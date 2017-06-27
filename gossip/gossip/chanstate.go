@@ -154,7 +154,7 @@ func (ga *gossipAdapterImpl) ValidateStateInfoMessage(msg *proto.SignedGossipMes
 
 // GetOrgOfPeer returns the organization identifier of a certain peer
 func (ga *gossipAdapterImpl) GetOrgOfPeer(PKIID common.PKIidType) api.OrgIdentityType {
-	return ga.gossipServiceImpl.getOrgOfPeer(PKIID)
+	return ga.gossipServiceImpl.GetOrgOfPeer(PKIID)
 }
 
 // GetIdentityByPKIID returns an identity of a peer with a certain

@@ -365,6 +365,8 @@ chaincode:
         escc: enable
         vscc: enable
         qscc: enable
+        mscc: enable
+        snapsscc: enable
 
     # Logging section for the chaincode container
     logging:

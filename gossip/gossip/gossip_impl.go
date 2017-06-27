@@ -1043,7 +1043,7 @@ func (g *gossipServiceImpl) sameOrgOrOurOrgPullFilter(msg proto.ReceivedMessage)
 	// Else, the peer is from a different org
 	return func(item string) bool {
 		pkiID := common.PKIidType(item)
-		msgsOrg := g.getOrgOfPeer(pkiID)
+		msgsOrg := g.GetOrgOfPeer(pkiID)
 		if len(msgsOrg) == 0 {
 			g.logger.Warning("Failed determining organization of", pkiID)
 			return false
@@ -1123,13 +1123,13 @@ func (g *gossipServiceImpl) isInMyorg(member discovery.NetworkMember) bool {
 	if member.PKIid == nil {
 		return false
 	}
-	if org := g.getOrgOfPeer(member.PKIid); org != nil {
+	if org := g.GetOrgOfPeer(member.PKIid); org != nil {
 		return bytes.Equal(g.selfOrg, org)
 	}
 	return false
 }
 
-func (g *gossipServiceImpl) getOrgOfPeer(PKIID common.PKIidType) api.OrgIdentityType {
+func (g *gossipServiceImpl) GetOrgOfPeer(PKIID common.PKIidType) api.OrgIdentityType {
 	cert, err := g.idMapper.Get(PKIID)
 	if err != nil {
 		return nil
@@ -1168,7 +1168,7 @@ func (g *gossipServiceImpl) validateStateInfoMsg(msg *proto.SignedGossipMessage)
 }
 
 func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember) (discovery.Sieve, discovery.EnvelopeFilter) {
-	remotePeerOrg := g.getOrgOfPeer(remotePeer.PKIid)
+	remotePeerOrg := g.GetOrgOfPeer(remotePeer.PKIid)
 
 	if len(remotePeerOrg) == 0 {
 		g.logger.Warning("Cannot determine organization of", remotePeer)
@@ -1183,7 +1183,7 @@ func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember
 			if !msg.IsAliveMsg() {
 				g.logger.Panic("Programming error, this should be used only on alive messages")
 			}
-			org := g.getOrgOfPeer(msg.GetAliveMsg().Membership.PkiId)
+			org := g.GetOrgOfPeer(msg.GetAliveMsg().Membership.PkiId)
 			if len(org) == 0 {
 				g.logger.Warning("Unable to determine org of message", msg.GossipMessage)
 				// Don't disseminate messages who's origin org is unknown
@@ -1211,7 +1211,7 @@ func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember
 }
 
 func (g *gossipServiceImpl) peersByOriginOrgPolicy(peer discovery.NetworkMember) filter.RoutingFilter {
-	peersOrg := g.getOrgOfPeer(peer.PKIid)
+	peersOrg := g.GetOrgOfPeer(peer.PKIid)
 	if len(peersOrg) == 0 {
 		g.logger.Warning("Unable to determine organization of peer", peer)
 		// Don't disseminate messages who's origin org is undetermined
@@ -1229,7 +1229,7 @@ func (g *gossipServiceImpl) peersByOriginOrgPolicy(peer discovery.NetworkMember)
 	// Else, select peers from the origin's organization,
 	// and also peers from our own organization
 	return func(member discovery.NetworkMember) bool {
-		memberOrg := g.getOrgOfPeer(member.PKIid)
+		memberOrg := g.GetOrgOfPeer(member.PKIid)
 		if len(memberOrg) == 0 {
 			return false
 		}
