@@ -583,7 +583,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 	//from here on : if we launch the container and get an error, we need to stop the container
 
 	//launch container if it is a System container or not in dev mode
-	if (!chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM) && (chrte == nil || chrte.handler == nil) {
+	if (!chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT) && (chrte == nil || chrte.handler == nil) {
 		//NOTE-We need to streamline code a bit so the data from LSCC gets passed to this thus
 		//avoiding the need to go to the FS. In particular, we should use cdsfs completely. It is
 		//just a vestige of old protocol that we continue to use ChaincodeDeploymentSpec for
@@ -595,7 +595,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 		//in the endorser has gone through LSCC validation. Just get the code from the FS.
 		if cds.CodePackage == nil {
 			//no code bytes for these situations
-			if !(chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM) {
+			if !(chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT) {
 				ccpack, err := ccprovider.GetChaincodeFromFS(cID.Name, cID.Version)
 				if err != nil {
 					return cID, cMsg, err
@@ -640,6 +640,9 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 func (chaincodeSupport *ChaincodeSupport) getVMType(cds *pb.ChaincodeDeploymentSpec) (string, error) {
 	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM {
 		return container.SYSTEM, nil
+	}
+	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		return container.SYSTEM_EXT, nil
 	}
 	return container.DOCKER, nil
 }

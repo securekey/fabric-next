@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/fabric/core/container/api"
 	"github.com/hyperledger/fabric/core/container/ccintf"
 	"github.com/hyperledger/fabric/core/container/dockercontroller"
+	"github.com/hyperledger/fabric/core/container/extcontroller"
 	"github.com/hyperledger/fabric/core/container/inproccontroller"
 )
 
@@ -49,8 +50,9 @@ var vmcontroller *VMController
 
 //constants for supported containers
 const (
-	DOCKER = "Docker"
-	SYSTEM = "System"
+	DOCKER     = "Docker"
+	SYSTEM     = "System"
+	SYSTEM_EXT = "SystemExt"
 )
 
 //NewVMController - creates/returns singleton
@@ -69,6 +71,8 @@ func (vmc *VMController) newVM(typ string) api.VM {
 		v = dockercontroller.NewDockerVM()
 	case SYSTEM:
 		v = &inproccontroller.InprocVM{}
+	case SYSTEM_EXT:
+		v = &extcontroller.ExtVM{}
 	default:
 		v = &dockercontroller.DockerVM{}
 	}
