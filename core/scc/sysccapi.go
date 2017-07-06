@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
+	"github.com/hyperledger/fabric/core/container/extcontroller"
 	"github.com/hyperledger/fabric/core/container/inproccontroller"
 	"github.com/hyperledger/fabric/core/peer"
 
@@ -65,12 +66,25 @@ type SystemChaincode struct {
 	// Enabled a convenient switch to enable/disable system chaincode without
 	// having to remove entry from importsysccs.go
 	Enabled bool
+
+	External bool
 }
 
 // RegisterSysCC registers the given system chaincode with the peer
 func RegisterSysCC(syscc *SystemChaincode) error {
 	if !syscc.Enabled || !isWhitelisted(syscc) {
 		sysccLogger.Info(fmt.Sprintf("system chaincode (%s,%s,%t) disabled", syscc.Name, syscc.Path, syscc.Enabled))
+		return nil
+	}
+
+	if syscc.External {
+		err := extcontroller.Register(syscc.Path, syscc.Chaincode)
+		if err != nil {
+			errStr := fmt.Sprintf("could not register (%s,%v): %s", syscc.Path, syscc, err)
+			sysccLogger.Error(errStr)
+			return fmt.Errorf(errStr)
+		}
+		sysccLogger.Infof("system chaincode %s(%s) registered", syscc.Name, syscc.Path)
 		return nil
 	}
 
@@ -118,7 +132,7 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: &pb.ChaincodeInput{Args: syscc.InitArgs}}
 
 	// First build and get the deployment spec
-	chaincodeDeploymentSpec, err := buildSysCC(ctxt, spec)
+	chaincodeDeploymentSpec, err := buildSysCC(ctxt, spec, syscc.External)
 
 	if err != nil {
 		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
@@ -145,7 +159,7 @@ func DeDeploySysCC(chainID string, syscc *SystemChaincode) error {
 
 	ctx := context.Background()
 	// First build and get the deployment spec
-	chaincodeDeploymentSpec, err := buildSysCC(ctx, spec)
+	chaincodeDeploymentSpec, err := buildSysCC(ctx, spec, syscc.External)
 
 	if err != nil {
 		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
@@ -164,9 +178,13 @@ func DeDeploySysCC(chainID string, syscc *SystemChaincode) error {
 }
 
 // buildLocal builds a given chaincode code
-func buildSysCC(context context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
+func buildSysCC(context context.Context, spec *pb.ChaincodeSpec, isExternal bool) (*pb.ChaincodeDeploymentSpec, error) {
 	var codePackageBytes []byte
-	chaincodeDeploymentSpec := &pb.ChaincodeDeploymentSpec{ExecEnv: pb.ChaincodeDeploymentSpec_SYSTEM, ChaincodeSpec: spec, CodePackage: codePackageBytes}
+	execEnv := pb.ChaincodeDeploymentSpec_SYSTEM
+	if isExternal {
+		execEnv = pb.ChaincodeDeploymentSpec_SYSTEM_EXT
+	}
+	chaincodeDeploymentSpec := &pb.ChaincodeDeploymentSpec{ExecEnv: execEnv, ChaincodeSpec: spec, CodePackage: codePackageBytes}
 	return chaincodeDeploymentSpec, nil
 }
 
