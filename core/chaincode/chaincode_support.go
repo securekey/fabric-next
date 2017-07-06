@@ -103,6 +103,7 @@ func GetChain() *ChaincodeSupport {
 }
 
 func (chaincodeSupport *ChaincodeSupport) preLaunchSetup(chaincode string) chan bool {
+	chaincodeLogger.Debugf("preLaunchSetup(%s)", chaincode)
 	chaincodeSupport.runningChaincodes.Lock()
 	defer chaincodeSupport.runningChaincodes.Unlock()
 	//register placeholder Handler. This will be transferred in registerHandler
@@ -251,6 +252,7 @@ func (chaincodeSupport *ChaincodeSupport) registerHandler(chaincodehandler *Hand
 	defer chaincodeSupport.runningChaincodes.Unlock()
 
 	chrte2, ok := chaincodeSupport.chaincodeHasBeenLaunched(key)
+	chaincodeLogger.Debugf("chaincodeHasBeenLaunched(%s) = %v", key, ok)
 	if ok && chrte2.handler.registered == true {
 		chaincodeLogger.Debugf("duplicate registered handler(key:%s) return error", key)
 		// Duplicate, return error
@@ -595,7 +597,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 		//in the endorser has gone through LSCC validation. Just get the code from the FS.
 		if cds.CodePackage == nil {
 			//no code bytes for these situations
-			if !(chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM) {
+			if !(chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT) {
 				ccpack, err := ccprovider.GetChaincodeFromFS(cID.Name, cID.Version)
 				if err != nil {
 					return cID, cMsg, err
@@ -610,6 +612,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 
 		cLang := cds.ChaincodeSpec.Type
 		err = chaincodeSupport.launchAndWaitForRegister(context, cccid, cds, cLang, builder)
+		chaincodeLogger.Debugf("launchAndWaitForRegister done, err: %v", err)
 		if err != nil {
 			chaincodeLogger.Errorf("launchAndWaitForRegister failed %s", err)
 			return cID, cMsg, err
@@ -618,6 +621,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 
 	if err == nil {
 		//launch will set the chaincode in Ready state
+		chaincodeLogger.Debug("before chaincodeSupport.sendReady")
 		err = chaincodeSupport.sendReady(context, cccid, chaincodeSupport.ccStartupTimeout)
 		if err != nil {
 			chaincodeLogger.Errorf("sending init failed(%s)", err)
@@ -640,6 +644,9 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 func (chaincodeSupport *ChaincodeSupport) getVMType(cds *pb.ChaincodeDeploymentSpec) (string, error) {
 	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM {
 		return container.SYSTEM, nil
+	}
+	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		return container.SYSTEM_EXT, nil
 	}
 	return container.DOCKER, nil
 }
