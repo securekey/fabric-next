@@ -68,10 +68,13 @@ func (vmc *VMController) newVM(typ string) api.VM {
 
 	switch typ {
 	case DOCKER:
+		vmLogger.Debugf("Creating DOCKER VM")
 		v = dockercontroller.NewDockerVM()
 	case SYSTEM:
+		vmLogger.Debugf("Creating SYSTEM VM")
 		v = &inproccontroller.InprocVM{}
 	case SYSTEM_EXT:
+		vmLogger.Debugf("Creating SYSTEM_EXT VM")
 		v = &extcontroller.ExtVM{}
 	default:
 		v = &dockercontroller.DockerVM{}

@@ -36,7 +36,7 @@ type extContainer struct {
 }
 
 var (
-	remoteLogger = flogging.MustGetLogger("extContainer")
+	extLogger    = flogging.MustGetLogger("extcontroller")
 	typeRegistry = make(map[string]*extContainer)
 	instRegistry = make(map[string]*extContainer)
 )
@@ -69,12 +69,12 @@ type ExtVM struct {
 func (vm *ExtVM) getInstance(ctxt context.Context, ipctemplate *extContainer, instName string, args []string, env []string) (*extContainer, error) {
 	ipc := instRegistry[instName]
 	if ipc != nil {
-		remoteLogger.Warningf("chaincode instance exists for %s", instName)
+		extLogger.Warningf("chaincode instance exists for %s", instName)
 		return ipc, nil
 	}
 	ipc = &extContainer{args: args, env: env, chaincode: ipctemplate.chaincode}
 	instRegistry[instName] = ipc
-	remoteLogger.Debugf("chaincode instance created for %s", instName)
+	extLogger.Debugf("chaincode instance created for %s", instName)
 	return ipc, nil
 }
 
@@ -95,7 +95,7 @@ func (vm *ExtVM) Deploy(ctxt context.Context, ccid ccintf.CCID, args []string, e
 	_, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
 
 	//FUTURE ... here is where we might check code for safety
-	remoteLogger.Debugf("registered : %s", path)
+	extLogger.Debugf("registered : %s", path)
 
 	return err
 }
