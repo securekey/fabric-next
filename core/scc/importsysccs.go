@@ -18,6 +18,11 @@ package scc
 
 import (
 	//import system chain codes here
+	"os"
+	"path/filepath"
+
+	"fmt"
+
 	"github.com/hyperledger/fabric/core/scc/cscc"
 	"github.com/hyperledger/fabric/core/scc/escc"
 	"github.com/hyperledger/fabric/core/scc/lscc"
@@ -25,6 +30,7 @@ import (
 	"github.com/hyperledger/fabric/core/scc/qscc"
 	"github.com/hyperledger/fabric/core/scc/snapsscc"
 	"github.com/hyperledger/fabric/core/scc/vscc"
+	"github.com/spf13/viper"
 )
 
 //see systemchaincode_test.go for an example using "sample_syscc"
@@ -92,6 +98,10 @@ var systemChaincodes = []*SystemChaincode{
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func RegisterSysCCs() {
+	err := loadRemoteSysCCs()
+	if err != nil {
+		panic(fmt.Errorf("Error loading remote system CCs: %v", err))
+	}
 	for _, sysCC := range systemChaincodes {
 		RegisterSysCC(sysCC)
 	}
@@ -161,4 +171,70 @@ func MockRegisterSysCCs(mockSysCCs []*SystemChaincode) []*SystemChaincode {
 // MockResetSysCCs restore orig system ccs - is used only for testing
 func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 	systemChaincodes = mockSysCCs
+}
+
+func loadRemoteSysCCs() error {
+	snapsPath := viper.GetString("chaincode.snapsPath")
+	if snapsPath == "" {
+		fmt.Println("Snaps path is not specified, won't load any Snaps")
+		return nil
+	}
+
+	fi, err := os.Stat(snapsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("Snaps directory is missing: %s", snapsPath)
+		}
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("Snaps path is not a directory: %s", snapsPath)
+	}
+
+	err = filepath.Walk(snapsPath, func(path string, f os.FileInfo, err error) error {
+		if f.IsDir() {
+			if path == snapsPath {
+				return nil
+			}
+			snapName := f.Name()
+			err := checkForDuplicateName(snapName)
+			if err == nil {
+				fmt.Printf("Loading snap %s\n", snapName)
+				cfgPath := filepath.Join(path, "config.yaml")
+				v := viper.New()
+				v.SetConfigFile(cfgPath)
+				err := v.ReadInConfig()
+				if err != nil {
+					return fmt.Errorf("Error reading snap configuration: %s", err)
+				}
+				scc := &SystemChaincode{
+					Name:              snapName,
+					Path:              snapName,
+					InitArgs:          [][]byte{[]byte("")},
+					Chaincode:         nil,
+					InvokableExternal: v.GetBool("InvokableExternal"),
+					InvokableCC2CC:    v.GetBool("InvokableCC2CC"),
+					Enabled:           v.GetBool("Enabled"),
+					External:          true,
+				}
+				systemChaincodes = append(systemChaincodes, scc)
+				// TODO - temporary hack for "whitelisting" snaps
+				// Must find a way to do it via env variable in docker-compose
+				chaincodes := viper.GetStringMapString("chaincode.system")
+				chaincodes[snapName] = "enable"
+				viper.Set("chaincode.system", chaincodes)
+			}
+		}
+		return nil
+	})
+	return err
+}
+
+func checkForDuplicateName(name string) error {
+	for _, sysCC := range systemChaincodes {
+		if sysCC.Name == name {
+			return fmt.Errorf("Duplicate SysCC name: %s", name)
+		}
+	}
+	return nil
 }
