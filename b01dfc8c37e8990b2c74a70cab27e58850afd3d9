@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fd72d9de_e279ce5f",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 195,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-10T19:14:32Z",
+      "side": 1,
+      "message": "If it\u0027s reading from a map, there is no need to check for duplicate names any more",
+      "range": {
+        "startLine": 195,
+        "startChar": 8,
+        "endLine": 195,
+        "endChar": 29
+      },
+      "revId": "b01dfc8c37e8990b2c74a70cab27e58850afd3d9",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
