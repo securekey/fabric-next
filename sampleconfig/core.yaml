@@ -367,6 +367,14 @@ chaincode:
         qscc: enable
         mscc: enable
         snapsscc: enable
+        extscc: enable
+
+    systemext:
+      extscc:
+        enabled: true
+        invokableExternal: false
+        invokableCC2CC:    true
+
 
     # Logging section for the chaincode container
     logging:
