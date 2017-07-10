@@ -29,7 +29,20 @@ import (
 )
 
 func init() {
-	viper.Set("chaincode.system", map[string]string{"lscc": "enable", "a": "enable"})
+	viper.Set("chaincode.system", map[string]string{"lscc": "enable", "a": "enable", "extscc": "enable"})
+
+	//mock External SysCCs
+	sysExtCCs := &SystemExtCCs{}
+	sysExtCCs.seccs = make(map[string]SystemChaincode)
+	sysExtCCs.seccs["extscc"] = SystemChaincode{
+		Enabled:           true,
+		InvokableExternal: true,
+		InvokableCC2CC:    false,
+		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc",
+	}
+
+	viper.Set("chaincode.systemext", sysExtCCs)
+
 	ccprovider.RegisterChaincodeProviderFactory(&ccprovider2.MockCcProviderFactory{})
 	RegisterSysCCs()
 }
@@ -114,4 +127,18 @@ func TestRegisterSysCC(t *testing.T) {
 	})
 	assert.Error(t, err)
 	assert.Contains(t, "path already registered", err)
+}
+
+func TestRegisterDuplicateExtSysCC(t *testing.T) {
+	ex := &SystemChaincode{
+		Name:              "extscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc",
+		Enabled:           true,
+		InvokableExternal: true,
+		InvokableCC2CC:    false,
+		External:          true,
+	}
+	err := RegisterSysCC(ex)
+
+	assert.Error(t, err)
 }

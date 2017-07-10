@@ -67,6 +67,7 @@ type SystemChaincode struct {
 	// having to remove entry from importsysccs.go
 	Enabled bool
 
+	// External System Chaincode to to support External SCCs either in-container(peer) or in-Docker
 	External bool
 }
 
@@ -192,5 +193,6 @@ func isWhitelisted(syscc *SystemChaincode) bool {
 	chaincodes := viper.GetStringMapString("chaincode.system")
 	val, ok := chaincodes[syscc.Name]
 	enabled := val == "enable" || val == "true" || val == "yes"
+
 	return ok && enabled
 }
