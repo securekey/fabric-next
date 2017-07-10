@@ -18,8 +18,6 @@ package scc
 
 import (
 	//import system chain codes here
-	"os"
-	"path/filepath"
 
 	"fmt"
 
@@ -173,68 +171,29 @@ func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 	systemChaincodes = mockSysCCs
 }
 
-func loadRemoteSysCCs() error {
-	snapsPath := viper.GetString("chaincode.snapsPath")
-	if snapsPath == "" {
-		fmt.Println("Snaps path is not specified, won't load any Snaps")
-		return nil
-	}
-
-	fi, err := os.Stat(snapsPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("Snaps directory is missing: %s", snapsPath)
-		}
-		return err
-	}
-	if !fi.IsDir() {
-		return fmt.Errorf("Snaps path is not a directory: %s", snapsPath)
-	}
-
-	err = filepath.Walk(snapsPath, func(path string, f os.FileInfo, err error) error {
-		if f.IsDir() {
-			if path == snapsPath {
-				return nil
-			}
-			snapName := f.Name()
-			err := checkForDuplicateName(snapName)
-			if err == nil {
-				fmt.Printf("Loading snap %s\n", snapName)
-				cfgPath := filepath.Join(path, "config.yaml")
-				v := viper.New()
-				v.SetConfigFile(cfgPath)
-				err := v.ReadInConfig()
-				if err != nil {
-					return fmt.Errorf("Error reading snap configuration: %s", err)
-				}
-				scc := &SystemChaincode{
-					Name:              snapName,
-					Path:              snapName,
-					InitArgs:          [][]byte{[]byte("")},
-					Chaincode:         nil,
-					InvokableExternal: v.GetBool("InvokableExternal"),
-					InvokableCC2CC:    v.GetBool("InvokableCC2CC"),
-					Enabled:           v.GetBool("Enabled"),
-					External:          true,
-				}
-				systemChaincodes = append(systemChaincodes, scc)
-				// TODO - temporary hack for "whitelisting" snaps
-				// Must find a way to do it via env variable in docker-compose
-				chaincodes := viper.GetStringMapString("chaincode.system")
-				chaincodes[snapName] = "enable"
-				viper.Set("chaincode.system", chaincodes)
-			}
-		}
-		return nil
-	})
-	return err
+type SystemExtCCs struct {
+	seccs map[string]SystemChaincode
 }
 
-func checkForDuplicateName(name string) error {
-	for _, sysCC := range systemChaincodes {
-		if sysCC.Name == name {
-			return fmt.Errorf("Duplicate SysCC name: %s", name)
-		}
+func loadRemoteSysCCs() error {
+	sysExtCCs := &SystemExtCCs{}
+	err := viper.UnmarshalKey("chaincode.systemext", &sysExtCCs)
+
+	if err != nil {
+		return fmt.Errorf("Got error while loading External System CCs: %+v\n", err)
 	}
+
+	for key, escc := range sysExtCCs.seccs {
+		// all External System CC must have External=true
+		escc.External = true
+		// set the name from the key
+		escc.Name = key
+
+		//for now harcoding InitArgs TODO remove when ready to read from config directly
+		escc.InitArgs = [][]byte{[]byte("")}
+
+		systemChaincodes = append(systemChaincodes, &escc)
+	}
+
 	return nil
 }
