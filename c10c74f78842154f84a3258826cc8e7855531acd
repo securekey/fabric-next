@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "248c1575_4089d448",
+        "filename": "protos/peer/chaincode.proto",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-11T14:00:18Z",
+      "side": 1,
+      "message": "if we set BINARY or DOCKER, how will fabric know what is the language of the cc (Java/Node/Go)",
+      "range": {
+        "startLine": 68,
+        "startChar": 8,
+        "endLine": 69,
+        "endChar": 18
+      },
+      "revId": "c10c74f78842154f84a3258826cc8e7855531acd",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
