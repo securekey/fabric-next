@@ -215,7 +215,6 @@ func loadRemoteSysCCs() error {
 					InvokableExternal: v.GetBool("InvokableExternal"),
 					InvokableCC2CC:    v.GetBool("InvokableCC2CC"),
 					Enabled:           v.GetBool("Enabled"),
-					External:          true,
 				}
 				systemChaincodes = append(systemChaincodes, scc)
 				// TODO - temporary hack for "whitelisting" snaps

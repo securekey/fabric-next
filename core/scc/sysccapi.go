@@ -43,14 +43,8 @@ type SystemChaincode struct {
 	//Unique name of the system chaincode
 	Name string
 
-	//Path to the system chaincode; currently not used
-	Path string
-
 	//InitArgs initialization arguments to startup the system chaincode
 	InitArgs [][]byte
-
-	// Chaincode is the actual chaincode object
-	Chaincode shim.Chaincode
 
 	// InvokableExternal keeps track of whether
 	// this system chaincode can be invoked
@@ -64,10 +58,32 @@ type SystemChaincode struct {
 	InvokableCC2CC bool
 
 	// Enabled a convenient switch to enable/disable system chaincode without
-	// having to remove entry from importsysccs.go
+	// having to remove its definition
 	Enabled bool
 
-	External bool
+	// Chaincode is the actual chaincode object
+	// If not nil, this object will be used as in-process SCC
+	Chaincode shim.Chaincode
+
+	// --------------------------------------------------------------------------
+	// Properties below are used only if the Chaincode property is nil, that is,
+	// if this is an out of process SCC
+	// --------------------------------------------------------------------------
+
+	// Chaincode type
+	ChaincodeType pb.ChaincodeSpec_Type
+
+	// Path to the system chaincode. The content of the path depends on the chaincode type.
+	Path string
+
+	// By default, an out of process chaincode is deployed in its own docker container.
+	// A GOLANG chaincode can specify InPeerContainer=true, to be deployed as a process
+	// spawned in the peer's docker container, to have access to the peer resources.
+	InPeerContainer bool
+}
+
+func (syscc *SystemChaincode) isExternal() bool {
+	return syscc.Chaincode == nil
 }
 
 // RegisterSysCC registers the given system chaincode with the peer
@@ -77,7 +93,7 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 		return nil
 	}
 
-	if syscc.External {
+	if syscc.isExternal() {
 		err := extcontroller.Register(syscc.Path, syscc.Chaincode)
 		if err != nil {
 			errStr := fmt.Sprintf("could not register (%s,%v): %s", syscc.Path, syscc, err)
@@ -132,7 +148,7 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: &pb.ChaincodeInput{Args: syscc.InitArgs}}
 
 	// First build and get the deployment spec
-	chaincodeDeploymentSpec, err := buildSysCC(ctxt, spec, syscc.External)
+	chaincodeDeploymentSpec, err := buildSysCC(ctxt, spec, syscc.isExternal())
 
 	if err != nil {
 		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
@@ -159,7 +175,7 @@ func DeDeploySysCC(chainID string, syscc *SystemChaincode) error {
 
 	ctx := context.Background()
 	// First build and get the deployment spec
-	chaincodeDeploymentSpec, err := buildSysCC(ctx, spec, syscc.External)
+	chaincodeDeploymentSpec, err := buildSysCC(ctx, spec, syscc.isExternal())
 
 	if err != nil {
 		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
