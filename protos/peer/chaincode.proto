@@ -65,6 +65,8 @@ message ChaincodeSpec {
         NODE = 2;
         CAR = 3;
         JAVA = 4;
+        BINARY = 5;
+        DOCKER = 6;
     }
 
     Type type = 1;

@@ -183,7 +183,6 @@ func loadRemoteSysCCs() error {
 			Path:      key,
 			InitArgs:  [][]byte{[]byte("")},
 			Chaincode: nil,
-			External:  true,
 		}
 		if err := viper.UnmarshalKey("chaincode.systemext."+key, escc); err != nil {
 			return err
