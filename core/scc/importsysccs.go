@@ -171,28 +171,24 @@ func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 	systemChaincodes = mockSysCCs
 }
 
-type SystemExtCCs struct {
-	seccs map[string]SystemChaincode
-}
-
 func loadRemoteSysCCs() error {
-	sysExtCCs := &SystemExtCCs{}
-	err := viper.UnmarshalKey("chaincode.systemext", &sysExtCCs)
 
-	if err != nil {
-		return fmt.Errorf("Got error while loading External System CCs: %+v\n", err)
-	}
+	ccs := viper.GetStringMap("chaincode.systemext")
 
-	for key, escc := range sysExtCCs.seccs {
-		// all External System CC must have External=true
-		escc.External = true
-		// set the name from the key
-		escc.Name = key
+	sysccLogger.Infof("Loading %d external system chaincodes", len(ccs))
 
-		//for now harcoding InitArgs TODO remove when ready to read from config directly
-		escc.InitArgs = [][]byte{[]byte("")}
-
-		systemChaincodes = append(systemChaincodes, &escc)
+	for key := range ccs {
+		escc := &SystemChaincode{
+			Name:      key,
+			Path:      key,
+			InitArgs:  [][]byte{[]byte("")},
+			Chaincode: nil,
+			External:  true,
+		}
+		if err := viper.UnmarshalKey("chaincode.systemext."+key, escc); err != nil {
+			return err
+		}
+		systemChaincodes = append(systemChaincodes, escc)
 	}
 
 	return nil
