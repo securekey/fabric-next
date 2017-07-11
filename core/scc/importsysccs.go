@@ -171,28 +171,23 @@ func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 	systemChaincodes = mockSysCCs
 }
 
-type SystemExtCCs struct {
-	seccs map[string]SystemChaincode
-}
-
 func loadRemoteSysCCs() error {
-	sysExtCCs := &SystemExtCCs{}
-	err := viper.UnmarshalKey("chaincode.systemext", &sysExtCCs)
+	ccs := viper.GetStringMap("chaincode.systemext")
 
-	if err != nil {
-		return fmt.Errorf("Got error while loading External System CCs: %+v\n", err)
-	}
+	sysccLogger.Infof("Loading %d external system chaincodes", len(ccs))
 
-	for key, escc := range sysExtCCs.seccs {
-		// all External System CC must have External=true
-		escc.External = true
-		// set the name from the key
-		escc.Name = key
-
-		//for now harcoding InitArgs TODO remove when ready to read from config directly
-		escc.InitArgs = [][]byte{[]byte("")}
-
-		systemChaincodes = append(systemChaincodes, &escc)
+	for key := range ccs {
+		escc := &SystemChaincode{
+			Name:              key,
+			Path:              key,
+			InitArgs:          [][]byte{[]byte("")},
+			Chaincode:         nil,
+			InvokableExternal: viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableExternal", key)),
+			InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableCC2CC", key)),
+			Enabled:           viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.enabled", key)),
+			External:          true,
+		}
+		systemChaincodes = append(systemChaincodes, escc)
 	}
 
 	return nil
