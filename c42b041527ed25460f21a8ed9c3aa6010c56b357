@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "715bbde7_792ccf7d",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 180,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2017-07-11T18:27:21Z",
+      "side": 1,
+      "message": "An alternative is to do something like this:\n\n\t\tescc :\u003d \u0026SystemChaincode{}\n\t\tif err :\u003d viper.UnmarshalKey(\"chaincode.systemext.\"+key, escc); err !\u003d nil {\n\t\t\treturn err\n\t\t}",
+      "revId": "c42b041527ed25460f21a8ed9c3aa6010c56b357",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
