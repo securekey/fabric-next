@@ -100,7 +100,7 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 	}
 
 	if syscc.isExternal() {
-		err := extcontroller.Register(syscc.Path, syscc.Chaincode)
+		err := extcontroller.Register(syscc.Path, syscc.Chaincode, syscc.ChaincodeType, syscc.ConfigPath, syscc.InPeerContainer)
 		if err != nil {
 			errStr := fmt.Sprintf("could not register (%s,%v): %s", syscc.Path, syscc, err)
 			sysccLogger.Error(errStr)
@@ -119,7 +119,6 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 			return fmt.Errorf(errStr)
 		}
 	}
-
 	sysccLogger.Infof("system chaincode %s(%s) registered", syscc.Name, syscc.Path)
 	return err
 }

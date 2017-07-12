@@ -29,6 +29,7 @@ type SimpleChaincode struct {
 
 // Init ...
 func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
+	fmt.Println("SimpleChaincode Init")
 	return shim.Success(nil)
 }
 
@@ -41,10 +42,12 @@ func (t *SimpleChaincode) Query(stub shim.ChaincodeStubInterface) pb.Response {
 // Transaction makes payment of X units from A to B
 func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	// TODO - implement something for testing
+	fmt.Println("SimpleChaincode Invoke")
 	return shim.Success(nil)
 }
 
 func main() {
+	fmt.Println("EXT SCC Main")
 	err := shim.Start(new(SimpleChaincode))
 	if err != nil {
 		fmt.Printf("Error starting Simple chaincode: %s", err)

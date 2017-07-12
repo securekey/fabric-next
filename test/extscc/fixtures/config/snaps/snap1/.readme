@@ -1,0 +1,11 @@
+##### STEPS TO GENERATE EXECUTABLE###########
+
+* Go to directory where your external system chaincode is located
+For example: <GOPATH>/src/github.com/hyperledger/fabric/test/extscc/fixtures/src/github.com/extscc_cc
+
+* run 'go build' command on your external system chaincode
+For example : go run extscc_cc.go
+
+* Copy generated executable file to this directory
+
+* Make sure path specified under "chaincode.systemext.extscc.path" in core.yaml points to the generated executable file
