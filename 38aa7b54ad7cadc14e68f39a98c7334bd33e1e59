@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b3ed3615_5a3c4018",
+        "filename": "core/container/extcontroller/extcontroller.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 80,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2017-07-12T20:12:36Z",
+      "side": 1,
+      "message": "ipctemplate variable should be renamed to reflect extContainer",
+      "revId": "38aa7b54ad7cadc14e68f39a98c7334bd33e1e59",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
