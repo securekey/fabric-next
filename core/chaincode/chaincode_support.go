@@ -103,7 +103,6 @@ func GetChain() *ChaincodeSupport {
 }
 
 func (chaincodeSupport *ChaincodeSupport) preLaunchSetup(chaincode string) chan bool {
-	chaincodeLogger.Debugf("preLaunchSetup(%s)", chaincode)
 	chaincodeSupport.runningChaincodes.Lock()
 	defer chaincodeSupport.runningChaincodes.Unlock()
 	//register placeholder Handler. This will be transferred in registerHandler
@@ -252,7 +251,6 @@ func (chaincodeSupport *ChaincodeSupport) registerHandler(chaincodehandler *Hand
 	defer chaincodeSupport.runningChaincodes.Unlock()
 
 	chrte2, ok := chaincodeSupport.chaincodeHasBeenLaunched(key)
-	chaincodeLogger.Debugf("chaincodeHasBeenLaunched(%s) = %v", key, ok)
 	if ok && chrte2.handler.registered == true {
 		chaincodeLogger.Debugf("duplicate registered handler(key:%s) return error", key)
 		// Duplicate, return error
@@ -621,7 +619,6 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 
 	if err == nil {
 		//launch will set the chaincode in Ready state
-		chaincodeLogger.Debug("before chaincodeSupport.sendReady")
 		err = chaincodeSupport.sendReady(context, cccid, chaincodeSupport.ccStartupTimeout)
 		if err != nil {
 			chaincodeLogger.Errorf("sending init failed(%s)", err)

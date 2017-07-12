@@ -373,8 +373,10 @@ chaincode:
       extscc:
         enabled: true
         invokableExternal: true
-        invokableCC2CC:    true
-
+        invokableCC2CC: true
+        path: extscc
+        configPath: extscc
+        chaincodeType: GOLANG
 
     # Logging section for the chaincode container
     logging:

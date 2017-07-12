@@ -62,7 +62,7 @@ type SystemChaincode struct {
 	Enabled bool
 
 	// Chaincode is the actual chaincode object
-	// If not nil, this object will be used as in-process SCC
+	// If not nil, this object will be used as the in-process SCC
 	Chaincode shim.Chaincode
 
 	// --------------------------------------------------------------------------
@@ -73,12 +73,18 @@ type SystemChaincode struct {
 	// Chaincode type
 	ChaincodeType pb.ChaincodeSpec_Type
 
-	// Path to the system chaincode. The content of the path depends on the chaincode type.
+	// Path to the system chaincode. The path content depends on the chaincode type.
 	Path string
 
-	// By default, an out of process chaincode is deployed in its own docker container.
+	// Path to the system chaincode configuration.
+	// When the SCC is deployed to its own docker container, ConfigPath is mounted as a volume.
+	// When the SCC is spawned as a process alongside the peer process, ConfigPath is
+	// passed to the process as the current working directory.
+	ConfigPath string
+
+	// By default, an out of process chaincode is deployed to its own docker container.
 	// A GOLANG chaincode can specify InPeerContainer=true, to be deployed as a process
-	// spawned in the peer's docker container, to have access to the peer resources.
+	// alongside the peer process.
 	InPeerContainer bool
 }
 

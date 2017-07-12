@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/fabric/core/scc/qscc"
 	"github.com/hyperledger/fabric/core/scc/snapsscc"
 	"github.com/hyperledger/fabric/core/scc/vscc"
+	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
 )
 
@@ -96,9 +97,9 @@ var systemChaincodes = []*SystemChaincode{
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func RegisterSysCCs() {
-	err := loadRemoteSysCCs()
+	err := loadExternalSysCCs()
 	if err != nil {
-		panic(fmt.Errorf("Error loading remote system CCs: %v", err))
+		panic(fmt.Errorf("Error loading external system CCs: %v", err))
 	}
 	for _, sysCC := range systemChaincodes {
 		RegisterSysCC(sysCC)
@@ -171,7 +172,7 @@ func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 	systemChaincodes = mockSysCCs
 }
 
-func loadRemoteSysCCs() error {
+func loadExternalSysCCs() error {
 
 	ccs := viper.GetStringMap("chaincode.systemext")
 
@@ -179,14 +180,27 @@ func loadRemoteSysCCs() error {
 
 	for key := range ccs {
 		escc := &SystemChaincode{
-			Name:      key,
-			Path:      key,
-			InitArgs:  [][]byte{[]byte("")},
-			Chaincode: nil,
+			Name:              key,
+			Path:              viper.GetString(fmt.Sprintf("chaincode.systemext.%s.path", key)),
+			ConfigPath:        viper.GetString(fmt.Sprintf("chaincode.systemext.%s.configPath", key)),
+			Enabled:           viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.enabled", key)),
+			InvokableExternal: viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableExternal", key)),
+			InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableCC2CC", key)),
+			InitArgs:          [][]byte{[]byte("")},
+			Chaincode:         nil,
 		}
-		if err := viper.UnmarshalKey("chaincode.systemext."+key, escc); err != nil {
-			return err
+		if escc.Path == "" {
+			return fmt.Errorf("Error loading system chaincode %s: Path is not provided", key)
 		}
+		if escc.ConfigPath == "" {
+			return fmt.Errorf("Error loading system chaincode %s: ConfigPath is not provided", key)
+		}
+		chaincodeTypeName := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.chaincodeType", key))
+		chaincodeType, ok := pb.ChaincodeSpec_Type_value[chaincodeTypeName]
+		if !ok || chaincodeType == 0 {
+			return fmt.Errorf("Error loading system chaincode %s: ChaincodeType is not provided", key)
+		}
+		escc.ChaincodeType = pb.ChaincodeSpec_Type(chaincodeType)
 		systemChaincodes = append(systemChaincodes, escc)
 	}
 
