@@ -188,6 +188,7 @@ func loadExternalSysCCs() error {
 			InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableCC2CC", key)),
 			InitArgs:          [][]byte{[]byte("")},
 			Chaincode:         nil,
+			InPeerContainer:   viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.inpeercontainer", key)),
 		}
 		if escc.Path == "" {
 			return fmt.Errorf("Error loading system chaincode %s: Path is not provided", key)

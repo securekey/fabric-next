@@ -82,6 +82,7 @@ services:
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/msp/peer/keystore/ecd9f80eb183352d5d4176eeb692e30bbfba4c38813ff9a0b6b799b546dda1d8_sk
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/msp/peer/signcerts/peer0.org1.example.com-cert.pem
       - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/msp/peer/cacerts/org1.example.com-cert.pem
+      - CORE_PEER_TLS_SERVERHOSTOVERRIDE=peer0.org1.example.com
       # # the following setting starts chaincode containers on the same
       # # bridge network as the peers
       # # https://docs.docker.com/compose/networking/
@@ -95,6 +96,8 @@ services:
         - /var/run/:/host/var/run/
         - ./channel/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/:/etc/hyperledger/msp/peer
         - ./config/snaps/:/opt/snaps
+        # # Below volume entry to be removed once problem with go executable binary dependency has been resolved (building with necessary flags)
+        - /usr/lib/:/usr/lib/
     depends_on:
       - orderer.example.com
       - builder
@@ -113,6 +116,7 @@ services:
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/msp/peer/keystore/81c71fd393054571c8d789f302a10390e0e83eb079b02a26a162ee26f02ff796_sk
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/msp/peer/signcerts/peer0.org2.example.com-cert.pem
       - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/msp/peer/cacerts/org2.example.com-cert.pem
+      - CORE_PEER_TLS_SERVERHOSTOVERRIDE=peer0.org2.example.com
       # # the following setting starts chaincode containers on the same
       # # bridge network as the peers
       # # https://docs.docker.com/compose/networking/
@@ -126,6 +130,8 @@ services:
         - /var/run/:/host/var/run/
         - ./channel/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/:/etc/hyperledger/msp/peer
         - ./config/snaps/:/opt/snaps
+        # # Below volume entry to be removed once problem with go executable binary dependency has been resolved (building with necessary flags)
+        - /usr/lib/:/usr/lib/
     depends_on:
       - orderer.example.com
       - builder

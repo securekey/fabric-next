@@ -370,13 +370,15 @@ chaincode:
         extscc: enable
 
     systemext:
-      extscc:
-        enabled: true
-        invokableExternal: true
-        invokableCC2CC: true
-        path: extscc
-        configPath: extscc
-        chaincodeType: GOLANG
+        extscc:
+          enabled: true
+          invokableExternal: true
+          invokableCC2CC:    true
+          path: /opt/snaps/snap1/extscc_cc
+          configPath: extscc
+          chaincodeType: BINARY
+          inpeercontainer:  true
+
 
     # Logging section for the chaincode container
     logging:

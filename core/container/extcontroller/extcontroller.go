@@ -25,14 +25,25 @@ import (
 	container "github.com/hyperledger/fabric/core/container/api"
 	"github.com/hyperledger/fabric/core/container/ccintf"
 
+	"os"
+	"os/exec"
+	"strings"
+
+	"github.com/hyperledger/fabric/core/config"
+	"github.com/spf13/viper"
 	"golang.org/x/net/context"
+
+	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
 type extContainer struct {
-	chaincode shim.Chaincode
-	running   bool
-	args      []string
-	env       []string
+	chaincode       shim.Chaincode
+	running         bool
+	args            []string
+	env             []string
+	chaincodeType   pb.ChaincodeSpec_Type
+	configPath      string
+	inPeerContainer bool
 }
 
 var (
@@ -51,13 +62,13 @@ func (s ExtSysCCRegisteredErr) Error() string {
 }
 
 //Register registers remote system chaincode with given path. The deploy should be called to initialize
-func Register(path string, cc shim.Chaincode) error {
+func Register(path string, cc shim.Chaincode, cctype pb.ChaincodeSpec_Type, configPath string, inPeerContainer bool) error {
 	tmp := typeRegistry[path]
 	if tmp != nil {
 		return ExtSysCCRegisteredErr(path)
 	}
 
-	typeRegistry[path] = &extContainer{chaincode: cc}
+	typeRegistry[path] = &extContainer{chaincode: cc, chaincodeType: cctype, configPath: configPath, inPeerContainer: inPeerContainer}
 	return nil
 }
 
@@ -67,15 +78,15 @@ type ExtVM struct {
 }
 
 func (vm *ExtVM) getInstance(ctxt context.Context, ipctemplate *extContainer, instName string, args []string, env []string) (*extContainer, error) {
-	ipc := instRegistry[instName]
-	if ipc != nil {
+	ec := instRegistry[instName]
+	if ec != nil {
 		extLogger.Warningf("chaincode instance exists for %s", instName)
-		return ipc, nil
+		return ec, nil
 	}
-	ipc = &extContainer{args: args, env: env, chaincode: ipctemplate.chaincode}
-	instRegistry[instName] = ipc
+	ec = &extContainer{args: args, env: env, chaincode: ipctemplate.chaincode}
+	instRegistry[instName] = ec
 	extLogger.Debugf("chaincode instance created for %s", instName)
-	return ipc, nil
+	return ec, nil
 }
 
 //Deploy verifies chaincode is registered and creates an instance for it. Currently only one instance can be created
@@ -112,13 +123,13 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 
 	instName, _ := vm.GetVMName(ccid)
 
-	rc, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
+	ec, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
 
 	if err != nil {
 		return fmt.Errorf(fmt.Sprintf("could not create instance for %s", instName))
 	}
 
-	if rc.running {
+	if ec.running {
 		return fmt.Errorf(fmt.Sprintf("chaincode running %s", path))
 	}
 
@@ -130,7 +141,33 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 		}
 	}
 
-	rc.running = true
+	if ipctemplate.inPeerContainer {
+		// To be started in peer container from binary or source
+		if ipctemplate.chaincodeType == pb.ChaincodeSpec_BINARY {
+			//To be started from binary
+
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						extLogger.Criticalf("caught panic from external system chaincode  %s", instName)
+					}
+				}()
+				ec.exec_cmd(path, env)
+				ec.running = true
+			}()
+
+		} else if ipctemplate.chaincodeType == pb.ChaincodeSpec_GOLANG {
+			//To be started from source
+			//TODO: (Implement) to be started from source
+			ec.running = true
+		}
+	} else {
+		// To be started in docker from binary or source
+		//TODO (Implement )
+
+		ec.running = true
+	}
+
 
 	return nil
 }
@@ -170,4 +207,44 @@ func (vm *ExtVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, nop
 //GetVMName ignores the peer and network name as it just needs to be unique in process
 func (vm *ExtVM) GetVMName(ccid ccintf.CCID) (string, error) {
 	return ccid.GetName(), nil
+}
+
+//exec_cmd to run path binary in peer container
+func (ec *extContainer) exec_cmd(path string, env []string) error {
+
+	// Setting up environment variables for command to be run
+	envmap := make(map[string]string)
+	for _, e := range env {
+		split := strings.SplitN(e, "=", 2)
+		envmap[split[0]] = split[1]
+	}
+
+	envmap["CORE_PEER_ADDRESS"] = viper.GetString("peer.address")
+	envmap["CORE_CHAINCODE_LOGGING_LEVEL"] = "debug"
+	if viper.GetBool("peer.tls.enabled") == true {
+		certPath := config.GetPath("peer.tls.rootcert.file")
+		if certPath == "" {
+			// check for tls cert
+			certPath = config.GetPath("peer.tls.cert.file")
+		}
+		envmap["CORE_PEER_TLS_ROOTCERT_FILE"] = certPath
+		envmap["CORE_PEER_TLS_SERVERHOSTOVERRIDE"] = viper.GetString("peer.tls.serverhostoverride")
+	}
+
+	var finalEnv []string
+	for k, v := range envmap {
+		finalEnv = append(finalEnv, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	cmd := exec.Command(path)
+	cmd.Stdout = os.Stdout
+	cmd.Env = finalEnv
+
+	err := cmd.Start()
+	if err != nil {
+		extLogger.Errorf("Failed to start external chaincode '%s', cause '%s'", path, err)
+		return fmt.Errorf("Error performing exec command on ext scc binary %s", err)
+	}
+
+	return nil
 }
