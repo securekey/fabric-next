@@ -1,0 +1,96 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d0267fc1_d8264597",
+        "filename": "core/container/extcontroller/extcontroller.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 223,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-12T19:30:51Z",
+      "side": 1,
+      "message": "Logging level has to come from the chaincode configuration",
+      "range": {
+        "startLine": 223,
+        "startChar": 43,
+        "endLine": 223,
+        "endChar": 48
+      },
+      "revId": "f5eef80003f90a2eecd575f97c6d4cf6bdbbfb77",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "5b810537_0f63f745",
+        "filename": "test/extscc/fixtures/docker-compose.yaml",
+        "patchSetId": 1
+      },
+      "lineNbr": 85,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-12T19:30:51Z",
+      "side": 1,
+      "message": "We have this in the CORE_PEER_ADDRESS, no need to define a new property. Fabric must be doing something similar with the user chaincode.",
+      "range": {
+        "startLine": 85,
+        "startChar": 8,
+        "endLine": 85,
+        "endChar": 40
+      },
+      "revId": "f5eef80003f90a2eecd575f97c6d4cf6bdbbfb77",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "94223bb0_fb1e650c",
+        "filename": "test/extscc/fixtures/docker-compose.yaml",
+        "patchSetId": 1
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-12T19:30:51Z",
+      "side": 1,
+      "message": "Add \"TODO\" here, so we don\u0027t forget it later.",
+      "range": {
+        "startLine": 99,
+        "startChar": 12,
+        "endLine": 99,
+        "endChar": 17
+      },
+      "revId": "f5eef80003f90a2eecd575f97c6d4cf6bdbbfb77",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "0ac06b0b_94cfb913",
+        "filename": "test/extscc/fixtures/docker-compose.yaml",
+        "patchSetId": 1
+      },
+      "lineNbr": 133,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-12T19:30:51Z",
+      "side": 1,
+      "message": "Add \"TODO\" here, so we don\u0027t forget it later.",
+      "range": {
+        "startLine": 133,
+        "startChar": 12,
+        "endLine": 133,
+        "endChar": 17
+      },
+      "revId": "f5eef80003f90a2eecd575f97c6d4cf6bdbbfb77",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
