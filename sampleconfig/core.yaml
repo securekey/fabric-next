@@ -369,16 +369,16 @@ chaincode:
         snapsscc: enable
         extscc: enable
 
+    # External system chaincodes
     systemext:
         extscc:
-          enabled: true
-          invokableExternal: true
-          invokableCC2CC:    true
           path: /opt/snaps/snap1/extscc_cc
           configPath: extscc
           chaincodeType: BINARY
-          inpeercontainer:  true
-
+          executionEnvironment:  SYSTEM_EXT
+          enabled: true
+          invokableExternal: true
+          invokableCC2CC:    true
 
     # Logging section for the chaincode container
     logging:

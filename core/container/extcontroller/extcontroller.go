@@ -37,13 +37,12 @@ import (
 )
 
 type extContainer struct {
-	chaincode       shim.Chaincode
-	running         bool
-	args            []string
-	env             []string
-	chaincodeType   pb.ChaincodeSpec_Type
-	configPath      string
-	inPeerContainer bool
+	chaincode     shim.Chaincode
+	running       bool
+	args          []string
+	env           []string
+	chaincodeType pb.ChaincodeSpec_Type
+	configPath    string
 }
 
 var (
@@ -62,13 +61,13 @@ func (s ExtSysCCRegisteredErr) Error() string {
 }
 
 //Register registers remote system chaincode with given path. The deploy should be called to initialize
-func Register(path string, cc shim.Chaincode, cctype pb.ChaincodeSpec_Type, configPath string, inPeerContainer bool) error {
+func Register(path string, cc shim.Chaincode, cctype pb.ChaincodeSpec_Type, configPath string) error {
 	tmp := typeRegistry[path]
 	if tmp != nil {
 		return ExtSysCCRegisteredErr(path)
 	}
 
-	typeRegistry[path] = &extContainer{chaincode: cc, chaincodeType: cctype, configPath: configPath, inPeerContainer: inPeerContainer}
+	typeRegistry[path] = &extContainer{chaincode: cc, chaincodeType: cctype, configPath: configPath}
 	return nil
 }
 
@@ -84,7 +83,7 @@ func (vm *ExtVM) getInstance(ctxt context.Context, ipctemplate *extContainer, in
 		return ec, nil
 	}
 	ec = &extContainer{args: args, env: env, chaincode: ipctemplate.chaincode,
-		chaincodeType:ipctemplate.chaincodeType, configPath:ipctemplate.configPath, inPeerContainer:ipctemplate.inPeerContainer}
+		chaincodeType: ipctemplate.chaincodeType, configPath: ipctemplate.configPath}
 	instRegistry[instName] = ec
 	extLogger.Debugf("chaincode instance created for %s", instName)
 	return ec, nil
@@ -142,33 +141,24 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 		}
 	}
 
-	if ec.inPeerContainer {
-		// To be started in peer container from binary or source
-		if ec.chaincodeType == pb.ChaincodeSpec_BINARY {
-			//To be started from binary
+	if ec.chaincodeType == pb.ChaincodeSpec_BINARY {
+		//To be started from binary
 
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						extLogger.Criticalf("caught panic from external system chaincode  %s", instName)
-					}
-				}()
-				ec.exec_cmd(path, env)
-				ec.running = true
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					extLogger.Criticalf("caught panic from external system chaincode  %s", instName)
+				}
 			}()
-
-		} else if ec.chaincodeType == pb.ChaincodeSpec_GOLANG {
-			//To be started from source
-			//TODO: (Implement) to be started from source
+			ec.exec_cmd(path, env)
 			ec.running = true
-		}
-	} else {
-		// To be started in docker from binary or source
-		//TODO (Implement )
+		}()
 
+	} else if ec.chaincodeType == pb.ChaincodeSpec_GOLANG {
+		//To be started from source
+		//TODO: (Implement) to be started from source
 		ec.running = true
 	}
-
 
 	return nil
 }
@@ -212,7 +202,6 @@ func (vm *ExtVM) GetVMName(ccid ccintf.CCID) (string, error) {
 
 //exec_cmd to run path binary in peer container
 func (ec *extContainer) exec_cmd(path string, env []string) error {
-
 
 	// Setting up environment variables for command to be run
 	envmap := make(map[string]string)
