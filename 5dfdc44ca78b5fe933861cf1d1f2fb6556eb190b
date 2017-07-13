@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5950769d_5836158c",
+        "filename": "core/scc/scc_test.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 130,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-13T16:17:58Z",
+      "side": 1,
+      "message": "Chaincode: \u0026lscc.LifeCycleSysCC{},\n\nwas added due to the implicit isExternal call. It should probably be removed with this additional change to keep this test case unchanged.",
+      "range": {
+        "startLine": 130,
+        "startChar": 1,
+        "endLine": 130,
+        "endChar": 36
+      },
+      "revId": "5dfdc44ca78b5fe933861cf1d1f2fb6556eb190b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "70d994c4_433b8cce",
+        "filename": "core/scc/scc_test.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 137,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-13T16:17:58Z",
+      "side": 1,
+      "message": "Chaincode: \u0026lscc.LifeCycleSysCC{},\nwas added due to the implicit isExternal call. It should probably be removed with this additional change to keep this test case unchanged.",
+      "range": {
+        "startLine": 137,
+        "startChar": 2,
+        "endLine": 137,
+        "endChar": 36
+      },
+      "revId": "5dfdc44ca78b5fe933861cf1d1f2fb6556eb190b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
