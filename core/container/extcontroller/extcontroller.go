@@ -116,15 +116,15 @@ func (vm *ExtVM) Deploy(ctxt context.Context, ccid ccintf.CCID, args []string, e
 func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, env []string, builder container.BuildSpecFactory, prelaunchFunc container.PrelaunchFunc) error {
 	path := ccid.ChaincodeSpec.ChaincodeId.Path
 
-	ipctemplate := typeRegistry[path]
+	ectemplate := typeRegistry[path]
 
-	if ipctemplate == nil {
+	if ectemplate == nil {
 		return fmt.Errorf(fmt.Sprintf("%s not registered", path))
 	}
 
 	instName, _ := vm.GetVMName(ccid)
 
-	ec, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
+	ec, err := vm.getInstance(ctxt, ectemplate, instName, args, env)
 
 	if err != nil {
 		return fmt.Errorf(fmt.Sprintf("could not create instance for %s", instName))
