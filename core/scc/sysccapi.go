@@ -61,35 +61,30 @@ type SystemChaincode struct {
 	// having to remove its definition
 	Enabled bool
 
-	// Chaincode is the actual chaincode object
-	// If not nil, this object will be used as the in-process SCC
-	Chaincode shim.Chaincode
-
-	// --------------------------------------------------------------------------
-	// Properties below are used only if the Chaincode property is nil, that is,
-	// if this is an out of process SCC
-	// --------------------------------------------------------------------------
-
 	// Chaincode type
 	ChaincodeType pb.ChaincodeSpec_Type
 
+	// Execution Environment
+	// The SYSTEM_EXT environment is currently supported only for
+	// the GOLANG chaincode type
+	ExecutionEnvironment pb.ChaincodeDeploymentSpec_ExecutionEnvironment
+
+	// Chaincode is the actual chaincode object
+	// Required when ExecutionEnvironment == SYSTEM
+	Chaincode shim.Chaincode
+
 	// Path to the system chaincode. The path content depends on the chaincode type.
+	// Required when ExecutionEnvironment != SYSTEM
+	// Ignored when ExecutionEnvironment == SYSTEM
 	Path string
 
 	// Path to the system chaincode configuration.
+	// Required when ExecutionEnvironment != SYSTEM
+	// Ignored when ExecutionEnvironment == SYSTEM
 	// When the SCC is deployed to its own docker container, ConfigPath is mounted as a volume.
 	// When the SCC is spawned as a process alongside the peer process, ConfigPath is
 	// passed to the process as the current working directory.
 	ConfigPath string
-
-	// By default, an out of process chaincode is deployed to its own docker container.
-	// A GOLANG chaincode can specify InPeerContainer=true, to be deployed as a process
-	// alongside the peer process.
-	InPeerContainer bool
-}
-
-func (syscc *SystemChaincode) isExternal() bool {
-	return syscc.Chaincode == nil
 }
 
 // RegisterSysCC registers the given system chaincode with the peer
@@ -99,8 +94,8 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 		return nil
 	}
 
-	if syscc.isExternal() {
-		err := extcontroller.Register(syscc.Path, syscc.Chaincode, syscc.ChaincodeType, syscc.ConfigPath, syscc.InPeerContainer)
+	if syscc.ExecutionEnvironment == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		err := extcontroller.Register(syscc.Path, syscc.Chaincode, syscc.ChaincodeType, syscc.ConfigPath)
 		if err != nil {
 			errStr := fmt.Sprintf("could not register (%s,%v): %s", syscc.Path, syscc, err)
 			sysccLogger.Error(errStr)
@@ -153,7 +148,7 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: &pb.ChaincodeInput{Args: syscc.InitArgs}}
 
 	// First build and get the deployment spec
-	chaincodeDeploymentSpec, err := buildSysCC(ctxt, spec, syscc.isExternal())
+	chaincodeDeploymentSpec, err := buildSysCC(ctxt, spec, syscc.ExecutionEnvironment)
 
 	if err != nil {
 		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
@@ -180,7 +175,7 @@ func DeDeploySysCC(chainID string, syscc *SystemChaincode) error {
 
 	ctx := context.Background()
 	// First build and get the deployment spec
-	chaincodeDeploymentSpec, err := buildSysCC(ctx, spec, syscc.isExternal())
+	chaincodeDeploymentSpec, err := buildSysCC(ctx, spec, syscc.ExecutionEnvironment)
 
 	if err != nil {
 		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
@@ -199,12 +194,8 @@ func DeDeploySysCC(chainID string, syscc *SystemChaincode) error {
 }
 
 // buildLocal builds a given chaincode code
-func buildSysCC(context context.Context, spec *pb.ChaincodeSpec, isExternal bool) (*pb.ChaincodeDeploymentSpec, error) {
+func buildSysCC(context context.Context, spec *pb.ChaincodeSpec, execEnv pb.ChaincodeDeploymentSpec_ExecutionEnvironment) (*pb.ChaincodeDeploymentSpec, error) {
 	var codePackageBytes []byte
-	execEnv := pb.ChaincodeDeploymentSpec_SYSTEM
-	if isExternal {
-		execEnv = pb.ChaincodeDeploymentSpec_SYSTEM_EXT
-	}
 	chaincodeDeploymentSpec := &pb.ChaincodeDeploymentSpec{ExecEnv: execEnv, ChaincodeSpec: spec, CodePackage: codePackageBytes}
 	return chaincodeDeploymentSpec, nil
 }
