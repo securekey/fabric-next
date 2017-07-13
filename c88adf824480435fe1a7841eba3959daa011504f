@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e48fcd8e_9e19de14",
+        "filename": "sampleconfig/core.yaml",
+        "patchSetId": 3
+      },
+      "lineNbr": 378,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-13T19:21:09Z",
+      "side": 1,
+      "message": "SYSTEM_EXT should be implicit for external SCCs. No need to have this line in core.yaml\nIt should be hardcoded in importsys.go",
+      "range": {
+        "startLine": 378,
+        "startChar": 10,
+        "endLine": 378,
+        "endChar": 43
+      },
+      "revId": "c88adf824480435fe1a7841eba3959daa011504f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
