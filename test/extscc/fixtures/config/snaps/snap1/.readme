@@ -4,7 +4,8 @@
 For example: <GOPATH>/src/github.com/hyperledger/fabric/test/extscc/fixtures/src/github.com/extscc_cc
 
 * run 'go build' command on your external system chaincode
-For example : go run extscc_cc.go
+For example : go build -ldflags "-linkmode external -extldflags '-static'" extscc_cc.go
+Note: Above command has to be run in target platform, for example "Vagrant" for mac
 
 * Copy generated executable file to this directory
 
