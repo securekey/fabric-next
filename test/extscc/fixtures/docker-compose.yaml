@@ -95,8 +95,6 @@ services:
         - /var/run/:/host/var/run/
         - ./channel/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/:/etc/hyperledger/msp/peer
         - ./config/snaps/:/opt/snaps
-        # # TODO : Below volume entry to be removed once problem with go executable binary dependency has been resolved (building with necessary flags)
-        - /usr/lib/:/usr/lib/
     depends_on:
       - orderer.example.com
       - builder
@@ -128,8 +126,6 @@ services:
         - /var/run/:/host/var/run/
         - ./channel/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/:/etc/hyperledger/msp/peer
         - ./config/snaps/:/opt/snaps
-        # # TODO : Below volume entry to be removed once problem with go executable binary dependency has been resolved (building with necessary flags)
-        - /usr/lib/:/usr/lib/
     depends_on:
       - orderer.example.com
       - builder
