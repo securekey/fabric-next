@@ -188,7 +188,6 @@ func loadExternalSysCCs() error {
 			InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableCC2CC", key)),
 			InitArgs:          [][]byte{[]byte("")},
 			Chaincode:         nil,
-			InPeerContainer:   viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.inpeercontainer", key)),
 		}
 		if escc.Path == "" {
 			return fmt.Errorf("Error loading system chaincode %s: Path is not provided", key)
@@ -196,12 +195,28 @@ func loadExternalSysCCs() error {
 		if escc.ConfigPath == "" {
 			return fmt.Errorf("Error loading system chaincode %s: ConfigPath is not provided", key)
 		}
+
+		// Load chaincode type
 		chaincodeTypeName := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.chaincodeType", key))
 		chaincodeType, ok := pb.ChaincodeSpec_Type_value[chaincodeTypeName]
 		if !ok || chaincodeType == 0 {
 			return fmt.Errorf("Error loading system chaincode %s: ChaincodeType is not provided", key)
 		}
 		escc.ChaincodeType = pb.ChaincodeSpec_Type(chaincodeType)
+
+		// Load execution environment
+		executionEnvironmentName := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.executionEnvironment", key))
+		executionEnvironment, ok := pb.ChaincodeDeploymentSpec_ExecutionEnvironment_value[executionEnvironmentName]
+		if !ok || executionEnvironment == 0 {
+			return fmt.Errorf("Error loading system chaincode %s: ExecutionEnvironment is not provided", key)
+		}
+		escc.ExecutionEnvironment = pb.ChaincodeDeploymentSpec_ExecutionEnvironment(executionEnvironment)
+
+		if escc.ExecutionEnvironment == pb.ChaincodeDeploymentSpec_SYSTEM_EXT && escc.ChaincodeType != pb.ChaincodeSpec_GOLANG {
+			// TODO: uncomment this line once the extcontroller properly handles this case
+			// return fmt.Errorf("Error loading system chaincode %s: SYSTEM_EXT execution environment requires GOLANG chaincode type", key)
+		}
+
 		systemChaincodes = append(systemChaincodes, escc)
 	}
 

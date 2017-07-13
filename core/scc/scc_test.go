@@ -24,7 +24,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	ccprovider2 "github.com/hyperledger/fabric/core/mocks/ccprovider"
 	"github.com/hyperledger/fabric/core/peer"
-	"github.com/hyperledger/fabric/core/scc/lscc"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -40,25 +39,20 @@ func init() {
 }
 
 func MockExternalSysCCs(enabled bool) {
-	//mock External SysCCs
-	chaincodeType, _ := pb.ChaincodeSpec_Type_value[pb.ChaincodeSpec_Type_name[1]]
 
-	sysExtCCs := SystemChaincode{
-		Enabled:           enabled,
-		InvokableExternal: true,
-		InvokableCC2CC:    false,
-		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc",
-		ConfigPath:        "github.com/hyperledger/fabric/core/chaincode/extscc/config",
-		ChaincodeType:     pb.ChaincodeSpec_Type(chaincodeType),
-	}
+	//mock External SysCCs
+	sysExtCCs := SystemChaincode{}
 
 	viper.Set("chaincode.systemext", map[string]interface{}{"extscc": sysExtCCs})
 
 	// below entries are needed as the above line doesn't simulate exact real yaml entries
-	viper.Set("chaincode.systemext.extscc.path", sysExtCCs.Path)
-	viper.Set("chaincode.systemext.extscc.configPath", sysExtCCs.ConfigPath)
-	viper.Set("chaincode.systemext.extscc.chaincodeType", sysExtCCs.ChaincodeType)
-	viper.Set("chaincode.systemext.extscc.enabled", enabled)
+	viper.Set("chaincode.systemext.extscc.path", "github.com/hyperledger/fabric/core/chaincode/extscc")
+	viper.Set("chaincode.systemext.extscc.configPath", "github.com/hyperledger/fabric/core/chaincode/extscc/config")
+	viper.Set("chaincode.systemext.extscc.chaincodeType", "GOLANG")
+	viper.Set("chaincode.systemext.extscc.executionEnvironment", "SYSTEM_EXT")
+	viper.Set("chaincode.systemext.extscc.enabled", true)
+	viper.Set("chaincode.systemext.extscc.invokableExternal", true)
+	viper.Set("chaincode.systemext.extscc.invokableCC2CC", true)
 }
 
 func TestDeploy(t *testing.T) {
@@ -130,17 +124,15 @@ func TestMockRegisterAndResetSysCCs(t *testing.T) {
 func TestRegisterSysCC(t *testing.T) {
 	// Chaincode is now required for regular SCCs
 	err := RegisterSysCC(&SystemChaincode{
-		Name:      "lscc",
-		Path:      "path",
-		Chaincode: &lscc.LifeCycleSysCC{},
-		Enabled:   true,
+		Name:    "lscc",
+		Path:    "path",
+		Enabled: true,
 	})
 	assert.NoError(t, err)
 	err = RegisterSysCC(&SystemChaincode{
-		Name:      "lscc",
-		Path:      "path",
-		Chaincode: &lscc.LifeCycleSysCC{},
-		Enabled:   true,
+		Name:    "lscc",
+		Path:    "path",
+		Enabled: true,
 	})
 	assert.Error(t, err)
 	assert.Contains(t, "path already registered", err)
@@ -150,15 +142,15 @@ func TestRegisterDuplicateExtSysCC(t *testing.T) {
 	MockExternalSysCCs(true)
 	RegisterSysCCs()
 
-	chaincodeType, _ := pb.ChaincodeSpec_Type_value[pb.ChaincodeSpec_Type_name[1]]
 	ex := &SystemChaincode{
-		Name:              "extscc",
-		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc",
-		Enabled:           true,
-		InvokableExternal: true,
-		InvokableCC2CC:    false,
-		ConfigPath:        "github.com/hyperledger/fabric/core/chaincode/extscc/config",
-		ChaincodeType:     pb.ChaincodeSpec_Type(chaincodeType),
+		Name:                 "extscc",
+		Path:                 "github.com/hyperledger/fabric/core/chaincode/extscc",
+		Enabled:              true,
+		InvokableExternal:    true,
+		InvokableCC2CC:       false,
+		ConfigPath:           "github.com/hyperledger/fabric/core/chaincode/extscc/config",
+		ChaincodeType:        pb.ChaincodeSpec_GOLANG,
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
 	}
 	err := RegisterSysCC(ex)
 
