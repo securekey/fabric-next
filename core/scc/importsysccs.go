@@ -35,62 +35,69 @@ import (
 //see systemchaincode_test.go for an example using "sample_syscc"
 var systemChaincodes = []*SystemChaincode{
 	{
-		Enabled:           true,
-		Name:              "cscc",
-		Path:              "github.com/hyperledger/fabric/core/scc/cscc",
-		InitArgs:          [][]byte{[]byte("")},
-		Chaincode:         &cscc.PeerConfiger{},
-		InvokableExternal: true, // cscc is invoked to join a channel
+		Enabled:              true,
+		Name:                 "cscc",
+		Path:                 "github.com/hyperledger/fabric/core/scc/cscc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &cscc.PeerConfiger{},
+		InvokableExternal:    true, // cscc is invoked to join a channel
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 	{
-		Enabled:           true,
-		Name:              "lscc",
-		Path:              "github.com/hyperledger/fabric/core/scc/lscc",
-		InitArgs:          [][]byte{[]byte("")},
-		Chaincode:         &lscc.LifeCycleSysCC{},
-		InvokableExternal: true, // lscc is invoked to deploy new chaincodes
-		InvokableCC2CC:    true, // lscc can be invoked by other chaincodes
+		Enabled:              true,
+		Name:                 "lscc",
+		Path:                 "github.com/hyperledger/fabric/core/scc/lscc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &lscc.LifeCycleSysCC{},
+		InvokableExternal:    true, // lscc is invoked to deploy new chaincodes
+		InvokableCC2CC:       true, // lscc can be invoked by other chaincodes
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 	{
-		Enabled:   true,
-		Name:      "escc",
-		Path:      "github.com/hyperledger/fabric/core/scc/escc",
-		InitArgs:  [][]byte{[]byte("")},
-		Chaincode: &escc.EndorserOneValidSignature{},
+		Enabled:              true,
+		Name:                 "escc",
+		Path:                 "github.com/hyperledger/fabric/core/scc/escc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &escc.EndorserOneValidSignature{},
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 	{
-		Enabled:   true,
-		Name:      "vscc",
-		Path:      "github.com/hyperledger/fabric/core/scc/vscc",
-		InitArgs:  [][]byte{[]byte("")},
-		Chaincode: &vscc.ValidatorOneValidSignature{},
+		Enabled:              true,
+		Name:                 "vscc",
+		Path:                 "github.com/hyperledger/fabric/core/scc/vscc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &vscc.ValidatorOneValidSignature{},
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 	{
-		Enabled:           true,
-		Name:              "qscc",
-		Path:              "github.com/hyperledger/fabric/core/chaincode/qscc",
-		InitArgs:          [][]byte{[]byte("")},
-		Chaincode:         &qscc.LedgerQuerier{},
-		InvokableExternal: true, // qscc can be invoked to retrieve blocks
-		InvokableCC2CC:    true, // qscc can be invoked to retrieve blocks also by a cc
+		Enabled:              true,
+		Name:                 "qscc",
+		Path:                 "github.com/hyperledger/fabric/core/chaincode/qscc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &qscc.LedgerQuerier{},
+		InvokableExternal:    true, // qscc can be invoked to retrieve blocks
+		InvokableCC2CC:       true, // qscc can be invoked to retrieve blocks also by a cc
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 	{
-		Enabled:           true,
-		Name:              "snapsscc",
-		Path:              "github.com/hyperledger/fabric/core/chaincode/snapsscc",
-		InitArgs:          [][]byte{[]byte("")},
-		Chaincode:         &snapsscc.SnapsSCC{},
-		InvokableExternal: true, // snapsscc can be invoked externally
-		InvokableCC2CC:    true, // snapsscc can be invoked by other chaincodes
+		Enabled:              true,
+		Name:                 "snapsscc",
+		Path:                 "github.com/hyperledger/fabric/core/chaincode/snapsscc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &snapsscc.SnapsSCC{},
+		InvokableExternal:    true, // snapsscc can be invoked externally
+		InvokableCC2CC:       true, // snapsscc can be invoked by other chaincodes
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 	{
-		Enabled:           true,
-		Name:              "mscc",
-		Path:              "github.com/hyperledger/fabric/core/chaincode/mscc",
-		InitArgs:          [][]byte{[]byte("")},
-		Chaincode:         &mscc.MembershipSCC{},
-		InvokableExternal: true, // mscc can be invoked externally
-		InvokableCC2CC:    true, // mscc can be invoked by other chaincodes
+		Enabled:              true,
+		Name:                 "mscc",
+		Path:                 "github.com/hyperledger/fabric/core/chaincode/mscc",
+		InitArgs:             [][]byte{[]byte("")},
+		Chaincode:            &mscc.MembershipSCC{},
+		InvokableExternal:    true, // mscc can be invoked externally
+		InvokableCC2CC:       true, // mscc can be invoked by other chaincodes
+		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
 	},
 }
 
