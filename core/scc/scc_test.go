@@ -53,6 +53,12 @@ func MockExternalSysCCs(enabled bool) {
 	viper.Set("chaincode.systemext.extscc.enabled", true)
 	viper.Set("chaincode.systemext.extscc.invokableExternal", true)
 	viper.Set("chaincode.systemext.extscc.invokableCC2CC", true)
+
+	viper.Set("chaincode.systemext.extscc.initArgs", map[string]string{
+		"arg1key": "arg1value",
+		"arg2key": "arg2value",
+		"arg3key": "arg3value",
+	})
 }
 
 func TestDeploy(t *testing.T) {
@@ -106,6 +112,14 @@ func TestIsSysCCAndNotInvokableExternal(t *testing.T) {
 	assert.False(t, (&sccProviderImpl{}).IsSysCCAndNotInvokableExternal("cscc"))
 	assert.True(t, (&sccProviderImpl{}).IsSysCC("cscc"))
 	assert.True(t, (&sccProviderImpl{}).IsSysCCAndNotInvokableExternal("vscc"))
+}
+
+func TestSysCCInitArgs(t *testing.T) {
+	initArgs := SysCCInitArgs("extscc")
+	assert.Equal(t, 3, len(initArgs))
+	assert.Equal(t, "arg1key=arg1value", string(initArgs[0]))
+	assert.Equal(t, "arg2key=arg2value", string(initArgs[1]))
+	assert.Equal(t, "arg3key=arg3value", string(initArgs[2]))
 }
 
 func TestSccProviderImpl_GetQueryExecutorForLedger(t *testing.T) {

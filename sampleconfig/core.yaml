@@ -372,13 +372,17 @@ chaincode:
     # External system chaincodes
     systemext:
         extscc:
-          path: /opt/snaps/snap1/extscc_cc
-          configPath: extscc
-          chaincodeType: BINARY
-          executionEnvironment:  SYSTEM_EXT
-          enabled: true
-          invokableExternal: true
-          invokableCC2CC:    true
+            path: /opt/snaps/snap1/extscc_cc
+            configPath: extscc
+            chaincodeType: BINARY
+            executionEnvironment:  SYSTEM_EXT
+            enabled: true
+            invokableExternal: true
+            invokableCC2CC:    true
+            initArgs:
+                arg1key: arg1value
+                arg2key: arg2value
+                arg3key: arg3value
 
     # Logging section for the chaincode container
     logging:

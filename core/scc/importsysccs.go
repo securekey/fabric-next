@@ -153,6 +153,17 @@ func IsSysCCAndNotInvokableExternal(name string) bool {
 	return false
 }
 
+// SysCCInitArgs returns init arguments if the chaincode
+// is a system chaincode, or nil if it is not
+func SysCCInitArgs(name string) [][]byte {
+	for _, sysCC := range systemChaincodes {
+		if sysCC.Name == name {
+			return sysCC.InitArgs
+		}
+	}
+	return nil
+}
+
 // IsSysCCAndNotInvokableCC2CC returns true if the chaincode
 // is a system chaincode and *CANNOT* be invoked through
 // a cc2cc invocation
@@ -222,6 +233,16 @@ func loadExternalSysCCs() error {
 		if escc.ExecutionEnvironment == pb.ChaincodeDeploymentSpec_SYSTEM_EXT && escc.ChaincodeType != pb.ChaincodeSpec_GOLANG {
 			// TODO: uncomment this line once the extcontroller properly handles this case
 			// return fmt.Errorf("Error loading system chaincode %s: SYSTEM_EXT execution environment requires GOLANG chaincode type", key)
+		}
+
+		// Load init arguments
+		initArgsMap := viper.GetStringMapString(fmt.Sprintf("chaincode.systemext.%s.initArgs", key))
+		if len(initArgsMap) > 0 {
+			var initArgs [][]byte
+			for k, v := range initArgsMap {
+				initArgs = append(initArgs, []byte(fmt.Sprintf("%s=%s", k, v)))
+			}
+			escc.InitArgs = initArgs
 		}
 
 		systemChaincodes = append(systemChaincodes, escc)
