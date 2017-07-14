@@ -214,7 +214,7 @@ func loadExternalSysCCs() error {
 		// Load execution environment
 		executionEnvironmentName := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.executionEnvironment", key))
 		executionEnvironment, ok := pb.ChaincodeDeploymentSpec_ExecutionEnvironment_value[executionEnvironmentName]
-		if !ok || executionEnvironment == 0 {
+		if !ok {
 			return fmt.Errorf("Error loading system chaincode %s: ExecutionEnvironment is not provided", key)
 		}
 		escc.ExecutionEnvironment = pb.ChaincodeDeploymentSpec_ExecutionEnvironment(executionEnvironment)
