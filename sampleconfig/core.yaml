@@ -372,8 +372,8 @@ chaincode:
     # External system chaincodes
     systemext:
         extscc:
-            path: /opt/snaps/snap1/extscc_cc
-            configPath: extscc
+            path: extscc1/extscc_cc
+            configPath: /opt/extsysccs
             chaincodeType: BINARY
             executionEnvironment:  SYSTEM_EXT
             enabled: true
