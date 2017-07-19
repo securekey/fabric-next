@@ -20,7 +20,12 @@ import (
 	//import system chain codes here
 
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 
+	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/scc/cscc"
 	"github.com/hyperledger/fabric/core/scc/escc"
 	"github.com/hyperledger/fabric/core/scc/lscc"
@@ -35,81 +40,95 @@ import (
 //see systemchaincode_test.go for an example using "sample_syscc"
 var systemChaincodes = []*SystemChaincode{
 	{
-		Enabled:              true,
-		Name:                 "cscc",
-		Path:                 "github.com/hyperledger/fabric/core/scc/cscc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &cscc.PeerConfiger{},
-		InvokableExternal:    true, // cscc is invoked to join a channel
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:           true,
+		Name:              "cscc",
+		Path:              "github.com/hyperledger/fabric/core/scc/cscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         &cscc.PeerConfiger{},
+		InvokableExternal: true, // cscc is invoked to join a channel
 	},
 	{
-		Enabled:              true,
-		Name:                 "lscc",
-		Path:                 "github.com/hyperledger/fabric/core/scc/lscc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &lscc.LifeCycleSysCC{},
-		InvokableExternal:    true, // lscc is invoked to deploy new chaincodes
-		InvokableCC2CC:       true, // lscc can be invoked by other chaincodes
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:           true,
+		Name:              "lscc",
+		Path:              "github.com/hyperledger/fabric/core/scc/lscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         &lscc.LifeCycleSysCC{},
+		InvokableExternal: true, // lscc is invoked to deploy new chaincodes
+		InvokableCC2CC:    true, // lscc can be invoked by other chaincodes
 	},
 	{
-		Enabled:              true,
-		Name:                 "escc",
-		Path:                 "github.com/hyperledger/fabric/core/scc/escc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &escc.EndorserOneValidSignature{},
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:   true,
+		Name:      "escc",
+		Path:      "github.com/hyperledger/fabric/core/scc/escc",
+		InitArgs:  [][]byte{[]byte("")},
+		Chaincode: &escc.EndorserOneValidSignature{},
 	},
 	{
-		Enabled:              true,
-		Name:                 "vscc",
-		Path:                 "github.com/hyperledger/fabric/core/scc/vscc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &vscc.ValidatorOneValidSignature{},
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:   true,
+		Name:      "vscc",
+		Path:      "github.com/hyperledger/fabric/core/scc/vscc",
+		InitArgs:  [][]byte{[]byte("")},
+		Chaincode: &vscc.ValidatorOneValidSignature{},
 	},
 	{
-		Enabled:              true,
-		Name:                 "qscc",
-		Path:                 "github.com/hyperledger/fabric/core/chaincode/qscc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &qscc.LedgerQuerier{},
-		InvokableExternal:    true, // qscc can be invoked to retrieve blocks
-		InvokableCC2CC:       true, // qscc can be invoked to retrieve blocks also by a cc
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:           true,
+		Name:              "qscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/qscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         &qscc.LedgerQuerier{},
+		InvokableExternal: true, // qscc can be invoked to retrieve blocks
+		InvokableCC2CC:    true, // qscc can be invoked to retrieve blocks also by a cc
 	},
 	{
-		Enabled:              true,
-		Name:                 "snapsscc",
-		Path:                 "github.com/hyperledger/fabric/core/chaincode/snapsscc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &snapsscc.SnapsSCC{},
-		InvokableExternal:    true, // snapsscc can be invoked externally
-		InvokableCC2CC:       true, // snapsscc can be invoked by other chaincodes
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:           true,
+		Name:              "snapsscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/snapsscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         &snapsscc.SnapsSCC{},
+		InvokableExternal: true, // snapsscc can be invoked externally
+		InvokableCC2CC:    true, // snapsscc can be invoked by other chaincodes
 	},
 	{
-		Enabled:              true,
-		Name:                 "mscc",
-		Path:                 "github.com/hyperledger/fabric/core/chaincode/mscc",
-		InitArgs:             [][]byte{[]byte("")},
-		Chaincode:            &mscc.MembershipSCC{},
-		InvokableExternal:    true, // mscc can be invoked externally
-		InvokableCC2CC:       true, // mscc can be invoked by other chaincodes
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM,
+		Enabled:           true,
+		Name:              "mscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/mscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         &mscc.MembershipSCC{},
+		InvokableExternal: true, // mscc can be invoked externally
+		InvokableCC2CC:    true, // mscc can be invoked by other chaincodes
 	},
 }
 
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func RegisterSysCCs() {
+	createCDSForInternalSCCs()
 	err := loadExternalSysCCs()
 	if err != nil {
 		panic(fmt.Errorf("Error loading external system CCs: %v", err))
 	}
 	for _, sysCC := range systemChaincodes {
 		RegisterSysCC(sysCC)
+	}
+}
+
+func createCDSForInternalSCCs() {
+	// Create cds for internal SCCs
+	for _, syscc := range systemChaincodes {
+		syscc.CDS = &pb.ChaincodeDeploymentSpec{
+			ExecEnv: pb.ChaincodeDeploymentSpec_SYSTEM,
+			ChaincodeSpec: &pb.ChaincodeSpec{
+				Type: pb.ChaincodeSpec_GOLANG,
+				ChaincodeId: &pb.ChaincodeID{
+					Name:    syscc.Name,
+					Path:    syscc.Path,
+					Version: util.GetSysCCVersion(),
+				},
+				Input: &pb.ChaincodeInput{
+					Args: syscc.InitArgs,
+				},
+			},
+		}
 	}
 }
 
@@ -192,61 +211,77 @@ func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 
 func loadExternalSysCCs() error {
 
-	ccs := viper.GetStringMap("chaincode.systemext")
-
-	sysccLogger.Infof("Loading %d external system chaincodes", len(ccs))
-
-	for key := range ccs {
-		escc := &SystemChaincode{
-			Name:              key,
-			Path:              viper.GetString(fmt.Sprintf("chaincode.systemext.%s.path", key)),
-			ConfigPath:        viper.GetString(fmt.Sprintf("chaincode.systemext.%s.configPath", key)),
-			Enabled:           viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.enabled", key)),
-			InvokableExternal: viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableExternal", key)),
-			InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.invokableCC2CC", key)),
-			InitArgs:          [][]byte{[]byte("")},
-			Chaincode:         nil,
-		}
-		if escc.Path == "" {
-			return fmt.Errorf("Error loading system chaincode %s: Path is not provided", key)
-		}
-		if escc.ConfigPath == "" {
-			return fmt.Errorf("Error loading system chaincode %s: ConfigPath is not provided", key)
-		}
-
-		// Load chaincode type
-		chaincodeTypeName := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.chaincodeType", key))
-		chaincodeType, ok := pb.ChaincodeSpec_Type_value[chaincodeTypeName]
-		if !ok || chaincodeType == 0 {
-			return fmt.Errorf("Error loading system chaincode %s: ChaincodeType is not provided", key)
-		}
-		escc.ChaincodeType = pb.ChaincodeSpec_Type(chaincodeType)
-
-		// Load execution environment
-		executionEnvironmentName := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.executionEnvironment", key))
-		executionEnvironment, ok := pb.ChaincodeDeploymentSpec_ExecutionEnvironment_value[executionEnvironmentName]
-		if !ok {
-			return fmt.Errorf("Error loading system chaincode %s: ExecutionEnvironment is not provided", key)
-		}
-		escc.ExecutionEnvironment = pb.ChaincodeDeploymentSpec_ExecutionEnvironment(executionEnvironment)
-
-		if escc.ExecutionEnvironment == pb.ChaincodeDeploymentSpec_SYSTEM_EXT && escc.ChaincodeType != pb.ChaincodeSpec_GOLANG {
-			// TODO: uncomment this line once the extcontroller properly handles this case
-			// return fmt.Errorf("Error loading system chaincode %s: SYSTEM_EXT execution environment requires GOLANG chaincode type", key)
-		}
-
-		// Load init arguments
-		initArgsMap := viper.GetStringMapString(fmt.Sprintf("chaincode.systemext.%s.initArgs", key))
-		if len(initArgsMap) > 0 {
-			var initArgs [][]byte
-			for k, v := range initArgsMap {
-				initArgs = append(initArgs, []byte(fmt.Sprintf("%s=%s", k, v)))
-			}
-			escc.InitArgs = initArgs
-		}
-
-		systemChaincodes = append(systemChaincodes, escc)
+	extSccPath := viper.GetString("chaincode.extSccPath")
+	if extSccPath == "" {
+		sysccLogger.Info("extSccPath is not specified, won't load any external system chaincodes")
+		return nil
 	}
 
-	return nil
+	fi, err := os.Stat(extSccPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("External SCC directory is missing: %s", extSccPath)
+		}
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("extSccPath is not a directory: %s", extSccPath)
+	}
+
+	sysccLogger.Infof("Loading external SCCs from path: %s", extSccPath)
+	err = filepath.Walk(extSccPath, func(path string, f os.FileInfo, err error) error {
+		if err == nil {
+			if path == extSccPath {
+				return nil
+			}
+			if f.IsDir() {
+				sysccLogger.Infof("Skipping loading SCC from directory: %s", path)
+				return nil
+			}
+			sysccLogger.Infof("Loading external SCC from path: %s", path)
+			ccbytes, err := ioutil.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("Error reading from file %s: %v", path, err)
+			}
+			sysccLogger.Debugf("%d bytes read from file %s", len(ccbytes), path)
+			ccpack := ccprovider.CDSPackage{}
+			_, err = ccpack.InitFromBuffer(ccbytes)
+			if err != nil {
+				return err
+			}
+			cds := ccpack.GetDepSpec()
+			ccName := cds.GetChaincodeSpec().GetChaincodeId().GetName()
+
+			execEnv := pb.ChaincodeDeploymentSpec_DOCKER
+			execEnvString := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.execEnv", ccName))
+			if execEnvString != "" {
+				ee, ok := pb.ChaincodeDeploymentSpec_ExecutionEnvironment_value[execEnvString]
+				if !ok {
+					return fmt.Errorf("Invalid execution environment: %s", execEnvString)
+				}
+				execEnv = pb.ChaincodeDeploymentSpec_ExecutionEnvironment(ee)
+			}
+			cds.ExecEnv = execEnv
+
+			scc := &SystemChaincode{
+				Name:              ccName,
+				InitArgs:          [][]byte{[]byte("")},
+				Chaincode:         nil,
+				InvokableExternal: viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.InvokableExternal", ccName)),
+				InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.InvokableCC2CC", ccName)),
+				Enabled:           viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.Enabled", ccName)),
+				ConfigPath:        viper.GetString(fmt.Sprintf("chaincode.systemext.%s.ConfigPath", ccName)),
+				CDS:               cds,
+			}
+			systemChaincodes = append(systemChaincodes, scc)
+			// Whitelist if it's enabled
+			if scc.Enabled {
+				chaincodes := viper.GetStringMapString("chaincode.system")
+				chaincodes[ccName] = "enable"
+				viper.Set("chaincode.system", chaincodes)
+			}
+		}
+		return nil
+	})
+	return err
 }

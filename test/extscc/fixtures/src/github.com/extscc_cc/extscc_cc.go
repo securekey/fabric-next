@@ -27,10 +27,15 @@ import (
 type SimpleChaincode struct {
 }
 
+var logger = shim.NewLogger("extscc")
+
 // Init ...
 func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
-	fmt.Println("SimpleChaincode Init")
+	logger.Info("-----------------------------------------------")
+	logger.Info("=========================> extscc Init")
+	logger.Info("-----------------------------------------------")
 	return shim.Success(nil)
+	//return shim.Error("============ Testing if INIT is called by the peer ==================")
 }
 
 // Query ...

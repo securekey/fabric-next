@@ -595,7 +595,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 		//in the endorser has gone through LSCC validation. Just get the code from the FS.
 		if cds.CodePackage == nil {
 			//no code bytes for these situations
-			if !(chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT) {
+			if !(chaincodeSupport.userRunsCC || cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM) {
 				ccpack, err := ccprovider.GetChaincodeFromFS(cID.Name, cID.Version)
 				if err != nil {
 					return cID, cMsg, err
@@ -606,7 +606,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 			}
 		}
 
-		builder := func() (io.Reader, error) { return platforms.GenerateDockerBuild(cds) }
+		builder := func() (io.Reader, error) { return platforms.GenerateBuild(cds) }
 
 		cLang := cds.ChaincodeSpec.Type
 		err = chaincodeSupport.launchAndWaitForRegister(context, cccid, cds, cLang, builder)

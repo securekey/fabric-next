@@ -369,21 +369,6 @@ chaincode:
         snapsscc: enable
         extscc: enable
 
-    # External system chaincodes
-    systemext:
-        extscc:
-            path: extscc1/extscc_cc
-            configPath: /opt/extsysccs
-            chaincodeType: BINARY
-            executionEnvironment:  SYSTEM_EXT
-            enabled: true
-            invokableExternal: true
-            invokableCC2CC:    true
-            initArgs:
-                arg1key: arg1value
-                arg2key: arg2value
-                arg3key: arg3value
-
     # Logging section for the chaincode container
     logging:
       # Default level for all loggers within the chaincode container

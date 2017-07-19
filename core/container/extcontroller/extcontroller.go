@@ -33,6 +33,8 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 
+	"io/ioutil"
+
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
@@ -141,23 +143,27 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 		}
 	}
 
-	if ec.chaincodeType == pb.ChaincodeSpec_BINARY {
-		//To be started from binary
-
+	if ec.chaincodeType == pb.ChaincodeSpec_GOLANG {
+		reader, err := builder()
+		if err != nil {
+			return fmt.Errorf("Error creating binary builder for chaincode %s: %s", path, err)
+		}
+		b, err := ioutil.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("Error reading from chaincode %s builder: %s", path, err)
+		}
+		binPath := string(b)
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
 					extLogger.Criticalf("caught panic from external system chaincode  %s", instName)
 				}
 			}()
-			ec.exec_cmd(path, env)
+			ec.exec_cmd(binPath, env)
 			ec.running = true
 		}()
-
-	} else if ec.chaincodeType == pb.ChaincodeSpec_GOLANG {
-		//To be started from source
-		//TODO: (Implement) to be started from source
-		ec.running = true
+	} else {
+		return fmt.Errorf(fmt.Sprintf("Error starting chaincode %s: Only GOLANG chaincodes are supported", ccid.ChaincodeSpec.ChaincodeId.Name))
 	}
 
 	return nil
@@ -233,6 +239,7 @@ func (ec *extContainer) exec_cmd(path string, env []string) error {
 	cmd.Env = finalEnv
 	cmd.Dir = ec.configPath
 
+	extLogger.Infof("=================> Starting execution of %s", path)
 	err := cmd.Start()
 	if err != nil {
 		extLogger.Errorf("Failed to start external chaincode '%s', cause '%s'", path, err)

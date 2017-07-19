@@ -168,6 +168,20 @@ func generateDockerBuild(platform Platform, cds *pb.ChaincodeDeploymentSpec, inp
 	return nil
 }
 
+func GenerateBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
+	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_DOCKER {
+		return GenerateDockerBuild(cds)
+	} else if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		return GenerateExtBuild(cds)
+	} else {
+		return nil, fmt.Errorf("Failed to generate platform-specific build: execution environment is not supported: %s", pb.ChaincodeDeploymentSpec_ExecutionEnvironment_name[int32(cds.ExecEnv)])
+	}
+}
+
+func GenerateExtBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
+	return nil, fmt.Errorf("Failed to generate platform-specific build: execution environment is not YET supported: %s", pb.ChaincodeDeploymentSpec_ExecutionEnvironment_name[int32(cds.ExecEnv)])
+}
+
 func GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
 
 	inputFiles := make(InputFiles)

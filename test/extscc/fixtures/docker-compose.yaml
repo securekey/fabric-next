@@ -86,6 +86,19 @@ services:
       # # bridge network as the peers
       # # https://docs.docker.com/compose/networking/
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fixtures_default
+      - CORE_CHAINCODE_EXTSCCPATH=/opt/extsysccs
+      # EXTSCC1
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_ENABLED=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_EXECENV=DOCKER
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLEEXTERNAL=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLECC2CC=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/some/config/path
+      # EXTSCC2
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_ENABLED=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_EXECENV=SYSTEM_EXT
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLEEXTERNAL=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLECC2CC=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/some/config/path
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
@@ -117,6 +130,18 @@ services:
       # # bridge network as the peers
       # # https://docs.docker.com/compose/networking/
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fixtures_default
+      - CORE_CHAINCODE_EXTSCCPATH=/opt/extsysccs
+      # EXTSCC1
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_ENABLED=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLEEXTERNAL=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLECC2CC=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/some/config/path
+      # EXTSCC2
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_ENABLED=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_EXECENV=SYSTEM_EXT
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLEEXTERNAL=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLECC2CC=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/some/config/path
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
