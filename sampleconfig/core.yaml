@@ -367,7 +367,6 @@ chaincode:
         qscc: enable
         mscc: enable
         snapsscc: enable
-        extscc: enable
 
     # Logging section for the chaincode container
     logging:
