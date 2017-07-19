@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "47193ef9_3bf6d2c6",
+        "filename": "sampleconfig/core.yaml",
+        "patchSetId": 1
+      },
+      "lineNbr": 370,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-19T16:14:10Z",
+      "side": 1,
+      "message": "May not be needed any more",
+      "range": {
+        "startLine": 370,
+        "startChar": 8,
+        "endLine": 370,
+        "endChar": 14
+      },
+      "revId": "ef930a31074deacd3b1016cd7d255ed687da8b2d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
