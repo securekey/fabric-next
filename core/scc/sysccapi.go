@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
+	"github.com/hyperledger/fabric/core/container/dockercontroller"
 	"github.com/hyperledger/fabric/core/container/extcontroller"
 	"github.com/hyperledger/fabric/core/container/inproccontroller"
 	"github.com/hyperledger/fabric/core/peer"
@@ -87,26 +88,33 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 		return nil
 	}
 
+	var ok bool = true
+	var err error
 	path := syscc.CDS.ChaincodeSpec.ChaincodeId.Path
-	if syscc.CDS.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
-		err := extcontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
+
+	switch syscc.CDS.ExecEnv {
+	case pb.ChaincodeDeploymentSpec_DOCKER:
+		err = dockercontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
 		if err != nil {
-			errStr := fmt.Sprintf("could not register (%s,%v): %s", path, syscc, err)
-			sysccLogger.Error(errStr)
-			return fmt.Errorf(errStr)
+			_, ok = err.(dockercontroller.DockerExtSysCCRegisteredErr)
 		}
-		sysccLogger.Infof("system chaincode %s(%s) registered", syscc.Name, path)
-		return nil
+	case pb.ChaincodeDeploymentSpec_SYSTEM_EXT:
+		err = extcontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
+		if err != nil {
+			_, ok = err.(extcontroller.ExtSysCCRegisteredErr)
+		}
+	default:
+		err = inproccontroller.Register(path, syscc.Chaincode)
+		if err != nil {
+			_, ok = err.(inproccontroller.SysCCRegisteredErr)
+		}
 	}
 
-	err := inproccontroller.Register(path, syscc.Chaincode)
-	if err != nil {
-		//if the type is registered, the instance may not be... keep going
-		if _, ok := err.(inproccontroller.SysCCRegisteredErr); !ok {
-			errStr := fmt.Sprintf("could not register (%s,%v): %s", path, syscc, err)
-			sysccLogger.Error(errStr)
-			return fmt.Errorf(errStr)
-		}
+	//if the type is registered, the instance may not be... keep going
+	if !ok {
+		errStr := fmt.Sprintf("could not register (%s,%v): %s", path, syscc, err)
+		sysccLogger.Error(errStr)
+		return fmt.Errorf(errStr)
 	}
 	sysccLogger.Infof("system chaincode %s(%s) registered", syscc.Name, path)
 	return err
