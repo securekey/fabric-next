@@ -31,7 +31,6 @@ import (
 	"github.com/hyperledger/fabric/core/scc/lscc"
 	"github.com/hyperledger/fabric/core/scc/mscc"
 	"github.com/hyperledger/fabric/core/scc/qscc"
-	"github.com/hyperledger/fabric/core/scc/snapsscc"
 	"github.com/hyperledger/fabric/core/scc/vscc"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
@@ -78,15 +77,6 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         &qscc.LedgerQuerier{},
 		InvokableExternal: true, // qscc can be invoked to retrieve blocks
 		InvokableCC2CC:    true, // qscc can be invoked to retrieve blocks also by a cc
-	},
-	{
-		Enabled:           true,
-		Name:              "snapsscc",
-		Path:              "github.com/hyperledger/fabric/core/chaincode/snapsscc",
-		InitArgs:          [][]byte{[]byte("")},
-		Chaincode:         &snapsscc.SnapsSCC{},
-		InvokableExternal: true, // snapsscc can be invoked externally
-		InvokableCC2CC:    true, // snapsscc can be invoked by other chaincodes
 	},
 	{
 		Enabled:           true,

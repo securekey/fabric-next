@@ -24,7 +24,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	ccprovider2 "github.com/hyperledger/fabric/core/mocks/ccprovider"
 	"github.com/hyperledger/fabric/core/peer"
-	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -156,14 +155,12 @@ func TestRegisterDuplicateExtSysCC(t *testing.T) {
 	RegisterSysCCs()
 
 	ex := &SystemChaincode{
-		Name:                 "extscc",
-		Path:                 "github.com/hyperledger/fabric/core/chaincode/extscc",
-		Enabled:              true,
-		InvokableExternal:    true,
-		InvokableCC2CC:       false,
-		ConfigPath:           "github.com/hyperledger/fabric/core/chaincode/extscc/config",
-		ChaincodeType:        pb.ChaincodeSpec_GOLANG,
-		ExecutionEnvironment: pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+		Name:              "extscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc",
+		Enabled:           true,
+		InvokableExternal: true,
+		InvokableCC2CC:    false,
+		ConfigPath:        "github.com/hyperledger/fabric/core/chaincode/extscc/config",
 	}
 	err := RegisterSysCC(ex)
 
