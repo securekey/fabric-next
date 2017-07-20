@@ -98,7 +98,7 @@ services:
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_EXECENV=SYSTEM_EXT
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLEEXTERNAL=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLECC2CC=true
-      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/some/config/path
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/opt/extsysccs
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
@@ -141,7 +141,7 @@ services:
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_EXECENV=SYSTEM_EXT
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLEEXTERNAL=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLECC2CC=true
-      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/some/config/path
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/opt/extsysccs
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
