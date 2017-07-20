@@ -384,7 +384,7 @@ func (chaincodeSupport *ChaincodeSupport) getArgsAndEnv(cccid *ccprovider.CCCont
 		envs = append(envs, "CORE_CHAINCODE_LOGGING_FORMAT="+chaincodeSupport.logFormat)
 	}
 	switch cLang {
-	case pb.ChaincodeSpec_GOLANG, pb.ChaincodeSpec_CAR:
+	case pb.ChaincodeSpec_GOLANG, pb.ChaincodeSpec_CAR, pb.ChaincodeSpec_DOCKER, pb.ChaincodeSpec_BINARY:
 		args = []string{"chaincode", fmt.Sprintf("-peer.address=%s", chaincodeSupport.peerAddress)}
 	case pb.ChaincodeSpec_JAVA:
 		args = []string{"java", "-jar", "chaincode.jar", "--peerAddress", chaincodeSupport.peerAddress}
@@ -435,7 +435,7 @@ func (chaincodeSupport *ChaincodeSupport) launchAndWaitForRegister(ctxt context.
 		return nil
 	}
 
-	sir := container.StartImageReq{CCID: ccintf.CCID{ChaincodeSpec: cds.ChaincodeSpec, NetworkID: chaincodeSupport.peerNetworkID, PeerID: chaincodeSupport.peerID, Version: cccid.Version}, Builder: builder, Args: args, Env: env, PrelaunchFunc: preLaunchFunc}
+	sir := container.StartImageReq{CCID: ccintf.CCID{ChaincodeSpec: cds.ChaincodeSpec, NetworkID: chaincodeSupport.peerNetworkID, PeerID: chaincodeSupport.peerID, Version: cccid.Version, IsSys: cccid.Syscc}, Builder: builder, Args: args, Env: env, PrelaunchFunc: preLaunchFunc}
 
 	ipcCtxt := context.WithValue(ctxt, ccintf.GetCCHandlerKey(), chaincodeSupport)
 
