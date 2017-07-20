@@ -52,6 +52,7 @@ type CCID struct {
 	PeerID        string
 	ChainID       string
 	Version       string
+	IsSys         bool
 }
 
 //GetName returns canonical chaincode name based on chain name
