@@ -18,18 +18,20 @@ package scc
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
 
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	ccprovider2 "github.com/hyperledger/fabric/core/mocks/ccprovider"
 	"github.com/hyperledger/fabric/core/peer"
+	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func init() {
-	viper.Set("chaincode.system", map[string]string{"lscc": "enable", "a": "enable", "extscc": "enable"})
+	viper.Set("chaincode.system", map[string]string{"lscc": "enable", "a": "enable", "extscc1": "enable"})
 
 	MockExternalSysCCs(false)
 
@@ -43,17 +45,21 @@ func MockExternalSysCCs(enabled bool) {
 	sysExtCCs := SystemChaincode{}
 
 	viper.Set("chaincode.systemext", map[string]interface{}{"extscc": sysExtCCs})
+	sysccLogger.Errorf("Setting %s for chaincode.systemext.enabled", enabled)
+	viper.Set("chaincode.systemext.enabled", enabled)
+	// make sure this path is available and has a valid CDS file (extscc1.golang):
+	// github.com/hyperledger/fabric/test/extscc/fixtures/config/extsysccs/extscc1.golang
+	// todo need to investigate why unit tests can't read from a relative path
+	viper.Set("chaincode.systemext.cds.path", "../../test/extscc/fixtures/config/extsysccs")
 
 	// below entries are needed as the above line doesn't simulate exact real yaml entries
-	viper.Set("chaincode.systemext.extscc.path", "github.com/hyperledger/fabric/core/chaincode/extscc")
-	viper.Set("chaincode.systemext.extscc.configPath", "github.com/hyperledger/fabric/core/chaincode/extscc/config")
-	viper.Set("chaincode.systemext.extscc.chaincodeType", "GOLANG")
-	viper.Set("chaincode.systemext.extscc.executionEnvironment", "SYSTEM_EXT")
-	viper.Set("chaincode.systemext.extscc.enabled", true)
-	viper.Set("chaincode.systemext.extscc.invokableExternal", true)
-	viper.Set("chaincode.systemext.extscc.invokableCC2CC", true)
+	viper.Set("chaincode.systemext.extscc1.path", "github.com/hyperledger/fabric/core/chaincode/extscc")
+	viper.Set("chaincode.systemext.extscc1.configPath", "github.com/hyperledger/fabric/core/chaincode/extscc1/config")
+	viper.Set("chaincode.systemext.extscc1.invokableexternal", true)
+	viper.Set("chaincode.systemext.extscc1.invokablecc2cc", true)
+	viper.Set("chaincode.systemext.extscc1.enabled", enabled)
 
-	viper.Set("chaincode.systemext.extscc.initArgs", map[string]string{
+	viper.Set("chaincode.systemext.extscc1.initArgs", map[string]string{
 		"arg1key": "arg1value",
 		"arg2key": "arg2value",
 		"arg3key": "arg3value",
@@ -73,6 +79,19 @@ func TestDeploy(t *testing.T) {
 	deploySysCC("a", &SystemChaincode{
 		Enabled: true,
 		Name:    "lscc",
+		CDS: &pb.ChaincodeDeploymentSpec{
+			ExecEnv: pb.ChaincodeDeploymentSpec_SYSTEM,
+			ChaincodeSpec: &pb.ChaincodeSpec{
+				Type: pb.ChaincodeSpec_GOLANG,
+				ChaincodeId: &pb.ChaincodeID{
+					Name: "lscc",
+					Path: "",
+				},
+				Input: &pb.ChaincodeInput{
+					Args: [][]byte{[]byte("")},
+				},
+			},
+		},
 	})
 }
 
@@ -113,14 +132,6 @@ func TestIsSysCCAndNotInvokableExternal(t *testing.T) {
 	assert.True(t, (&sccProviderImpl{}).IsSysCCAndNotInvokableExternal("vscc"))
 }
 
-func TestSysCCInitArgs(t *testing.T) {
-	initArgs := SysCCInitArgs("extscc")
-	assert.Equal(t, 3, len(initArgs))
-	assert.Equal(t, "arg1key=arg1value", string(initArgs[0]))
-	assert.Equal(t, "arg2key=arg2value", string(initArgs[1]))
-	assert.Equal(t, "arg3key=arg3value", string(initArgs[2]))
-}
-
 func TestSccProviderImpl_GetQueryExecutorForLedger(t *testing.T) {
 	qe, err := (&sccProviderImpl{}).GetQueryExecutorForLedger("")
 	assert.Nil(t, qe)
@@ -135,16 +146,32 @@ func TestMockRegisterAndResetSysCCs(t *testing.T) {
 }
 
 func TestRegisterSysCC(t *testing.T) {
+	cds := &pb.ChaincodeDeploymentSpec{
+		ExecEnv: pb.ChaincodeDeploymentSpec_SYSTEM,
+		ChaincodeSpec: &pb.ChaincodeSpec{
+			Type: pb.ChaincodeSpec_GOLANG,
+			ChaincodeId: &pb.ChaincodeID{
+				Name: "lscc",
+				Path: "",
+			},
+			Input: &pb.ChaincodeInput{
+				Args: [][]byte{[]byte("")},
+			},
+		},
+	}
+
 	err := RegisterSysCC(&SystemChaincode{
 		Name:    "lscc",
 		Path:    "path",
 		Enabled: true,
+		CDS:     cds,
 	})
 	assert.NoError(t, err)
 	err = RegisterSysCC(&SystemChaincode{
 		Name:    "lscc",
 		Path:    "path",
 		Enabled: true,
+		CDS:     cds,
 	})
 	assert.Error(t, err)
 	assert.Contains(t, "path already registered", err)
@@ -153,16 +180,42 @@ func TestRegisterSysCC(t *testing.T) {
 func TestRegisterDuplicateExtSysCC(t *testing.T) {
 	MockExternalSysCCs(true)
 	RegisterSysCCs()
+	cds, err := mockextscc1CDS()
+
+	assert.Nil(t, err, "mocking extscc1 CDS should not return an error")
 
 	ex := &SystemChaincode{
-		Name:              "extscc",
-		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc",
+		Name:              "extscc1", // <-- name should trigger duplicate error
+		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc1",
 		Enabled:           true,
 		InvokableExternal: true,
 		InvokableCC2CC:    false,
-		ConfigPath:        "github.com/hyperledger/fabric/core/chaincode/extscc/config",
+		ConfigPath:        "github.com/hyperledger/fabric/core/chaincode/extscc1/config",
+		CDS:               cds,
 	}
-	err := RegisterSysCC(ex)
+	err = RegisterSysCC(ex)
 
 	assert.Error(t, err)
+}
+
+func mockextscc1CDS() (*pb.ChaincodeDeploymentSpec, error) {
+	// make sure this path is available and has a valid CDS file (extscc1.golang):
+	// github.com/hyperledger/fabric/test/extscc/fixtures/config/extsysccs/extscc1.golang
+	// todo need to investigate why unit tests can't read from a relative path
+	path := "../../test/extscc/fixtures/config/extsysccs/extscc1.golang"
+
+	ccbytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading from file %s: %v", path, err)
+	}
+
+	ccpack := ccprovider.CDSPackage{}
+
+	_, err = ccpack.InitFromBuffer(ccbytes)
+	if err != nil {
+		return nil, err
+	}
+	cds := ccpack.GetDepSpec()
+
+	return cds, nil
 }

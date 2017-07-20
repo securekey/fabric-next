@@ -93,10 +93,16 @@ var systemChaincodes = []*SystemChaincode{
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func RegisterSysCCs() {
 	createCDSForInternalSCCs()
-	err := loadExternalSysCCs()
-	if err != nil {
-		panic(fmt.Errorf("Error loading external system CCs: %v", err))
+	extSccEnabled := viper.GetBool("chaincode.systemext.enabled")
+	if !extSccEnabled {
+		sysccLogger.Info("External System CCs feature is disabled.")
+	} else {
+		err := loadExternalSysCCs()
+		if err != nil {
+			panic(fmt.Errorf("Error loading external system CCs: %v", err))
+		}
 	}
+	sysccLogger.Debugf("About to register %d SCCs", len(systemChaincodes))
 	for _, sysCC := range systemChaincodes {
 		RegisterSysCC(sysCC)
 	}
@@ -200,35 +206,34 @@ func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
 }
 
 func loadExternalSysCCs() error {
-
-	extSccPath := viper.GetString("chaincode.extSccPath")
-	if extSccPath == "" {
-		sysccLogger.Info("extSccPath is not specified, won't load any external system chaincodes")
+	extSccCDSPath := viper.GetString("chaincode.systemext.cds.path")
+	if extSccCDSPath == "" {
+		sysccLogger.Info("extSccCDSPath is not specified, won't load any external system chaincodes")
 		return nil
 	}
 
-	fi, err := os.Stat(extSccPath)
+	fi, err := os.Stat(extSccCDSPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("External SCC directory is missing: %s", extSccPath)
+			return fmt.Errorf("External SCC directory is missing: %s", extSccCDSPath)
 		}
 		return err
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("extSccPath is not a directory: %s", extSccPath)
+		return fmt.Errorf("extSccCDSPath is not a directory: %s", extSccCDSPath)
 	}
 
-	sysccLogger.Infof("Loading external SCCs from path: %s", extSccPath)
-	err = filepath.Walk(extSccPath, func(path string, f os.FileInfo, err error) error {
+	sysccLogger.Infof("Loading external SCCs from CDS path: %s", extSccCDSPath)
+	err = filepath.Walk(extSccCDSPath, func(path string, f os.FileInfo, err error) error {
 		if err == nil {
-			if path == extSccPath {
+			if path == extSccCDSPath {
 				return nil
 			}
 			if f.IsDir() {
 				sysccLogger.Infof("Skipping loading SCC from directory: %s", path)
 				return nil
 			}
-			sysccLogger.Infof("Loading external SCC from path: %s", path)
+			sysccLogger.Infof("Loading external SCC from CDS path: %s", path)
 			ccbytes, err := ioutil.ReadFile(path)
 			if err != nil {
 				return fmt.Errorf("Error reading from file %s: %v", path, err)
