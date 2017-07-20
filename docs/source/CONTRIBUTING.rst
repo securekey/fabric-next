@@ -1,10 +1,10 @@
 Contributions Welcome!
 ======================
 
-We welcome contributions to the Hyperledger Project in many forms, and
+We welcome contributions to Hyperledger in many forms, and
 there's always plenty to do!
 
-First things first, please review the Hyperledger Project's `Code of
+First things first, please review the Hyperledger `Code of
 Conduct <https://wiki.hyperledger.org/community/hyperledger-project-code-of-conduct>`__
 before participating. It is important that we keep things civil.
 
@@ -111,7 +111,7 @@ Discussion of the proposed feature should be conducted in the JIRA issue itself,
 so that we have a consistent pattern within our community as to where to find
 design discussion.
 
-Getting the support of three or more of the Fabric maintainers for the new
+Getting the support of three or more of the Hyperledger Fabric maintainers for the new
 feature will greatly enhance the probability that the feature's related CRs
 will be merged.
 
@@ -133,7 +133,7 @@ Next, try :doc:`building the project <dev-setup/build>` in your local
 development environment to ensure that everything is set up correctly.
 
 The :doc:`logging-control` document describes how to tweak
-the logging levels of various components within the Fabric. Finally,
+the logging levels of various components within Hyperledger Fabric. Finally,
 every source file needs to include a
 `license header <https://github.com/hyperledger/fabric/blob/master/docs/source/dev-setup/headers.txt>`__: modified to include a copyright
 statement for the principle author(s).
@@ -235,8 +235,7 @@ Maintainers
 The project's :doc:`maintainers <MAINTAINERS>` are responsible for
 reviewing and merging all patches submitted for review and they guide
 the over-all technical direction of the project within the guidelines
-established by the Hyperledger Project's Technical Steering Committee
-(TSC).
+established by the Hyperledger Technical Steering Committee (TSC).
 
 Becoming a maintainer
 ~~~~~~~~~~~~~~~~~~~~~

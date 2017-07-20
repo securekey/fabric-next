@@ -1,5 +1,5 @@
-Welcome to Fabric
-=================
+Welcome to Hyperledger Fabric
+=============================
 
 Hyperledger Fabric is a platform for distributed ledger solutions, underpinned
 by a modular architecture delivering high degrees of confidentiality, resiliency,
@@ -13,16 +13,17 @@ future of enterprise blockchain requires building on top of a fully-vetted,
 open source architecture; Hyperledger Fabric is your starting point.
 
 It's recommended for first-time users to begin by going through the
-:doc:`getting_started` section in order to gain familiarity with the Fabric
+:doc:`getting_started` section in order to gain familiarity with the Hyperledger Fabric
 components and the basic transaction flow.  Once comfortable, continue
 exploring the library for demos, technical specifications, APIs, etc.
 
-Before diving in, watch how Fabric is `Building a Blockchain for Business
-<https://www.youtube.com/watch?v=EKa5Gh9whgU>`__ .
+Before diving in, watch how Hyperledger Fabric is Building a Blockchain for
+Business:
 
+.. raw:: html
 
-
-.. NOTE:: This build of the docs is from the "|version|" branch
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/EKa5Gh9whgU" frameborder="0" allowfullscreen></iframe>
+   <br/><br/>
 
 .. toctree::
    :maxdepth: 2
@@ -60,6 +61,7 @@ Before diving in, watch how Fabric is `Building a Blockchain for Business
    msp
    configtx
    configtxgen
+   configtxlator
    cc-packaging-and-signing
    endorsement-policies
    error-handling
@@ -71,7 +73,7 @@ Before diving in, watch how Fabric is `Building a Blockchain for Business
 
    arch-deep-dive
    txflow
-   Fabric CA's User Guide <http://hyperledger-fabric-ca.readthedocs.io/en/latest>
+   Hyperledger Fabric CA's User Guide <http://hyperledger-fabric-ca.readthedocs.io/en/latest>
    fabric-sdks
    kafka
    channels
@@ -110,7 +112,6 @@ Before diving in, watch how Fabric is `Building a Blockchain for Business
    releases
    questions
    status
-   license
 
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/

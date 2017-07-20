@@ -437,26 +437,6 @@ func (g *gossipServiceImpl) validateMsg(msg proto.ReceivedMessage) bool {
 		}
 	}
 
-	if msg.GetGossipMessage().IsDataMsg() {
-		blockMsg := msg.GetGossipMessage().GetDataMsg()
-		if blockMsg.Payload == nil {
-			g.logger.Warning("Empty block! Discarding it")
-			return false
-		}
-
-		// If we're configured to skip block validation, don't verify it
-		if g.conf.SkipBlockVerification {
-			return true
-		}
-
-		seqNum := blockMsg.Payload.SeqNum
-		rawBlock := blockMsg.Payload.Data
-		if err := g.mcs.VerifyBlock(msg.GetGossipMessage().Channel, seqNum, rawBlock); err != nil {
-			g.logger.Warning("Could not verify block", blockMsg.Payload.SeqNum, ":", err)
-			return false
-		}
-	}
-
 	if msg.GetGossipMessage().IsStateInfoMsg() {
 		if err := g.validateStateInfoMsg(msg.GetGossipMessage()); err != nil {
 			g.logger.Warning("StateInfo message", msg, "is found invalid:", err)
@@ -595,6 +575,9 @@ func (g *gossipServiceImpl) gossipInChan(messages []*proto.SignedGossipMessage, 
 			return bytes.Equal(o.(*proto.SignedGossipMessage).Channel, channel)
 		}
 		messagesOfChannel, messages = partitionMessages(grabMsgs, messages)
+		if len(messagesOfChannel) == 0 {
+			continue
+		}
 		// Grab channel object for that channel
 		gc := g.chanState.getGossipChannelByChainID(channel)
 		if gc == nil {
@@ -604,15 +587,16 @@ func (g *gossipServiceImpl) gossipInChan(messages []*proto.SignedGossipMessage, 
 		// Select the peers to send the messages to
 		// For leadership messages we will select all peers that pass routing factory - e.g. all peers in channel and org
 		membership := g.disc.GetMembership()
-		allPeersInCh := filter.SelectPeers(len(membership), membership, chanRoutingFactory(gc))
-		peers2Send := filter.SelectPeers(g.conf.PropagatePeerNum, membership, chanRoutingFactory(gc))
+		var peers2Send []*comm.RemotePeer
+		if messagesOfChannel[0].IsLeadershipMsg() {
+			peers2Send = filter.SelectPeers(len(membership), membership, chanRoutingFactory(gc))
+		} else {
+			peers2Send = filter.SelectPeers(g.conf.PropagatePeerNum, membership, chanRoutingFactory(gc))
+		}
+
 		// Send the messages to the remote peers
 		for _, msg := range messagesOfChannel {
-			if msg.IsLeadershipMsg() {
-				g.comm.Send(msg, allPeersInCh...)
-			} else {
-				g.comm.Send(msg, peers2Send...)
-			}
+			g.comm.Send(msg, peers2Send...)
 		}
 	}
 }
@@ -935,7 +919,7 @@ func (sa *discoverySecurityAdapter) ValidateAliveMsg(m *proto.SignedGossipMessag
 	}
 
 	if identity == nil {
-		sa.logger.Warning("Don't have certificate for", am)
+		sa.logger.Debug("Don't have certificate for", am)
 		return false
 	}
 

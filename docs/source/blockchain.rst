@@ -1,22 +1,22 @@
 Introduction
 ============
-Hyperledger Fabric is a platform for distributed ledger solutions underpinned 
+Hyperledger Fabric is a platform for distributed ledger solutions underpinned
 by a modular architecture delivering high degrees of confidentiality,
 resiliency, flexibility and scalability. It is designed to support pluggable
 implementations of different components and accommodate the complexity and
 intricacies that exist across the economic ecosystem.
 
-Fabric delivers a uniquely elastic and extensible architecture, distinguishing
+Hyperledger Fabric delivers a uniquely elastic and extensible architecture, distinguishing
 it from alternative blockchain solutions. Planning for the future of enterprise
 blockchain requires building on top of a fully vetted, open-source architecture;
 Hyperledger Fabric is your starting point.
 
-We recommended first-time users begin by going through the rest of the 
-introduction below in order to gain familiarity with how blockchains work 
-and with the specific features and components of Fabric. 
+We recommended first-time users begin by going through the rest of the
+introduction below in order to gain familiarity with how blockchains work
+and with the specific features and components of Hyperledger Fabric.
 
-Once comfortable -- or if you're already familiar with blockchain and 
-Hyperledger Fabric -- go to :doc:`getting_started` and from there explore the 
+Once comfortable -- or if you're already familiar with blockchain and
+Hyperledger Fabric -- go to :doc:`getting_started` and from there explore the
 demos, technical specifications, APIs, etc.
 
 What is a Blockchain?
@@ -41,8 +41,7 @@ simple to determine the provenance of information because participants can be
 sure information has not been changed after the fact. It’s why blockchains
 are sometimes described as **systems of proof**.
 
- 
-**Smart Contracts**
+ **Smart Contracts**
 
 To support the consistent update of information – and to enable a whole host of
 ledger functions (transacting, querying, etc) – a blockchain network uses **smart
@@ -89,7 +88,6 @@ ownership of it.
 
 What you’re left with is a business network that looks like this:
 
-
 .. image:: images/current_network.png
 
 Modern technology has taken this process from stone tablets and paper folders
@@ -104,7 +102,6 @@ of failure.
 It’s impossible with today’s fractured approach to information and
 process sharing to build a system of record that spans a business network, even
 though the needs of visibility and trust are clear.
-
 
 **The Blockchain Difference**
 
@@ -133,7 +130,6 @@ You now know what blockchain is and why it’s useful. There are a lot of other
 details that are important, but they all relate to these fundamental ideas of
 the sharing of information and processes.
 
-
 What is Hyperledger Fabric?
 ---------------------------
 
@@ -151,14 +147,14 @@ and is a system by which participants manage their transactions.
 Where Hyperledger Fabric breaks from some other blockchain systems is that
 it is **private** and **permissioned**. Rather than the “proof of work” some
 blockchain networks use to verify identity (allowing anyone who meets those
-criteria to join the network), the members of a Fabric network enroll through
-a **membership services provider**.
+criteria to join the network), the members of a Hyperledger Fabric network
+enroll through a **membership services provider**.
 
-Fabric also offers several pluggable options. Ledger data can be stored in
-multiple formats, consensus mechanisms can be switched in and out,
-and different membership service providers are supported.
+Hyperledger Fabric also offers several pluggable options. Ledger data can be
+stored in multiple formats, consensus mechanisms can be switched in and out,
+and different MSPs are supported.
 
-Fabric also offers the ability to create **channels**, allowing a group of
+Hyperledger Fabric also offers the ability to create **channels**, allowing a group of
 participants to create a separate ledger of transactions. This is an especially
 important option for networks where some participants might be competitors and not
 want every transaction they make - a special price they're offering to some participants
@@ -166,17 +162,11 @@ and not others, for example - known to every participant. If two
 participants form a channel, then those participants – and no others – have copies
 of the ledger for that channel.
 
-The following diagram outlines the four building blocks of Hyperledger Fabric:
-
-.. image:: images/Requirements.png
-
 **Shared Ledger**
 
 Hyperledger Fabric has a ledger subsystem comprising two components: the **world
 state** and the **transaction log**. Each participant has a copy of the ledger to
-every Fabric network they belong to.
-
-.. image:: images/what.png
+every Hyperledger Fabric network they belong to.
 
 The world state component describes the state of the ledger at a given point
 in time. It’s the database of the ledger. The transaction log component records
@@ -197,18 +187,15 @@ application needs to interact with the ledger. In most cases chaincode only
 interacts with the database component of the ledger, the world state (querying
 it, for example), and not the transaction log.
 
-.. image:: images/sContracts.png
-
-You can write chaincode in several programming languages. Currently supported
-languages include GOLANG and Java with others coming soon.
+Chaincode can be implemented in several programming languages. The currently
+supported chaincode language is `Go <https://golang.org/>`__ with support
+for Java and other languages coming in future releases.
 
 **Privacy**
 
 Depending on the needs of a network, participants in a Business-to-Business
 (B2B) network might be extremely sensitive about how much information they share.
 For other networks, privacy will not be a top concern.
-
-.. image:: images/Lock.png
 
 Hyperledger Fabric supports networks where privacy (using channels) is a key
 operational requirement as well as networks that are comparatively open.
@@ -220,9 +207,6 @@ even though they might be between different sets of participants within the
 network. For this to happen, the order of transactions must be established
 and a method for rejecting bad transactions that have been inserted into the
 ledger in error (or maliciously) must be put into place.
-
-.. image:: images/handshake.png
-
 
 This is a thoroughly researched area of computer science, and there are many
 ways to achieve it, each with different trade-offs. For example, PBFT (Practical
@@ -242,48 +226,23 @@ We’ll learn more about the Hyperledger Fabric consensus mechanisms, which
 currently include SOLO, Kafka, and will soon extend to SBFT (Simplified
 Byzantine Fault Tolerance), in another document.
 
-
 Where can I learn more?
 -----------------------
 
 :doc:`getting_started`
 
-Where you learn how to set up a sample network on your local machine. You’ll be
-introduced to most of the key components within a blockchain network, learn
-more about how they interact with each other, and then you’ll actually get the
-code and run some simple query and update transactions.
+We provide a number of tutorials where you’ll be introduced to most of the
+key components within a blockchain network, learn more about how they
+interact with each other, and then you’ll actually get the code and run
+some simple transactions against a running blockchain network. We also provide
+tutorials for those of you thinking of operating a blockchain network using
+Hyperledger Fabric.
 
 :doc:`fabric_model`
 
 A deeper look at the components and concepts brought up in this introduction as
 well as a few others and describes how they work together in a sample
 transaction flow.
-
-:doc:`marbles`
-
-Where you can learn how to write a sample smart contract in GOLANG and invoke
-it from an application written in JavaScript. You’ll become comfortable with
-the key APIs used by both smart contract developers and application developers
-and ready to write your own application using the Hyperledger Fabric API
-reference information.
-
-Designing a Business Network (coming soon)
-
-Takes you through how to design a business network using a standard process.
-You’ll start by defining the business network and identify the participants
-and the goods and services that move between them. You’ll think about the key
-lifecycles and how they are impacted by the activities of the key participants.
-By the time you’re through, you’ll be ready to start working with key
-stakeholders in your company to design a business network that uses Hyperledger
-Fabric.
-
-:doc:`planning_guide`
-
-Deals with the practical concerns of setting up and managing a production
-Hyperledger Fabric blockchain. You’ll understand the key factors to consider
-when planning a blockchain solution, such as compute, storage and network
-requirements. You’ll also understand the key non-functional requirements,
-including maintainability, performance, availability and disaster recovery.
 
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/

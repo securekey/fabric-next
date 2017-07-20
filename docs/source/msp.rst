@@ -12,14 +12,13 @@ MSP may define their own notion of identity, and the rules by which those
 identities are governed (identity validation) and authenticated (signature
 generation and verification).
 
-A Fabric blockchain network can be governed by one or more MSPs. In this
-way Fabric offers modularity of membership operations, and interoperability
-across different membership standards and architectures. Fabric currently
-supports PKCS #11 libraries.
+A Hyperledger Fabric blockchain network can be governed by one or more MSPs.
+This provides modularity of membership operations, and interoperability
+across different membership standards and architectures.
 
 In the rest of this document we elaborate on the setup of the MSP
-implementation supported by Fabric, and discuss best practices concerning
-its use.
+implementation supported by Hyperledger Fabric, and discuss best practices
+concerning its use.
 
 MSP Configuration
 -----------------
@@ -77,32 +76,33 @@ verification. These parameters are deduced by
   in the ``OU`` field of their X.509 certificate structure.
 
 For more information on the validity of identities in the current MSP implementation
-we refer the reader to the identity validation
-rules :doc:`msp-identity-validity-rules`.
+we refer the reader to :doc:`msp-identity-validity-rules`.
 
 In addition to verification related parameters, for the MSP to enable
 the node on which it is instantiated to sign or authenticate, one needs to
 specify:
 
-- The signing key used for signing by the node, and
+- The signing key used for signing by the node (currently only ECDSA keys are
+  supported), and
 - The node's X.509 certificate, that is a valid identity under the
   verification parameters of this MSP
 
-It is important to note that MSP identities never expire, they can only be revoked
-by adding them the appropriate CRLs. In addition, for TLS certificates,
-fabric does not offer support for revocation.
+It is important to note that MSP identities never expire; they can only be revoked
+by adding them to the appropriate CRLs. Additionally, there is currently no
+support for enforcing revocation of TLS certificates.
 
 How to generate MSP certificates and their signing keys?
 --------------------------------------------------------
 
 To generate X.509 certificates to feed its MSP configuration, the application
-can use `Openssl <https://www.openssl.org/>`_.
+can use `Openssl <https://www.openssl.org/>`_. We emphasise that in Hyperledger
+Fabric there is no support for certificates including RSA keys.
 
 Alternatively one can use ``cryptogen`` tool, whose operation is explained in
 :doc:`getting_started`.
 
-For fabric-ca related certificate generation, we refer the reader to the
-fabric-ca related documentation - :doc:`Setup/ca-setup`.
+`Hyperledger Fabric CA <http://hyperledger-fabric-ca.readthedocs.io/en/latest/>`_
+can also be used to generate the keys and certificates needed to configure an MSP.
 
 MSP setup on the peer & orderer side
 ------------------------------------
@@ -127,7 +127,8 @@ and a file:
    ``OrganizationalUnitIdentifier`` represents the actual string as
    expected to appear in X.509 certificate OU-field (e.g. "COP")
 5. (optional) a folder ``crls`` to include the considered CRLs
-6. a folder ``keystore`` to include a PEM file with the node's signing key
+6. a folder ``keystore`` to include a PEM file with the node's signing key;
+   we emphasise that currently RSA keys are not supported
 7. a folder ``signcerts`` to include a PEM file with the node's X.509
    certificate
 8. (optional) a folder ``tlscacerts`` to include PEM files each corresponding to a TLS root
@@ -210,12 +211,7 @@ considered:
   organization-scoped messages to the peers that have an identity under the
   same MSP regardless of whether they belong to the same actual organization.
   This is a limitation of the granularity of MSP definition, and/or of the peer’s
-  configuration. In future versions of Fabric, this can change as we move
-  towards (i) an identity channel that contains all membership related
-  information of the network, (ii) peer notion of “trust-zone” being
-  configurable, where a peer’s administrator specifying at peer setup time whose
-  MSP members should be treated by peers as authorized to receive
-  organization-scoped messages.
+  configuration.
 
 **2) One organization has different divisions (say organizational units), to**
 **which it wants to grant access to different channels.**
@@ -304,7 +300,7 @@ and does not require blacklisting the no longer considered intermediate CA.
 
 MSP identities' root CAs and MSP TLS certificates' root CAs (and relative intermediate CAs)
 need to be declared in different folders. This is to avoid confusion between
-different classes of certificates. Fabric does not forbid to reuse the same
+different classes of certificates. It is not forbidden to reuse the same
 CAs for both MSP identities and TLS certificates but best practices suggest
 to avoid this in production.
 
