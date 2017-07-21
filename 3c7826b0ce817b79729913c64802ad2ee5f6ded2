@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f658a1b6_054eb500",
+        "filename": "test/extscc/fixtures/docker-compose.yaml",
+        "patchSetId": 1
+      },
+      "lineNbr": 89,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-21T15:55:31Z",
+      "side": 1,
+      "message": "I already changed this line. it looks like the change has been reverted. Please merge the latest commit of this file.",
+      "range": {
+        "startLine": 89,
+        "startChar": 6,
+        "endLine": 89,
+        "endChar": 48
+      },
+      "revId": "3c7826b0ce817b79729913c64802ad2ee5f6ded2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
