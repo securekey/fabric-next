@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "78bcea57_3072c1bd",
+        "filename": "core/container/dockercontroller/dockercontroller.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 94,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2017-07-21T13:37:58Z",
+      "side": 1,
+      "message": "Wrong comment - did you run golint?",
+      "revId": "4af9ee817d6348c3ec34db0aab596d15d8b3ccf7",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
