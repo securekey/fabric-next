@@ -16,6 +16,23 @@
       "revId": "4af9ee817d6348c3ec34db0aab596d15d8b3ccf7",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "dcd4d464_0a7d9cd5",
+        "filename": "core/scc/sysccapi.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-21T13:48:10Z",
+      "side": 1,
+      "message": "Error is being swallowed. Do we need to return an error after asserting it\u0027s type?\n\nSame issue on lines 104 and 109.",
+      "revId": "4af9ee817d6348c3ec34db0aab596d15d8b3ccf7",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
