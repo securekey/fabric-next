@@ -45,7 +45,7 @@ func MockExternalSysCCs(enabled bool) {
 	sysExtCCs := SystemChaincode{}
 
 	viper.Set("chaincode.systemext", map[string]interface{}{"extscc": sysExtCCs})
-	sysccLogger.Errorf("Setting %s for chaincode.systemext.enabled", enabled)
+	sysccLogger.Infof("Setting chaincode.systemext.enabled to %t", enabled)
 	viper.Set("chaincode.systemext.enabled", enabled)
 	// make sure this path is available and has a valid CDS file (extscc1.golang):
 	// github.com/hyperledger/fabric/test/extscc/fixtures/config/extsysccs/extscc1.golang
