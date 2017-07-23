@@ -37,7 +37,7 @@ var javaExcludeFileTypes = map[string]bool{
 	".class": true,
 }
 
-func WriteFolderToTarPackage(tw *tar.Writer, srcPath string, excludeDir string, includeFileTypeMap map[string]bool, excludeFileTypeMap map[string]bool) error {
+func WriteFolderToTarPackage(tw *tar.Writer, srcPath string, destPath string, excludeDir string, includeFileTypeMap map[string]bool, excludeFileTypeMap map[string]bool) error {
 	rootDirectory := srcPath
 	vmLogger.Infof("rootDirectory = %s", rootDirectory)
 
@@ -83,8 +83,10 @@ func WriteFolderToTarPackage(tw *tar.Writer, srcPath string, excludeDir string, 
 			}
 		}
 
-		newPath := fmt.Sprintf("src%s", path[rootDirLen:])
-		//newPath := path[len(rootDirectory):]
+		newPath := path[rootDirLen+1:]
+		if destPath != "" {
+			newPath = filepath.Join(destPath, newPath)
+		}
 
 		err = WriteFileToPackage(path, newPath, tw)
 		if err != nil {
@@ -105,7 +107,7 @@ func WriteJavaProjectToPackage(tw *tar.Writer, srcPath string) error {
 
 	vmLogger.Debugf("Packaging Java project from path %s", srcPath)
 
-	if err := WriteFolderToTarPackage(tw, srcPath, "", nil, javaExcludeFileTypes); err != nil {
+	if err := WriteFolderToTarPackage(tw, srcPath, "src", "", nil, javaExcludeFileTypes); err != nil {
 
 		vmLogger.Errorf("Error writing folder to tar package %s", err)
 		return err

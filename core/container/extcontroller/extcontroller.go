@@ -159,7 +159,7 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 					extLogger.Criticalf("caught panic from external system chaincode  %s", instName)
 				}
 			}()
-			ec.exec_cmd(binPath, env)
+			ec.execCmd(binPath, env)
 			ec.running = true
 		}()
 	} else {
@@ -206,8 +206,8 @@ func (vm *ExtVM) GetVMName(ccid ccintf.CCID) (string, error) {
 	return ccid.GetName(), nil
 }
 
-//exec_cmd to run path binary in peer container
-func (ec *extContainer) exec_cmd(path string, env []string) error {
+//execCmd to run path binary in peer container
+func (ec *extContainer) execCmd(path string, env []string) error {
 
 	// Setting up environment variables for command to be run
 	envmap := make(map[string]string)

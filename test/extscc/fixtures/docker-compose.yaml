@@ -89,19 +89,19 @@ services:
       # enable External SCCs
       - CORE_CHAINCODE_SYSTEMEXT_ENABLED=true
       # path of External SCCs to read files with CodeDeploymentSpec object
-      - CORE_CHAINCODE_SYSTEMEXT_CDS_PATH=/opt/extsysccs
+      - CORE_CHAINCODE_SYSTEMEXT_CDS_PATH=/opt/extsysccs/deploy
       # EXTSCC1
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_ENABLED=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_EXECENV=DOCKER
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLEEXTERNAL=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLECC2CC=true
-      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/some/config/path
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/opt/extsysccs/config/extscc1
       # EXTSCC2
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_ENABLED=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_EXECENV=SYSTEM_EXT
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLEEXTERNAL=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLECC2CC=true
-      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/opt/extsysccs
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/opt/extsysccs/config/extscc2
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
@@ -110,7 +110,8 @@ services:
     volumes:
         - /var/run/:/host/var/run/
         - ./channel/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/:/etc/hyperledger/msp/peer
-        - ./config/extsysccs/:/opt/extsysccs
+        - ./deploy:/opt/extsysccs/deploy
+        - ./config:/opt/extsysccs/config
     depends_on:
       - orderer.example.com
       - builder
@@ -136,18 +137,18 @@ services:
       # enable External SCCs
       - CORE_CHAINCODE_SYSTEMEXT_ENABLED=true
       # path of External SCCs to read files with CodeDeploymentSpec object
-      - CORE_CHAINCODE_SYSTEMEXT_CDS_PATH=/opt/extsysccs
+      - CORE_CHAINCODE_SYSTEMEXT_CDS_PATH=/opt/extsysccs/deploy
       # EXTSCC1
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_ENABLED=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLEEXTERNAL=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLECC2CC=true
-      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/some/config/path
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/opt/extsysccs/config/extscc1
       # EXTSCC2
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_ENABLED=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_EXECENV=SYSTEM_EXT
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLEEXTERNAL=true
       - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_INVOKABLECC2CC=true
-      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/opt/extsysccs
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC2_CONFIGPATH=/opt/extsysccs/config/extscc2
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
@@ -156,7 +157,8 @@ services:
     volumes:
         - /var/run/:/host/var/run/
         - ./channel/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/:/etc/hyperledger/msp/peer
-        - ./config/extsysccs/:/opt/extsysccs
+        - ./deploy:/opt/extsysccs/deploy
+        - ./config:/opt/extsysccs/config
     depends_on:
       - orderer.example.com
       - builder

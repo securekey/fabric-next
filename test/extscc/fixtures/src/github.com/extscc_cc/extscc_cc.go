@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	pb "github.com/hyperledger/fabric/protos/peer"
+	"github.com/spf13/viper"
 )
 
 // SimpleChaincode example simple Chaincode implementation
@@ -31,11 +32,20 @@ var logger = shim.NewLogger("extscc")
 
 // Init ...
 func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface) pb.Response {
-	logger.Info("-----------------------------------------------")
-	logger.Info("=========================> extscc Init")
-	logger.Info("-----------------------------------------------")
+	viper.SetConfigName("config")
+	viper.AddConfigPath(".")
+	err := viper.ReadInConfig()
+	if err != nil {
+		return shim.Error(fmt.Sprintf("Error reading configuration: %s", err))
+	}
+	v := viper.GetString("vipertest")
+	if v != "Viper Works!" {
+		return shim.Error("Error initializing viper")
+	}
+	logger.Info("-----------------------------------------------------------------")
+	logger.Infof("=========================> extscc Init completed, %s", v)
+	logger.Info("-----------------------------------------------------------------")
 	return shim.Success(nil)
-	//return shim.Error("============ Testing if INIT is called by the peer ==================")
 }
 
 // Query ...

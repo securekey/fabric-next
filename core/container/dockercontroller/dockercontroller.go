@@ -41,13 +41,13 @@ import (
 )
 
 var (
-	dockerLogger             = flogging.MustGetLogger("dockercontroller")
-	hostConfig               *docker.HostConfig
-	extSccDockerTypeRegistry = make(map[string]*dockerSysExtContainer)
-	extSccDockerInstRegistry = make(map[string]*dockerSysExtContainer)
+	dockerLogger    = flogging.MustGetLogger("dockercontroller")
+	hostConfig      *docker.HostConfig
+	sccTypeRegistry = make(map[string]*dockerSCCContainer)
+	sccInstRegistry = make(map[string]*dockerSCCContainer)
 )
 
-type dockerSysExtContainer struct {
+type dockerSCCContainer struct {
 	chaincode         shim.Chaincode
 	running           bool
 	args              []string
@@ -92,23 +92,23 @@ type dockerClient interface {
 
 // errors
 
-//DockerExtSysCCRegisteredErr registered error
-type DockerExtSysCCRegisteredErr string
+//DockerSCCRegisteredErr registered error
+type DockerSCCRegisteredErr string
 
-func (s DockerExtSysCCRegisteredErr) Error() string {
+func (s DockerSCCRegisteredErr) Error() string {
 	return fmt.Sprintf("%s already registered - Docker SCC", string(s))
 }
 
 //Register registers remote system chaincode for Docker with given path. The deploy should be called to initialize
 func Register(path string, cc shim.Chaincode, cctype pb.ChaincodeSpec_Type, configPath string) error {
-	tmp := extSccDockerTypeRegistry[path]
+	tmp := sccTypeRegistry[path]
 	if tmp != nil {
-		return DockerExtSysCCRegisteredErr(path)
+		return DockerSCCRegisteredErr(path)
 	}
 	vm := *NewDockerVM()
 
-	dockerLogger.Debugf("**** Registering External SCC in a docker %s, %#v, ", path, cc, cctype, configPath, vm)
-	extSccDockerTypeRegistry[path] = &dockerSysExtContainer{
+	dockerLogger.Debugf("**** Registering SCC in a docker %s, %#v, ", path, cc, cctype, configPath, vm)
+	sccTypeRegistry[path] = &dockerSCCContainer{
 		chaincode:         cc,
 		chaincodeSpecType: cctype,
 		configPath:        configPath,
@@ -237,7 +237,7 @@ func (vm *DockerVM) Deploy(ctxt context.Context, ccid ccintf.CCID,
 	if ccid.IsSysSCC {
 		path := ccid.ChaincodeSpec.ChaincodeId.Path
 
-		ipctemplate := extSccDockerTypeRegistry[path]
+		ipctemplate := sccTypeRegistry[path]
 		if ipctemplate == nil {
 			return fmt.Errorf(fmt.Sprintf("%s not registered", path))
 		}
@@ -247,7 +247,7 @@ func (vm *DockerVM) Deploy(ctxt context.Context, ccid ccintf.CCID,
 		}
 
 		instName, _ := vm.GetVMName(ccid)
-		_, err := vm.getDockerExtSCCInstance(ctxt, ipctemplate, instName, args, env)
+		_, err := vm.getDockerSCCInstance(ctxt, ipctemplate, instName, args, env)
 
 		//FUTURE ... here is where we might check code for safety
 		dockerLogger.Debugf("registered : %s", path)
@@ -279,13 +279,13 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 	if ccid.IsSysSCC {
 		path := ccid.ChaincodeSpec.ChaincodeId.Path
 
-		ectemplate := extSccDockerTypeRegistry[path]
+		ectemplate := sccTypeRegistry[path]
 
 		if ectemplate == nil {
 			return fmt.Errorf(fmt.Sprintf("%s not registered", path))
 		}
 
-		ec, err := vm.getDockerExtSCCInstance(ctxt, ectemplate, imageID, args, env)
+		ec, err := vm.getDockerSCCInstance(ctxt, ectemplate, imageID, args, env)
 
 		if err != nil {
 			return fmt.Errorf(fmt.Sprintf("could not create instance for %s", imageID))
@@ -437,14 +437,14 @@ func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 	if ccid.IsSysSCC {
 		path := ccid.ChaincodeSpec.ChaincodeId.Path
 
-		ipctemplate := extSccDockerTypeRegistry[path]
+		ipctemplate := sccTypeRegistry[path]
 		if ipctemplate == nil {
 			return fmt.Errorf("%s not registered", path)
 		}
 
 		instName, _ := vm.GetVMName(ccid)
 
-		ipc := extSccDockerInstRegistry[instName]
+		ipc := sccInstRegistry[instName]
 
 		if ipc == nil {
 			return fmt.Errorf("%s not found", instName)
@@ -454,7 +454,7 @@ func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 			return fmt.Errorf("%s not running", instName)
 		}
 
-		delete(extSccDockerInstRegistry, instName)
+		delete(sccInstRegistry, instName)
 	}
 
 	id, err := vm.GetVMName(ccid)
@@ -558,15 +558,15 @@ func (vm *DockerVM) GetVMName(ccid ccintf.CCID) (string, error) {
 	return name, nil
 }
 
-func (vm *DockerVM) getDockerExtSCCInstance(ctxt context.Context, ipctemplate *dockerSysExtContainer, instName string, args []string, env []string) (*dockerSysExtContainer, error) {
-	ec := extSccDockerInstRegistry[instName]
+func (vm *DockerVM) getDockerSCCInstance(ctxt context.Context, ipctemplate *dockerSCCContainer, instName string, args []string, env []string) (*dockerSCCContainer, error) {
+	ec := sccInstRegistry[instName]
 	if ec != nil {
 		dockerLogger.Warningf("Docker ext scc chaincode instance exists for %s", instName)
 		return ec, nil
 	}
-	ec = &dockerSysExtContainer{args: args, env: env, chaincode: ipctemplate.chaincode,
+	ec = &dockerSCCContainer{args: args, env: env, chaincode: ipctemplate.chaincode,
 		chaincodeSpecType: ipctemplate.chaincodeSpecType, configPath: ipctemplate.configPath}
-	extSccDockerInstRegistry[instName] = ec
+	sccInstRegistry[instName] = ec
 	dockerLogger.Debugf("Docker ext scc chaincode instance created for %s", instName)
 	return ec, nil
 }

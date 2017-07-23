@@ -88,7 +88,7 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 		return nil
 	}
 
-	var ok bool = true
+	ok := true
 	var err error
 	path := syscc.CDS.ChaincodeSpec.ChaincodeId.Path
 
@@ -96,7 +96,7 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 	case pb.ChaincodeDeploymentSpec_DOCKER:
 		err = dockercontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
 		if err != nil {
-			_, ok = err.(dockercontroller.DockerExtSysCCRegisteredErr)
+			_, ok = err.(dockercontroller.DockerSCCRegisteredErr)
 		}
 	case pb.ChaincodeDeploymentSpec_SYSTEM_EXT:
 		err = extcontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
