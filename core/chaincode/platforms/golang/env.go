@@ -37,7 +37,7 @@ func getEnv() Env {
 	return env
 }
 
-func getGoEnv() (Env, error) {
+func GetGoEnv() (Env, error) {
 	env := getEnv()
 
 	goenvbytes, err := runProgram(env, 10*time.Second, "go", "env")

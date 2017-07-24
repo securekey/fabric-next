@@ -73,7 +73,7 @@ func decodeUrl(spec *pb.ChaincodeSpec) (string, error) {
 }
 
 func getGopath() (string, error) {
-	env, err := getGoEnv()
+	env, err := GetGoEnv()
 	if err != nil {
 		return "", err
 	}
@@ -265,7 +265,7 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 	// --------------------------------------------------------------------------------------
 	// Update our environment for the purposes of executing go-list directives
 	// --------------------------------------------------------------------------------------
-	env, err := getGoEnv()
+	env, err := GetGoEnv()
 	if err != nil {
 		return nil, err
 	}
