@@ -258,6 +258,13 @@ func loadExternalSysCCs() error {
 			}
 			cds.ExecEnv = execEnv
 
+			//Loading CDS type
+			cdsType := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.cds.type", ccName))
+			if cdsType != "" {
+				ccSpecType := pb.ChaincodeSpec_Type_value[cdsType]
+				cds.GetChaincodeSpec().Type = pb.ChaincodeSpec_Type(ccSpecType)
+			}
+
 			scc := &SystemChaincode{
 				Name:              ccName,
 				InitArgs:          [][]byte{[]byte("")},
