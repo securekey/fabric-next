@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9acf382c_048d2bac",
+        "filename": "test/extscc/fixtures/bin/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 2,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-24T18:01:18Z",
+      "side": 1,
+      "message": "should be set to 1.0.0 to work with the peer 1.0.0\n\notherwise external SCC cannot be invoked. It will be deployed but it cannot be invoked.",
+      "range": {
+        "startLine": 2,
+        "startChar": 54,
+        "endLine": 2,
+        "endChar": 62
+      },
+      "revId": "b1faed4aa513d17a7aa053f8ae43d747746f2e37",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "2c33183a_9a9514d3",
+        "filename": "test/extscc/fixtures/bin/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 6,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-24T18:01:18Z",
+      "side": 1,
+      "message": "should be set to 1.0.0 to work with the peer 1.0.0\n\notherwise external SCC cannot be invoked. It will be deployed but it cannot be invoked.",
+      "range": {
+        "startLine": 6,
+        "startChar": 54,
+        "endLine": 6,
+        "endChar": 62
+      },
+      "revId": "b1faed4aa513d17a7aa053f8ae43d747746f2e37",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
