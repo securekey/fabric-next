@@ -54,6 +54,10 @@ func WriteFolderToTarPackage(tw *tar.Writer, srcPath string, destPath string, ex
 			return nil
 		}
 
+		if info == nil {
+			return fmt.Errorf("Path is not found: %s", path)
+		}
+
 		if info.Mode().IsDir() {
 			return nil
 		}
