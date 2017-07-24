@@ -1,0 +1,142 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e2f1696d_8ea63c5e",
+        "filename": "core/chaincode/platforms/binary/package.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T21:24:46Z",
+      "side": 1,
+      "message": "Do we need this whole file?",
+      "range": {
+        "startLine": 34,
+        "startChar": 5,
+        "endLine": 34,
+        "endChar": 18
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "03dcaaab_f2b94111",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T21:24:46Z",
+      "side": 1,
+      "message": "Is this needed?",
+      "range": {
+        "startLine": 57,
+        "startChar": 5,
+        "endLine": 57,
+        "endChar": 14
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "1e895054_100b8324",
+        "filename": "core/chaincode/platforms/binary/platform_test.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 17,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T21:24:46Z",
+      "side": 1,
+      "message": "Is this whole file copy/paste?",
+      "range": {
+        "startLine": 17,
+        "startChar": 0,
+        "endLine": 17,
+        "endChar": 14
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f7bf9447_e0b88bc5",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T21:24:46Z",
+      "side": 1,
+      "message": "This should be CC Type - chaincode type.",
+      "range": {
+        "startLine": 261,
+        "startChar": 5,
+        "endLine": 261,
+        "endChar": 21
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "be1c44c4_a6b21849",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 262,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T21:24:46Z",
+      "side": 1,
+      "message": "ccType",
+      "range": {
+        "startLine": 262,
+        "startChar": 3,
+        "endLine": 262,
+        "endChar": 10
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7b430895_1ddac195",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 262,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T21:24:46Z",
+      "side": 1,
+      "message": "cc",
+      "range": {
+        "startLine": 262,
+        "startChar": 66,
+        "endLine": 262,
+        "endChar": 69
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
