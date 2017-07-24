@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "1d3cbf2b_12f54065",
+        "filename": "core/chaincode/platforms/binary/package.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T23:25:33Z",
+      "side": 1,
+      "message": "This seems to be the same function as in golang platform? If this is the case there should be only one.\n\nThe same comment for all items in this file.",
+      "range": {
+        "startLine": 34,
+        "startChar": 5,
+        "endLine": 34,
+        "endChar": 18
+      },
+      "revId": "becd061c56da7653eda7c47c51dba1f1571d127f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
