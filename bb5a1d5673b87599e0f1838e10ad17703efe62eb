@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d46e1f04_c3962b9b",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-24T22:44:26Z",
+      "side": 1,
+      "message": "CC type should have been already set in CDS.ChaincodeSpec by \"peer chaincode package -l binary\"",
+      "range": {
+        "startLine": 261,
+        "startChar": 3,
+        "endLine": 261,
+        "endChar": 20
+      },
+      "revId": "bb5a1d5673b87599e0f1838e10ad17703efe62eb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
