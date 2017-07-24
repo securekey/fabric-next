@@ -22,6 +22,30 @@
       "revId": "bb5a1d5673b87599e0f1838e10ad17703efe62eb",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4d506e39_24bd248c",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-24T23:17:03Z",
+      "side": 1,
+      "message": "Yes, you are right.\n\nI tested without passing CC type and it is picking it from package. \n\nreverting back this change.",
+      "parentUuid": "d46e1f04_c3962b9b",
+      "range": {
+        "startLine": 261,
+        "startChar": 3,
+        "endLine": 261,
+        "endChar": 20
+      },
+      "revId": "bb5a1d5673b87599e0f1838e10ad17703efe62eb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
