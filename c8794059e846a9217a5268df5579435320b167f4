@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "9c49e5cc_286b464d",
+        "filename": "core/chaincode/platforms/binary/package.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-24T21:49:21Z",
+      "side": 1,
+      "message": "Yes, to run \"peer chaincode package\" command",
+      "parentUuid": "e2f1696d_8ea63c5e",
+      "range": {
+        "startLine": 34,
+        "startChar": 5,
+        "endLine": 34,
+        "endChar": 18
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "03dcaaab_f2b94111",
         "filename": "core/chaincode/platforms/binary/platform.go",
         "patchSetId": 2
@@ -36,6 +60,30 @@
       "writtenOn": "2017-07-24T21:24:46Z",
       "side": 1,
       "message": "Is this needed?",
+      "range": {
+        "startLine": 57,
+        "startChar": 5,
+        "endLine": 57,
+        "endChar": 14
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "76b7fd83_392794e1",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-24T21:49:21Z",
+      "side": 1,
+      "message": "Yes, for chaincode package.",
+      "parentUuid": "03dcaaab_f2b94111",
       "range": {
         "startLine": 57,
         "startChar": 5,
@@ -71,6 +119,30 @@
     },
     {
       "key": {
+        "uuid": "b8e88dba_c0d5c5e0",
+        "filename": "core/chaincode/platforms/binary/platform_test.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 17,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-24T21:49:21Z",
+      "side": 1,
+      "message": "Will revise and fix all testcases in this package in next push.",
+      "parentUuid": "1e895054_100b8324",
+      "range": {
+        "startLine": 17,
+        "startChar": 0,
+        "endLine": 17,
+        "endChar": 14
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "f7bf9447_e0b88bc5",
         "filename": "core/scc/importsysccs.go",
         "patchSetId": 2
@@ -82,6 +154,30 @@
       "writtenOn": "2017-07-24T21:24:46Z",
       "side": 1,
       "message": "This should be CC Type - chaincode type.",
+      "range": {
+        "startLine": 261,
+        "startChar": 5,
+        "endLine": 261,
+        "endChar": 21
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8916b062_94b8a7bf",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-24T21:49:21Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "f7bf9447_e0b88bc5",
       "range": {
         "startLine": 261,
         "startChar": 5,
@@ -133,6 +229,30 @@
         "startChar": 66,
         "endLine": 262,
         "endChar": 69
+      },
+      "revId": "c8794059e846a9217a5268df5579435320b167f4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "25571fd4_7beb77d5",
+        "filename": "core/scc/importsysccs.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 262,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2017-07-24T21:49:21Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "be1c44c4_a6b21849",
+      "range": {
+        "startLine": 262,
+        "startChar": 3,
+        "endLine": 262,
+        "endChar": 10
       },
       "revId": "c8794059e846a9217a5268df5579435320b167f4",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
