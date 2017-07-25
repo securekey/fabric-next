@@ -22,41 +22,16 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 	"strings"
 
 	"github.com/hyperledger/fabric/common/metadata"
 	"github.com/hyperledger/fabric/core/chaincode/platforms"
-	"github.com/hyperledger/fabric/core/config"
 	cutil "github.com/hyperledger/fabric/core/container/util"
 	pb "github.com/hyperledger/fabric/protos/peer"
-	"github.com/spf13/viper"
 )
 
 // InputFiles ...
 type InputFiles map[string][]byte
-
-func getPeerTLSCert() ([]byte, error) {
-
-	if viper.GetBool("peer.tls.enabled") == false {
-		// no need for certificates if TLS is not enabled
-		return nil, nil
-	}
-	var path string
-	// first we check for the rootcert
-	path = config.GetPath("peer.tls.rootcert.file")
-	if path == "" {
-		// check for tls cert
-		path = config.GetPath("peer.tls.cert.file")
-	}
-	// this should not happen if the peer is running with TLS enabled
-	if _, err := os.Stat(path); err != nil {
-		return nil, err
-	}
-	// FIXME: FAB-2037 - ensure we sanely resolve relative paths specified in the yaml
-	return ioutil.ReadFile(path)
-}
 
 // GenerateDockerBuild build a reader that will be used for creating a docker image
 func GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec, cert []byte) (io.Reader, error) {

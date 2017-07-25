@@ -48,9 +48,9 @@ func MockExternalSysCCs(enabled bool) {
 	sysccLogger.Infof("Setting chaincode.systemext.enabled to %t", enabled)
 	viper.Set("chaincode.systemext.enabled", enabled)
 	// make sure this path is available and has a valid CDS file (extscc1.golang):
-	// github.com/hyperledger/fabric/test/extscc/fixtures/config/extsysccs/extscc1.golang
+	// github.com/hyperledger/fabric/test/extscc/fixtures/config/extscc1.golang
 	// todo need to investigate why unit tests can't read from a relative path
-	viper.Set("chaincode.systemext.cds.path", "../../test/extscc/fixtures/config/extsysccs")
+	viper.Set("chaincode.systemext.cds.path", "../../test/extscc/fixtures/deploy")
 
 	// below entries are needed as the above line doesn't simulate exact real yaml entries
 	viper.Set("chaincode.systemext.extscc1.path", "github.com/hyperledger/fabric/core/chaincode/extscc")
@@ -200,9 +200,9 @@ func TestRegisterDuplicateExtSysCC(t *testing.T) {
 
 func mockextscc1CDS() (*pb.ChaincodeDeploymentSpec, error) {
 	// make sure this path is available and has a valid CDS file (extscc1.golang):
-	// github.com/hyperledger/fabric/test/extscc/fixtures/config/extsysccs/extscc1.golang
+	// github.com/hyperledger/fabric/test/extscc/fixtures/deploy/extscc1.golang
 	// todo need to investigate why unit tests can't read from a relative path
-	path := "../../test/extscc/fixtures/config/extsysccs/extscc1.golang"
+	path := "../../test/extscc/fixtures/deploy/extscc1.golang"
 
 	ccbytes, err := ioutil.ReadFile(path)
 	if err != nil {

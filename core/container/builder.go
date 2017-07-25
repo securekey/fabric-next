@@ -19,41 +19,17 @@ package container
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 
-	"github.com/hyperledger/fabric/core/config"
 	"github.com/hyperledger/fabric/core/container/dockercontroller"
 	"github.com/hyperledger/fabric/core/container/extcontroller"
+	"github.com/hyperledger/fabric/core/container/util"
 	pb "github.com/hyperledger/fabric/protos/peer"
-	"github.com/spf13/viper"
 )
-
-func getPeerTLSCert() ([]byte, error) {
-
-	if viper.GetBool("peer.tls.enabled") == false {
-		// no need for certificates if TLS is not enabled
-		return nil, nil
-	}
-	var path string
-	// first we check for the rootcert
-	path = config.GetPath("peer.tls.rootcert.file")
-	if path == "" {
-		// check for tls cert
-		path = config.GetPath("peer.tls.cert.file")
-	}
-	// this should not happen if the peer is running with TLS enabled
-	if _, err := os.Stat(path); err != nil {
-		return nil, err
-	}
-	// FIXME: FAB-2037 - ensure we sanely resolve relative paths specified in the yaml
-	return ioutil.ReadFile(path)
-}
 
 // Build generates a container build and provides a reader to deliver the build when
 // a container is created
 func Build(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
-	cert, err := getPeerTLSCert()
+	cert, err := util.GetPeerTLSCert()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read the TLS certificate: %s", err)
 	}

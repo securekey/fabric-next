@@ -70,3 +70,7 @@ func (g *GossipMock) JoinChan(joinMsg api.JoinChannelMessage, chainID common.Cha
 
 func (*GossipMock) Stop() {
 }
+
+func (g *GossipMock) GetOrgOfPeer(PKIID common.PKIidType) api.OrgIdentityType {
+	panic("implement me")
+}

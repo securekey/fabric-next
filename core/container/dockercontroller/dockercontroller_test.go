@@ -36,6 +36,7 @@ import (
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/container/ccintf"
+	cutil "github.com/hyperledger/fabric/core/container/util"
 	coreutil "github.com/hyperledger/fabric/core/testutil"
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
@@ -130,7 +131,12 @@ func Test_Start(t *testing.T) {
 		t.Fatal()
 	}
 	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackage}
-	bldr := func() (io.Reader, error) { return platforms.GenerateDockerBuild(cds) }
+
+	certs, err := cutil.GetPeerTLSCert()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bldr := func() (io.Reader, error) { return GenerateDockerBuild(cds, certs) }
 
 	// case 4: start called with builder and dockerClient.CreateContainer returns
 	// docker.noSuchImgErr and dockerClient.Start returns error

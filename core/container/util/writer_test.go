@@ -152,7 +152,7 @@ func Test_WriteFolderToPackage(t *testing.T) {
 		".xml": true,
 	}
 
-	err := WriteFolderToTarPackage(tw, srcPath, "",
+	err := WriteFolderToTarPackage(tw, srcPath, "src", "",
 		includeFileTypes, excludeFileTypes)
 	assert.NoError(t, err, "Error writing folder to package")
 
@@ -174,7 +174,7 @@ func Test_WriteFolderToPackage(t *testing.T) {
 		"github.com/hyperledger/fabric/examples/chaincode/java")
 	tarw := tar.NewWriter(bytes.NewBuffer(nil))
 	defer tarw.Close()
-	err = WriteFolderToTarPackage(tarw, srcPath, "SimpleSample",
+	err = WriteFolderToTarPackage(tarw, srcPath, "SimpleSample", "",
 		nil, excludeFileTypes)
 	assert.NoError(t, err, "Error writing folder to package")
 }

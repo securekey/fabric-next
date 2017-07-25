@@ -88,6 +88,10 @@ func (*gossipMock) Stop() {
 	panic("implement me")
 }
 
+func (g *gossipMock) GetOrgOfPeer(PKIID common.PKIidType) api.OrgIdentityType {
+	panic("implement me")
+}
+
 type appOrgMock struct {
 	id string
 }
