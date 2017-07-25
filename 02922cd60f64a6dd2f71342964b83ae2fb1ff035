@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "dc39bdf8_79bc510e",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-07-25T17:35:42Z",
+      "side": 1,
+      "message": "comment update to 555",
+      "range": {
+        "startLine": 74,
+        "startChar": 24,
+        "endLine": 74,
+        "endChar": 27
+      },
+      "revId": "02922cd60f64a6dd2f71342964b83ae2fb1ff035",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
