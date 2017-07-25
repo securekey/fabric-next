@@ -40,7 +40,7 @@ type Platform struct {
 }
 
 // Returns whether the given file or directory exists or not
-func pathExists(path string) (bool, error) {
+func PathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -72,7 +72,7 @@ func decodeUrl(spec *pb.ChaincodeSpec) (string, error) {
 	return urlLocation, nil
 }
 
-func getGopath() (string, error) {
+func GetGopath() (string, error) {
 	env, err := getGoEnv()
 	if err != nil {
 		return "", err
@@ -106,12 +106,12 @@ func (goPlatform *Platform) ValidateSpec(spec *pb.ChaincodeSpec) error {
 	//which we do later anyway. But we *can* - and *should* - test for existence of local paths.
 	//Treat empty scheme as a local filesystem path
 	if path.Scheme == "" {
-		gopath, err := getGopath()
+		gopath, err := GetGopath()
 		if err != nil {
 			return err
 		}
 		pathToCheck := filepath.Join(gopath, "src", spec.ChaincodeId.Path)
-		exists, err := pathExists(pathToCheck)
+		exists, err := PathExists(pathToCheck)
 		if err != nil {
 			return fmt.Errorf("error validating chaincode path: %s", err)
 		}
@@ -254,7 +254,7 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 	// --------------------------------------------------------------------------------------
 	// retrieve a CodeDescriptor from either HTTP or the filesystem
 	// --------------------------------------------------------------------------------------
-	code, err := getCode(spec)
+	code, err := GetCode(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 		// Drop if provided by GOROOT
 		for goroot := range goroots {
 			fqp := filepath.Join(goroot, "src", pkg)
-			exists, err := pathExists(fqp)
+			exists, err := PathExists(fqp)
 			if err == nil && exists {
 				logger.Debugf("Discarding GOROOT package %s", pkg)
 				return false
@@ -365,7 +365,7 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 		// cannot be found must be system packages and silently skip them
 		for gopath := range gopaths {
 			fqp := filepath.Join(gopath, "src", dep)
-			exists, err := pathExists(fqp)
+			exists, err := PathExists(fqp)
 
 			logger.Debugf("checking: %s exists: %v", fqp, exists)
 
@@ -413,7 +413,7 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 	tw := tar.NewWriter(gw)
 
 	for _, file := range files {
-		err = cutil.WriteFileToPackage(file.Path, file.Name, tw)
+		err = cutil.WriteFileToPackage(file.Path, file.Name, tw, 0)
 		if err != nil {
 			return nil, fmt.Errorf("Error writing %s to tar: %s", file.Name, err)
 		}

@@ -41,7 +41,7 @@ var logger = flogging.MustGetLogger("golang-platform")
 
 func getCodeFromFS(path string) (codegopath string, err error) {
 	logger.Debugf("getCodeFromFS %s", path)
-	gopath, err := getGopath()
+	gopath, err := GetGopath()
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +64,7 @@ type CodeDescriptor struct {
 //
 //NOTE: for dev mode, user builds and runs chaincode manually. The name provided
 //by the user is equivalent to the path.
-func getCode(spec *pb.ChaincodeSpec) (*CodeDescriptor, error) {
+func GetCode(spec *pb.ChaincodeSpec) (*CodeDescriptor, error) {
 	if spec == nil {
 		return nil, errors.New("Cannot collect files from nil spec")
 	}
