@@ -2,6 +2,29 @@
   "comments": [
     {
       "key": {
+        "uuid": "73f19e77_2167f6e4",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 62,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T17:36:21Z",
+      "side": 1,
+      "message": "Perhaps we should also check that we have only one file in .tar and that it\u0027s name is \"chaincode\". We already check it is executable (mode 555)",
+      "range": {
+        "startLine": 62,
+        "startChar": 1,
+        "endLine": 62,
+        "endChar": 4
+      },
+      "revId": "02922cd60f64a6dd2f71342964b83ae2fb1ff035",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "dc39bdf8_79bc510e",
         "filename": "core/chaincode/platforms/binary/platform.go",
         "patchSetId": 6
@@ -13,6 +36,29 @@
       "writtenOn": "2017-07-25T17:35:42Z",
       "side": 1,
       "message": "comment update to 555",
+      "range": {
+        "startLine": 74,
+        "startChar": 24,
+        "endLine": 74,
+        "endChar": 27
+      },
+      "revId": "02922cd60f64a6dd2f71342964b83ae2fb1ff035",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "0c890e23_2eb9cceb",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T17:36:21Z",
+      "side": 1,
+      "message": "555",
       "range": {
         "startLine": 74,
         "startChar": 24,
