@@ -61,7 +61,7 @@ func (t *MembershipSCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 
 //getAllPeers retrieves all of the peers (excluding this one) that are currently alive
 func (t *MembershipSCC) getAllPeers(stub shim.ChaincodeStubInterface, args [][]byte) pb.Response {
-	payload, err := t.marshalEndpoints(t.gossip().Peers())
+	payload, err := t.marshalEndpoints(t.gossip().Peers(), true)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -79,7 +79,15 @@ func (t *MembershipSCC) getPeersOfChannel(stub shim.ChaincodeStubInterface, args
 		return shim.Error("Expecting channel ID")
 	}
 
-	payload, err := t.marshalEndpoints(t.gossip().PeersOfChannel(common.ChainID(channelID)))
+	localPeerJoined := false
+	for _, ch := range peer.GetChannelsInfo() {
+		if ch.ChannelId == channelID {
+			localPeerJoined = true
+			break
+		}
+	}
+
+	payload, err := t.marshalEndpoints(t.gossip().PeersOfChannel(common.ChainID(channelID)), localPeerJoined)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -89,7 +97,7 @@ func (t *MembershipSCC) getPeersOfChannel(stub shim.ChaincodeStubInterface, args
 	return shim.Success(payload)
 }
 
-func (t *MembershipSCC) marshalEndpoints(members []discovery.NetworkMember) ([]byte, error) {
+func (t *MembershipSCC) marshalEndpoints(members []discovery.NetworkMember, includeLocalPeer bool) ([]byte, error) {
 	gossip := t.gossip()
 
 	peerEndpoints := &protos.PeerEndpoints{}
@@ -101,24 +109,26 @@ func (t *MembershipSCC) marshalEndpoints(members []discovery.NetworkMember) ([]b
 		})
 	}
 
-	// Add self since Gossip only contains other peers
-	peerEndpoint, err := peer.GetPeerEndpoint()
-	if err != nil {
-		return nil, fmt.Errorf("Error reading peer endpoint: %s", err)
-	}
+	if includeLocalPeer {
+		// Add self since Gossip only contains other peers
+		peerEndpoint, err := peer.GetPeerEndpoint()
+		if err != nil {
+			return nil, fmt.Errorf("Error reading peer endpoint: %s", err)
+		}
 
-	localMSPid, err := mspmgmt.GetLocalMSP().GetIdentifier()
-	if err != nil {
-		return nil, fmt.Errorf("Error getting local MSP Identifier: %s", err)
-	}
+		localMSPid, err := mspmgmt.GetLocalMSP().GetIdentifier()
+		if err != nil {
+			return nil, fmt.Errorf("Error getting local MSP Identifier: %s", err)
+		}
 
-	self := &protos.PeerEndpoint{
-		Endpoint:         peerEndpoint.Address,
-		InternalEndpoint: peerEndpoint.Address,
-		MSPid:            []byte(localMSPid),
-	}
+		self := &protos.PeerEndpoint{
+			Endpoint:         peerEndpoint.Address,
+			InternalEndpoint: peerEndpoint.Address,
+			MSPid:            []byte(localMSPid),
+		}
 
-	peerEndpoints.Endpoints = append(peerEndpoints.Endpoints, self)
+		peerEndpoints.Endpoints = append(peerEndpoints.Endpoints, self)
+	}
 
 	payload, err := proto.Marshal(peerEndpoints)
 	if err != nil {
