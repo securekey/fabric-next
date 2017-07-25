@@ -1,0 +1,297 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c4a9e4a4_83c188bc",
+        "filename": "core/chaincode/platforms/binary/package.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "This whole file is not needed, as we don\u0027t deal with golang sources, just a single binary file",
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a44270c2_cba1c3bb",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "This is not Go",
+      "range": {
+        "startLine": 39,
+        "startChar": 26,
+        "endLine": 39,
+        "endChar": 28
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "370b8423_bcd21c1b",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 63,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Checking the path for precompiled binaries doesn\u0027t make sense, as the path is used only during compilation. Should just return nil.",
+      "range": {
+        "startLine": 41,
+        "startChar": 0,
+        "endLine": 63,
+        "endChar": 11
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "491ae5cc_99d72b81",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "755 or 555 might be better",
+      "range": {
+        "startLine": 99,
+        "startChar": 24,
+        "endLine": 99,
+        "endChar": 27
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "75e2f44e_5c3bc186",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 111,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not GOLANG",
+      "range": {
+        "startLine": 111,
+        "startChar": 38,
+        "endLine": 111,
+        "endChar": 44
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fdf21c68_7269eac8",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 125,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not applicable to binary",
+      "range": {
+        "startLine": 116,
+        "startChar": 1,
+        "endLine": 125,
+        "endChar": 2
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fc690792_459cca56",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 133,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not applicable to binary",
+      "range": {
+        "startLine": 127,
+        "startChar": 1,
+        "endLine": 133,
+        "endChar": 2
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "59b7acec_5997d23c",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 146,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not applicable to binary",
+      "range": {
+        "startLine": 135,
+        "startChar": 1,
+        "endLine": 146,
+        "endChar": 17
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3d8c8b70_0a2015a1",
+        "filename": "core/chaincode/platforms/binary/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 155,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "The only file we need to tar is the binary, the path to it could be in the CDS (as path)",
+      "range": {
+        "startLine": 155,
+        "startChar": 22,
+        "endLine": 155,
+        "endChar": 27
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f4193e5f_01636cd3",
+        "filename": "core/chaincode/platforms/golang/package.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 67,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not applicable to binary, no need to export",
+      "range": {
+        "startLine": 67,
+        "startChar": 5,
+        "endLine": 67,
+        "endChar": 12
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4b7f03d4_bcd0393d",
+        "filename": "core/chaincode/platforms/golang/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 43,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not needed for binary, no need to export",
+      "range": {
+        "startLine": 43,
+        "startChar": 5,
+        "endLine": 43,
+        "endChar": 15
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "72ce42b1_9143db63",
+        "filename": "core/chaincode/platforms/golang/platform.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "Not needed for binary, no need to export",
+      "range": {
+        "startLine": 75,
+        "startChar": 5,
+        "endLine": 75,
+        "endChar": 14
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "608ac8ca_128e26bf",
+        "filename": "test/extscc/fixtures/bin/readme.txt",
+        "patchSetId": 5
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-07-25T16:52:27Z",
+      "side": 1,
+      "message": "We shouldn\u0027t look for the binary in the GOPATH. We don\u0027t even have to know the language this compiled plugin is written in, as long as it can be run as any other binary. This should be just a relative path to the current working directory, so the packaging tool can find the binary file to package",
+      "range": {
+        "startLine": 7,
+        "startChar": 62,
+        "endLine": 7,
+        "endChar": 144
+      },
+      "revId": "8ca91105fa5661beb986def79fe5edc30d2f2ced",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
