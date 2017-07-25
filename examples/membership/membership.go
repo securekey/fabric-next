@@ -54,7 +54,7 @@ func main() {
 	mainFlags.StringVarP(&mspMgrConfigDir, "mspcfgdir", "m", defaultMspDir, "Path to MSP dir")
 	mainFlags.StringVarP(&mspID, "mspid", "i", defaultMspID, "MSP ID")
 	mainFlags.StringVarP(&peerAddress, "peer.address", "p", defaultPeerAddress, "Peer address in the form host:port")
-	mainFlags.BoolVarP(&peerTLSEnabled, "peer.tls.enabled", "false", defaultPeerTLSEnabled, "Peer TLS enabled")
+	mainFlags.BoolVarP(&peerTLSEnabled, "peer.tls.enabled", "", defaultPeerTLSEnabled, "Peer TLS enabled")
 	mainFlags.StringVarP(&peerServerOverride, "peer.tls.serverhostoverride", "", "", "Peer TLS server host override")
 	mainFlags.StringVarP(&peerTLSRootCertFile, "peer.tls.rootcert.file", "", "", "Peer TLS root certificate file path")
 	mainFlags.StringVarP(&channelID, "channel", "c", "", "Channel ID")
