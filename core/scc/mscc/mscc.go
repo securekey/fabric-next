@@ -12,6 +12,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/peer"
+	"github.com/hyperledger/fabric/core/policy"
 	"github.com/hyperledger/fabric/core/scc/mscc/protos"
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
@@ -32,10 +33,18 @@ const (
 // MembershipSCC is the System Chaincode that provides information about peer membership
 type MembershipSCC struct {
 	gossipServiceOverride service.GossipService
+	policyChecker         policy.PolicyChecker
 }
 
 // Init is called once when the chaincode started the first time
 func (t *MembershipSCC) Init(stub shim.ChaincodeStubInterface) pb.Response {
+	// Init policy checker for access control
+	t.policyChecker = policy.NewPolicyChecker(
+		peer.NewChannelPolicyManagerGetter(),
+		mspmgmt.GetLocalMSP(),
+		mspmgmt.NewLocalMSPPrincipalGetter(),
+	)
+
 	logger.Infof("Successfully initialized")
 	return shim.Success(nil)
 }
@@ -48,6 +57,15 @@ func (t *MembershipSCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	}
 
 	functionName := string(args[0])
+
+	// Check ACL
+	sp, err := stub.GetSignedProposal()
+	if err != nil {
+		return shim.Error(fmt.Sprintf("Failed getting signed proposal from stub: [%s]", err))
+	}
+	if err = t.policyChecker.CheckPolicyNoChannel(mspmgmt.Members, sp); err != nil {
+		return shim.Error(fmt.Sprintf("\"%s\" request failed authorization check: [%s]", functionName, err))
+	}
 
 	switch functionName {
 	case getAllPeersFunction:

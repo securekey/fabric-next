@@ -7,20 +7,38 @@ SPDX-License-Identifier: Apache-2.0
 package mscc
 
 import (
+	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/committer"
+	"github.com/hyperledger/fabric/core/policy"
+	policymocks "github.com/hyperledger/fabric/core/policy/mocks"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	gcommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/service"
+	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/gossip"
 	proto "github.com/hyperledger/fabric/protos/gossip"
+	pb "github.com/hyperledger/fabric/protos/peer"
+	"github.com/hyperledger/fabric/protos/utils"
 )
 
-func newMockStub(gossip service.GossipService) *shim.MockStub {
-	return shim.NewMockStub("MembershipSCC", &MembershipSCC{gossipServiceOverride: gossip})
+func newMockStub(gossip service.GossipService, identity []byte, identityDeserializer msp.IdentityDeserializer) *shim.MockStub {
+	cc := &MembershipSCC{gossipServiceOverride: gossip}
+
+	// Init the policy checker
+	policyManagerGetter := &policymocks.MockChannelPolicyManagerGetter{
+		Managers: map[string]policies.Manager{},
+	}
+
+	cc.policyChecker = policy.NewPolicyChecker(
+		policyManagerGetter,
+		identityDeserializer,
+		&policymocks.MockMSPPrincipalGetter{Principal: identity},
+	)
+	return shim.NewMockStub("MembershipSCC", cc)
 }
 
 type mockGossipService struct {
@@ -97,4 +115,18 @@ func (s *mockGossip) SuspectPeers(api.PeerSuspector) {
 
 func (s *mockGossip) GetOrgOfPeer(PKIID gcommon.PKIidType) api.OrgIdentityType {
 	return s.MSPid
+}
+
+func newMockIdentity() []byte {
+	return []byte("Some Identity")
+}
+
+func newMockSignedProposal(identity []byte) (*pb.SignedProposal, msp.IdentityDeserializer) {
+	sProp, _ := utils.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, identity, nil)
+	sProp.Signature = sProp.ProposalBytes
+	identityDeserializer := &policymocks.MockIdentityDeserializer{
+		Identity: identity,
+		Msg:      sProp.ProposalBytes,
+	}
+	return sProp, identityDeserializer
 }

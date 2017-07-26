@@ -8,6 +8,7 @@ package mscc
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
@@ -17,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/scc/mscc/protos"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestInit tests Init method
@@ -33,15 +35,17 @@ func TestInit(t *testing.T) {
 
 // TestInvokeInvalidFunction tests Invoke method with an invalid function name
 func TestInvokeInvalidFunction(t *testing.T) {
-	stub := newMockStub(nil)
+	identity := newMockIdentity()
+	sProp, identityDeserializer := newMockSignedProposal(identity)
 
 	args := [][]byte{}
-	if res := stub.MockInvoke("txID", args); res.Status == shim.OK {
+	stub := newMockStub(nil, identity, identityDeserializer)
+	if res := stub.MockInvokeWithSignedProposal("txID", args, sProp); res.Status == shim.OK {
 		t.Fatalf("mscc invoke expecting error for invalid number of args")
 	}
 
 	args = [][]byte{[]byte("invalid")}
-	if res := stub.MockInvoke("txID", args); res.Status == shim.OK {
+	if res := stub.MockInvokeWithSignedProposal("txID", args, sProp); res.Status == shim.OK {
 		t.Fatalf("mscc invoke expecting error for invalid function")
 	}
 }
@@ -56,10 +60,12 @@ func TestGetAllPeers(t *testing.T) {
 	members := []discovery.NetworkMember{}
 	msp1 := []byte("Org1MSP")
 
-	stub := newMockStub(newMockGossipService(msp1, members))
+	identity := newMockIdentity()
+	sProp, identityDeserializer := newMockSignedProposal(identity)
+	stub := newMockStub(newMockGossipService(msp1, members), identity, identityDeserializer)
 
 	args := [][]byte{[]byte(getAllPeersFunction)}
-	res := stub.MockInvoke("txID", args)
+	res := stub.MockInvokeWithSignedProposal("txID", args, sProp)
 	if res.Status != shim.OK {
 		t.Fatalf("mscc invoke(getAllPeers) - unexpected status: %d, Message: %s", res.Status, res.Message)
 	}
@@ -88,10 +94,11 @@ func TestGetAllPeers(t *testing.T) {
 		discovery.NetworkMember{Endpoint: "host2:1000", InternalEndpoint: "internalhost2:1000"},
 	}
 
-	stub = newMockStub(newMockGossipService(msp1, members))
-
 	args = [][]byte{[]byte(getAllPeersFunction)}
-	res = stub.MockInvoke("txID", args)
+
+	stub = newMockStub(newMockGossipService(msp1, members), identity, identityDeserializer)
+
+	res = stub.MockInvokeWithSignedProposal("txID", args, sProp)
 	if res.Status != shim.OK {
 		t.Fatalf("mscc invoke(getAllPeers) - unexpected status: %d, Message: %s", res.Status, res.Message)
 	}
@@ -131,16 +138,20 @@ func TestGetPeersOfChannel(t *testing.T) {
 
 	// Test on channel that peer hasn't joined
 	msp1 := []byte("Org1MSP")
-	stub := newMockStub(newMockGossipService(msp1, members))
+
+	identity := newMockIdentity()
+	sProp, identityDeserializer := newMockSignedProposal(identity)
+
+	stub := newMockStub(newMockGossipService(msp1, members), identity, identityDeserializer)
 
 	args := [][]byte{[]byte(getPeersOfChannelFunction), nil}
-	res := stub.MockInvoke("txID", args)
+	res := stub.MockInvokeWithSignedProposal("txID", args, sProp)
 	if res.Status == shim.OK {
 		t.Fatalf("mscc invoke(getPeersOfChannel) - Expecting error for nil channel ID")
 	}
 
 	args = [][]byte{[]byte(getPeersOfChannelFunction), []byte(channelID)}
-	res = stub.MockInvoke("txID", args)
+	res = stub.MockInvokeWithSignedProposal("txID", args, sProp)
 	if res.Status != shim.OK {
 		t.Fatalf("mscc invoke(getPeersOfChannel) - unexpected status: %d, Message: %s", res.Status, res.Message)
 	}
@@ -169,7 +180,7 @@ func TestGetPeersOfChannel(t *testing.T) {
 	}
 
 	args = [][]byte{[]byte(getPeersOfChannelFunction), []byte(channelID)}
-	res = stub.MockInvoke("txID", args)
+	res = stub.MockInvokeWithSignedProposal("txID", args, sProp)
 	if res.Status != shim.OK {
 		t.Fatalf("mscc invoke(getPeersOfChannel) - unexpected status: %d, Message: %s", res.Status, res.Message)
 	}
@@ -192,6 +203,23 @@ func TestGetPeersOfChannel(t *testing.T) {
 	if err := checkEndpoints(expected, endpoints.Endpoints); err != nil {
 		t.Fatalf("mscc invoke(getPeersOfChannel) - %s", err)
 	}
+}
+
+// TestAccessControl tests access control
+func TestAccessControl(t *testing.T) {
+	sProp, identityDeserializer := newMockSignedProposal([]byte("invalididentity"))
+
+	// getAllPeers
+	stub := newMockStub(nil, newMockIdentity(), identityDeserializer)
+	res := stub.MockInvokeWithSignedProposal("txID", [][]byte{[]byte(getAllPeersFunction), nil}, sProp)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "mscc invoke expected to fail with authorization error")
+	assert.True(t, strings.HasPrefix(res.Message, "\"getAllPeers\" request failed authorization check"), "Unexpected error message: %s", res.Message)
+
+	// getPeersOfChannel
+	stub = newMockStub(nil, newMockIdentity(), identityDeserializer)
+	res = stub.MockInvokeWithSignedProposal("txID", [][]byte{[]byte(getPeersOfChannelFunction), nil}, sProp)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "mscc invoke expected to fail with authorization error")
+	assert.True(t, strings.HasPrefix(res.Message, "\"getPeersOfChannel\" request failed authorization check"), "Unexpected error message: %s", res.Message)
 }
 
 func checkEndpoints(expected []*protos.PeerEndpoint, actual []*protos.PeerEndpoint) error {
