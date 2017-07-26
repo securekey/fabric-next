@@ -8,7 +8,7 @@ syntax = "proto3";
 
 option go_package = "github.com/hyperledger/fabric/core/scc/mscc/protos";
 
-package protos;
+package membership;
 
 // PeerEndpoint contains the internal and external endpoint of a peer
 message PeerEndpoint {
