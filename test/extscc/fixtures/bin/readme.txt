@@ -1,10 +1,10 @@
 # Build the CC golang source package from this directory
 # IMPORTANT: This example has the version (-v option) set to 0. Make sure to increase the version if the CC is changed!!!
-../../../../build/bin/peer chaincode package -S -n extscc1 -p github.com/hyperledger/fabric/test/extscc/fixtures/src/github.com/extscc_cc -v 0 ../deploy/extscc1.golang
+../../../../build/bin/peer chaincode package -S -n extscc1 -p github.com/hyperledger/fabric/test/extscc/fixtures/src/github.com/extscc_cc -v 1.0.0 ../deploy/extscc1.golang
 
 # Build the CC golang binary package from this directory
 # IMPORTANT: This example has the version (-v option) set to 0. Make sure to increase the version if the CC is changed!!!
-../../../../build/bin/peer chaincode package -S -n extscc3 -p ../src/github.com/extscc_cc_binary -v 0 ../deploy/extscc3.golang -l binary
+../../../../build/bin/peer chaincode package -S -n extscc3 -p ../src/github.com/extscc_cc_binary/extscc_cc -v 1.0.0 ../deploy/extscc3.golang -l binary
 
 
 ##### STEPS TO GENERATE EXECUTABLE BINARY###########
