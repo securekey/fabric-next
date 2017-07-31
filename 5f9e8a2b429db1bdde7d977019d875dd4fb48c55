@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "18e4ac87_8fae395f",
+        "filename": "core/scc/samplesyscc/samplesyscc.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T16:47:44Z",
+      "side": 1,
+      "message": "This code should be in a new SCC. We should not modify fabric\u0027s samples to demonstrate our functionality.",
+      "revId": "5f9e8a2b429db1bdde7d977019d875dd4fb48c55",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "09f7037d_6fd5d925",
+        "filename": "core/scc/samplesyscc2/samplesyscc2.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 36,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T16:47:44Z",
+      "side": 1,
+      "message": "Remove critical log",
+      "revId": "5f9e8a2b429db1bdde7d977019d875dd4fb48c55",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "c831d2b2_4db8df9e",
+        "filename": "examples/extscc_calls/extscc/client.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 58,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T16:47:44Z",
+      "side": 1,
+      "message": "Use logger",
+      "revId": "5f9e8a2b429db1bdde7d977019d875dd4fb48c55",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
