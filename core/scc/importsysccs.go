@@ -247,6 +247,11 @@ func loadExternalSysCCs() error {
 			cds := ccpack.GetDepSpec()
 			ccName := cds.GetChaincodeSpec().GetChaincodeId().GetName()
 
+			if !viper.IsSet(fmt.Sprintf("chaincode.systemext.%s.Enabled", ccName)) {
+				sysccLogger.Infof("Found %s as Ext SCC CDS path, but it is not registered in the configs. Ignoring..", path)
+				return nil
+			}
+
 			execEnv := pb.ChaincodeDeploymentSpec_DOCKER
 			execEnvString := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.execEnv", ccName))
 			if execEnvString != "" {
