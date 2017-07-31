@@ -1148,9 +1148,34 @@ func (handler *Handler) enterBusyState(e *fsm.Event, state string) {
 		}
 
 		var triggerNextStateMsg *pb.ChaincodeMessage
+		errHandler := func(payload []byte, errFmt string, errArgs ...interface{}) {
+			chaincodeLogger.Errorf(errFmt, errArgs)
+			triggerNextStateMsg = &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_ERROR, Payload: payload, Txid: msg.Txid}
+		}
+
+		chaincodeSpec := &pb.ChaincodeSpec{}
+		unmarshalErr := proto.Unmarshal(msg.Payload, chaincodeSpec)
+		if unmarshalErr != nil {
+			errHandler([]byte(unmarshalErr.Error()), "[%s]Unable to decipher payload. Sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_ERROR)
+			return
+		}
+		// Get the chaincodeID to invoke. The chaincodeID to be called may
+		// contain composite info like "chaincode-name:version/channel-name"
+		// We are not using version now but default to the latest
+		calledCcIns := getChaincodeInstance(chaincodeSpec.ChaincodeId.Name)
+		//is the chaincode a system chaincode ?
+		isscc := sysccprovider.GetSystemChaincodeProvider().IsSysCC(calledCcIns.ChaincodeName)
+		// vefify the context has a ChainId to verify valid Transaction Simulator
+		// if chainID == 0, then the assumption this is an SCC called by the client and no UCC involved, so no Transaction Simulator involved
+		//txContext := handler.getTxContext(msg.Txid)
 		var txContext *transactionContext
-		txContext, triggerNextStateMsg = handler.isValidTxSim(msg.Txid, "[%s]No ledger context for %s. Sending %s",
-			shorttxid(msg.Txid), msg.Type.String(), pb.ChaincodeMessage_ERROR)
+
+		if !isscc {
+			txContext, triggerNextStateMsg = handler.isValidTxSim(msg.Txid, "[%s]No ledger context for %s. Sending %s",
+				shorttxid(msg.Txid), msg.Type.String(), pb.ChaincodeMessage_ERROR)
+		} else {
+			txContext = handler.getTxContext(msg.Txid)
+		}
 
 		defer func() {
 			handler.deleteTXIDEntry(msg.Txid)
@@ -1163,11 +1188,6 @@ func (handler *Handler) enterBusyState(e *fsm.Event, state string) {
 
 		if txContext == nil {
 			return
-		}
-
-		errHandler := func(payload []byte, errFmt string, errArgs ...interface{}) {
-			chaincodeLogger.Errorf(errFmt, errArgs)
-			triggerNextStateMsg = &pb.ChaincodeMessage{Type: pb.ChaincodeMessage_ERROR, Payload: payload, Txid: msg.Txid}
 		}
 
 		chaincodeID := handler.getCCRootName()
@@ -1191,17 +1211,7 @@ func (handler *Handler) enterBusyState(e *fsm.Event, state string) {
 			if chaincodeLogger.IsEnabledFor(logging.DEBUG) {
 				chaincodeLogger.Debugf("[%s] C-call-C", shorttxid(msg.Txid))
 			}
-			chaincodeSpec := &pb.ChaincodeSpec{}
-			unmarshalErr := proto.Unmarshal(msg.Payload, chaincodeSpec)
-			if unmarshalErr != nil {
-				errHandler([]byte(unmarshalErr.Error()), "[%s]Unable to decipher payload. Sending %s", shorttxid(msg.Txid), pb.ChaincodeMessage_ERROR)
-				return
-			}
 
-			// Get the chaincodeID to invoke. The chaincodeID to be called may
-			// contain composite info like "chaincode-name:version/channel-name"
-			// We are not using version now but default to the latest
-			calledCcIns := getChaincodeInstance(chaincodeSpec.ChaincodeId.Name)
 			chaincodeSpec.ChaincodeId.Name = calledCcIns.ChaincodeName
 			if calledCcIns.ChainID == "" {
 				// use caller's channel as the called chaincode is in the same channel
@@ -1249,9 +1259,6 @@ func (handler *Handler) enterBusyState(e *fsm.Event, state string) {
 			}
 
 			//Call LSCC to get the called chaincode artifacts
-
-			//is the chaincode a system chaincode ?
-			isscc := sysccprovider.GetSystemChaincodeProvider().IsSysCC(calledCcIns.ChaincodeName)
 
 			var cd *ccprovider.ChaincodeData
 			if !isscc {
