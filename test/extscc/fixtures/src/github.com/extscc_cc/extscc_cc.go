@@ -47,8 +47,10 @@ func (t *SimpleChaincode) Query(stub shim.ChaincodeStubInterface) pb.Response {
 // Transaction makes payment of X units from A to B
 func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	// TODO - implement something for testing
-	fmt.Println("SimpleChaincode Invoke")
-	return shim.Success(nil)
+	logger.Info("-----------------------------------------------------------------")
+	logger.Infof("=========================> extscc Invoke completed, returning %s", []byte("Hello World from ExtScc"))
+	logger.Info("-----------------------------------------------------------------")
+	return shim.Success([]byte("Hello World from ExtScc"))
 }
 
 func main() {

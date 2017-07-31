@@ -17,9 +17,16 @@ limitations under the License.
 package samplesyscc
 
 import (
+	"time"
+
+	"fmt"
+
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	pb "github.com/hyperledger/fabric/protos/peer"
+	logging "github.com/op/go-logging"
 )
+
+var logger = logging.MustGetLogger("samplesyscc1")
 
 // SampleSysCC example simple Chaincode implementation
 type SampleSysCC struct {
@@ -30,6 +37,7 @@ type SampleSysCC struct {
 func (t *SampleSysCC) Init(stub shim.ChaincodeStubInterface) pb.Response {
 	//as system chaincodes do not take part in consensus and are part of the system,
 	//best practice to do nothing (or very little) in Init.
+	logger.Debug("[----------------------> samplesyscc init called <--------------------------]")
 
 	return shim.Success(nil)
 }
@@ -84,6 +92,18 @@ func (t *SampleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		}
 
 		return shim.Success(valbytes)
+	case "invokesamplesyscc2":
+		syscc2 := "samplesyscc2"
+		time.Sleep(time.Second * 2)
+		logger.Infof("------------ Done sleeping. Invoking %s", syscc2)
+		response := stub.InvokeChaincode(syscc2, [][]byte{[]byte("test")}, "")
+		logger.Infof("************ InvokeChaincode response is: %+v", fmt.Sprintf("%s", response))
+		if response.Status != shim.OK {
+			errStr := fmt.Sprintf("Failed to invoke chaincode %s from %s . Error: %s", syscc2, "samplesyscc", string(response.Message))
+			logger.Warning(errStr)
+			return shim.Error(errStr)
+		}
+		return response
 	default:
 		jsonResp := "{\"Error\":\"Unknown function " + f + "\"}"
 		return shim.Error(jsonResp)
