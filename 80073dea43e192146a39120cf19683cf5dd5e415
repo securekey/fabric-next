@@ -1,0 +1,140 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "a6c15704_425c8cbf",
+        "filename": "examples/extscc_calls/extscc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 112,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "Method not used",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a1d35963_c3e60262",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 4
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "We have the crypto materials copied in fabric-next/test/extscc/fixtures and can use those.\n\nThere should not be a dependency on fabric-sdk-go to run this example.",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b61d9de0_198f6294",
+        "filename": "test/extscc/fixtures/src/github.com/extscccaller_cc/extscccaller_cc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 8,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "Lines 8-12  are not required. This is covered by the SPDX identifier",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bdfd5456_a41e6eea",
+        "filename": "test/extscc/fixtures/src/github.com/extscccaller_cc/extscccaller_cc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "typo: Cahincode",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "5c2f5238_2aaa1daa",
+        "filename": "test/extscc/fixtures/src/github.com/extscccaller_cc/extscccaller_cc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "Remove commented out code",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "83a70ca3_6d7d37b4",
+        "filename": "test/extscc/fixtures/src/github.com/extscccaller_cc/extscccaller_cc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "Query can be removed as it is no longer in the chaincode interface",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f2764167_2e656609",
+        "filename": "test/extscc/fixtures/src/github.com/extscccaller_cc/extscccaller_cc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 61,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "Remove commented out code",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "91c1936f_7c319880",
+        "filename": "test/extscc/fixtures/src/github.com/extscccaller_cc/extscccaller_cc.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 65,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-07-31T20:35:31Z",
+      "side": 1,
+      "message": "Use logger",
+      "revId": "80073dea43e192146a39120cf19683cf5dd5e415",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
