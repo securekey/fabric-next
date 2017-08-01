@@ -1,6 +1,8 @@
 #
 # extscc_calls examples demonstrate the invocation of external system chaincodes.
 #
+# read the section 'Configuration and Installation of EXT SCCs' below to configure new EXT SCCs in Fabric
+#
 # extscc.go and extscc/client.go simulate a client that will invoke external SCC
 # the example chaincodes used are:
 #     1. in peer process open source external SCC called: extscc1 (source code is from: extscc_cc) invoked by extscccaller_cc
@@ -45,3 +47,49 @@ or
 --invoke.binary=true
 or
 -b true
+
+
+########################################################
+#
+#  Configuration and Installation of EXT SCCs
+#
+########################################################
+#
+# External SCCs are treated by Fabric as normal SCCs with the only difference is the former are configurable and pluggable while the latter are hard coded.
+#
+# Each Peer must be configured with the EXT SCCs it needs to support.
+#
+# To enable the EXT SCC feature in Fabric, make sure to set this flag to true under the peer's 'environment' map in the docker compose yaml file:
+ - CORE_CHAINCODE_SYSTEMEXT_ENABLED=true
+#
+# if set to false, the peer will ignore any EXT SCC configuration
+#
+# Each EXT SCC must be packaged using the 'peer package' cli command into a CC Deployment Specification or CDS package.
+# See the following readme.txt file for examples on how to generate these packages:
+cd $GOPATH/fabric/test/extscc/fixtures/bin/readme.txt
+
+# extscc1 is for an open source EXT SCC compiled from source. It's CDS package will contain the source code.
+# extscc3 is for a binary (pre-compiled) EXT SCC that shows an example of a private/closed source EXT SCC. It's CDS package contains the pre-compile image without the source code.
+# extscccaller is used to show an example of one EXT SCC invoking another EXT SCC. It calls extscc1
+# extscccaller is also use to invoke ano EXT SCC but for a pre-compiled binary one. It invokes extscc3
+#
+# In order to read the generated CDS package for your EXT SCC, make sure to add it in the path defined under the peer's 'environment' map in docker compose yaml file under this variable:
+     # path of External SCCs to read files with CodeDeploymentSpec object
+     - CORE_CHAINCODE_SYSTEMEXT_CDS_PATH=/opt/extsysccs/deploy
+# Fabric will read the list of CDS files found in the above path and will load the EXT SCCs as defined in the docker compose yaml configs.
+#
+# Each EXT SCC must be defined under the peer's 'environment' map in the docker compose yaml file. Here's an example config:
+      # EXTSCC1
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_ENABLED=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_EXECENV=DOCKER
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLEEXTERNAL=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_INVOKABLECC2CC=true
+      - CORE_CHAINCODE_SYSTEMEXT_EXTSCC1_CONFIGPATH=/opt/extsysccs/config/extscc1
+
+
+# All EXT SCC configuration entries must be prefixed with 'CORE_CHAINCODE_SYSTEMEXT_' following the SCC name (in the above example 'EXTSCC1') then following
+# the conventional SCC's variables defined in SystemChaincode struct under $GOPATH/fabric/core/scc/sysccapi.go
+#
+# CONFIGPATH variable was added to enable loading specific configs for the EXT SCC via yaml/viper
+# EXECENV variable is used to tell Fabric if the EXT SCC must be compiled and executed in a process within the peer (SYSTEM_EXT value)
+# or if should run in it's own Docker image (DOCKER value)
