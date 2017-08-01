@@ -4,7 +4,7 @@
 
 # Build the CC golang binary package from this directory
 # IMPORTANT: This example has the version (-v option) set to 1.0.0. Make sure this version changes with the fabric version. Current Fabric version is 1.0.0
-../../../../build/bin/peer chaincode package -S -n extscc3 -p ../src/github.com/extscc_cc_binary -v 1.0.0 ../deploy/extscc3.golang -l binary && chmod 755 ../deploy/extscc3.golang
+../../../../build/bin/peer chaincode package -S -n extscc3 -p ../src/github.com/extscc_cc_binary/extscc_cc -v 1.0.0 ../deploy/extscc3.golang -l binary && chmod 755 ../deploy/extscc3.golang
 
 # Build the ext SCC callers source package from this directory
 # IMPORTANT: This example has the version (-v option) set to 1.0.0. Make sure this version changes with the fabric version. Current Fabric version is 1.0.0
