@@ -19,6 +19,52 @@
     },
     {
       "key": {
+        "uuid": "caeec33b_bbc848b3",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 58,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "the in-process SCCs",
+      "range": {
+        "startLine": 58,
+        "startChar": 41,
+        "endLine": 58,
+        "endChar": 52
+      },
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "6c407638_f4eb7f2c",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 72,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "binary",
+      "range": {
+        "startLine": 72,
+        "startChar": 149,
+        "endLine": 72,
+        "endChar": 154
+      },
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "b55bb79e_1dda3ade",
         "filename": "examples/extscc_calls/readme.txt",
         "patchSetId": 1
@@ -30,6 +76,121 @@
       "writtenOn": "2017-08-01T16:10:31Z",
       "side": 1,
       "message": "spelling",
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8b219bcc_86d6c332",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "another?",
+      "range": {
+        "startLine": 74,
+        "startChar": 37,
+        "endLine": 74,
+        "endChar": 40
+      },
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "004ea71a_5d900904",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "all",
+      "range": {
+        "startLine": 79,
+        "startChar": 19,
+        "endLine": 79,
+        "endChar": 30
+      },
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "e3a91adb_c3cc1024",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 94,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "remove",
+      "range": {
+        "startLine": 94,
+        "startChar": 128,
+        "endLine": 94,
+        "endChar": 133
+      },
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "60fa96cb_4f7df1cc",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 94,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "defines the SCC execution environment - in the same docker container alongside the peer process",
+      "range": {
+        "startLine": 94,
+        "startChar": 19,
+        "endLine": 94,
+        "endChar": 115
+      },
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f69598ea_e52dc241",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-01T16:19:58Z",
+      "side": 1,
+      "message": "in its own Docker container (DOCKER)",
+      "range": {
+        "startLine": 95,
+        "startChar": 5,
+        "endLine": 95,
+        "endChar": 58
+      },
       "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
