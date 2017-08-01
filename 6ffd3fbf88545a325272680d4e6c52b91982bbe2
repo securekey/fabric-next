@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "bdfae142_f2612d2c",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 4,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2017-08-01T16:10:31Z",
+      "side": 1,
+      "message": "This readme looks like shell script with comments. This should be regular readme.md file with proper formatting.",
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b55bb79e_1dda3ade",
+        "filename": "examples/extscc_calls/readme.txt",
+        "patchSetId": 1
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2017-08-01T16:10:31Z",
+      "side": 1,
+      "message": "spelling",
+      "revId": "6ffd3fbf88545a325272680d4e6c52b91982bbe2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
