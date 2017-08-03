@@ -525,6 +525,8 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 		cMsg = ci.ChaincodeSpec.Input
 	}
 
+	chaincodeLogger.Infof("************* CC Name: %v   IsSysscc: %v     ****************", cccid.Name, cccid.Syscc)
+
 	canName := cccid.GetCanonicalName()
 	chaincodeSupport.runningChaincodes.Lock()
 	var chrte *chaincodeRTEnv
@@ -612,6 +614,11 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 		chaincodeLogger.Debugf("launchAndWaitForRegister done, err: %v", err)
 		if err != nil {
 			chaincodeLogger.Errorf("launchAndWaitForRegister failed %s", err)
+
+			if cccid.Syscc {
+				panic(fmt.Sprintf("Failed to launch system chaincode %s, error: %s", cccid.Name, err))
+			}
+
 			return cID, cMsg, err
 		}
 	}
@@ -625,6 +632,10 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 			errIgnore := chaincodeSupport.Stop(context, cccid, cds)
 			if errIgnore != nil {
 				chaincodeLogger.Errorf("stop failed %s(%s)", errIgnore, err)
+			}
+
+			if cccid.Syscc {
+				panic(fmt.Sprintf("Failed to send INIT to system chaincode %s, error: %s", cccid.Name, err))
 			}
 		}
 		chaincodeLogger.Debug("sending init completed")
@@ -679,6 +690,11 @@ func (chaincodeSupport *ChaincodeSupport) Execute(ctxt context.Context, cccid *c
 	if !ok {
 		chaincodeSupport.runningChaincodes.Unlock()
 		chaincodeLogger.Debugf("cannot execute-chaincode is not running: %s", canName)
+
+		if cccid.Syscc && (msg.Type == pb.ChaincodeMessage_INIT) {
+			panic(fmt.Sprintf("Failed to INIT system chaincode %s, it is not running", cccid.Name))
+		}
+
 		return nil, fmt.Errorf("Cannot execute transaction for %s", canName)
 	}
 	chaincodeSupport.runningChaincodes.Unlock()
@@ -686,6 +702,10 @@ func (chaincodeSupport *ChaincodeSupport) Execute(ctxt context.Context, cccid *c
 	var notfy chan *pb.ChaincodeMessage
 	var err error
 	if notfy, err = chrte.handler.sendExecuteMessage(ctxt, cccid.ChainID, msg, cccid.SignedProposal, cccid.Proposal); err != nil {
+		if cccid.Syscc && (msg.Type == pb.ChaincodeMessage_INIT) {
+			panic(fmt.Sprintf("Failed to INIT system chaincode %s, error: %s", cccid.Name, err))
+		}
+
 		return nil, fmt.Errorf("Error sending %s: %s", msg.Type.String(), err)
 	}
 	var ccresp *pb.ChaincodeMessage
@@ -699,6 +719,20 @@ func (chaincodeSupport *ChaincodeSupport) Execute(ctxt context.Context, cccid *c
 
 	//our responsibility to delete transaction context if sendExecuteMessage succeeded
 	chrte.handler.deleteTxContext(msg.Txid)
+
+	if cccid.Syscc && (msg.Type == pb.ChaincodeMessage_INIT) {
+		if err != nil {
+			panic(fmt.Sprintf("Failed to INIT system chaincode %s, error: %s", cccid.Name, err))
+		}
+
+		if ccresp == nil {
+			panic(fmt.Sprintf("Failed to INIT system chaincode %s, execute transaction response was nil", cccid.Name))
+		}
+
+		if ccresp.Type != pb.ChaincodeMessage_COMPLETED {
+			panic(fmt.Sprintf("Failed to INIT system chaincode %s, received transaction msg response type: %s", cccid.Name, ccresp.Type.String()))
+		}
+	}
 
 	return ccresp, err
 }
