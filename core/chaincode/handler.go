@@ -1174,11 +1174,12 @@ func (handler *Handler) enterBusyState(e *fsm.Event, state string) {
 			isscc = sysccprovider.GetSystemChaincodeProvider().IsSysCC(calledCcIns.ChaincodeName)
 		}
 
-		if !isscc {
+		//for SCC invokes without chaindID, do not validate TxSim
+		if isscc && txContext.chainID == ""{
+			txContext = handler.getTxContext(msg.Txid)
+		} else {
 			txContext, triggerNextStateMsg = handler.isValidTxSim(msg.Txid, "[%s]No ledger context for %s. Sending %s",
 				shorttxid(msg.Txid), msg.Type.String(), pb.ChaincodeMessage_ERROR)
-		} else {
-			txContext = handler.getTxContext(msg.Txid)
 		}
 
 		defer func() {
