@@ -525,8 +525,6 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 		cMsg = ci.ChaincodeSpec.Input
 	}
 
-	chaincodeLogger.Infof("************* CC Name: %v   IsSysscc: %v     ****************", cccid.Name, cccid.Syscc)
-
 	canName := cccid.GetCanonicalName()
 	chaincodeSupport.runningChaincodes.Lock()
 	var chrte *chaincodeRTEnv
