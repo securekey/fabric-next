@@ -22,6 +22,30 @@
       "revId": "abf71a153bc7e325119ab01b28d1fab4cfe0f422",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4e3de984_af448e60",
+        "filename": "core/chaincode/chaincode_support.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 528,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2017-08-04T12:54:55Z",
+      "side": 1,
+      "message": "Yes, forgot to remove that",
+      "parentUuid": "08d26edb_cadb986d",
+      "range": {
+        "startLine": 528,
+        "startChar": 0,
+        "endLine": 528,
+        "endChar": 112
+      },
+      "revId": "abf71a153bc7e325119ab01b28d1fab4cfe0f422",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
