@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "205796b9_492fe058",
+        "filename": "core/container/extcontroller/extbuilder.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-08T20:39:05Z",
+      "side": 1,
+      "message": "Should use a dedicated subdirectory under \"peer.fileSystemPath\" for storing binaries.\n\nSee chaincode_support.go",
+      "range": {
+        "startLine": 34,
+        "startChar": 1,
+        "endLine": 34,
+        "endChar": 26
+      },
+      "revId": "74671629657a3e379d1bb1552c3d36bab342ee1b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
