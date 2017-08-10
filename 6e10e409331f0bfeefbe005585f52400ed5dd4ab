@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c68d3bac_a4d6df6d",
+        "filename": "core/container/extcontroller/extbuilder.go",
+        "patchSetId": 7
+      },
+      "lineNbr": 82,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2017-08-10T18:28:54Z",
+      "side": 1,
+      "message": "generateExtCCHashFile returns an error, should probably handle that",
+      "revId": "6e10e409331f0bfeefbe005585f52400ed5dd4ab",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
