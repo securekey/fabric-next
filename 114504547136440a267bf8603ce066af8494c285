@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "910c1843_8bb3fcbd",
+        "filename": "core/container/extcontroller/extbuilder.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2017-08-10T17:59:11Z",
+      "side": 1,
+      "message": "curDir is probably a wrong name for this variable (here and throughout the code), as it is the chaincode build output directory, not the running process\u0027 curent working directory",
+      "range": {
+        "startLine": 35,
+        "startChar": 1,
+        "endLine": 35,
+        "endChar": 7
+      },
+      "revId": "114504547136440a267bf8603ce066af8494c285",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
