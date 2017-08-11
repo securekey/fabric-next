@@ -98,15 +98,16 @@ func GetConfigTxProcessor() customtx.Processor {
 //---------- ACLProvider intialized once SCCs are brought up by peer ---------
 var aclProvider ACLProvider
 
-var once sync.Once
-
 //RegisterACLProvider will be called to register actual SCC if RSCC (an ACLProvider) is enabled
+//only UT should call multiple times
 func RegisterACLProvider(r ACLProvider) {
-	once.Do(func() {
-		configtxLock.Lock()
-		defer configtxLock.Unlock()
-		aclProvider = newACLMgmt(r)
-	})
+	configtxLock.Lock()
+	defer configtxLock.Unlock()
+	if aclProvider != nil {
+		//error to make it stand out
+		aclLogger.Error("setting aclProvider again...hope its just UT")
+	}
+	aclProvider = newACLMgmt(r)
 }
 
 //GetACLProvider returns ACLProvider
