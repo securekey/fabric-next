@@ -18,24 +18,25 @@ package qscc
 import (
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/hyperledger/fabric/common/ledger/testutil"
-	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/aclmgmt"
+	"github.com/hyperledger/fabric/core/aclmgmt/mocks"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/peer"
-	"github.com/hyperledger/fabric/core/policy"
-	policymocks "github.com/hyperledger/fabric/core/policy/mocks"
 	"github.com/hyperledger/fabric/protos/common"
 	peer2 "github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 func setupTestLedger(chainid string, path string) (*shim.MockStub, error) {
+	aclmgmt.RegisterACLProvider(&mocks.MockACLProvider2{nil})
+
 	viper.Set("peer.fileSystemPath", path)
 	peer.MockInitialize()
 	peer.MockCreateChain(chainid)
@@ -159,30 +160,77 @@ func TestFailingAccessControl(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	e := new(LedgerQuerier)
-	// Init the policy checker to have a failure
-	policyManagerGetter := &policymocks.MockChannelPolicyManagerGetter{
-		Managers: map[string]policies.Manager{
-			chainid: &policymocks.MockChannelPolicyManager{MockPolicy: &policymocks.MockPolicy{Deserializer: &policymocks.MockIdentityDeserializer{Identity: []byte("Alice"), Msg: []byte("msg1")}}},
-		},
-	}
-	e.policyChecker = policy.NewPolicyChecker(
-		policyManagerGetter,
-		&policymocks.MockIdentityDeserializer{Identity: []byte("Alice"), Msg: []byte("msg1")},
-		&policymocks.MockMSPPrincipalGetter{Principal: []byte("Alice")},
-	)
 	stub := shim.NewMockStub("LedgerQuerier", e)
 
+	// GetChainInfo
 	args := [][]byte{[]byte(GetChainInfo), []byte(chainid)}
 	sProp, _ := utils.MockSignedEndorserProposalOrPanic(chainid, &peer2.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
-	policyManagerGetter.Managers[chainid].(*policymocks.MockChannelPolicyManager).MockPolicy.(*policymocks.MockPolicy).Deserializer.(*policymocks.MockIdentityDeserializer).Msg = sProp.ProposalBytes
 	sProp.Signature = sProp.ProposalBytes
+	// Set the ACLProvider to have a failure
+	aclProvider := new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.QSCC_GetChainInfo, chainid, sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
 	res := stub.MockInvokeWithSignedProposal("2", args, sProp)
-	assert.Equal(t, int32(shim.OK), res.Status, "GetChainInfo failed with err: %s", res.Message)
-
-	sProp, _ = utils.MockSignedEndorserProposalOrPanic(chainid, &peer2.ChaincodeSpec{}, []byte("Bob"), []byte("msg2"))
-	res = stub.MockInvokeWithSignedProposal("3", args, sProp)
 	assert.Equal(t, int32(shim.ERROR), res.Status, "GetChainInfo must fail: %s", res.Message)
-	assert.True(t, strings.HasPrefix(res.Message, "Authorization request failed"))
+	assert.Contains(t, res.Message, "Failed access control")
+	// assert that the expectations were met
+	aclProvider.AssertExpectations(t)
+
+	// GetBlockByNumber
+	args = [][]byte{[]byte(GetBlockByNumber), []byte(chainid), []byte("1")}
+	sProp, _ = utils.MockSignedEndorserProposalOrPanic(chainid, &peer2.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
+	sProp.Signature = sProp.ProposalBytes
+	// Set the ACLProvider to have a failure
+	aclProvider = new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.QSCC_GetBlockByNumber, chainid, sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
+	res = stub.MockInvokeWithSignedProposal("2", args, sProp)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "GetBlockByNumber must fail: %s", res.Message)
+	assert.Contains(t, res.Message, "Failed access control")
+	// assert that the expectations were met
+	aclProvider.AssertExpectations(t)
+
+	// GetBlockByHash
+	args = [][]byte{[]byte(GetBlockByHash), []byte(chainid), []byte("1")}
+	sProp, _ = utils.MockSignedEndorserProposalOrPanic(chainid, &peer2.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
+	sProp.Signature = sProp.ProposalBytes
+	// Set the ACLProvider to have a failure
+	aclProvider = new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.QSCC_GetBlockByHash, chainid, sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
+	res = stub.MockInvokeWithSignedProposal("2", args, sProp)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "GetBlockByHash must fail: %s", res.Message)
+	assert.Contains(t, res.Message, "Failed access control")
+	// assert that the expectations were met
+	aclProvider.AssertExpectations(t)
+
+	// GetBlockByTxID
+	args = [][]byte{[]byte(GetBlockByTxID), []byte(chainid), []byte("1")}
+	sProp, _ = utils.MockSignedEndorserProposalOrPanic(chainid, &peer2.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
+	sProp.Signature = sProp.ProposalBytes
+	// Set the ACLProvider to have a failure
+	aclProvider = new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.QSCC_GetBlockByTxID, chainid, sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
+	res = stub.MockInvokeWithSignedProposal("2", args, sProp)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "GetBlockByTxID must fail: %s", res.Message)
+	assert.Contains(t, res.Message, "Failed access control")
+	// assert that the expectations were met
+	aclProvider.AssertExpectations(t)
+
+	// GetTransactionByID
+	args = [][]byte{[]byte(GetTransactionByID), []byte(chainid), []byte("1")}
+	sProp, _ = utils.MockSignedEndorserProposalOrPanic(chainid, &peer2.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
+	sProp.Signature = sProp.ProposalBytes
+	// Set the ACLProvider to have a failure
+	aclProvider = new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.QSCC_GetTransactionByID, chainid, sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
+	res = stub.MockInvokeWithSignedProposal("2", args, sProp)
+	assert.Equal(t, int32(shim.ERROR), res.Status, "QSCC_GetTransactionByID must fail: %s", res.Message)
+	assert.Contains(t, res.Message, "Failed access control")
+	// assert that the expectations were met
+	aclProvider.AssertExpectations(t)
 }
 
 func TestQueryNonexistentFunction(t *testing.T) {
