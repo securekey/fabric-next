@@ -1,4 +1,4 @@
-v1.0.0 July 11, 2017
+v1.0.1 August 5, 2017
 ------------------------
 
 Release Notes
@@ -13,7 +13,12 @@ none
 
 Resolved Vulnerabilities
 ------------------------
-https://jira.hyperledger.org/browse/FAB-5207
+https://jira.hyperledger.org/browse/FAB-5329
+https://jira.hyperledger.org/browse/FAB-5330
+https://jira.hyperledger.org/browse/FAB-5353
+https://jira.hyperledger.org/browse/FAB-5529
+https://jira.hyperledger.org/browse/FAB-5606
+https://jira.hyperledger.org/browse/FAB-5627
 
 Known Issues & Workarounds
 --------------------------
@@ -33,4 +38,4 @@ fabric-ccenv in the future.
 
 Change Log
 ----------
-https://github.com/hyperledger/fabric/blob/master/CHANGELOG.md#v100
+https://github.com/hyperledger/fabric/blob/master/CHANGELOG.md#v101
