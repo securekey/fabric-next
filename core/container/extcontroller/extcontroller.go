@@ -94,7 +94,7 @@ func (vm *ExtVM) Deploy(ctxt context.Context, ccid ccintf.CCID, args []string, e
 		return fmt.Errorf(fmt.Sprintf("%s system chaincode does not contain chaincode instance", path))
 	}
 
-	instName, _ := vm.GetVMName(ccid)
+	instName, _ := vm.GetVMName(ccid, nil)
 	_, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
 
 	//FUTURE ... here is where we might check code for safety
@@ -113,7 +113,7 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 		return fmt.Errorf(fmt.Sprintf("%s not registered", path))
 	}
 
-	instName, _ := vm.GetVMName(ccid)
+	instName, _ := vm.GetVMName(ccid, nil)
 
 	ec, err := vm.getInstance(ctxt, ectemplate, instName, args, env)
 
@@ -168,7 +168,7 @@ func (vm *ExtVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, dont
 		return fmt.Errorf("%s not registered", path)
 	}
 
-	instName, _ := vm.GetVMName(ccid)
+	instName, _ := vm.GetVMName(ccid, nil)
 
 	ipc := instRegistry[instName]
 
@@ -192,7 +192,7 @@ func (vm *ExtVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, nop
 }
 
 //GetVMName ignores the peer and network name as it just needs to be unique in process
-func (vm *ExtVM) GetVMName(ccid ccintf.CCID) (string, error) {
+func (vm *ExtVM) GetVMName(ccid ccintf.CCID, format func(string) (string, error)) (string, error) {
 	return ccid.GetName(), nil
 }
 
