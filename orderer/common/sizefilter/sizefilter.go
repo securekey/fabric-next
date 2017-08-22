@@ -18,36 +18,29 @@ package sizefilter
 
 import (
 	"github.com/hyperledger/fabric/orderer/common/filter"
-	cb "github.com/hyperledger/fabric/protos/common"
-	ab "github.com/hyperledger/fabric/protos/orderer"
+	ab "github.com/hyperledger/fabric/protos/common"
 	logging "github.com/op/go-logging"
 )
 
 var logger = logging.MustGetLogger("orderer/common/sizefilter")
 
-// Support defines the subset of the channel support required to create this filter
-type Support interface {
-	BatchSize() *ab.BatchSize
-}
-
 // MaxBytesRule rejects messages larger than maxBytes
-func MaxBytesRule(support Support) filter.Rule {
-	return &maxBytesRule{support: support}
+func MaxBytesRule(maxBytes uint32) filter.Rule {
+	return &maxBytesRule{maxBytes: maxBytes}
 }
 
 type maxBytesRule struct {
-	support Support
+	maxBytes uint32
 }
 
-func (r *maxBytesRule) Apply(message *cb.Envelope) (filter.Action, filter.Committer) {
-	maxBytes := r.support.BatchSize().AbsoluteMaxBytes
-	if size := messageByteSize(message); size > maxBytes {
-		logger.Warningf("%d byte message payload exceeds maximum allowed %d bytes", size, maxBytes)
+func (r *maxBytesRule) Apply(message *ab.Envelope) (filter.Action, filter.Committer) {
+	if size := messageByteSize(message); size > r.maxBytes {
+		logger.Warningf("%d byte message payload exceeds maximum allowed %d bytes", size, r.maxBytes)
 		return filter.Reject, nil
 	}
 	return filter.Forward, nil
 }
 
-func messageByteSize(message *cb.Envelope) uint32 {
+func messageByteSize(message *ab.Envelope) uint32 {
 	return uint32(len(message.Payload) + len(message.Signature))
 }

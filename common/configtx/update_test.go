@@ -89,23 +89,15 @@ func TestVerifyDeltaSet(t *testing.T) {
 	t.Run("Green path", func(t *testing.T) {
 		deltaSet := make(map[string]comparable)
 
-		deltaSet["foo"] = comparable{ConfigValue: &cb.ConfigValue{Version: 1, ModPolicy: "foo"}}
-
-		assert.NoError(t, cm.verifyDeltaSet(deltaSet, nil), "Good update")
-	})
-
-	t.Run("Bad mod policy", func(t *testing.T) {
-		deltaSet := make(map[string]comparable)
-
 		deltaSet["foo"] = comparable{ConfigValue: &cb.ConfigValue{Version: 1}}
 
-		assert.Regexp(t, "invalid mod_policy for element", cm.verifyDeltaSet(deltaSet, nil))
+		assert.NoError(t, cm.verifyDeltaSet(deltaSet, nil), "Good update")
 	})
 
 	t.Run("Big Skip", func(t *testing.T) {
 		deltaSet := make(map[string]comparable)
 
-		deltaSet["foo"] = comparable{ConfigValue: &cb.ConfigValue{Version: 2, ModPolicy: "foo"}}
+		deltaSet["foo"] = comparable{ConfigValue: &cb.ConfigValue{Version: 2}}
 
 		assert.Error(t, cm.verifyDeltaSet(deltaSet, nil), "Version skip from 0 to 2")
 	})
@@ -113,7 +105,7 @@ func TestVerifyDeltaSet(t *testing.T) {
 	t.Run("New item high version", func(t *testing.T) {
 		deltaSet := make(map[string]comparable)
 
-		deltaSet["bar"] = comparable{ConfigValue: &cb.ConfigValue{Version: 1, ModPolicy: "foo"}}
+		deltaSet["bar"] = comparable{ConfigValue: &cb.ConfigValue{Version: 1}}
 
 		assert.Error(t, cm.verifyDeltaSet(deltaSet, nil), "New key not at version 0")
 	})
@@ -121,7 +113,7 @@ func TestVerifyDeltaSet(t *testing.T) {
 	t.Run("Policy evalaution to false", func(t *testing.T) {
 		deltaSet := make(map[string]comparable)
 
-		deltaSet["foo"] = comparable{ConfigValue: &cb.ConfigValue{Version: 1, ModPolicy: "foo"}}
+		deltaSet["foo"] = comparable{ConfigValue: &cb.ConfigValue{Version: 1}}
 		cm.Resources.(*mockconfigtx.Resources).PolicyManagerVal.Policy = &mockpolicies.Policy{Err: fmt.Errorf("Err")}
 
 		assert.Error(t, cm.verifyDeltaSet(deltaSet, nil), "Policy evaluation should have failed")
@@ -189,22 +181,4 @@ func TestPolicyForItem(t *testing.T) {
 	})
 	assert.True(t, ok)
 	assert.Equal(t, policy, fooPolicy, "Should have found relative foo policy for foo group")
-}
-
-func TestValidateModPolicy(t *testing.T) {
-	t.Run("Valid", func(t *testing.T) {
-		assert.Nil(t, validateModPolicy("/foo/bar"))
-	})
-	t.Run("Empty", func(t *testing.T) {
-		assert.Regexp(t, "mod_policy not set", validateModPolicy(""))
-	})
-	t.Run("InvalidFirstChar", func(t *testing.T) {
-		assert.Regexp(t, "path element at 0 is invalid", validateModPolicy("^foo"))
-	})
-	t.Run("InvalidRootPath", func(t *testing.T) {
-		assert.Regexp(t, "path element at 0 is invalid", validateModPolicy("/"))
-	})
-	t.Run("InvalidSubPath", func(t *testing.T) {
-		assert.Regexp(t, "path element at 1 is invalid", validateModPolicy("foo//bar"))
-	})
 }

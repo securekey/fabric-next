@@ -72,10 +72,6 @@ func TestToString(t *testing.T) {
 		},
 	}
 	assert.NotContains(t, fmt.Sprintf("%v", sMsg), "2")
-	sMsg.GetDataMsg().Payload = nil
-	assert.NotPanics(t, func() {
-		_ = sMsg.String()
-	})
 
 	sMsg = &SignedGossipMessage{
 		GossipMessage: &GossipMessage{

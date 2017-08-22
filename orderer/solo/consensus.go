@@ -29,9 +29,10 @@ var logger = logging.MustGetLogger("orderer/solo")
 type consenter struct{}
 
 type chain struct {
-	support  multichain.ConsenterSupport
-	sendChan chan *cb.Envelope
-	exitChan chan struct{}
+	support      multichain.ConsenterSupport
+	batchTimeout time.Duration
+	sendChan     chan *cb.Envelope
+	exitChan     chan struct{}
 }
 
 // New creates a new consenter for the solo consensus scheme.
@@ -48,9 +49,10 @@ func (solo *consenter) HandleChain(support multichain.ConsenterSupport, metadata
 
 func newChain(support multichain.ConsenterSupport) *chain {
 	return &chain{
-		support:  support,
-		sendChan: make(chan *cb.Envelope),
-		exitChan: make(chan struct{}),
+		batchTimeout: support.SharedConfig().BatchTimeout(),
+		support:      support,
+		sendChan:     make(chan *cb.Envelope),
+		exitChan:     make(chan struct{}),
 	}
 }
 
@@ -90,7 +92,7 @@ func (ch *chain) main() {
 		case msg := <-ch.sendChan:
 			batches, committers, ok := ch.support.BlockCutter().Ordered(msg)
 			if ok && len(batches) == 0 && timer == nil {
-				timer = time.After(ch.support.SharedConfig().BatchTimeout())
+				timer = time.After(ch.batchTimeout)
 				continue
 			}
 			for i, batch := range batches {

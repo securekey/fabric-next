@@ -18,7 +18,6 @@ package dockercontroller
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -30,7 +29,6 @@ import (
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	container "github.com/hyperledger/fabric/core/container/api"
 	"github.com/hyperledger/fabric/core/container/ccintf"
@@ -47,8 +45,6 @@ var (
 	hostConfig      *docker.HostConfig
 	sccTypeRegistry = make(map[string]*dockerSCCContainer)
 	sccInstRegistry = make(map[string]*dockerSCCContainer)
-	vmRegExp        = regexp.MustCompile("[^a-zA-Z0-9-_.]")
-	imageRegExp     = regexp.MustCompile("^[a-z0-9]+(([._-][a-z0-9]+)+)?$")
 )
 
 type dockerSCCContainer struct {
@@ -207,7 +203,7 @@ func (vm *DockerVM) createContainer(ctxt context.Context, client dockerClient,
 
 func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID,
 	args []string, env []string, reader io.Reader) error {
-	id, err := vm.GetVMName(ccid, formatImageName)
+	id, err := vm.GetVMName(ccid)
 	if err != nil {
 		return err
 	}
@@ -250,7 +246,7 @@ func (vm *DockerVM) Deploy(ctxt context.Context, ccid ccintf.CCID,
 			return fmt.Errorf(fmt.Sprintf("%s system chaincode does not contain chaincode instance", path))
 		}
 
-		instName, _ := vm.GetVMName(ccid, nil)
+		instName, _ := vm.GetVMName(ccid)
 		_, err := vm.getDockerSCCInstance(ctxt, ipctemplate, instName, args, env)
 
 		//FUTURE ... here is where we might check code for safety
@@ -274,7 +270,7 @@ func (vm *DockerVM) Deploy(ctxt context.Context, ccid ccintf.CCID,
 //Start starts a container using a previously created docker image
 func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 	args []string, env []string, builder container.BuildSpecFactory, prelaunchFunc container.PrelaunchFunc) error {
-	imageID, err := vm.GetVMName(ccid, formatImageName)
+	imageID, err := vm.GetVMName(ccid)
 	if err != nil {
 		return err
 	}
@@ -306,11 +302,7 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 		return err
 	}
 
-	containerID, err := vm.GetVMName(ccid, nil)
-	if err != nil {
-		return err
-	}
-
+	containerID := strings.Replace(imageID, ":", "_", -1)
 	attachStdout := viper.GetBool("vm.docker.attachStdout")
 
 	//stop,force remove if necessary
@@ -450,7 +442,7 @@ func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 			return fmt.Errorf("%s not registered", path)
 		}
 
-		instName, _ := vm.GetVMName(ccid, nil)
+		instName, _ := vm.GetVMName(ccid)
 
 		ipc := sccInstRegistry[instName]
 
@@ -465,7 +457,7 @@ func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 		delete(sccInstRegistry, instName)
 	}
 
-	id, err := vm.GetVMName(ccid, nil)
+	id, err := vm.GetVMName(ccid)
 	if err != nil {
 		return err
 	}
@@ -511,7 +503,7 @@ func (vm *DockerVM) stopInternal(ctxt context.Context, client dockerClient,
 
 //Destroy destroys an image
 func (vm *DockerVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, noprune bool) error {
-	id, err := vm.GetVMName(ccid, formatImageName)
+	id, err := vm.GetVMName(ccid)
 	if err != nil {
 		return err
 	}
@@ -534,50 +526,36 @@ func (vm *DockerVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, 
 	return err
 }
 
-// GetVMName generates the VM name from peer information. It accepts a format
-// function parameter to allow different formatting based on the desired use of
-// the name.
-func (vm *DockerVM) GetVMName(ccid ccintf.CCID, format func(string) (string, error)) (string, error) {
+//GetVMName generates the docker image from peer information given the hashcode. This is needed to
+//keep image name's unique in a single host, multi-peer environment (such as a development environment)
+func (vm *DockerVM) GetVMName(ccid ccintf.CCID) (string, error) {
 	name := ccid.GetName()
 
-	// replace any invalid characters with "-"
+	//Convert to lowercase and replace any invalid characters with "-"
+	r := regexp.MustCompile("[^a-zA-Z0-9-_.]")
+
 	if ccid.NetworkID != "" && ccid.PeerID != "" {
-		name = vmRegExp.ReplaceAllString(
-			fmt.Sprintf("%s-%s-%s", ccid.NetworkID, ccid.PeerID, name), "-")
+		name = strings.ToLower(
+			r.ReplaceAllString(
+				fmt.Sprintf("%s-%s-%s", ccid.NetworkID, ccid.PeerID, name), "-"))
 	} else if ccid.NetworkID != "" {
-		name = vmRegExp.ReplaceAllString(
-			fmt.Sprintf("%s-%s", ccid.NetworkID, name), "-")
+		name = strings.ToLower(
+			r.ReplaceAllString(
+				fmt.Sprintf("%s-%s", ccid.NetworkID, name), "-"))
 	} else if ccid.PeerID != "" {
-		name = vmRegExp.ReplaceAllString(
-			fmt.Sprintf("%s-%s", ccid.PeerID, name), "-")
+		name = strings.ToLower(
+			r.ReplaceAllString(
+				fmt.Sprintf("%s-%s", ccid.PeerID, name), "-"))
 	}
 
-	if format != nil {
-		formattedName, err := format(name)
-		if err != nil {
-			return formattedName, err
-		}
-		// check to ensure format function didn't add any invalid characters
-		name = vmRegExp.ReplaceAllString(formattedName, "-")
+	// Check name complies with Docker's repository naming rules
+	r = regexp.MustCompile("^[a-z0-9]+(([._-][a-z0-9]+)+)?$")
+
+	if !r.MatchString(name) {
+		dockerLogger.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", name)
+		return name, fmt.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", name)
 	}
 	return name, nil
-}
-
-// formatImageName formats the docker image from peer information. This is
-// needed to keep image (repository) names unique in a single host, multi-peer
-// environment (such as a development environment). It computes the hash for the
-// supplied image name and then appends it to the lowercase image name to ensure
-// uniqueness.
-func formatImageName(name string) (string, error) {
-	imageName := strings.ToLower(fmt.Sprintf("%s-%s", name, hex.EncodeToString(util.ComputeSHA256([]byte(name)))))
-
-	// Check that name complies with Docker's repository naming rules
-	if !imageRegExp.MatchString(imageName) {
-		dockerLogger.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", name)
-		return imageName, fmt.Errorf("Error constructing Docker VM Name. '%s' breaks Docker's repository naming rules", imageName)
-	}
-
-	return imageName, nil
 }
 
 func (vm *DockerVM) getDockerSCCInstance(ctxt context.Context, ipctemplate *dockerSCCContainer, instName string, args []string, env []string) (*dockerSCCContainer, error) {

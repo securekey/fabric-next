@@ -18,6 +18,7 @@ package multichain
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/hyperledger/fabric/common/config"
 	"github.com/hyperledger/fabric/common/configtx"
@@ -139,9 +140,8 @@ func (scf *systemChainFilter) authorize(configEnvelope *cb.ConfigEnvelope) (conf
 func (scf *systemChainFilter) inspect(proposedManager, configManager configtxapi.Manager) error {
 	proposedEnv := proposedManager.ConfigEnvelope()
 	actualEnv := configManager.ConfigEnvelope()
-	// reflect.DeepEqual will not work here, because it considers nil and empty maps as unequal
-	if !proto.Equal(proposedEnv.Config, actualEnv.Config) {
-		return fmt.Errorf("config proposed by the channel creation request did not match the config received with the channel creation request")
+	if !reflect.DeepEqual(proposedEnv.Config, actualEnv.Config) {
+		return fmt.Errorf("The config proposed by the channel creation request did not match the config received with the channel creation request")
 	}
 	return nil
 }

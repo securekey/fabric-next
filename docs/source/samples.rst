@@ -2,7 +2,7 @@ Hyperledger Fabric Samples
 ==========================
 
 .. note:: If you are running on **Windows** you will want to make use of the
-	  Docker Quickstart Terminal for the upcoming terminal commands.
+          ``Git bash shell`` extension for the upcoming terminal commands.
           Please visit the :doc:`prereqs` if you haven't previously installed
           it.
 
@@ -46,16 +46,10 @@ you will extract the platform-specific binaries:
 
   curl -sSL https://goo.gl/iX9dek | bash
 
-.. note:: If you get an error running the above curl command, you may
-          have too old a version of curl. Please visit the
-          :doc:`prereqs` page for additional information on where to
-          find the latest version.
-
 The curl command above downloads and executes a bash script
 that will download and extract all of the platform-specific binaries you
 will need to set up your network and place them into the cloned repo you
 created above. It retrieves four platform-specific binaries:
-
   * ``cryptogen``,
   * ``configtxgen``,
   * ``configtxlator``, and
@@ -79,15 +73,11 @@ The script lists out the Docker images installed upon conclusion.
 
 Look at the names for each image; these are the components that will ultimately
 comprise our Hyperledger Fabric network.  You will also notice that you have
-two instances of the same image ID - one tagged as "x86_64-1.0.0" and
+two instances of the same image ID - one tagged as "x86_64-1.0.0-rc1" and
 one tagged as "latest".
 
-.. note:: On different architectures, the x86_64 would be replaced
+.. note:: Note that on different architectures, the x86_64 would be replaced
           with the string identifying your architecture.
-
-.. note:: If you have questions not addressed by this documentation, or run into
-          issues with any of the tutorials, please visit the :doc:`questions`
-          page for some tips on where to find additional help.
 
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/

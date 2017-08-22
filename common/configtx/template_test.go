@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/hyperledger/fabric/common/config"
-	configmsp "github.com/hyperledger/fabric/common/config/msp"
 	mmsp "github.com/hyperledger/fabric/common/mocks/msp"
 	cb "github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
@@ -145,11 +144,8 @@ func TestNewChainTemplate(t *testing.T) {
 	assert.Len(t, configUpdate.WriteSet.Groups[config.ApplicationGroupKey].Groups, len(orgs))
 
 	for _, org := range orgs {
-		group, ok := configUpdate.WriteSet.Groups[config.ApplicationGroupKey].Groups[org]
+		_, ok := configUpdate.WriteSet.Groups[config.ApplicationGroupKey].Groups[org]
 		assert.True(t, ok, "Expected to find %s but did not", org)
-		for _, policy := range group.Policies {
-			assert.Equal(t, configmsp.AdminsPolicyKey, policy.ModPolicy)
-		}
 	}
 }
 
