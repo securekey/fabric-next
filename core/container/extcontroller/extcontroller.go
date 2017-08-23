@@ -19,8 +19,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/hyperledger/fabric/core/config"
-	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 
 	"io/ioutil"
@@ -198,30 +196,14 @@ func (vm *ExtVM) GetVMName(ccid ccintf.CCID) (string, error) {
 
 //execCmd to run path binary in peer container
 func (ec *extContainer) execCmd(path string, env []string) error {
-
-	// Setting up environment variables for command to be run
-	envmap := make(map[string]string)
-	for _, e := range env {
-		split := strings.SplitN(e, "=", 2)
-		envmap[split[0]] = split[1]
-	}
-
-	envmap["CORE_PEER_ADDRESS"] = viper.GetString("peer.address")
-
-	if viper.GetBool("peer.tls.enabled") == true {
-		certPath := config.GetPath("peer.tls.rootcert.file")
-		if certPath == "" {
-			// check for tls cert
-			certPath = config.GetPath("peer.tls.cert.file")
-		}
-		envmap["CORE_PEER_TLS_ROOTCERT_FILE"] = certPath
-		split := strings.SplitN(viper.GetString("peer.address"), ":", 2)
-		envmap["CORE_PEER_TLS_SERVERHOSTOVERRIDE"] = split[0]
-	}
+	peerEnv := getPeerEnv()
 
 	var finalEnv []string
-	for k, v := range envmap {
-		finalEnv = append(finalEnv, fmt.Sprintf("%s=%s", k, v))
+	for _, v := range env {
+		finalEnv = append(finalEnv, v)
+	}
+	for _, v := range peerEnv {
+		finalEnv = append(finalEnv, v)
 	}
 
 	cmd := exec.Command(path)
@@ -237,4 +219,15 @@ func (ec *extContainer) execCmd(path string, env []string) error {
 	}
 
 	return nil
+}
+
+func getPeerEnv() []string {
+	var env []string
+	for _, v := range os.Environ() {
+		if strings.HasPrefix(v, "CORE") {
+			env = append(env, v)
+		}
+	}
+
+	return env
 }
