@@ -17,8 +17,15 @@ limitations under the License.
 package scc
 
 import (
-	"github.com/hyperledger/fabric/core/aclmgmt"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 
+	"github.com/hyperledger/fabric/core/aclmgmt"
+	"github.com/hyperledger/fabric/core/common/ccprovider"
+	pb "github.com/hyperledger/fabric/protos/peer"
+	"github.com/spf13/viper"
 	//import system chain codes here
 	"github.com/hyperledger/fabric/core/scc/cscc"
 	"github.com/hyperledger/fabric/core/scc/escc"
@@ -38,6 +45,7 @@ var systemChaincodes = []*SystemChaincode{
 		InitArgs:          [][]byte{[]byte("")},
 		Chaincode:         &cscc.PeerConfiger{},
 		InvokableExternal: true, // cscc is invoked to join a channel
+		Chainless:         false,
 	},
 	{
 		Enabled:           true,
@@ -47,6 +55,7 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         &lscc.LifeCycleSysCC{},
 		InvokableExternal: true, // lscc is invoked to deploy new chaincodes
 		InvokableCC2CC:    true, // lscc can be invoked by other chaincodes
+		Chainless:         false,
 	},
 	{
 		Enabled:   true,
@@ -54,6 +63,7 @@ var systemChaincodes = []*SystemChaincode{
 		Path:      "github.com/hyperledger/fabric/core/scc/escc",
 		InitArgs:  [][]byte{[]byte("")},
 		Chaincode: &escc.EndorserOneValidSignature{},
+		Chainless: false,
 	},
 	{
 		Enabled:   true,
@@ -61,6 +71,7 @@ var systemChaincodes = []*SystemChaincode{
 		Path:      "github.com/hyperledger/fabric/core/scc/vscc",
 		InitArgs:  [][]byte{[]byte("")},
 		Chaincode: &vscc.ValidatorOneValidSignature{},
+		Chainless: false,
 	},
 	{
 		Enabled:           true,
@@ -70,6 +81,7 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         &qscc.LedgerQuerier{},
 		InvokableExternal: true, // qscc can be invoked to retrieve blocks
 		InvokableCC2CC:    true, // qscc can be invoked to retrieve blocks also by a cc
+		Chainless:         false,
 	},
 	{
 		Enabled:           true,
@@ -79,6 +91,7 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         rscc.NewRscc(),
 		InvokableExternal: true,  // rscc can be invoked to update policies
 		InvokableCC2CC:    false, // rscc cannot be invoked from a cc
+		Chainless:         false,
 	},
 	{
 		Enabled:           true,
@@ -94,6 +107,16 @@ var systemChaincodes = []*SystemChaincode{
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func RegisterSysCCs() {
+	extSccEnabled := viper.GetBool("chaincode.systemext.enabled")
+	if !extSccEnabled {
+		sysccLogger.Info("External System CCs feature is disabled.")
+	} else {
+		err := loadExternalSysCCs()
+		if err != nil {
+			panic(fmt.Errorf("Error loading external system CCs: %v", err))
+		}
+	}
+
 	var aclProvider aclmgmt.ACLProvider
 	for _, sysCC := range systemChaincodes {
 		if reg, _ := registerSysCC(sysCC); reg {
@@ -113,7 +136,9 @@ func RegisterSysCCs() {
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func DeploySysCCs(chainID string) {
 	for _, sysCC := range systemChaincodes {
-		deploySysCC(chainID, sysCC)
+		if chainID == "" || !sysCC.Chainless {
+			deploySysCC(chainID, sysCC)
+		}
 	}
 }
 
@@ -171,6 +196,79 @@ func MockRegisterSysCCs(mockSysCCs []*SystemChaincode) []*SystemChaincode {
 }
 
 // MockResetSysCCs restore orig system ccs - is used only for testing
-func MockResetSysCCs(mockSysCCs []*SystemChaincode) {
-	systemChaincodes = mockSysCCs
+func MockResetSysCCs(origSysCCs []*SystemChaincode) {
+	systemChaincodes = origSysCCs
+}
+
+func loadExternalSysCCs() error {
+	extSccCDSPath := viper.GetString("chaincode.systemext.cds.path")
+	if extSccCDSPath == "" {
+		sysccLogger.Info("extSccCDSPath is not specified, won't load any external system chaincodes")
+		return nil
+	}
+
+	fi, err := os.Stat(extSccCDSPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("External SCC directory is missing: %s", extSccCDSPath)
+		}
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("extSccCDSPath is not a directory: %s", extSccCDSPath)
+	}
+
+	sysccLogger.Infof("Loading external SCCs from CDS path: %s", extSccCDSPath)
+	err = filepath.Walk(extSccCDSPath, func(path string, f os.FileInfo, err error) error {
+		if err == nil {
+			if path == extSccCDSPath {
+				return nil
+			}
+			if f.IsDir() {
+				sysccLogger.Infof("Skipping loading SCC from directory: %s", path)
+				return nil
+			}
+			sysccLogger.Infof("Loading external SCC from CDS path: %s", path)
+			ccbytes, err := ioutil.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("Error reading from file %s: %v", path, err)
+			}
+			sysccLogger.Debugf("%d bytes read from file %s", len(ccbytes), path)
+			ccpack := ccprovider.CDSPackage{}
+			_, err = ccpack.InitFromBuffer(ccbytes)
+			if err != nil {
+				return err
+			}
+			cds := ccpack.GetDepSpec()
+			ccName := cds.GetChaincodeSpec().GetChaincodeId().GetName()
+
+			if !viper.IsSet(fmt.Sprintf("chaincode.systemext.%s.Enabled", ccName)) {
+				sysccLogger.Infof("Found %s as Ext SCC CDS path, but it is not registered in the configs. Ignoring..", path)
+				return nil
+			}
+
+			cds.ExecEnv = pb.ChaincodeDeploymentSpec_SYSTEM_EXT
+
+			scc := &SystemChaincode{
+				Name:              ccName,
+				InitArgs:          [][]byte{[]byte("")},
+				Chaincode:         nil,
+				InvokableExternal: viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.InvokableExternal", ccName)),
+				InvokableCC2CC:    viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.InvokableCC2CC", ccName)),
+				Enabled:           viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.Enabled", ccName)),
+				ConfigPath:        viper.GetString(fmt.Sprintf("chaincode.systemext.%s.ConfigPath", ccName)),
+				CDS:               cds,
+				Chainless:         viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.Chainless", ccName)),
+			}
+			systemChaincodes = append(systemChaincodes, scc)
+			// Whitelist if it's enabled
+			if scc.Enabled {
+				chaincodes := viper.GetStringMapString("chaincode.system")
+				chaincodes[ccName] = "enable"
+				viper.Set("chaincode.system", chaincodes)
+			}
+		}
+		return nil
+	})
+	return err
 }
