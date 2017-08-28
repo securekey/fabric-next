@@ -45,6 +45,7 @@ var systemChaincodes = []*SystemChaincode{
 		InitArgs:          [][]byte{[]byte("")},
 		Chaincode:         &cscc.PeerConfiger{},
 		InvokableExternal: true, // cscc is invoked to join a channel
+		Chainless:         false,
 	},
 	{
 		Enabled:           true,
@@ -54,6 +55,7 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         &lscc.LifeCycleSysCC{},
 		InvokableExternal: true, // lscc is invoked to deploy new chaincodes
 		InvokableCC2CC:    true, // lscc can be invoked by other chaincodes
+		Chainless:         false,
 	},
 	{
 		Enabled:   true,
@@ -61,6 +63,7 @@ var systemChaincodes = []*SystemChaincode{
 		Path:      "github.com/hyperledger/fabric/core/scc/escc",
 		InitArgs:  [][]byte{[]byte("")},
 		Chaincode: &escc.EndorserOneValidSignature{},
+		Chainless: false,
 	},
 	{
 		Enabled:   true,
@@ -68,6 +71,7 @@ var systemChaincodes = []*SystemChaincode{
 		Path:      "github.com/hyperledger/fabric/core/scc/vscc",
 		InitArgs:  [][]byte{[]byte("")},
 		Chaincode: &vscc.ValidatorOneValidSignature{},
+		Chainless: false,
 	},
 	{
 		Enabled:           true,
@@ -77,6 +81,7 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         &qscc.LedgerQuerier{},
 		InvokableExternal: true, // qscc can be invoked to retrieve blocks
 		InvokableCC2CC:    true, // qscc can be invoked to retrieve blocks also by a cc
+		Chainless:         false,
 	},
 	{
 		Enabled:           true,
@@ -86,6 +91,7 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         &mscc.MembershipSCC{},
 		InvokableExternal: true, // mscc can be invoked externally
 		InvokableCC2CC:    true, // mscc can be invoked by other chaincodes
+		Chainless:         false,
 	},
 }
 
@@ -132,7 +138,9 @@ func createCDSForInternalSCCs() {
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func DeploySysCCs(chainID string) {
 	for _, sysCC := range systemChaincodes {
-		deploySysCC(chainID, sysCC)
+		if chainID == "" || !sysCC.Chainless {
+			deploySysCC(chainID, sysCC)
+		}
 	}
 }
 
@@ -272,6 +280,7 @@ func loadExternalSysCCs() error {
 				Enabled:           viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.Enabled", ccName)),
 				ConfigPath:        viper.GetString(fmt.Sprintf("chaincode.systemext.%s.ConfigPath", ccName)),
 				CDS:               cds,
+				Chainless:         viper.GetBool(fmt.Sprintf("chaincode.systemext.%s.Chainless", ccName)),
 			}
 			systemChaincodes = append(systemChaincodes, scc)
 			// Whitelist if it's enabled

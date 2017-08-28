@@ -79,6 +79,9 @@ type SystemChaincode struct {
 	// When the SCC is spawned as a process alongside the peer process, ConfigPath is
 	// passed to the process as the current working directory.
 	ConfigPath string
+
+	// External system chaincodes can be configured to be chainless
+	Chainless bool
 }
 
 // RegisterSysCC registers the given system chaincode with the peer
