@@ -442,36 +442,7 @@ func (m *mockLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, err
 	return args.Get(0).(ledger.HistoryQueryExecutor), nil
 }
 
-<<<<<<< HEAD
-=======
-// GetPvtDataAndBlockByNum retrieves pvt data and block
-func (m *mockLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
-	args := m.Called()
-	return args.Get(0).(*ledger.BlockAndPvtData), nil
-}
 
-// GetPvtDataByNum retrieves the pvt data
-func (m *mockLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-	args := m.Called()
-	return args.Get(0).([]*ledger.TxPvtData), nil
-}
-
-// CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
-func (m *mockLedger) CommitWithPvtData(pvtDataAndBlock *ledger.BlockAndPvtData) error {
-	return nil
-}
-
-// PurgePrivateData purges the private data
-func (m *mockLedger) PurgePrivateData(maxBlockNumToRetain uint64) error {
-	return nil
-}
-
-// PrivateDataMinBlockNum returns the lowest retained endorsement block height
-func (m *mockLedger) PrivateDataMinBlockNum() (uint64, error) {
-	return 0, nil
-}
-
->>>>>>> origin/1.1
 // Prune prune using policy
 func (m *mockLedger) Prune(policy ledger2.PrunePolicy) error {
 	return nil
