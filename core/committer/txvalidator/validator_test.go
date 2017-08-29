@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2017 All Rights Reserved.
+Copyright IBM Corp. 2016 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package txvalidator
@@ -442,8 +432,6 @@ func (m *mockLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, err
 	return args.Get(0).(ledger.HistoryQueryExecutor), nil
 }
 
-<<<<<<< HEAD
-=======
 // GetPvtDataAndBlockByNum retrieves pvt data and block
 func (m *mockLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
 	args := m.Called()
@@ -471,7 +459,6 @@ func (m *mockLedger) PrivateDataMinBlockNum() (uint64, error) {
 	return 0, nil
 }
 
->>>>>>> origin/1.1
 // Prune prune using policy
 func (m *mockLedger) Prune(policy ledger2.PrunePolicy) error {
 	return nil
@@ -531,8 +518,6 @@ func (exec *mockQueryExecutor) ExecuteQuery(namespace, query string) (ledger2.Re
 	return args.Get(0).(ledger2.ResultsIterator), args.Error(1)
 }
 
-<<<<<<< HEAD
-=======
 func (exec *mockQueryExecutor) GetPrivateData(namespace, collection, key string) ([]byte, error) {
 	args := exec.Called(namespace, collection, key)
 	return args.Get(0).([]byte), args.Error(1)
@@ -553,7 +538,6 @@ func (exec *mockQueryExecutor) ExecuteQueryOnPrivateData(namespace, collection, 
 	return args.Get(0).(ledger2.ResultsIterator), args.Error(1)
 }
 
->>>>>>> origin/1.1
 func (exec *mockQueryExecutor) Done() {
 }
 

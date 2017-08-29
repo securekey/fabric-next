@@ -7,20 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package extcontroller
 
 import (
-	"testing"
-
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"path/filepath"
-
-	"github.com/hyperledger/fabric/common/util"
-	"github.com/hyperledger/fabric/core/chaincode/platforms"
-	pb "github.com/hyperledger/fabric/protos/peer"
-	"github.com/spf13/viper"
 )
 
 func TestGenerateBinHashAndCheckIsBinExtCCBuilt(t *testing.T) {
