@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package comm
@@ -178,7 +168,9 @@ func (c *commImpl) createConnection(endpoint string, expectedPKIID common.PKIidT
 
 	cl := proto.NewGossipClient(cc)
 
-	if _, err = cl.Ping(context.Background(), &proto.Empty{}); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), defConnTimeout)
+	defer cancel()
+	if _, err = cl.Ping(ctx, &proto.Empty{}); err != nil {
 		cc.Close()
 		return nil, err
 	}
@@ -276,7 +268,9 @@ func (c *commImpl) Probe(remotePeer *RemotePeer) error {
 	}
 	defer cc.Close()
 	cl := proto.NewGossipClient(cc)
-	_, err = cl.Ping(context.Background(), &proto.Empty{})
+	ctx, cancel := context.WithTimeout(context.Background(), defConnTimeout)
+	defer cancel()
+	_, err = cl.Ping(ctx, &proto.Empty{})
 	c.logger.Debug("Returning", err)
 	return err
 }
@@ -294,7 +288,9 @@ func (c *commImpl) Handshake(remotePeer *RemotePeer) (api.PeerIdentityType, erro
 	defer cc.Close()
 
 	cl := proto.NewGossipClient(cc)
-	if _, err = cl.Ping(context.Background(), &proto.Empty{}); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), defConnTimeout)
+	defer cancel()
+	if _, err = cl.Ping(ctx, &proto.Empty{}); err != nil {
 		return nil, err
 	}
 

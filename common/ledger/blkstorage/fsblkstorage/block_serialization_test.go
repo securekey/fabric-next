@@ -34,7 +34,7 @@ func TestBlockSerialization(t *testing.T) {
 }
 
 func TestExtractTxid(t *testing.T) {
-	txEnv, txid, _ := testutil.ConstructTransaction(t, testutil.ConstructRandomBytes(t, 50), false)
+	txEnv, txid, _ := testutil.ConstructTransaction(t, testutil.ConstructRandomBytes(t, 50), "", false)
 	txEnvBytes, _ := putils.GetBytesEnvelope(txEnv)
 	extractedTxid, err := extractTxID(txEnvBytes)
 	testutil.AssertNoError(t, err, "")
@@ -59,8 +59,8 @@ func TestSerializedBlockInfo(t *testing.T) {
 
 		testutil.AssertEquals(t, txid, indexTxID)
 		b := bb[indexOffset.offset:]
-		len, num := proto.DecodeVarint(b)
-		txEnvBytesFromBB := b[num : num+int(len)]
+		length, num := proto.DecodeVarint(b)
+		txEnvBytesFromBB := b[num : num+int(length)]
 		testutil.AssertEquals(t, txEnvBytesFromBB, txEnvBytes)
 	}
 }

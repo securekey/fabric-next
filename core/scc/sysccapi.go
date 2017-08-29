@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
-	"github.com/hyperledger/fabric/core/container/dockercontroller"
 	"github.com/hyperledger/fabric/core/container/extcontroller"
 	"github.com/hyperledger/fabric/core/container/inproccontroller"
 	"github.com/hyperledger/fabric/core/peer"
@@ -84,11 +83,11 @@ type SystemChaincode struct {
 	Chainless bool
 }
 
-// RegisterSysCC registers the given system chaincode with the peer
-func RegisterSysCC(syscc *SystemChaincode) error {
+// registerSysCC registers the given system chaincode with the peer
+func registerSysCC(syscc *SystemChaincode) (bool, error) {
 	if !syscc.Enabled || !isWhitelisted(syscc) {
 		sysccLogger.Info(fmt.Sprintf("system chaincode (%s,%t) disabled", syscc.Name, syscc.Enabled))
-		return nil
+		return false, nil
 	}
 
 	ok := true
@@ -96,11 +95,6 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 	path := syscc.CDS.ChaincodeSpec.ChaincodeId.Path
 
 	switch syscc.CDS.ExecEnv {
-	case pb.ChaincodeDeploymentSpec_DOCKER:
-		err = dockercontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
-		if err != nil {
-			_, ok = err.(dockercontroller.DockerSCCRegisteredErr)
-		}
 	case pb.ChaincodeDeploymentSpec_SYSTEM_EXT:
 		err = extcontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
 		if err != nil {
@@ -117,10 +111,11 @@ func RegisterSysCC(syscc *SystemChaincode) error {
 	if !ok {
 		errStr := fmt.Sprintf("could not register (%s,%v): %s", path, syscc, err)
 		sysccLogger.Error(errStr)
-		return fmt.Errorf(errStr)
+		return false, fmt.Errorf(errStr)
 	}
 	sysccLogger.Infof("system chaincode %s(%s) registered", syscc.Name, path)
-	return err
+	return true, err
+
 }
 
 // deploySysCC deploys the given system chaincode on a chain
@@ -134,6 +129,8 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 
 	ccprov := ccprovider.GetChaincodeProvider()
 
+	txid := util.GenerateUUID()
+
 	ctxt := context.Background()
 	if chainID != "" {
 		lgr := peer.GetLedger(chainID)
@@ -141,10 +138,14 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 			panic(fmt.Sprintf("syschain %s start up failure - unexpected nil ledger for channel %s", syscc.Name, chainID))
 		}
 
-		_, err := ccprov.GetContext(lgr)
+		//init can do GetState (and other Get's) even if Puts cannot be
+		//be handled. Need ledger for this
+		ctxt2, err := ccprov.GetContext(lgr, txid)
 		if err != nil {
 			return err
 		}
+
+		ctxt = ctxt2
 
 		defer ccprov.ReleaseContext()
 	}
@@ -154,9 +155,7 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 		return err
 	}
 
-	txid := util.GenerateUUID()
-
-	version := syscc.CDS.ChaincodeSpec.ChaincodeId.Version
+	version := util.GetSysCCVersion()
 
 	cccid := ccprov.GetCCContext(chainID, syscc.CDS.ChaincodeSpec.ChaincodeId.Name, version, txid, true, nil, nil)
 

@@ -29,7 +29,7 @@ import (
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
-// VM implemenation of VM management functionality.
+// VM implementation of VM management functionality.
 type VM struct {
 	Client *docker.Client
 }
@@ -72,7 +72,7 @@ func (vm *VM) BuildChaincodeContainer(spec *pb.ChaincodeSpec) error {
 	}
 
 	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackage}
-	dockerSpec, err := Build(cds)
+	dockerSpec, err := platforms.GenerateDockerBuild(cds)
 	if err != nil {
 		return fmt.Errorf("Error getting chaincode docker image: %s", err)
 	}

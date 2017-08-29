@@ -1,42 +1,23 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package broadcast
 
 import (
-	"github.com/hyperledger/fabric/orderer/common/filter"
-	cb "github.com/hyperledger/fabric/protos/common"
-	ab "github.com/hyperledger/fabric/protos/orderer"
-	"github.com/op/go-logging"
-
 	"io"
 
-	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/protos/utils"
+	"github.com/hyperledger/fabric/orderer/common/msgprocessor"
+	cb "github.com/hyperledger/fabric/protos/common"
+	ab "github.com/hyperledger/fabric/protos/orderer"
+
+	"github.com/op/go-logging"
+	"github.com/pkg/errors"
 )
 
 var logger = logging.MustGetLogger("orderer/common/broadcast")
-
-// ConfigUpdateProcessor is used to transform CONFIG_UPDATE transactions which are used to generate other envelope
-// message types with preprocessing by the orderer
-type ConfigUpdateProcessor interface {
-	// Process takes in an envelope of type CONFIG_UPDATE and proceses it
-	// to transform it either into another envelope type
-	Process(envConfigUpdate *cb.Envelope) (*cb.Envelope, error)
-}
 
 // Handler defines an interface which handles broadcasts
 type Handler interface {
@@ -44,29 +25,37 @@ type Handler interface {
 	Handle(srv ab.AtomicBroadcast_BroadcastServer) error
 }
 
-// SupportManager provides a way for the Handler to look up the Support for a chain
-type SupportManager interface {
-	ConfigUpdateProcessor
-
-	// GetChain gets the chain support for a given ChannelId
-	GetChain(chainID string) (Support, bool)
+// ChannelSupportRegistrar provides a way for the Handler to look up the Support for a channel
+type ChannelSupportRegistrar interface {
+	// BroadcastChannelSupport returns the message channel header, whether the message is a config update
+	// and the channel resources for a message or an error if the message is not a message which can
+	// be processed directly (like CONFIG and ORDERER_TRANSACTION messages)
+	BroadcastChannelSupport(msg *cb.Envelope) (*cb.ChannelHeader, bool, ChannelSupport, error)
 }
 
-// Support provides the backing resources needed to support broadcast on a chain
-type Support interface {
-	// Enqueue accepts a message and returns true on acceptance, or false on shutdown
-	Enqueue(env *cb.Envelope) bool
+// ChannelSupport provides the backing resources needed to support broadcast on a channel
+type ChannelSupport interface {
+	msgprocessor.Processor
+	Consenter
+}
 
-	// Filters returns the set of broadcast filters for this chain
-	Filters() *filter.RuleSet
+// Consenter provides methods to send messages through consensus
+type Consenter interface {
+	// Order accepts a message or returns an error indicating the cause of failure
+	// It ultimately passes through to the consensus.Chain interface
+	Order(env *cb.Envelope, configSeq uint64) error
+
+	// Configure accepts a reconfiguration or returns an error indicating the cause of failure
+	// It ultimately passes through to the consensus.Chain interface
+	Configure(configUpdateMsg *cb.Envelope, config *cb.Envelope, configSeq uint64) error
 }
 
 type handlerImpl struct {
-	sm SupportManager
+	sm ChannelSupportRegistrar
 }
 
 // NewHandlerImpl constructs a new implementation of the Handler interface
-func NewHandlerImpl(sm SupportManager) Handler {
+func NewHandlerImpl(sm ChannelSupportRegistrar) Handler {
 	return &handlerImpl{
 		sm: sm,
 	}
@@ -86,67 +75,40 @@ func (bh *handlerImpl) Handle(srv ab.AtomicBroadcast_BroadcastServer) error {
 			return err
 		}
 
-		payload, err := utils.UnmarshalPayload(msg.Payload)
+		chdr, isConfig, processor, err := bh.sm.BroadcastChannelSupport(msg)
 		if err != nil {
-			logger.Warningf("Received malformed message, dropping connection: %s", err)
-			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_BAD_REQUEST})
+			logger.Warningf("[channel: %s] Could not get message processor: %s", chdr.ChannelId, err)
+			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_INTERNAL_SERVER_ERROR, Info: err.Error()})
 		}
 
-		if payload.Header == nil {
-			logger.Warningf("Received malformed message, with missing header, dropping connection")
-			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_BAD_REQUEST})
-		}
+		if !isConfig {
+			logger.Debugf("[channel: %s] Broadcast is processing normal message with txid '%s' of type %s", chdr.ChannelId, chdr.TxId, cb.HeaderType_name[chdr.Type])
 
-		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
-		if err != nil {
-			logger.Warningf("Received malformed message (bad channel header), dropping connection: %s", err)
-			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_BAD_REQUEST})
-		}
-
-		if chdr.Type == int32(cb.HeaderType_CONFIG_UPDATE) {
-			logger.Debugf("Preprocessing CONFIG_UPDATE")
-			msg, err = bh.sm.Process(msg)
+			configSeq, err := processor.ProcessNormalMsg(msg)
 			if err != nil {
-				logger.Warningf("Rejecting CONFIG_UPDATE because: %s", err)
-				return srv.Send(&ab.BroadcastResponse{Status: cb.Status_BAD_REQUEST})
+				logger.Warningf("[channel: %s] Rejecting broadcast of normal message because of error: %s", chdr.ChannelId, err)
+				return srv.Send(&ab.BroadcastResponse{Status: ClassifyError(err), Info: err.Error()})
 			}
 
-			err = proto.Unmarshal(msg.Payload, payload)
-			if err != nil || payload.Header == nil {
-				logger.Criticalf("Generated bad transaction after CONFIG_UPDATE processing")
-				return srv.Send(&ab.BroadcastResponse{Status: cb.Status_INTERNAL_SERVER_ERROR})
-			}
-
-			chdr, err = utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+			err = processor.Order(msg, configSeq)
 			if err != nil {
-				logger.Criticalf("Generated bad transaction after CONFIG_UPDATE processing (bad channel header): %s", err)
-				return srv.Send(&ab.BroadcastResponse{Status: cb.Status_INTERNAL_SERVER_ERROR})
+				logger.Warningf("[channel: %s] Rejecting broadcast of normal message with SERVICE_UNAVAILABLE: rejected by Order: %s", chdr.ChannelId, err)
+				return srv.Send(&ab.BroadcastResponse{Status: cb.Status_SERVICE_UNAVAILABLE, Info: err.Error()})
+			}
+		} else { // isConfig
+			logger.Debugf("[channel: %s] Broadcast is processing config update message", chdr.ChannelId)
+
+			config, configSeq, err := processor.ProcessConfigUpdateMsg(msg)
+			if err != nil {
+				logger.Warningf("[channel: %s] Rejecting broadcast of config message because of error: %s", chdr.ChannelId, err)
+				return srv.Send(&ab.BroadcastResponse{Status: ClassifyError(err), Info: err.Error()})
 			}
 
-			if chdr.ChannelId == "" {
-				logger.Criticalf("Generated bad transaction after CONFIG_UPDATE processing (empty channel ID)")
-				return srv.Send(&ab.BroadcastResponse{Status: cb.Status_INTERNAL_SERVER_ERROR})
+			err = processor.Configure(msg, config, configSeq)
+			if err != nil {
+				logger.Warningf("[channel: %s] Rejecting broadcast of config message with SERVICE_UNAVAILABLE: rejected by Configure: %s", chdr.ChannelId, err)
+				return srv.Send(&ab.BroadcastResponse{Status: cb.Status_SERVICE_UNAVAILABLE, Info: err.Error()})
 			}
-		}
-
-		support, ok := bh.sm.GetChain(chdr.ChannelId)
-		if !ok {
-			logger.Warningf("Rejecting broadcast because channel %s was not found", chdr.ChannelId)
-			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_NOT_FOUND})
-		}
-
-		logger.Debugf("[channel: %s] Broadcast is filtering message of type %s", chdr.ChannelId, cb.HeaderType_name[chdr.Type])
-
-		// Normal transaction for existing chain
-		_, filterErr := support.Filters().Apply(msg)
-
-		if filterErr != nil {
-			logger.Warningf("[channel: %s] Rejecting broadcast message because of filter error: %s", chdr.ChannelId, filterErr)
-			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_BAD_REQUEST})
-		}
-
-		if !support.Enqueue(msg) {
-			return srv.Send(&ab.BroadcastResponse{Status: cb.Status_SERVICE_UNAVAILABLE})
 		}
 
 		if logger.IsEnabledFor(logging.DEBUG) {
@@ -158,5 +120,17 @@ func (bh *handlerImpl) Handle(srv ab.AtomicBroadcast_BroadcastServer) error {
 			logger.Warningf("[channel: %s] Error sending to stream: %s", chdr.ChannelId, err)
 			return err
 		}
+	}
+}
+
+// ClassifyError converts an error type into a status code.
+func ClassifyError(err error) cb.Status {
+	switch errors.Cause(err) {
+	case msgprocessor.ErrChannelDoesNotExist:
+		return cb.Status_NOT_FOUND
+	case msgprocessor.ErrPermissionDenied:
+		return cb.Status_FORBIDDEN
+	default:
+		return cb.Status_BAD_REQUEST
 	}
 }

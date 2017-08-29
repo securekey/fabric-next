@@ -69,6 +69,10 @@ func (edsf *embeddingDeliveryServiceFactory) Service(g GossipService, endpoints 
 }
 
 func TestLeaderYield(t *testing.T) {
+<<<<<<< HEAD
+=======
+	t.Skip()
+>>>>>>> origin/1.1
 	// Scenario: Spawn 2 peers and wait for the first one to be the leader
 	// There isn't any orderer present so the leader peer won't be able to
 	// connect to the orderer, and should relinquish its leadership after a while.
@@ -110,6 +114,14 @@ func TestLeaderYield(t *testing.T) {
 
 	// Returns index of the leader or -1 if no leader elected
 	getLeader := func() int {
+<<<<<<< HEAD
+=======
+		p0.lock.RLock()
+		p1.lock.RLock()
+		defer p0.lock.RUnlock()
+		defer p1.lock.RUnlock()
+
+>>>>>>> origin/1.1
 		if p0.leaderElection[channelName].IsLeader() {
 			// Ensure p1 isn't a leader at the same time
 			assert.False(t, p1.leaderElection[channelName].IsLeader())

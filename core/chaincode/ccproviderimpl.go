@@ -53,10 +53,10 @@ type ccProviderContextImpl struct {
 }
 
 // GetContext returns a context for the supplied ledger, with the appropriate tx simulator
-func (c *ccProviderImpl) GetContext(ledger ledger.PeerLedger) (context.Context, error) {
+func (c *ccProviderImpl) GetContext(ledger ledger.PeerLedger, txid string) (context.Context, error) {
 	var err error
 	// get context for the chaincode execution
-	c.txsim, err = ledger.NewTxSimulator()
+	c.txsim, err = ledger.NewTxSimulator(txid)
 	if err != nil {
 		return nil, err
 	}
@@ -103,12 +103,12 @@ func (c *ccProviderImpl) Execute(ctxt context.Context, cccid interface{}, spec i
 	return Execute(ctxt, cccid.(*ccProviderContextImpl).ctx, spec)
 }
 
-// ExecuteWithErrorFilder executes the chaincode given context and spec and returns payload
+// ExecuteWithErrorFilter executes the chaincode given context and spec and returns payload
 func (c *ccProviderImpl) ExecuteWithErrorFilter(ctxt context.Context, cccid interface{}, spec interface{}) ([]byte, *pb.ChaincodeEvent, error) {
 	return ExecuteWithErrorFilter(ctxt, cccid.(*ccProviderContextImpl).ctx, spec)
 }
 
-// ExecuteWithErrorFilder executes the chaincode given context and spec and returns payload
+// Stop stops the chaincode given context and spec
 func (c *ccProviderImpl) Stop(ctxt context.Context, cccid interface{}, spec *pb.ChaincodeDeploymentSpec) error {
 	if theChaincodeSupport != nil {
 		return theChaincodeSupport.Stop(ctxt, cccid.(*ccProviderContextImpl).ctx, spec)

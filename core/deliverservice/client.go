@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package deliverclient
@@ -54,7 +44,8 @@ type broadcastClient struct {
 	onConnect    broadcastSetup
 	prod         comm.ConnectionProducer
 	blocksprovider.BlocksDeliverer
-	conn *connection
+	conn     *connection
+	endpoint string
 }
 
 // NewBroadcastClient returns a broadcastClient with the given params
@@ -98,8 +89,10 @@ func (bc *broadcastClient) try(action func() (interface{}, error)) (interface{},
 		if err != nil {
 			backoffDuration, retry = bc.shouldRetry(attempt, time.Since(start))
 			if !retry {
+				logger.Warning("Got error:", err, "at", attempt, "attempt. Ceasing to retry")
 				break
 			}
+			logger.Warning("Got error:", err, ",at", attempt, "attempt. Retrying in", backoffDuration)
 			bc.sleep(backoffDuration)
 			continue
 		}
@@ -120,7 +113,7 @@ func (bc *broadcastClient) doAction(action func() (interface{}, error)) (interfa
 	}
 	resp, err := action()
 	if err != nil {
-		bc.Disconnect()
+		bc.Disconnect(false)
 		return nil, err
 	}
 	return resp, nil
@@ -134,30 +127,37 @@ func (bc *broadcastClient) sleep(duration time.Duration) {
 }
 
 func (bc *broadcastClient) connect() error {
+	bc.endpoint = ""
 	conn, endpoint, err := bc.prod.NewConnection()
+	logger.Debug("Connected to", endpoint)
 	if err != nil {
 		logger.Error("Failed obtaining connection:", err)
 		return err
 	}
 	ctx, cf := context.WithCancel(context.Background())
+	logger.Debug("Establishing gRPC stream with", endpoint, "...")
 	abc, err := bc.createClient(conn).Deliver(ctx)
 	if err != nil {
 		logger.Error("Connection to ", endpoint, "established but was unable to create gRPC stream:", err)
 		conn.Close()
 		return err
 	}
-	err = bc.afterConnect(conn, abc, cf)
+	err = bc.afterConnect(conn, abc, cf, endpoint)
 	if err == nil {
 		return nil
 	}
+	logger.Warning("Failed running post-connection procedures:", err)
 	// If we reached here, lets make sure connection is closed
 	// and nullified before we return
-	bc.Disconnect()
+	bc.Disconnect(false)
 	return err
 }
 
-func (bc *broadcastClient) afterConnect(conn *grpc.ClientConn, abc orderer.AtomicBroadcast_DeliverClient, cf context.CancelFunc) error {
+func (bc *broadcastClient) afterConnect(conn *grpc.ClientConn, abc orderer.AtomicBroadcast_DeliverClient, cf context.CancelFunc, endpoint string) error {
+	logger.Debug("Entering")
+	defer logger.Debug("Exiting")
 	bc.Lock()
+	bc.endpoint = endpoint
 	bc.conn = &connection{ClientConn: conn, cancel: cf}
 	bc.BlocksDeliverer = abc
 	if bc.shouldStop() {
@@ -194,6 +194,8 @@ func (bc *broadcastClient) shouldStop() bool {
 
 // Close makes the client close its connection and shut down
 func (bc *broadcastClient) Close() {
+	logger.Debug("Entering")
+	defer logger.Debug("Exiting")
 	bc.Lock()
 	defer bc.Unlock()
 	if bc.shouldStop() {
@@ -204,13 +206,20 @@ func (bc *broadcastClient) Close() {
 	if bc.conn == nil {
 		return
 	}
+	bc.endpoint = ""
 	bc.conn.Close()
 }
 
-// Disconnect makes the client close the existing connection
-func (bc *broadcastClient) Disconnect() {
+// Disconnect makes the client close the existing connection and makes current endpoint unavailable for time interval, if disableEndpoint set to true
+func (bc *broadcastClient) Disconnect(disableEndpoint bool) {
+	logger.Debug("Entering")
+	defer logger.Debug("Exiting")
 	bc.Lock()
 	defer bc.Unlock()
+	if disableEndpoint && bc.endpoint != "" {
+		bc.prod.DisableEndpoint(bc.endpoint)
+	}
+	bc.endpoint = ""
 	if bc.conn == nil {
 		return
 	}

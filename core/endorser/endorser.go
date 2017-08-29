@@ -15,18 +15,18 @@ import (
 
 	"errors"
 
-	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/aclmgmt"
 	"github.com/hyperledger/fabric/core/chaincode"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/validation"
+	"github.com/hyperledger/fabric/core/handlers/decoration"
+	"github.com/hyperledger/fabric/core/handlers/library"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/peer"
-	"github.com/hyperledger/fabric/core/policy"
 	syscc "github.com/hyperledger/fabric/core/scc"
 	"github.com/hyperledger/fabric/msp"
-	"github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	putils "github.com/hyperledger/fabric/protos/utils"
@@ -52,17 +52,11 @@ var endorserLogger = flogging.MustGetLogger("endorser")
 
 // Endorser provides the Endorser service ProcessProposal
 type Endorser struct {
-	policyChecker policy.PolicyChecker
 }
 
 // NewEndorserServer creates and returns a new Endorser server instance.
 func NewEndorserServer() pb.EndorserServer {
 	e := new(Endorser)
-	e.policyChecker = policy.NewPolicyChecker(
-		peer.NewChannelPolicyManagerGetter(),
-		mgmt.GetLocalMSP(),
-		mgmt.NewLocalMSPPrincipalGetter(),
-	)
 
 	return e
 }
@@ -70,7 +64,7 @@ func NewEndorserServer() pb.EndorserServer {
 // checkACL checks that the supplied proposal complies
 // with the writers policy of the chain
 func (e *Endorser) checkACL(signedProp *pb.SignedProposal, chdr *common.ChannelHeader, shdr *common.SignatureHeader, hdrext *pb.ChaincodeHeaderExtension) error {
-	return e.policyChecker.CheckPolicy(chdr.ChannelId, policies.ChannelApplicationWriters, signedProp)
+	return aclmgmt.GetACLProvider().CheckACL(aclmgmt.PROPOSE, chdr.ChannelId, signedProp)
 }
 
 //TODO - check for escc and vscc
@@ -78,12 +72,12 @@ func (*Endorser) checkEsccAndVscc(prop *pb.Proposal) error {
 	return nil
 }
 
-func (*Endorser) getTxSimulator(ledgername string) (ledger.TxSimulator, error) {
+func (*Endorser) getTxSimulator(ledgername string, txid string) (ledger.TxSimulator, error) {
 	lgr := peer.GetLedger(ledgername)
 	if lgr == nil {
 		return nil, fmt.Errorf("channel does not exist: %s", ledgername)
 	}
-	return lgr.NewTxSimulator()
+	return lgr.NewTxSimulator(txid)
 }
 
 func (*Endorser) getHistoryQueryExecutor(ledgername string) (ledger.HistoryQueryExecutor, error) {
@@ -110,6 +104,12 @@ func (e *Endorser) callChaincode(ctxt context.Context, chainID string, version s
 	scc := syscc.IsSysCC(cid.Name)
 
 	cccid := ccprovider.NewCCContext(chainID, cid.Name, version, txid, scc, signedProp, prop)
+
+	// decorate the chaincode input
+	decorator := library.InitRegistry(library.Config{}).Lookup(library.DecoratorKey).(decoration.Decorator)
+	cis.ChaincodeSpec.Input.Decorations = make(map[string][]byte)
+	cis.ChaincodeSpec.Input = decorator.Decorate(prop, cis.ChaincodeSpec.Input)
+	cccid.ProposalDecorations = cis.ChaincodeSpec.Input.Decorations
 
 	res, ccevent, err = chaincode.ExecuteChaincode(ctxt, cccid, cis.ChaincodeSpec.Input.Args)
 
@@ -245,7 +245,8 @@ func (e *Endorser) simulateProposal(ctx context.Context, chainID string, txid st
 	}
 
 	//---3. execute the proposal and get simulation results
-	var simResult []byte
+	var simResult *ledger.TxSimulationResults
+	var pubSimResBytes []byte
 	var res *pb.Response
 	var ccevent *pb.ChaincodeEvent
 	res, ccevent, err = e.callChaincode(ctx, chainID, version, txid, signedProp, prop, cis, cid, txsim)
@@ -258,9 +259,12 @@ func (e *Endorser) simulateProposal(ctx context.Context, chainID string, txid st
 		if simResult, err = txsim.GetTxSimulationResults(); err != nil {
 			return nil, nil, nil, nil, err
 		}
-	}
 
-	return cdLedger, res, simResult, ccevent, nil
+		if pubSimResBytes, err = simResult.GetPubSimulationBytes(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
+	return cdLedger, res, pubSimResBytes, ccevent, nil
 }
 
 func (e *Endorser) getCDSFromLSCC(ctx context.Context, chainID string, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, chaincodeID string, txsim ledger.TxSimulator) (*ccprovider.ChaincodeData, error) {
@@ -434,7 +438,7 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 	var txsim ledger.TxSimulator
 	var historyQueryExecutor ledger.HistoryQueryExecutor
 	if chainID != "" {
-		if txsim, err = e.getTxSimulator(chainID); err != nil {
+		if txsim, err = e.getTxSimulator(chainID, txid); err != nil {
 			return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, err
 		}
 		if historyQueryExecutor, err = e.getHistoryQueryExecutor(chainID); err != nil {

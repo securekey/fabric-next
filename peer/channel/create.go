@@ -23,9 +23,10 @@ import (
 	"errors"
 
 	"github.com/golang/protobuf/proto"
+	channelconfig "github.com/hyperledger/fabric/common/config/channel"
 	"github.com/hyperledger/fabric/common/configtx"
-	genesisconfig "github.com/hyperledger/fabric/common/configtx/tool/localconfig"
 	localsigner "github.com/hyperledger/fabric/common/localmsp"
+	genesisconfig "github.com/hyperledger/fabric/common/tools/configtxgen/localconfig"
 	"github.com/hyperledger/fabric/common/util"
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/peer/common"
@@ -75,7 +76,7 @@ func createChannelFromDefaults(cf *ChannelCmdFactory) (*cb.Envelope, error) {
 		return nil, err
 	}
 
-	chCrtEnv, err := configtx.MakeChainCreationTransaction(chainID, genesisconfig.SampleConsortiumName, signer)
+	chCrtEnv, err := channelconfig.MakeChainCreationTransaction(chainID, genesisconfig.SampleConsortiumName, signer)
 
 	if err != nil {
 		return nil, err
@@ -114,6 +115,12 @@ func sanityCheckAndSignConfigTx(envConfigUpdate *cb.Envelope) (*cb.Envelope, err
 
 	if ch.ChannelId == "" {
 		return nil, InvalidCreateTx("empty channel id")
+	}
+
+	// Specifying the chainID on the CLI is usually redundant, as a hack, set it
+	// here if it has not been set explicitly
+	if chainID == "" {
+		chainID = ch.ChannelId
 	}
 
 	if ch.ChannelId != chainID {

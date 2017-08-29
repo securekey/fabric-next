@@ -17,6 +17,8 @@ limitations under the License.
 package scc
 
 import (
+	"github.com/hyperledger/fabric/core/aclmgmt"
+
 	//import system chain codes here
 
 	"fmt"
@@ -31,6 +33,7 @@ import (
 	"github.com/hyperledger/fabric/core/scc/lscc"
 	"github.com/hyperledger/fabric/core/scc/mscc"
 	"github.com/hyperledger/fabric/core/scc/qscc"
+	"github.com/hyperledger/fabric/core/scc/rscc"
 	"github.com/hyperledger/fabric/core/scc/vscc"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
@@ -93,6 +96,15 @@ var systemChaincodes = []*SystemChaincode{
 		InvokableCC2CC:    true, // mscc can be invoked by other chaincodes
 		Chainless:         false,
 	},
+	{
+		Enabled:           true,
+		Name:              "rscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/rscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         rscc.NewRscc(),
+		InvokableExternal: true,  // rscc can be invoked to update policies
+		InvokableCC2CC:    false, // rscc cannot be invoked from a cc
+	},
 }
 
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
@@ -108,10 +120,20 @@ func RegisterSysCCs() {
 			panic(fmt.Errorf("Error loading external system CCs: %v", err))
 		}
 	}
-	sysccLogger.Debugf("About to register %d SCCs", len(systemChaincodes))
+
+	var aclProvider aclmgmt.ACLProvider
 	for _, sysCC := range systemChaincodes {
-		RegisterSysCC(sysCC)
+		if reg, _ := registerSysCC(sysCC); reg {
+			//rscc is registered, lets make it the aclProvider
+			if sysCC.Name == "rscc" {
+				aclProvider = sysCC.Chaincode.(aclmgmt.ACLProvider)
+			}
+		}
 	}
+	//a nil aclProvider will initialize defaultACLProvider
+	//which will provide 1.0 ACL defaults
+	aclmgmt.RegisterACLProvider(aclProvider)
+
 }
 
 func createCDSForInternalSCCs() {

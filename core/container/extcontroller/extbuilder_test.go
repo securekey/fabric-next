@@ -67,28 +67,6 @@ func TestComputeHashCodes(t *testing.T) {
 	t.Logf("Time elapsed for hashing name %s: %s", n, elapsed)
 }
 
-func TestGenerateExtBuild(t *testing.T) {
-	viper.Set("peer.fileSystemPath", "testbin/")
-	chaincodePath := "github.com/hyperledger/fabric/examples/chaincode/go/chaincode_example01"
-	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_GOLANG,
-		ChaincodeId: &pb.ChaincodeID{Name: "extscc_cc", Path: chaincodePath},
-		Input:       &pb.ChaincodeInput{Args: util.ToChaincodeArgs("f")}}
-	codePackage, err := platforms.GetDeploymentPayload(spec)
-
-	if err != nil {
-		t.Fatal()
-	}
-	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackage}
-
-	_, err = GenerateExtBuild(cds, nil)
-	testerr(t, err, true)
-
-	// to see the generated hash for the scc binary, comment out the below 2 lines
-	// hash is found under testbin/chaincodes/hash
-	err = deleteAllHashFiles(filepath.Join(viper.GetString("peer.fileSystemPath"), "chaincodes"), "extscc_cc")
-	testerr(t, err, true)
-}
-
 func testerr(t *testing.T, err error, succ bool) {
 	if succ {
 		assert.NoError(t, err, "Expected success but got error")

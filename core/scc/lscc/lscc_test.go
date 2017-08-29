@@ -19,6 +19,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -30,6 +31,8 @@ import (
 	"github.com/hyperledger/fabric/common/mocks/scc"
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/aclmgmt"
+	"github.com/hyperledger/fabric/core/aclmgmt/mocks"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccpackage"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -232,6 +235,7 @@ func TestInvalidCodeDeploy(t *testing.T) {
 // A default instantiation policy is used automatically because the cc package
 // comes without a policy.
 func TestDeploy(t *testing.T) {
+	aclmgmt.RegisterACLProvider(&mocks.MockACLProvider2{nil})
 	path := "github.com/hyperledger/fabric/examples/chaincode/go/chaincode_example02"
 
 	testDeploy(t, "example02", "0", path, false, false, "")
@@ -1099,6 +1103,8 @@ func TestGetChaincodesAccessRights(t *testing.T) {
 // TestGetCCInfoAccessRights verifies that only authorized parties can call
 // the GETCCINFO function
 func TestGetCCAccessRights(t *testing.T) {
+	aclmgmt.RegisterACLProvider(&mocks.MockACLProvider2{nil})
+
 	scc := new(LifeCycleSysCC)
 	stub := shim.NewMockStub("lscc", scc)
 
@@ -1150,16 +1156,20 @@ func TestGetCCAccessRights(t *testing.T) {
 
 	// Should fail
 	sProp, _ = utils.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, []byte("Bob"), []byte("msg1"))
-	identityDeserializer.Msg = sProp.ProposalBytes
-	sProp.Signature = sProp.ProposalBytes
+	aclProvider := new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.LSCC_GETCCINFO, "test", sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
 	res = stub.MockInvokeWithSignedProposal("1", args, sProp)
 	if res.Status == shim.OK {
 		t.Logf("This should fail [%s]", res.Message)
 		t.FailNow()
 	}
+	assert.Contains(t, res.Message, "Failed access control")
+	aclProvider.AssertExpectations(t)
 
 	// GETDEPSPEC
 	// Should pass
+	aclmgmt.RegisterACLProvider(&mocks.MockACLProvider2{nil})
 	args = [][]byte{[]byte(GETDEPSPEC), []byte("test"), []byte(cds.ChaincodeSpec.ChaincodeId.Name)}
 	sProp, _ = utils.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
 	identityDeserializer.Msg = sProp.ProposalBytes
@@ -1172,16 +1182,20 @@ func TestGetCCAccessRights(t *testing.T) {
 
 	// Should fail
 	sProp, _ = utils.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, []byte("Bob"), []byte("msg1"))
-	identityDeserializer.Msg = sProp.ProposalBytes
-	sProp.Signature = sProp.ProposalBytes
+	aclProvider = new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.LSCC_GETDEPSPEC, "test", sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
 	res = stub.MockInvokeWithSignedProposal("1", args, sProp)
 	if res.Status == shim.OK {
 		t.Logf("This should fail [%s]", res.Message)
 		t.FailNow()
 	}
+	assert.Contains(t, res.Message, "Failed access control")
+	aclProvider.AssertExpectations(t)
 
 	// GETCCDATA
 	// Should pass
+	aclmgmt.RegisterACLProvider(&mocks.MockACLProvider2{nil})
 	args = [][]byte{[]byte(GETCCDATA), []byte("test"), []byte(cds.ChaincodeSpec.ChaincodeId.Name)}
 	sProp, _ = utils.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, []byte("Alice"), []byte("msg1"))
 	identityDeserializer.Msg = sProp.ProposalBytes
@@ -1194,13 +1208,16 @@ func TestGetCCAccessRights(t *testing.T) {
 
 	// Should fail
 	sProp, _ = utils.MockSignedEndorserProposalOrPanic("", &pb.ChaincodeSpec{}, []byte("Bob"), []byte("msg1"))
-	identityDeserializer.Msg = sProp.ProposalBytes
-	sProp.Signature = sProp.ProposalBytes
+	aclProvider = new(mocks.MockACLProvider)
+	aclProvider.On("CheckACL", aclmgmt.LSCC_GETCCDATA, "test", sProp).Return(errors.New("Failed access control"))
+	aclmgmt.RegisterACLProvider(aclProvider)
 	res = stub.MockInvokeWithSignedProposal("1", args, sProp)
 	if res.Status == shim.OK {
 		t.Logf("This should fail [%s]", res.Message)
 		t.FailNow()
 	}
+	assert.Contains(t, res.Message, "Failed access control")
+	aclProvider.AssertExpectations(t)
 }
 
 var id msp.SigningIdentity

@@ -146,32 +146,16 @@ func TestMockRegisterAndResetSysCCs(t *testing.T) {
 }
 
 func TestRegisterSysCC(t *testing.T) {
-	cds := &pb.ChaincodeDeploymentSpec{
-		ExecEnv: pb.ChaincodeDeploymentSpec_SYSTEM,
-		ChaincodeSpec: &pb.ChaincodeSpec{
-			Type: pb.ChaincodeSpec_GOLANG,
-			ChaincodeId: &pb.ChaincodeID{
-				Name: "lscc",
-				Path: "",
-			},
-			Input: &pb.ChaincodeInput{
-				Args: [][]byte{[]byte("")},
-			},
-		},
-	}
-
-	err := RegisterSysCC(&SystemChaincode{
+	_, err := registerSysCC(&SystemChaincode{
 		Name:    "lscc",
 		Path:    "path",
 		Enabled: true,
-		CDS:     cds,
 	})
 	assert.NoError(t, err)
-	err = RegisterSysCC(&SystemChaincode{
+	_, err = registerSysCC(&SystemChaincode{
 		Name:    "lscc",
 		Path:    "path",
 		Enabled: true,
-		CDS:     cds,
 	})
 	assert.Error(t, err)
 	assert.Contains(t, "path already registered", err)

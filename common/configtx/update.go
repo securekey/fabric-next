@@ -81,6 +81,7 @@ func (cm *configManager) verifyDeltaSet(deltaSet map[string]comparable, signedDa
 	}
 
 	for key, value := range deltaSet {
+		logger.Debugf("Processing change to key: %s", key)
 		if err := validateModPolicy(value.modPolicy()); err != nil {
 			return fmt.Errorf("invalid mod_policy for element %s: %s", key, err)
 		}
@@ -136,7 +137,7 @@ func (cm *configManager) authorizeUpdate(configUpdateEnv *cb.ConfigUpdateEnvelop
 		return nil, fmt.Errorf("Update not for correct channel: %s for %s", configUpdate.ChannelId, cm.current.channelID)
 	}
 
-	readSet, err := MapConfig(configUpdate.ReadSet)
+	readSet, err := MapConfig(configUpdate.ReadSet, cm.initializer.RootGroupKey())
 	if err != nil {
 		return nil, fmt.Errorf("Error mapping ReadSet: %s", err)
 	}
@@ -145,7 +146,7 @@ func (cm *configManager) authorizeUpdate(configUpdateEnv *cb.ConfigUpdateEnvelop
 		return nil, fmt.Errorf("Error validating ReadSet: %s", err)
 	}
 
-	writeSet, err := MapConfig(configUpdate.WriteSet)
+	writeSet, err := MapConfig(configUpdate.WriteSet, cm.initializer.RootGroupKey())
 	if err != nil {
 		return nil, fmt.Errorf("Error mapping WriteSet: %s", err)
 	}
@@ -169,19 +170,29 @@ func (cm *configManager) authorizeUpdate(configUpdateEnv *cb.ConfigUpdateEnvelop
 }
 
 func (cm *configManager) policyForItem(item comparable) (policies.Policy, bool) {
-	// path is always at least of length 1
-	manager, ok := cm.PolicyManager().Manager(item.path[1:])
-	if !ok {
-		return nil, ok
+	manager := cm.initializer.PolicyManager()
+
+	modPolicy := item.modPolicy()
+
+	// If the mod_policy path is relative, get the right manager for the context
+	// if the mod_policy path is absolute (starts with /) evaluate at the root
+	if len(modPolicy) > 0 && modPolicy[0] != policies.PathSeparator[0] {
+		// path is always at least of length 1
+		var ok bool
+		manager, ok = manager.Manager(item.path[1:])
+		if !ok {
+			return nil, ok
+		}
+
+		// In the case of the group type, its key is part of its path for the purposes of finding the policy manager
+		if item.ConfigGroup != nil {
+			manager, ok = manager.Manager([]string{item.key})
+		}
+		if !ok {
+			return nil, ok
+		}
 	}
 
-	// In the case of the group type, its key is part of its path for the purposes of finding the policy manager
-	if item.ConfigGroup != nil {
-		manager, ok = manager.Manager([]string{item.key})
-	}
-	if !ok {
-		return nil, ok
-	}
 	return manager.GetPolicy(item.modPolicy())
 }
 

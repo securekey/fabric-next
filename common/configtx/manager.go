@@ -49,9 +49,8 @@ type configSet struct {
 }
 
 type configManager struct {
-	api.Resources
 	callOnUpdate []func(api.Manager)
-	initializer  api.Initializer
+	initializer  api.Proposer
 	current      *configSet
 }
 
@@ -111,7 +110,7 @@ func validateChannelID(channelID string) error {
 	return nil
 }
 
-func NewManagerImpl(envConfig *cb.Envelope, initializer api.Initializer, callOnUpdate []func(api.Manager)) (api.Manager, error) {
+func NewManagerImpl(envConfig *cb.Envelope, initializer api.Proposer, callOnUpdate []func(api.Manager)) (api.Manager, error) {
 	if envConfig == nil {
 		return nil, fmt.Errorf("Nil envelope")
 	}
@@ -134,13 +133,12 @@ func NewManagerImpl(envConfig *cb.Envelope, initializer api.Initializer, callOnU
 		return nil, fmt.Errorf("Bad channel id: %s", err)
 	}
 
-	configMap, err := MapConfig(configEnv.Config.ChannelGroup)
+	configMap, err := MapConfig(configEnv.Config.ChannelGroup, initializer.RootGroupKey())
 	if err != nil {
 		return nil, fmt.Errorf("Error converting config to map: %s", err)
 	}
 
 	cm := &configManager{
-		Resources:   initializer,
 		initializer: initializer,
 		current: &configSet{
 			sequence:  configEnv.Config.Sequence,
@@ -184,7 +182,7 @@ func (cm *configManager) proposeConfigUpdate(configtx *cb.Envelope) (*cb.ConfigE
 		return nil, fmt.Errorf("Error authorizing update: %s", err)
 	}
 
-	channelGroup, err := configMapToConfig(configMap)
+	channelGroup, err := configMapToConfig(configMap, cm.initializer.RootGroupKey())
 	if err != nil {
 		return nil, fmt.Errorf("Could not turn configMap back to channelGroup: %s", err)
 	}
@@ -228,7 +226,7 @@ func (cm *configManager) prepareApply(configEnv *cb.ConfigEnvelope) (*configResu
 		return nil, err
 	}
 
-	channelGroup, err := configMapToConfig(configMap)
+	channelGroup, err := configMapToConfig(configMap, cm.initializer.RootGroupKey())
 	if err != nil {
 		return nil, fmt.Errorf("Could not turn configMap back to channelGroup: %s", err)
 	}
@@ -265,7 +263,7 @@ func (cm *configManager) Apply(configEnv *cb.ConfigEnvelope) error {
 	// elements from a config graph perspective.  Therefore, it is not safe to use
 	// as the config map after application.  Instead, we compute the config map
 	// just like we would at startup.
-	configMap, err := MapConfig(configEnv.Config.ChannelGroup)
+	configMap, err := MapConfig(configEnv.Config.ChannelGroup, cm.initializer.RootGroupKey())
 	if err != nil {
 		return err
 	}

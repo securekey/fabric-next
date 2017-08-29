@@ -39,7 +39,7 @@ func GetRootPath() string {
 	return filepath.Join(sysPath, "ledgersData")
 }
 
-// GetLedgerProviderPath returns the filesystem path for stroing ledger ledgerProvider contents
+// GetLedgerProviderPath returns the filesystem path for storing ledger ledgerProvider contents
 func GetLedgerProviderPath() string {
 	return filepath.Join(GetRootPath(), "ledgerProvider")
 }
@@ -54,9 +54,24 @@ func GetHistoryLevelDBPath() string {
 	return filepath.Join(GetRootPath(), "historyLeveldb")
 }
 
+// GetTransientStorePath returns the filesystem path that is used to temporarily store the private rwset
+func GetTransientStorePath() string {
+	return filepath.Join(GetRootPath(), "transientStore")
+}
+
+// GetPvtWritesetStorePath returns the filesystem path that is used for permanent storage of privare write-sets
+func GetPvtWritesetStorePath() string {
+	return filepath.Join(GetRootPath(), "pvtWritesetStore")
+}
+
 // GetBlockStorePath returns the filesystem path that is used for the chain block stores
 func GetBlockStorePath() string {
 	return filepath.Join(GetRootPath(), "chains")
+}
+
+// GetPvtdataStorePath returns the filesystem path that is used for permanent storage of private write-sets
+func GetPvtdataStorePath() string {
+	return filepath.Join(GetRootPath(), "pvtdataStore")
 }
 
 // GetMaxBlockfileSize returns maximum size of the block file

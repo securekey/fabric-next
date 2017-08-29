@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package chaincode
@@ -19,6 +9,7 @@ package chaincode
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -168,9 +159,9 @@ func finitPeer(lis net.Listener, chainIDs ...string) {
 	}
 }
 
-func startTxSimulation(ctxt context.Context, chainID string) (context.Context, ledger.TxSimulator, error) {
+func startTxSimulation(ctxt context.Context, chainID string, txid string) (context.Context, ledger.TxSimulator, error) {
 	lgr := peer.GetLedger(chainID)
-	txsim, err := lgr.NewTxSimulator()
+	txsim, err := lgr.NewTxSimulator(txid)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -184,7 +175,7 @@ func startTxSimulation(ctxt context.Context, chainID string) (context.Context, l
 	return ctxt, txsim, nil
 }
 
-func endTxSimulationCDS(chainID string, _ string, txsim ledger.TxSimulator, payload []byte, commit bool, cds *pb.ChaincodeDeploymentSpec, blockNumber uint64) error {
+func endTxSimulationCDS(chainID string, txid string, txsim ledger.TxSimulator, payload []byte, commit bool, cds *pb.ChaincodeDeploymentSpec, blockNumber uint64) error {
 	// get serialized version of the signer
 	ss, err := signer.Serialize()
 	if err != nil {
@@ -206,7 +197,7 @@ func endTxSimulationCDS(chainID string, _ string, txsim ledger.TxSimulator, payl
 	return endTxSimulation(chainID, lsccid, txsim, payload, commit, prop, blockNumber)
 }
 
-func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, _ string, txsim ledger.TxSimulator, payload []byte, commit bool, cis *pb.ChaincodeInvocationSpec, blockNumber uint64) error {
+func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, txid string, txsim ledger.TxSimulator, payload []byte, commit bool, cis *pb.ChaincodeInvocationSpec, blockNumber uint64) error {
 	// get serialized version of the signer
 	ss, err := signer.Serialize()
 	if err != nil {
@@ -214,9 +205,12 @@ func endTxSimulationCIS(chainID string, ccid *pb.ChaincodeID, _ string, txsim le
 	}
 
 	// get a proposal - we need it to get a transaction
-	prop, _, err := putils.CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, chainID, cis, ss)
+	prop, returnedTxid, err := putils.CreateProposalFromCISAndTxid(txid, common.HeaderType_ENDORSER_TRANSACTION, chainID, cis, ss)
 	if err != nil {
 		return err
+	}
+	if returnedTxid != txid {
+		return errors.New("txids are not same")
 	}
 
 	return endTxSimulation(chainID, ccid, txsim, payload, commit, prop, blockNumber)
@@ -236,16 +230,22 @@ func endTxSimulation(chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimula
 	txsim.Done()
 	if lgr := peer.GetLedger(chainID); lgr != nil {
 		if commit {
-			var txSimulationResults []byte
+			var txSimulationResults *ledger.TxSimulationResults
+			var txSimulationBytes []byte
 			var err error
+
+			txsim.Done()
 
 			//get simulation results
 			if txSimulationResults, err = txsim.GetTxSimulationResults(); err != nil {
 				return err
 			}
-
+			if txSimulationBytes, err = txSimulationResults.GetPubSimulationBytes(); err != nil {
+				return nil
+			}
 			// assemble a (signed) proposal response message
-			resp, err := putils.CreateProposalResponse(prop.Header, prop.Payload, &pb.Response{Status: 200}, txSimulationResults, nil, ccid, nil, signer)
+			resp, err := putils.CreateProposalResponse(prop.Header, prop.Payload, &pb.Response{Status: 200},
+				txSimulationBytes, nil, ccid, nil, signer)
 			if err != nil {
 				return err
 			}
@@ -321,14 +321,12 @@ func deploy2(ctx context.Context, cccid *ccprovider.CCContext, chaincodeDeployme
 		return nil, fmt.Errorf("Error creating lscc spec : %s\n", err)
 	}
 
-	ctx, txsim, err := startTxSimulation(ctx, cccid.ChainID)
+	uuid := util.GenerateUUID()
+	cccid.TxID = uuid
+	ctx, txsim, err := startTxSimulation(ctx, cccid.ChainID, cccid.TxID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get handle to simulator: %s ", err)
 	}
-
-	uuid := util.GenerateUUID()
-
-	cccid.TxID = uuid
 
 	defer func() {
 		//no error, lets try commit
@@ -372,7 +370,7 @@ func invokeWithVersion(ctx context.Context, chainID string, version string, spec
 	uuid = util.GenerateUUID()
 
 	var txsim ledger.TxSimulator
-	ctx, txsim, err = startTxSimulation(ctx, chainID)
+	ctx, txsim, err = startTxSimulation(ctx, chainID, uuid)
 	if err != nil {
 		return nil, uuid, nil, fmt.Errorf("Failed to get handle to simulator: %s ", err)
 	}
@@ -542,7 +540,8 @@ func _(chainID string, _ string) error {
 
 // Check the correctness of the final state after transaction execution.
 func checkFinalState(cccid *ccprovider.CCContext, a int, b int) error {
-	_, txsim, err := startTxSimulation(context.Background(), cccid.ChainID)
+	txid := util.GenerateUUID()
+	_, txsim, err := startTxSimulation(context.Background(), cccid.ChainID, txid)
 	if err != nil {
 		return fmt.Errorf("Failed to get handle to simulator: %s ", err)
 	}
@@ -1059,7 +1058,8 @@ func TestChaincodeInvokeChaincodeErrorCase(t *testing.T) {
 
 // Test the invocation of a transaction.
 func TestQueries(t *testing.T) {
-	testForSkip(t)
+	// Allow queries test alone so that end to end test can be performed. It takes less than 5 seconds.
+	//testForSkip(t)
 
 	chainID := util.GetTestChainID()
 
@@ -1095,7 +1095,8 @@ func TestQueries(t *testing.T) {
 	}
 
 	// Add 101 marbles for testing range queries and rich queries (for capable ledgers)
-	// The tests will test both range and rich queries and queries with query limits
+	// on both public and private data. The tests will test both range and rich queries
+	// and queries with query limits
 	for i := 1; i <= 101; i++ {
 		f = "put"
 
@@ -1124,6 +1125,167 @@ func TestQueries(t *testing.T) {
 			theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
 			return
 		}
+
+		f = "putPrivate"
+
+		key = fmt.Sprintf("pmarble%03d", i)
+		args = util.ToChaincodeArgs(f, "c1", key, argsString)
+		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+		_, _, _, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+		nextBlockNumber++
+
+		if err != nil {
+			t.Fail()
+			t.Logf("Error invoking <%s>: %s", ccID, err)
+			theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+			return
+		}
+
+	}
+
+	// Insert a marble in 3 private collections
+	for i := 2; i <= 4; i++ {
+		collection := fmt.Sprintf("c%d", i)
+		value := fmt.Sprintf("value_c%d", i)
+
+		f = "putPrivate"
+		t.Logf("invoking PutPrivateData with collection:<%s> key:%s", collection, "marble001")
+		args = util.ToChaincodeArgs(f, collection, "pmarble001", value)
+		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+		_, _, _, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+		nextBlockNumber++
+
+		if err != nil {
+			t.Fail()
+			t.Logf("Error invoking <%s>: %s", ccID, err)
+			theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+			return
+		}
+	}
+
+	// read a marble from collection c3
+	f = "getPrivate"
+	args = util.ToChaincodeArgs(f, "c3", "pmarble001")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err := invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	nextBlockNumber++
+
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	var val string
+	err = json.Unmarshal(retval, &val)
+	expectedValue := fmt.Sprintf("value_c%d", 3)
+	if val != expectedValue {
+		t.Fail()
+		t.Logf("Error detected with the GetPrivateData")
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	// delete a marble from collection c3
+	f = "removePrivate"
+	args = util.ToChaincodeArgs(f, "c3", "pmarble001")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	nextBlockNumber++
+
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	// delete a marble from collection c4
+	f = "removePrivate"
+	args = util.ToChaincodeArgs(f, "c4", "pmarble001")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	nextBlockNumber++
+
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	// read deleted marble from collection c3 to verify whether delete executed correctly
+	f = "getPrivate"
+	args = util.ToChaincodeArgs(f, "c3", "pmarble001")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	nextBlockNumber++
+
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	err = json.Unmarshal(retval, &val)
+	if val != "" {
+		t.Fail()
+		t.Logf("Error detected with the GetPrivateData")
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	// try to read the marble inserted in collection c2 from public state to check
+	// whether it returns the marble (for correct operation, it should not return)
+	f = "get"
+	args = util.ToChaincodeArgs(f, "pmarble001")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	nextBlockNumber++
+
+	if err != nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+
+	err = json.Unmarshal(retval, &val)
+	if val != "" {
+		t.Fail()
+		t.Logf("Error detected with the GetState: %s", val)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+	//The following range query for "marble001" to "marble011" should return 10 marbles
+	f = "keysPrivate"
+	args = util.ToChaincodeArgs(f, "c1", "pmarble001", "pmarble011")
+
+	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+	_, _, retval, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	// TODO: uncomment once GetPrivateDataQueryResult() is implemented
+	//nextBlockNumber++
+	if err == nil {
+		t.Fail()
+		t.Logf("Error invoking <%s>: %s", ccID, err)
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
+	}
+	var keys []interface{}
+	err = json.Unmarshal(retval, &keys)
+	// TODO: change equal to not-equal to once the GetPrivateDataByRange() is implemented in ledger
+	if len(keys) == 10 {
+		t.Fail()
+		t.Logf("Error detected with the range query, should have returned 10 but returned %v", len(keys))
+		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+		return
 	}
 
 	//The following range query for "marble001" to "marble011" should return 10 marbles
@@ -1131,7 +1293,7 @@ func TestQueries(t *testing.T) {
 	args = util.ToChaincodeArgs(f, "marble001", "marble011")
 
 	spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
-	_, _, retval, err := invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+	_, _, retval, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
 	nextBlockNumber++
 	if err != nil {
 		t.Fail()
@@ -1140,7 +1302,6 @@ func TestQueries(t *testing.T) {
 		return
 	}
 
-	var keys []interface{}
 	err = json.Unmarshal(retval, &keys)
 	if len(keys) != 10 {
 		t.Fail()
@@ -1257,7 +1418,31 @@ func TestQueries(t *testing.T) {
 			theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
 			return
 		}
+		f = "queryPrivate"
+		args = util.ToChaincodeArgs(f, "c1", "{\"selector\":{\"color\":\"blue\"}}")
 
+		spec = &pb.ChaincodeSpec{Type: 1, ChaincodeId: cID, Input: &pb.ChaincodeInput{Args: args}}
+		_, _, _, err = invoke(ctxt, chainID, spec, nextBlockNumber, nil)
+		// TODO: uncomment once GetPrivateDataQueryResult() is implemented
+		//nextBlockNumber++
+		if err == nil {
+			t.Fail()
+			t.Logf("Error invoking <%s>: %s", ccID, err)
+			theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+			return
+		}
+
+		//unmarshal the results
+		err = json.Unmarshal(retval, &keys)
+
+		//check to see if there are 100 values
+		// TODO: change equal to not-equal to once the GetPrivateDataQueryResult() is implemented in ledger
+		if len(keys) == 100 {
+			t.Fail()
+			t.Logf("Error detected with the rich query, should have returned 100 but returned %v %s", len(keys), keys)
+			theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
+			return
+		}
 		//Reset the query limit to 5
 		viper.Set("ledger.state.queryLimit", 5)
 
@@ -1277,7 +1462,6 @@ func TestQueries(t *testing.T) {
 
 		//unmarshal the results
 		err = json.Unmarshal(retval, &keys)
-
 		//check to see if there are 5 values
 		if len(keys) != 5 {
 			t.Fail()
@@ -1388,7 +1572,7 @@ func TestQueries(t *testing.T) {
 	err = json.Unmarshal(retval, &history)
 	if len(history) != 3 {
 		t.Fail()
-		t.Logf("Error detected with the history query, should have returned 3 but returned %v", len(keys))
+		t.Logf("Error detected with the history query, should have returned 3 but returned %v", len(history))
 		theChaincodeSupport.Stop(ctxt, cccid, &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec})
 		return
 	}
@@ -1757,7 +1941,7 @@ func TestChaincodeInitializeInitError(t *testing.T) {
 
 			var nextBlockNumber uint64
 
-			// the chaincode to install and instanciate
+			// the chaincode to install and instantiate
 			chaincodeName := generateChaincodeName(tc.chaincodeType)
 			chaincodePath := tc.chaincodePath
 			chaincodeVersion := "1.0.0.0"

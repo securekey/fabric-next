@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package gossip
@@ -298,7 +288,7 @@ func testCertificateUpdate(t *testing.T, shouldSucceed bool, certStore *certStor
 }
 
 func createMismatchedUpdateMessage() *proto.SignedGossipMessage {
-	identity := &proto.PeerIdentity{
+	peeridentity := &proto.PeerIdentity{
 		// This PKI-ID is different than the cert, and the mapping between
 		// certificate to PKI-ID in this test is simply the identity function.
 		PkiId: []byte("A"),
@@ -313,7 +303,7 @@ func createMismatchedUpdateMessage() *proto.SignedGossipMessage {
 		Nonce:   0,
 		Tag:     proto.GossipMessage_EMPTY,
 		Content: &proto.GossipMessage_PeerIdentity{
-			PeerIdentity: identity,
+			PeerIdentity: peeridentity,
 		},
 	}
 	sMsg := &proto.SignedGossipMessage{
@@ -324,7 +314,7 @@ func createMismatchedUpdateMessage() *proto.SignedGossipMessage {
 }
 
 func createBadlySignedUpdateMessage() *proto.SignedGossipMessage {
-	identity := &proto.PeerIdentity{
+	peeridentity := &proto.PeerIdentity{
 		PkiId: []byte("C"),
 		Cert:  []byte("C"),
 	}
@@ -338,7 +328,7 @@ func createBadlySignedUpdateMessage() *proto.SignedGossipMessage {
 		Nonce:   0,
 		Tag:     proto.GossipMessage_EMPTY,
 		Content: &proto.GossipMessage_PeerIdentity{
-			PeerIdentity: identity,
+			PeerIdentity: peeridentity,
 		},
 	}
 	sMsg := &proto.SignedGossipMessage{
@@ -355,7 +345,7 @@ func createBadlySignedUpdateMessage() *proto.SignedGossipMessage {
 }
 
 func createValidUpdateMessage() *proto.SignedGossipMessage {
-	identity := &proto.PeerIdentity{
+	peeridentity := &proto.PeerIdentity{
 		PkiId: []byte("B"),
 		Cert:  []byte("B"),
 	}
@@ -368,7 +358,7 @@ func createValidUpdateMessage() *proto.SignedGossipMessage {
 		Nonce:   0,
 		Tag:     proto.GossipMessage_EMPTY,
 		Content: &proto.GossipMessage_PeerIdentity{
-			PeerIdentity: identity,
+			PeerIdentity: peeridentity,
 		},
 	}
 	sMsg := &proto.SignedGossipMessage{

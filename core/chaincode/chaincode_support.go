@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/config"
@@ -295,8 +296,8 @@ func (chaincodeSupport *ChaincodeSupport) registerHandler(chaincodehandler *Hand
 func (chaincodeSupport *ChaincodeSupport) deregisterHandler(chaincodehandler *Handler) error {
 
 	// clean up queryIteratorMap
-	for _, context := range chaincodehandler.txCtxs {
-		for _, v := range context.queryIteratorMap {
+	for _, txcontext := range chaincodehandler.txCtxs {
+		for _, v := range txcontext.queryIteratorMap {
 			v.Close()
 		}
 	}
@@ -656,7 +657,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 			}
 		}
 
-		builder := func() (io.Reader, error) { return container.Build(cds) }
+		builder := func() (io.Reader, error) { return platforms.GenerateBuild(cds) }
 
 		cLang := cds.ChaincodeSpec.Type
 		err = chaincodeSupport.launchAndWaitForRegister(context, cccid, cds, cLang, builder)

@@ -1,22 +1,13 @@
 /*
-Copyright IBM Corp. 2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package policies
 
 import (
+	"fmt"
 	"testing"
 
 	cb "github.com/hyperledger/fabric/protos/common"
@@ -148,11 +139,11 @@ func TestNestedManager(t *testing.T) {
 		_, ok := n1.GetPolicy(policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
-		_, ok = m.GetPolicy(n1.BasePath() + "/" + policyName)
+		_, ok = m.GetPolicy(n1.(*ManagerImpl).BasePath() + "/" + policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
 		for i, abs := range []Manager{n1, m} {
-			absName := absPrefix + n1.BasePath() + "/" + policyName
+			absName := absPrefix + n1.(*ManagerImpl).BasePath() + "/" + policyName
 			_, ok = abs.GetPolicy(absName)
 			assert.True(t, ok, "Should have found absolutely policy for manager %d", i)
 		}
@@ -162,14 +153,14 @@ func TestNestedManager(t *testing.T) {
 		_, ok := n2a.GetPolicy(policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
-		_, ok = n1.GetPolicy(n2a.BasePath() + "/" + policyName)
+		_, ok = n1.GetPolicy(n2a.(*ManagerImpl).BasePath() + "/" + policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
-		_, ok = m.GetPolicy(n1.BasePath() + "/" + n2a.BasePath() + "/" + policyName)
+		_, ok = m.GetPolicy(n1.(*ManagerImpl).BasePath() + "/" + n2a.(*ManagerImpl).BasePath() + "/" + policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
 		for i, abs := range []Manager{n2a, n1, m} {
-			absName := absPrefix + n1.BasePath() + "/" + n2a.BasePath() + "/" + policyName
+			absName := absPrefix + n1.(*ManagerImpl).BasePath() + "/" + n2a.(*ManagerImpl).BasePath() + "/" + policyName
 			_, ok = abs.GetPolicy(absName)
 			assert.True(t, ok, "Should have found absolutely policy for manager %d", i)
 		}
@@ -179,16 +170,32 @@ func TestNestedManager(t *testing.T) {
 		_, ok := n2b.GetPolicy(policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
-		_, ok = n1.GetPolicy(n2b.BasePath() + "/" + policyName)
+		_, ok = n1.GetPolicy(n2b.(*ManagerImpl).BasePath() + "/" + policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
-		_, ok = m.GetPolicy(n1.BasePath() + "/" + n2b.BasePath() + "/" + policyName)
+		_, ok = m.GetPolicy(n1.(*ManagerImpl).BasePath() + "/" + n2b.(*ManagerImpl).BasePath() + "/" + policyName)
 		assert.True(t, ok, "Should have found policy %s", policyName)
 
 		for i, abs := range []Manager{n2b, n1, m} {
-			absName := absPrefix + n1.BasePath() + "/" + n2b.BasePath() + "/" + policyName
+			absName := absPrefix + n1.(*ManagerImpl).BasePath() + "/" + n2b.(*ManagerImpl).BasePath() + "/" + policyName
 			_, ok = abs.GetPolicy(absName)
 			assert.True(t, ok, "Should have found absolutely policy for manager %d", i)
 		}
 	}
+}
+
+func TestFQPathName(t *testing.T) {
+	fqPath := []string{"base", "nest1", "nest2"}
+	m := NewManagerImpl(fqPath[0], defaultProviders())
+	nesting1, err := m.BeginPolicyProposals(t, []string{fqPath[1]})
+	assert.NoError(t, err)
+	assert.Len(t, nesting1, 1)
+
+	nesting2, err := nesting1[0].BeginPolicyProposals(t, []string{fqPath[2]})
+	assert.NoError(t, err)
+	assert.Len(t, nesting2, 1)
+
+	assert.Equal(t, fmt.Sprintf("/%s/%s/%s", fqPath[0], fqPath[1], fqPath[2]), nesting2[0].(*ManagerImpl).fqPath)
+	assert.Equal(t, fmt.Sprintf("/%s/%s", fqPath[0], fqPath[1]), nesting1[0].(*ManagerImpl).fqPath)
+	assert.Equal(t, fmt.Sprintf("/%s", fqPath[0]), m.fqPath)
 }

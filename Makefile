@@ -23,7 +23,7 @@
 #   - behave-deps - ensures pre-requisites are available for running behave manually
 #   - gotools - installs go tools like golint
 #   - linter - runs all code checks
-#   - license - checks go sourrce files for Apache license header
+#   - license - checks go source files for Apache license header
 #   - native - ensures all native binaries are available
 #   - docker[-clean] - ensures all docker images are available[/cleaned]
 #   - peer-docker[-clean] - ensures the peer container is available[/cleaned]
@@ -36,7 +36,7 @@
 #   - unit-test-clean - cleans unit test state (particularly from docker)
 
 PROJECT_NAME   = hyperledger/fabric
-BASE_VERSION = 1.0.1
+BASE_VERSION = 1.1.0
 PREV_VERSION = 1.0.0
 IS_RELEASE = true
 
@@ -87,7 +87,7 @@ RELEASE_PLATFORMS = windows-amd64 darwin-amd64 linux-amd64 linux-ppc64le linux-s
 RELEASE_PKGS = configtxgen cryptogen configtxlator peer orderer
 
 pkgmap.cryptogen      := $(PKGNAME)/common/tools/cryptogen
-pkgmap.configtxgen    := $(PKGNAME)/common/configtx/tool/configtxgen
+pkgmap.configtxgen    := $(PKGNAME)/common/tools/configtxgen
 pkgmap.configtxlator  := $(PKGNAME)/common/tools/configtxlator
 pkgmap.peer           := $(PKGNAME)/peer
 pkgmap.orderer        := $(PKGNAME)/orderer

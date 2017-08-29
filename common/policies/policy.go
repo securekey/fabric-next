@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package policies
@@ -75,12 +65,6 @@ type Manager interface {
 
 	// Manager returns the sub-policy manager for a given path and whether it exists
 	Manager(path []string) (Manager, bool)
-
-	// Basepath returns the basePath the manager was instantiated with
-	BasePath() string
-
-	// Policies returns all policy names defined in the manager
-	PolicyNames() []string
 }
 
 // Proposer is the interface used by the configtx manager for policy management
@@ -126,16 +110,13 @@ type policyConfig struct {
 // In general, it should only be referenced as an Impl for the configtx.ConfigManager
 type ManagerImpl struct {
 	parent        *ManagerImpl
-	basePath      string
-	fqPrefix      string
+	basePath      string // The group level path
+	fqPrefix      string // If this manager is treated as the root, the fully qualified prefix for policy names
+	fqPath        string // The true absolute path, taking parents into consideration
 	providers     map[int32]Provider
 	config        *policyConfig
 	pendingConfig map[interface{}]*policyConfig
 	pendingLock   sync.RWMutex
-
-	// SuppressSanityLogMessages when set to true will prevent the sanity checking log
-	// messages.  Useful for novel cases like channel templates
-	SuppressSanityLogMessages bool
 }
 
 // NewManagerImpl creates a new ManagerImpl with the given CryptoHelper
@@ -148,6 +129,7 @@ func NewManagerImpl(basePath string, providers map[int32]Provider) *ManagerImpl 
 	return &ManagerImpl{
 		basePath:  basePath,
 		fqPrefix:  PathSeparator + basePath + PathSeparator,
+		fqPath:    PathSeparator + basePath, // Overridden after construction in the sub-manager case
 		providers: providers,
 		config: &policyConfig{
 			policies: make(map[string]Policy),
@@ -163,7 +145,7 @@ func (rp rejectPolicy) Evaluate(signedData []*cb.SignedData) error {
 	return fmt.Errorf("No such policy type: %s", rp)
 }
 
-// Basepath returns the basePath the manager was instnatiated with
+// Basepath returns the basePath the manager was instantiated with
 func (pm *ManagerImpl) BasePath() string {
 	return pm.basePath
 }
@@ -223,7 +205,7 @@ func (pm *ManagerImpl) GetPolicy(id string) (Policy, bool) {
 		return rejectPolicy(relpath), false
 	}
 	if logger.IsEnabledFor(logging.DEBUG) {
-		logger.Debugf("Returning policy %s for evaluation", relpath)
+		logger.Debugf("Returning policy %s from manager %s for evaluation", relpath, pm.fqPath)
 	}
 	return policy, true
 }
@@ -247,6 +229,13 @@ func (pm *ManagerImpl) BeginPolicyProposals(tx interface{}, groups []string) ([]
 	for i, group := range groups {
 		newManager := NewManagerImpl(group, pm.providers)
 		newManager.parent = pm
+		mi := newManager
+		var fqPath []string
+		for mi != nil {
+			fqPath = append([]string{PathSeparator, mi.basePath}, fqPath...)
+			mi = mi.parent
+		}
+		newManager.fqPath = strings.Join(fqPath, "")
 		pendingConfig.managers[group] = newManager
 		managers[i] = newManager
 	}
@@ -293,41 +282,6 @@ func (pm *ManagerImpl) CommitProposals(tx interface{}) {
 
 	pm.config = pendingConfig
 	delete(pm.pendingConfig, tx)
-
-	if pm.parent == nil && pm.basePath == ChannelPrefix && !pm.SuppressSanityLogMessages {
-		for _, policyName := range []string{ChannelReaders, ChannelWriters} {
-			_, ok := pm.GetPolicy(policyName)
-			if !ok {
-				logger.Warningf("Current configuration has no policy '%s', this will likely cause problems in production systems", policyName)
-			} else {
-				logger.Debugf("As expected, current configuration has policy '%s'", policyName)
-			}
-		}
-		if _, ok := pm.config.managers[ApplicationPrefix]; ok {
-			// Check for default application policies if the application component is defined
-			for _, policyName := range []string{
-				ChannelApplicationReaders,
-				ChannelApplicationWriters,
-				ChannelApplicationAdmins} {
-				_, ok := pm.GetPolicy(policyName)
-				if !ok {
-					logger.Warningf("Current configuration has no policy '%s', this will likely cause problems in production systems", policyName)
-				} else {
-					logger.Debugf("As expected, current configuration has policy '%s'", policyName)
-				}
-			}
-		}
-		if _, ok := pm.config.managers[OrdererPrefix]; ok {
-			for _, policyName := range []string{BlockValidation} {
-				_, ok := pm.GetPolicy(policyName)
-				if !ok {
-					logger.Warningf("Current configuration has no policy '%s', this will likely cause problems in production systems", policyName)
-				} else {
-					logger.Debugf("As expected, current configuration has policy '%s'", policyName)
-				}
-			}
-		}
-	}
 }
 
 // ProposePolicy takes key, path, and ConfigPolicy and registers it in the proposed PolicyManager, or errors

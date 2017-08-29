@@ -19,15 +19,16 @@ package ledgermgmt
 import (
 	"os"
 
-	"fmt"
-
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/transientstore"
+
+	"fmt"
 )
 
 // InitializeTestEnv initializes ledgermgmt for tests
 func InitializeTestEnv() {
 	remove()
-	initialize()
+	initialize(nil)
 }
 
 // CleanupTestEnv closes the ledgermagmt and removes the store directory
@@ -43,4 +44,6 @@ func remove() {
 	if err != nil {
 		logger.Errorf("Error: %s", err)
 	}
+	transientStorePath := transientstore.GetTransientStorePath()
+	os.RemoveAll(transientStorePath)
 }

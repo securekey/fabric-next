@@ -23,7 +23,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/cauthdsl"
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/policies"
+	"github.com/hyperledger/fabric/core/aclmgmt"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
@@ -50,7 +50,7 @@ const (
 	//CHAINCODETABLE prefix for chaincode tables
 	CHAINCODETABLE = "chaincodes"
 
-	//chaincode lifecyle commands
+	//chaincode lifecycle commands
 
 	//INSTALL install command
 	INSTALL = "install"
@@ -138,7 +138,7 @@ func (t TXNotFoundErr) Error() string {
 	return fmt.Sprintf("transaction not found %s", string(t))
 }
 
-//InvalidDeploymentSpecErr invalide chaincode deployment spec error
+//InvalidDeploymentSpecErr invalid chaincode deployment spec error
 type InvalidDeploymentSpecErr string
 
 func (f InvalidDeploymentSpecErr) Error() string {
@@ -739,7 +739,7 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		// TODO: add access control check
 		// once the instantiation process will be completed.
 
-		//chain the chaincode shoud be associated with. It
+		//chain the chaincode should be associated with. It
 		//should be created with a register call
 		chainname := string(args[1])
 
@@ -849,10 +849,17 @@ func (lscc *LifeCycleSysCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		ccname := string(args[2])
 
 		// 2. check local Channel Readers policy
-		// Notice that this information are already available on the ledger
-		// therefore we enforce here that the caller is reader of the channel.
-		if err = lscc.policyChecker.CheckPolicy(chain, policies.ChannelApplicationReaders, sp); err != nil {
-			return shim.Error(fmt.Sprintf("Authorization for %s on channel %s has been denied with error %s", function, args[1], err))
+		var resource string
+		switch function {
+		case GETCCINFO:
+			resource = aclmgmt.LSCC_GETCCINFO
+		case GETDEPSPEC:
+			resource = aclmgmt.LSCC_GETDEPSPEC
+		case GETCCDATA:
+			resource = aclmgmt.LSCC_GETCCDATA
+		}
+		if err = aclmgmt.GetACLProvider().CheckACL(resource, chain, sp); err != nil {
+			return shim.Error(fmt.Sprintf("Authorization request failed %s: %s", chain, err))
 		}
 
 		cdbytes, err := lscc.getCCInstance(stub, ccname)

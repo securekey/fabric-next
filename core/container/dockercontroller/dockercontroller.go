@@ -31,34 +31,20 @@ import (
 	"github.com/fsouza/go-dockerclient"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/util"
-	"github.com/hyperledger/fabric/core/chaincode/shim"
 	container "github.com/hyperledger/fabric/core/container/api"
 	"github.com/hyperledger/fabric/core/container/ccintf"
 	cutil "github.com/hyperledger/fabric/core/container/util"
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
-
-	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
 var (
-	dockerLogger    = flogging.MustGetLogger("dockercontroller")
-	hostConfig      *docker.HostConfig
-	sccTypeRegistry = make(map[string]*dockerSCCContainer)
-	sccInstRegistry = make(map[string]*dockerSCCContainer)
-	vmRegExp        = regexp.MustCompile("[^a-zA-Z0-9-_.]")
-	imageRegExp     = regexp.MustCompile("^[a-z0-9]+(([._-][a-z0-9]+)+)?$")
+	dockerLogger = flogging.MustGetLogger("dockercontroller")
+	hostConfig   *docker.HostConfig
+	vmRegExp     = regexp.MustCompile("[^a-zA-Z0-9-_.]")
+	imageRegExp  = regexp.MustCompile("^[a-z0-9]+(([._-][a-z0-9]+)+)?$")
 )
-
-type dockerSCCContainer struct {
-	chaincode         shim.Chaincode
-	running           bool
-	args              []string
-	env               []string
-	chaincodeSpecType pb.ChaincodeSpec_Type
-	configPath        string
-}
 
 // getClient returns an instance that implements dockerClient interface
 type getClient func() (dockerClient, error)
@@ -92,32 +78,6 @@ type dockerClient interface {
 	KillContainer(opts docker.KillContainerOptions) error
 	// RemoveContainer removes a docker container, returns an error in case of failure
 	RemoveContainer(opts docker.RemoveContainerOptions) error
-}
-
-// errors
-
-//DockerSCCRegisteredErr registered error
-type DockerSCCRegisteredErr string
-
-func (s DockerSCCRegisteredErr) Error() string {
-	return fmt.Sprintf("%s already registered - Docker SCC", string(s))
-}
-
-//Register registers remote system chaincode for Docker with given path. The deploy should be called to initialize
-func Register(path string, cc shim.Chaincode, cctype pb.ChaincodeSpec_Type, configPath string) error {
-	tmp := sccTypeRegistry[path]
-	if tmp != nil {
-		return DockerSCCRegisteredErr(path)
-	}
-	vm := *NewDockerVM()
-
-	dockerLogger.Debugf("**** Registering SCC in a docker %s, %#v, ", path, cc, cctype, configPath, vm)
-	sccTypeRegistry[path] = &dockerSCCContainer{
-		chaincode:         cc,
-		chaincodeSpecType: cctype,
-		configPath:        configPath,
-	}
-	return nil
 }
 
 // NewDockerVM returns a new DockerVM instance
@@ -237,28 +197,6 @@ func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID,
 func (vm *DockerVM) Deploy(ctxt context.Context, ccid ccintf.CCID,
 	args []string, env []string, reader io.Reader) error {
 
-	// verify if matches External SCC first
-	if ccid.IsSysSCC {
-		path := ccid.ChaincodeSpec.ChaincodeId.Path
-
-		ipctemplate := sccTypeRegistry[path]
-		if ipctemplate == nil {
-			return fmt.Errorf(fmt.Sprintf("%s not registered", path))
-		}
-
-		if ipctemplate.chaincode == nil {
-			return fmt.Errorf(fmt.Sprintf("%s system chaincode does not contain chaincode instance", path))
-		}
-
-		instName, _ := vm.GetVMName(ccid, nil)
-		_, err := vm.getDockerSCCInstance(ctxt, ipctemplate, instName, args, env)
-
-		//FUTURE ... here is where we might check code for safety
-		dockerLogger.Debugf("registered : %s", path)
-
-		return err
-	}
-
 	client, err := vm.getClientFnc()
 	switch err {
 	case nil:
@@ -277,27 +215,6 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 	imageID, err := vm.GetVMName(ccid, formatImageName)
 	if err != nil {
 		return err
-	}
-
-	// verify if matches External SCC first
-	if ccid.IsSysSCC {
-		path := ccid.ChaincodeSpec.ChaincodeId.Path
-
-		ectemplate := sccTypeRegistry[path]
-
-		if ectemplate == nil {
-			return fmt.Errorf(fmt.Sprintf("%s not registered", path))
-		}
-
-		ec, err := vm.getDockerSCCInstance(ctxt, ectemplate, imageID, args, env)
-
-		if err != nil {
-			return fmt.Errorf(fmt.Sprintf("could not create instance for %s", imageID))
-		}
-
-		if ec.running {
-			return fmt.Errorf(fmt.Sprintf("chaincode running %s", path))
-		}
 	}
 
 	client, err := vm.getClientFnc()
@@ -440,31 +357,6 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 
 //Stop stops a running chaincode
 func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
-
-	// verify if matches External SCC first to remove it from the registry
-	if ccid.IsSysSCC {
-		path := ccid.ChaincodeSpec.ChaincodeId.Path
-
-		ipctemplate := sccTypeRegistry[path]
-		if ipctemplate == nil {
-			return fmt.Errorf("%s not registered", path)
-		}
-
-		instName, _ := vm.GetVMName(ccid, nil)
-
-		ipc := sccInstRegistry[instName]
-
-		if ipc == nil {
-			return fmt.Errorf("%s not found", instName)
-		}
-
-		if !ipc.running {
-			return fmt.Errorf("%s not running", instName)
-		}
-
-		delete(sccInstRegistry, instName)
-	}
-
 	id, err := vm.GetVMName(ccid, nil)
 	if err != nil {
 		return err
@@ -540,16 +432,12 @@ func (vm *DockerVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, 
 func (vm *DockerVM) GetVMName(ccid ccintf.CCID, format func(string) (string, error)) (string, error) {
 	name := ccid.GetName()
 
-	// replace any invalid characters with "-"
 	if ccid.NetworkID != "" && ccid.PeerID != "" {
-		name = vmRegExp.ReplaceAllString(
-			fmt.Sprintf("%s-%s-%s", ccid.NetworkID, ccid.PeerID, name), "-")
+		name = fmt.Sprintf("%s-%s-%s", ccid.NetworkID, ccid.PeerID, name)
 	} else if ccid.NetworkID != "" {
-		name = vmRegExp.ReplaceAllString(
-			fmt.Sprintf("%s-%s", ccid.NetworkID, name), "-")
+		name = fmt.Sprintf("%s-%s", ccid.NetworkID, name)
 	} else if ccid.PeerID != "" {
-		name = vmRegExp.ReplaceAllString(
-			fmt.Sprintf("%s-%s", ccid.PeerID, name), "-")
+		name = fmt.Sprintf("%s-%s", ccid.PeerID, name)
 	}
 
 	if format != nil {
@@ -557,9 +445,13 @@ func (vm *DockerVM) GetVMName(ccid ccintf.CCID, format func(string) (string, err
 		if err != nil {
 			return formattedName, err
 		}
-		// check to ensure format function didn't add any invalid characters
-		name = vmRegExp.ReplaceAllString(formattedName, "-")
+		name = formattedName
 	}
+
+	// replace any invalid characters with "-" (either in network id, peer id, or in the
+	// entire name returned by any format function)
+	name = vmRegExp.ReplaceAllString(name, "-")
+
 	return name, nil
 }
 
@@ -569,7 +461,9 @@ func (vm *DockerVM) GetVMName(ccid ccintf.CCID, format func(string) (string, err
 // supplied image name and then appends it to the lowercase image name to ensure
 // uniqueness.
 func formatImageName(name string) (string, error) {
-	imageName := strings.ToLower(fmt.Sprintf("%s-%s", name, hex.EncodeToString(util.ComputeSHA256([]byte(name)))))
+	hash := hex.EncodeToString(util.ComputeSHA256([]byte(name)))
+	name = vmRegExp.ReplaceAllString(name, "-")
+	imageName := strings.ToLower(fmt.Sprintf("%s-%s", name, hash))
 
 	// Check that name complies with Docker's repository naming rules
 	if !imageRegExp.MatchString(imageName) {
@@ -578,17 +472,4 @@ func formatImageName(name string) (string, error) {
 	}
 
 	return imageName, nil
-}
-
-func (vm *DockerVM) getDockerSCCInstance(ctxt context.Context, ipctemplate *dockerSCCContainer, instName string, args []string, env []string) (*dockerSCCContainer, error) {
-	ec := sccInstRegistry[instName]
-	if ec != nil {
-		dockerLogger.Warningf("Docker ext scc chaincode instance exists for %s", instName)
-		return ec, nil
-	}
-	ec = &dockerSCCContainer{args: args, env: env, chaincode: ipctemplate.chaincode,
-		chaincodeSpecType: ipctemplate.chaincodeSpecType, configPath: ipctemplate.configPath}
-	sccInstRegistry[instName] = ec
-	dockerLogger.Debugf("Docker ext scc chaincode instance created for %s", instName)
-	return ec, nil
 }

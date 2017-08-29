@@ -89,6 +89,22 @@ func TestUnmarshalEnvelope(t *testing.T) {
 
 }
 
+func TestUnmarshalBlock(t *testing.T) {
+	var env *cb.Block
+	good, _ := proto.Marshal(&cb.Block{})
+	env, err := UnmarshalBlock(good)
+	assert.NoError(t, err, "Unexpected error unmarshaling block")
+	assert.NotNil(t, env, "Block should not be nil")
+	env = UnmarshalBlockOrPanic(good)
+	assert.NotNil(t, env, "Block should not be nil")
+
+	bad := []byte("bad block")
+	assert.Panics(t, func() {
+		_ = UnmarshalBlockOrPanic(bad)
+	}, "Expected panic unmarshaling malformed block")
+
+}
+
 func TestUnmarshalEnvelopeOfType(t *testing.T) {
 	env := &cb.Envelope{}
 
@@ -313,4 +329,32 @@ func (m *mockLocalSigner) Sign(message []byte) ([]byte, error) {
 		return nil, errors.New("sign error")
 	}
 	return message, nil
+}
+
+func TestChannelHeader(t *testing.T) {
+	makeEnvelope := func(payload *cb.Payload) *cb.Envelope {
+		return &cb.Envelope{
+			Payload: MarshalOrPanic(payload),
+		}
+	}
+
+	_, err := ChannelHeader(makeEnvelope(&cb.Payload{
+		Header: &cb.Header{
+			ChannelHeader: MarshalOrPanic(&cb.ChannelHeader{
+				ChannelId: "foo",
+			}),
+		},
+	}))
+	assert.NoError(t, err, "Channel header was present")
+
+	_, err = ChannelHeader(makeEnvelope(&cb.Payload{
+		Header: &cb.Header{},
+	}))
+	assert.Error(t, err, "ChannelHeader was missing")
+
+	_, err = ChannelHeader(makeEnvelope(&cb.Payload{}))
+	assert.Error(t, err, "Header was missing")
+
+	_, err = ChannelHeader(&cb.Envelope{})
+	assert.Error(t, err, "Payload was missing")
 }

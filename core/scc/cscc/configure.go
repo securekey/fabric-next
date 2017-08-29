@@ -26,9 +26,9 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/common/config"
+	"github.com/hyperledger/fabric/common/config/channel"
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/policies"
+	"github.com/hyperledger/fabric/core/aclmgmt"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/policy"
@@ -74,7 +74,7 @@ func (e *PeerConfiger) Init(stub shim.ChaincodeStubInterface) pb.Response {
 // Invoke is called for the following:
 // # to process joining a chain (called by app as a transaction proposal)
 // # to get the current configuration block (called by app)
-// # to update the configuration block (called by commmitter)
+// # to update the configuration block (called by committer)
 // Peer calls this function with 2 arguments:
 // # args[0] is the function name, which must be JoinChain, GetConfigBlock or
 // UpdateConfigBlock
@@ -126,6 +126,7 @@ func (e *PeerConfiger) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		}
 
 		// 2. check local MSP Admins policy
+		// TODO: move to ACLProvider once it will support chainless ACLs
 		if err = e.policyChecker.CheckPolicyNoChannel(mgmt.Admins, sp); err != nil {
 			return shim.Error(fmt.Sprintf("\"JoinChain\" request failed authorization check "+
 				"for channel [%s]: [%s]", cid, err))
@@ -133,13 +134,15 @@ func (e *PeerConfiger) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 
 		return joinChain(cid, block)
 	case GetConfigBlock:
-		// 2. check the channel reader policy
-		if err = e.policyChecker.CheckPolicy(string(args[1]), policies.ChannelApplicationReaders, sp); err != nil {
+		// 2. check policy
+		if err = aclmgmt.GetACLProvider().CheckACL(aclmgmt.CSCC_GetConfigBlock, string(args[1]), sp); err != nil {
 			return shim.Error(fmt.Sprintf("\"GetConfigBlock\" request failed authorization check for channel [%s]: [%s]", args[1], err))
 		}
+
 		return getConfigBlock(args[1])
 	case GetChannels:
 		// 2. check local MSP Members policy
+		// TODO: move to ACLProvider once it will support chainless ACLs
 		if err = e.policyChecker.CheckPolicyNoChannel(mgmt.Members, sp); err != nil {
 			return shim.Error(fmt.Sprintf("\"GetChannels\" request failed authorization check: [%s]", err))
 		}

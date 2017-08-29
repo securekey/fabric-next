@@ -1,17 +1,7 @@
 /*
 Copyright IBM Corp. 2016 All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package txvalidator
@@ -149,7 +139,7 @@ func (v *txValidator) Validate(block *common.Block) error {
 	txsfltr := ledgerUtil.NewTxValidationFlags(len(block.Data.Data))
 	// txsChaincodeNames records all the invoked chaincodes by tx in a block
 	txsChaincodeNames := make(map[int]*sysccprovider.ChaincodeInstance)
-	// upgradedChaincodes records all the chaincodes that are upgrded in a block
+	// upgradedChaincodes records all the chaincodes that are upgraded in a block
 	txsUpgradedChaincodes := make(map[int]*sysccprovider.ChaincodeInstance)
 	for tIdx, d := range block.Data.Data {
 		if d != nil {
@@ -403,9 +393,9 @@ func (v *vsccValidatorImpl) GetInfoForValidate(txid, chID, ccID string) (*sysccp
 	vscc := &sysccprovider.ChaincodeInstance{ChainID: chID}
 	var policy []byte
 	var err error
-	if ccID != "lscc" {
-		// when we are validating any chaincode other than
-		// LSCC, we need to ask LSCC to give us the name
+	if !sysccprovider.GetSystemChaincodeProvider().IsSysCC(ccID) {
+		// when we are validating a chaincode that is not a
+		// system CC, we need to ask the CC to give us the name
 		// of VSCC and of the policy that should be used
 
 		// obtain name of the VSCC and the policy from LSCC
@@ -420,10 +410,10 @@ func (v *vsccValidatorImpl) GetInfoForValidate(txid, chID, ccID string) (*sysccp
 		vscc.ChaincodeName = cd.Vscc
 		policy = cd.Policy
 	} else {
-		// when we are validating LSCC, we use the default
+		// when we are validating a system CC, we use the default
 		// VSCC and a default policy that requires one signature
 		// from any of the members of the channel
-		cc.ChaincodeName = "lscc"
+		cc.ChaincodeName = ccID
 		cc.ChaincodeVersion = coreUtil.GetSysCCVersion()
 		vscc.ChaincodeName = "vscc"
 		p := cauthdsl.SignedByAnyMember(v.support.GetMSPIDs(chID))
@@ -600,7 +590,7 @@ func (v *vsccValidatorImpl) VSCCValidateTx(payload *common.Payload, envBytes []b
 }
 
 func (v *vsccValidatorImpl) VSCCValidateTxForCC(envBytes []byte, txid, chid, vsccName, vsccVer string, policy []byte) error {
-	ctxt, err := v.ccprovider.GetContext(v.support.Ledger())
+	ctxt, err := v.ccprovider.GetContext(v.support.Ledger(), txid)
 	if err != nil {
 		msg := fmt.Sprintf("Cannot obtain context for txid=%s, err %s", txid, err)
 		logger.Errorf(msg)

@@ -21,11 +21,15 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/localmsp"
 	"github.com/hyperledger/fabric/core"
+	"github.com/hyperledger/fabric/core/aclmgmt"
 	"github.com/hyperledger/fabric/core/chaincode"
 	"github.com/hyperledger/fabric/core/comm"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/hyperledger/fabric/core/endorser"
+	authHandler "github.com/hyperledger/fabric/core/handlers/auth"
+	"github.com/hyperledger/fabric/core/handlers/library"
+	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/scc"
@@ -35,6 +39,7 @@ import (
 	"github.com/hyperledger/fabric/peer/common"
 	peergossip "github.com/hyperledger/fabric/peer/gossip"
 	"github.com/hyperledger/fabric/peer/version"
+	cb "github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -80,12 +85,18 @@ var nodeStartCmd = &cobra.Command{
 func initSysCCs() {
 	//deploy system chaincodes
 	scc.DeploySysCCs("")
-	logger.Infof("Deployed system chaincodess")
+	logger.Infof("Deployed system chaincodes")
 }
 
 func serve(args []string) error {
 	logger.Infof("Starting %s", version.GetInfo())
-	ledgermgmt.Initialize()
+
+	//aclmgmt initializes a proxy Processor that will be redirected to RSCC provider
+	//or default ACL Provider (for 1.0 behavior if RSCC is not enabled or available)
+	txprocessors := customtx.Processors{cb.HeaderType_CONFIG: aclmgmt.GetConfigTxProcessor()}
+
+	ledgermgmt.Initialize(txprocessors)
+
 	// Parameter overrides must be processed before any parameters are
 	// cached. Failures to cache cause the server to terminate immediately.
 	if chaincodeDevMode {
@@ -142,9 +153,16 @@ func serve(args []string) error {
 	// Register the Admin server
 	pb.RegisterAdminServer(peerServer.Server(), core.NewAdminServer())
 
-	// Register the Endorser server
 	serverEndorser := endorser.NewEndorserServer()
-	pb.RegisterEndorserServer(peerServer.Server(), serverEndorser)
+	libConf := library.Config{
+		AuthFilterFactory: viper.GetString("peer.handlers.authFilter"),
+		DecoratorFactory:  viper.GetString("peer.handlers.decorator"),
+	}
+	auth := library.InitRegistry(libConf).Lookup(library.AuthKey).(authHandler.Filter)
+	auth.Init(serverEndorser)
+
+	// Register the Endorser server
+	pb.RegisterEndorserServer(peerServer.Server(), auth)
 
 	// Initialize gossip component
 	bootstrap := viper.GetStringSlice("peer.gossip.bootstrap")
@@ -299,7 +317,7 @@ func createChaincodeServer(peerServer comm.GRPCServer, peerListenAddress string)
 	return srv, ccEpFunc
 }
 
-//NOTE - when we implment JOIN we will no longer pass the chainID as param
+//NOTE - when we implement JOIN we will no longer pass the chainID as param
 //The chaincode support will come up without registering system chaincodes
 //which will be registered only during join phase.
 func registerChaincodeSupport(grpcServer *grpc.Server, ccEpFunc ccEndpointFunc) {
