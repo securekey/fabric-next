@@ -442,8 +442,6 @@ func (m *mockLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, err
 	return args.Get(0).(ledger.HistoryQueryExecutor), nil
 }
 
-<<<<<<< HEAD
-=======
 // GetPvtDataAndBlockByNum retrieves pvt data and block
 func (m *mockLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
 	args := m.Called()
@@ -471,7 +469,6 @@ func (m *mockLedger) PrivateDataMinBlockNum() (uint64, error) {
 	return 0, nil
 }
 
->>>>>>> origin/1.1
 // Prune prune using policy
 func (m *mockLedger) Prune(policy ledger2.PrunePolicy) error {
 	return nil
@@ -531,8 +528,6 @@ func (exec *mockQueryExecutor) ExecuteQuery(namespace, query string) (ledger2.Re
 	return args.Get(0).(ledger2.ResultsIterator), args.Error(1)
 }
 
-<<<<<<< HEAD
-=======
 func (exec *mockQueryExecutor) GetPrivateData(namespace, collection, key string) ([]byte, error) {
 	args := exec.Called(namespace, collection, key)
 	return args.Get(0).([]byte), args.Error(1)
@@ -553,7 +548,6 @@ func (exec *mockQueryExecutor) ExecuteQueryOnPrivateData(namespace, collection, 
 	return args.Get(0).(ledger2.ResultsIterator), args.Error(1)
 }
 
->>>>>>> origin/1.1
 func (exec *mockQueryExecutor) Done() {
 }
 
