@@ -208,6 +208,7 @@ func (ec *extContainer) execCmd(path string, env []string) error {
 
 	cmd := exec.Command(path)
 	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Env = finalEnv
 	cmd.Dir = ec.configPath
 
