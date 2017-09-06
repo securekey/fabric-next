@@ -28,6 +28,7 @@ import (
 
 	"github.com/hyperledger/fabric/core/container/ccintf"
 	"github.com/hyperledger/fabric/core/container/dockercontroller"
+	"github.com/hyperledger/fabric/core/container/extcontroller"
 	"github.com/hyperledger/fabric/core/container/inproccontroller"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/stretchr/testify/assert"
@@ -285,4 +286,8 @@ func TestNewVM(t *testing.T) {
 	vm = vmcontroller.newVM("")
 	dvm = vm.(*dockercontroller.DockerVM)
 	assert.NotNil(t, dvm, "Requested default VM but newVM did not return dockercontroller.DockerVM")
+
+	vm = vmcontroller.newVM("SystemExt")
+	evm := vm.(*extcontroller.ExtVM)
+	assert.NotNil(t, evm, "Requested SystemExt VM but newVM did not return extcontroller.ExtVM")
 }

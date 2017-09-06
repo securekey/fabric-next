@@ -110,7 +110,7 @@ var systemChaincodes = []*SystemChaincode{
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
 //note the chaincode must still be deployed and launched like a user chaincode will be
 func RegisterSysCCs() {
-	createCDSForInternalSCCs()
+	//createCDSForInternalSCCs()
 	extSccEnabled := viper.GetBool("chaincode.systemext.enabled")
 	if !extSccEnabled {
 		sysccLogger.Info("External System CCs feature is disabled.")
@@ -282,16 +282,7 @@ func loadExternalSysCCs() error {
 				return nil
 			}
 
-			execEnv := pb.ChaincodeDeploymentSpec_DOCKER
-			execEnvString := viper.GetString(fmt.Sprintf("chaincode.systemext.%s.execEnv", ccName))
-			if execEnvString != "" {
-				ee, ok := pb.ChaincodeDeploymentSpec_ExecutionEnvironment_value[execEnvString]
-				if !ok {
-					return fmt.Errorf("Invalid execution environment: %s", execEnvString)
-				}
-				execEnv = pb.ChaincodeDeploymentSpec_ExecutionEnvironment(ee)
-			}
-			cds.ExecEnv = execEnv
+			cds.ExecEnv = pb.ChaincodeDeploymentSpec_SYSTEM_EXT
 
 			scc := &SystemChaincode{
 				Name:              ccName,

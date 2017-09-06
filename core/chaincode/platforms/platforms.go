@@ -18,6 +18,7 @@ package platforms
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -83,53 +84,40 @@ func GenerateBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
 	} else if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
 		return GenerateExtBuild(cds)
 	} else {
-		return nil, fmt.Errorf("Failed to generate platform-specific build: execution environment is not supported: %s", pb.ChaincodeDeploymentSpec_ExecutionEnvironment_name[int32(cds.ExecEnv)])
+		return nil, fmt.Errorf("Failed to generate platform-specific build: execution environment is not supported: %s", cds.ExecEnv.String())
 	}
 }
 
-// GenerateExtBuild takes a chaincode deployment spec, builds the chaincode
-// source by using a Docker container, and then extracts the chaincode binary
-// so that it can be used for execution within a process or Docker container
 func GenerateExtBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
-	curDir, err := os.Getwd()
+	// extract binary from cds and write to filesystem
+	binOutDir := filepath.Join(config.GetPath("peer.fileSystemPath"), "chaincodes",
+		cds.ChaincodeSpec.ChaincodeId.Name)
+
+	permissions := int(0755)
+	err := os.MkdirAll(binOutDir, os.FileMode(permissions))
 	if err != nil {
-		return nil, fmt.Errorf("Error getting current directory: %v", err)
+		return nil, fmt.Errorf("Error creating ext scc binary output directory %s: %s", binOutDir, err)
 	}
 
-	builder := func() (io.Reader, error) { return GenerateDockerBuild(cds) }
-
-	reader, err := builder()
-	if err != nil {
-		return nil, fmt.Errorf("Error building chaincode in Docker container: %v", err)
-	}
-
-	gr, err := gzip.NewReader(reader)
+	gr, err := gzip.NewReader(bytes.NewReader(cds.CodePackage))
 	if err != nil {
 		return nil, fmt.Errorf("Error opening gzip reader for code package: %v", err)
 	}
 
-	binPkgOutputPath := filepath.Join(curDir, "/binpackage.tar")
-
-	err = util.ExtractFileFromTar(gr, "binpackage.tar", binPkgOutputPath)
+	binOutFile := filepath.Join(binOutDir, "chaincode")
+	err = util.ExtractFileFromTar(gr, "chaincode", binOutFile)
 	gr.Close()
 	if err != nil {
-		return nil, fmt.Errorf("Error extracting binpackage.tar from code package: %v", err)
+		return nil, fmt.Errorf("Error extracting chaincode binary from codepackage: %v", err)
 	}
 
-	binPkgTarFile, err := os.Open(binPkgOutputPath)
+	f, err := os.Open(binOutFile)
 	if err != nil {
-		return nil, fmt.Errorf("Error opening binpackage.tar: %v", err)
+		return nil, fmt.Errorf("Error reading binary for chaincode with path %s: %s", binOutFile, err)
 	}
+	f.Close()
 
-	ccBinOutPath := filepath.Join(curDir, "/", cds.ChaincodeSpec.ChaincodeId.Name)
-
-	err = util.ExtractFileFromTar(binPkgTarFile, "./chaincode", ccBinOutPath)
-	binPkgTarFile.Close()
-	if err != nil {
-		return nil, fmt.Errorf("Error extracting chaincode binary from binpackage.tar: %v", err)
-	}
-
-	return strings.NewReader(ccBinOutPath), nil
+	return strings.NewReader(binOutFile), nil
 }
 
 func getPeerTLSCert() ([]byte, error) {
