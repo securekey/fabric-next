@@ -18,7 +18,6 @@ package scc
 
 import (
 	"fmt"
-	"io/ioutil"
 	"testing"
 
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -103,6 +102,41 @@ func TestDeDeploySysCC(t *testing.T) {
 	assert.NotPanics(t, f)
 }
 
+func TestDeployExtSCC(t *testing.T) {
+	oldChaincodes := viper.GetStringMapString("chaincode.system")
+	chaincodes := viper.GetStringMapString("chaincode.system")
+	chaincodes["extscc"] = "enable"
+	viper.Set("chaincode.system", chaincodes)
+	defer viper.Set("chaincode.system", oldChaincodes)
+
+	f := func() {
+		deploySysCC("", &SystemChaincode{
+			Enabled: true,
+			Name:    "extscc",
+			CDS: &pb.ChaincodeDeploymentSpec{
+				ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: &pb.ChaincodeID{Version: "1"}},
+				ExecEnv:       pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+			},
+		})
+	}
+
+	assert.NotPanics(t, f)
+}
+
+func TestDeDeployExtSCC(t *testing.T) {
+	f := func() {
+		DeDeploySysCC("", &SystemChaincode{
+			Enabled: true,
+			Name:    "extscc",
+			CDS: &pb.ChaincodeDeploymentSpec{
+				ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: &pb.ChaincodeID{Version: "1"}},
+				ExecEnv:       pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+			},
+		})
+	}
+	assert.NotPanics(t, f)
+}
+
 func TestSCCProvider(t *testing.T) {
 	assert.NotNil(t, (&sccProviderFactory{}).NewSystemChaincodeProvider())
 }
@@ -161,45 +195,47 @@ func TestRegisterSysCC(t *testing.T) {
 	assert.Contains(t, "path already registered", err)
 }
 
-func TestRegisterDuplicateExtSysCC(t *testing.T) {
-	MockExternalSysCCs(true)
-	RegisterSysCCs()
-	cds, err := mockextscc1CDS()
-
-	assert.Nil(t, err, "mocking extscc1 CDS should not return an error")
-
-	ex := &SystemChaincode{
-		Name:              "extscc1", // <-- name should trigger duplicate error
-		Path:              "github.com/hyperledger/fabric/core/chaincode/extscc1",
-		Enabled:           true,
-		InvokableExternal: true,
-		InvokableCC2CC:    false,
-		ConfigPath:        "github.com/hyperledger/fabric/core/chaincode/extscc1/config",
-		CDS:               cds,
-	}
-	err = RegisterSysCC(ex)
-
-	assert.Error(t, err)
+func TestRegisterExtSysCC(t *testing.T) {
+	_, err := registerSysCC(&SystemChaincode{
+		Enabled: true,
+		Name:    "extscc",
+		CDS: &pb.ChaincodeDeploymentSpec{
+			ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: &pb.ChaincodeID{Version: "1"}},
+			ExecEnv:       pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+		},
+	})
+	assert.NoError(t, err)
 }
 
-func mockextscc1CDS() (*pb.ChaincodeDeploymentSpec, error) {
-	// make sure this path is available and has a valid CDS file (extscc1.golang):
-	// github.com/hyperledger/fabric/test/extscc/fixtures/deploy/extscc1.golang
-	// todo need to investigate why unit tests can't read from a relative path
-	path := "../../test/extscc/fixtures/deploy/extscc1.golang"
-
-	ccbytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("Error reading from file %s: %v", path, err)
-	}
-
-	ccpack := ccprovider.CDSPackage{}
-
-	_, err = ccpack.InitFromBuffer(ccbytes)
-	if err != nil {
-		return nil, err
-	}
-	cds := ccpack.GetDepSpec()
-
-	return cds, nil
+func TestMockRegisterAndResetWithExtSysCCsAndNoCDSPathSet(t *testing.T) {
+	enabled := viper.Get("chaincode.systemext.enabled")
+	viper.Set("chaincode.systemext.enabled", true)
+	defer viper.Set("chaincode.systemext.enabled", enabled)
+	orig := MockRegisterSysCCs([]*SystemChaincode{})
+	assert.NotEmpty(t, orig)
+	MockResetSysCCs(orig)
+	assert.Equal(t, len(orig), len(systemChaincodes))
 }
+
+func TestMockRegisterWithExtSysCCs(t *testing.T) {
+	enabled := viper.Get("chaincode.systemext.enabled")
+	cdsPath := viper.Get("chaincode.systemext.cds.path")
+	extScc3Enabled := viper.Get("chaincode.systemext.extscc3.Enabled")
+	viper.Set("chaincode.systemext.enabled", true)
+	viper.Set("chaincode.systemext.cds.path", "/opt/gopath/src/github.com/hyperledger/fabric/test/extscc/fixtures/deploy")
+	viper.Set("chaincode.systemext.extscc3.Enabled", true)
+	defer viper.Set("chaincode.systemext.enabled", enabled)
+	defer viper.Set("chaincode.systemext.cds.path", cdsPath)
+	defer viper.Set("chaincode.systemext.extscc3.Enabled", extScc3Enabled)
+
+	orig := MockRegisterSysCCs([]*SystemChaincode{})
+	assert.NotEmpty(t, orig)
+	MockResetSysCCs(orig)
+	assert.Equal(t, len(orig), len(systemChaincodes))
+}
+
+// cds path not a dir
+
+// cds path doesnt exist
+
+// found cds but its not enabled
