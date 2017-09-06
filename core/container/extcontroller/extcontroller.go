@@ -9,21 +9,18 @@ package extcontroller
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	container "github.com/hyperledger/fabric/core/container/api"
 	"github.com/hyperledger/fabric/core/container/ccintf"
-
-	"os"
-	"os/exec"
-	"strings"
+	pb "github.com/hyperledger/fabric/protos/peer"
 
 	"golang.org/x/net/context"
-
-	"io/ioutil"
-
-	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
 type extContainer struct {
@@ -75,7 +72,7 @@ func (vm *ExtVM) getInstance(ctxt context.Context, ipctemplate *extContainer, in
 	ec = &extContainer{args: args, env: env, chaincode: ipctemplate.chaincode,
 		chaincodeType: ipctemplate.chaincodeType, configPath: ipctemplate.configPath}
 	instRegistry[instName] = ec
-	extLogger.Debugf("chaincode instance created for %s", instName)
+	extLogger.Infof("chaincode instance created for %s", instName)
 	return ec, nil
 }
 
@@ -131,27 +128,29 @@ func (vm *ExtVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, en
 		}
 	}
 
-	if ec.chaincodeType == pb.ChaincodeSpec_GOLANG {
+	if ec.chaincodeType == pb.ChaincodeSpec_BINARY {
 		reader, err := builder()
 		if err != nil {
 			return fmt.Errorf("Error creating binary builder for chaincode %s: %s", path, err)
 		}
+
 		b, err := ioutil.ReadAll(reader)
 		if err != nil {
 			return fmt.Errorf("Error reading from chaincode %s builder: %s", path, err)
 		}
 		binPath := string(b)
+
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
 					extLogger.Criticalf("caught panic from external system chaincode  %s", instName)
 				}
 			}()
-			ec.execCmd(binPath, env)
+			err = ec.execCmd(binPath, env)
 			ec.running = true
 		}()
 	} else {
-		return fmt.Errorf(fmt.Sprintf("Error starting chaincode %s: Only GOLANG chaincodes are supported", ccid.ChaincodeSpec.ChaincodeId.Name))
+		return fmt.Errorf(fmt.Sprintf("Error starting chaincode %s: Only BINARY chaincodes are supported", ccid.ChaincodeSpec.ChaincodeId.Name))
 	}
 
 	return nil
@@ -179,7 +178,6 @@ func (vm *ExtVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, dont
 	}
 
 	delete(instRegistry, instName)
-	//TODO stop
 	return nil
 }
 
@@ -191,7 +189,15 @@ func (vm *ExtVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, nop
 
 //GetVMName ignores the peer and network name as it just needs to be unique in process
 func (vm *ExtVM) GetVMName(ccid ccintf.CCID, format func(string) (string, error)) (string, error) {
-	return ccid.GetName(), nil
+	name := ccid.GetName()
+	if format != nil {
+		formattedName, err := format(name)
+		if err != nil {
+			return formattedName, err
+		}
+		name = formattedName
+	}
+	return name, nil
 }
 
 //execCmd to run path binary in peer container

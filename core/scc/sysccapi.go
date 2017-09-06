@@ -86,42 +86,42 @@ type SystemChaincode struct {
 // registerSysCC registers the given system chaincode with the peer
 func registerSysCC(syscc *SystemChaincode) (bool, error) {
 	if !syscc.Enabled || !isWhitelisted(syscc) {
-		sysccLogger.Info(fmt.Sprintf("system chaincode (%s,%t) disabled", syscc.Name, syscc.Enabled))
+		sysccLogger.Info(fmt.Sprintf("system chaincode (%s,%s,%t) disabled", syscc.Name, syscc.Path, syscc.Enabled))
 		return false, nil
 	}
 
 	ok := true
 	var err error
-	path := syscc.CDS.ChaincodeSpec.ChaincodeId.Path
+	var path string
 
-	switch syscc.CDS.ExecEnv {
-	case pb.ChaincodeDeploymentSpec_SYSTEM_EXT:
+	if syscc.CDS != nil && syscc.CDS.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		path = syscc.CDS.ChaincodeSpec.ChaincodeId.Path
 		err = extcontroller.Register(path, nil, syscc.CDS.ChaincodeSpec.GetType(), syscc.ConfigPath)
 		if err != nil {
 			_, ok = err.(extcontroller.ExtSysCCRegisteredErr)
 		}
-	default:
+	} else {
+		path = syscc.Path
 		err = inproccontroller.Register(path, syscc.Chaincode)
 		if err != nil {
 			_, ok = err.(inproccontroller.SysCCRegisteredErr)
 		}
 	}
 
-	//if the type is registered, the instance may not be... keep going
 	if !ok {
 		errStr := fmt.Sprintf("could not register (%s,%v): %s", path, syscc, err)
 		sysccLogger.Error(errStr)
 		return false, fmt.Errorf(errStr)
 	}
+
 	sysccLogger.Infof("system chaincode %s(%s) registered", syscc.Name, path)
 	return true, err
-
 }
 
 // deploySysCC deploys the given system chaincode on a chain
 func deploySysCC(chainID string, syscc *SystemChaincode) error {
 	if !syscc.Enabled || !isWhitelisted(syscc) {
-		sysccLogger.Info(fmt.Sprintf("system chaincode (%s,%s) disabled", syscc.Name, syscc.CDS.ChaincodeSpec.ChaincodeId.Path))
+		sysccLogger.Info(fmt.Sprintf("system chaincode (%s,%s) disabled", syscc.Name, syscc.Path))
 		return nil
 	}
 
@@ -150,36 +150,70 @@ func deploySysCC(chainID string, syscc *SystemChaincode) error {
 		defer ccprov.ReleaseContext()
 	}
 
-	if err != nil {
-		sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", syscc.CDS, err))
-		return err
+	var cds *pb.ChaincodeDeploymentSpec
+	var version string
+
+	if syscc.CDS != nil && syscc.CDS.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		cds = syscc.CDS
+		version = syscc.CDS.ChaincodeSpec.ChaincodeId.Version
+	} else {
+		chaincodeID := &pb.ChaincodeID{Path: syscc.Path, Name: syscc.Name}
+		spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: &pb.ChaincodeInput{Args: syscc.InitArgs}}
+		cds, err = buildSysCC(ctxt, spec)
+
+		if err != nil {
+			sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
+			return err
+		}
+
+		version = util.GetSysCCVersion()
 	}
 
-	version := util.GetSysCCVersion()
+	cccid := ccprov.GetCCContext(chainID, cds.ChaincodeSpec.ChaincodeId.Name, version, txid, true, nil, nil)
 
-	cccid := ccprov.GetCCContext(chainID, syscc.CDS.ChaincodeSpec.ChaincodeId.Name, version, txid, true, nil, nil)
+	_, _, err = ccprov.ExecuteWithErrorFilter(ctxt, cccid, cds)
 
-	_, _, err = ccprov.ExecuteWithErrorFilter(ctxt, cccid, syscc.CDS)
-
-	sysccLogger.Infof("system chaincode %s/%s(%s) deployed", syscc.Name, chainID, syscc.CDS.ChaincodeSpec.ChaincodeId.Path)
+	sysccLogger.Infof("system chaincode %s/%s(%s) deployed", syscc.Name, chainID, syscc.Path)
 
 	return err
 }
 
 // DeDeploySysCC stops the system chaincode and deregisters it from inproccontroller
 func DeDeploySysCC(chainID string, syscc *SystemChaincode) error {
+	var cds *pb.ChaincodeDeploymentSpec
+	var version string
+	var err error
 
-	ctx := context.Background()
+	ctxt := context.Background()
+
+	if syscc.CDS != nil && syscc.CDS.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		cds = syscc.CDS
+		version = syscc.CDS.ChaincodeSpec.ChaincodeId.Version
+	} else {
+		chaincodeID := &pb.ChaincodeID{Path: syscc.Path, Name: syscc.Name}
+		spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value["GOLANG"]), ChaincodeId: chaincodeID, Input: &pb.ChaincodeInput{Args: syscc.InitArgs}}
+		cds, err = buildSysCC(ctxt, spec)
+
+		if err != nil {
+			sysccLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
+			return err
+		}
+
+		version = util.GetSysCCVersion()
+	}
 
 	ccprov := ccprovider.GetChaincodeProvider()
 
-	version := util.GetSysCCVersion()
-
 	cccid := ccprov.GetCCContext(chainID, syscc.Name, version, "", true, nil, nil)
 
-	err := ccprov.Stop(ctx, cccid, syscc.CDS)
+	return ccprov.Stop(ctxt, cccid, cds)
+}
 
-	return err
+// buildLocal builds a given chaincode code
+func buildSysCC(context context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
+	var codePackageBytes []byte
+	chaincodeDeploymentSpec := &pb.ChaincodeDeploymentSpec{ExecEnv: pb.ChaincodeDeploymentSpec_SYSTEM, ChaincodeSpec: spec, CodePackage: codePackageBytes}
+	return chaincodeDeploymentSpec, nil
 }
 
 func isWhitelisted(syscc *SystemChaincode) bool {
