@@ -34,6 +34,9 @@
 #   - clean-all - superset of 'clean' that also removes persistent state
 #   - dist-clean - clean release packages for all target platforms
 #   - unit-test-clean - cleans unit test state (particularly from docker)
+#
+#   - peer-softhsm-docker - creates a peer image with softhsm for pkcs11 testing
+#
 
 PROJECT_NAME   = hyperledger/fabric
 BASE_VERSION = 1.1.0
@@ -96,7 +99,7 @@ pkgmap.cryptogen      := $(PKGNAME)/common/tools/cryptogen
 
 include docker-env.mk
 
-all: native docker checks
+all: native docker checks peer-softhsm-docker
 
 checks: license spelling linter unit-test behave
 
@@ -431,3 +434,7 @@ release-clean: $(patsubst %,%-release-clean, $(RELEASE_PLATFORMS))
 .PHONY: unit-test-clean
 unit-test-clean:
 	cd unit-test && docker-compose down
+
+
+peer-softhsm-docker:
+	$(DBUILD) -t $(DOCKER_NS)/fabric-peer:$(DOCKER_TAG)-softhsm -f Dockerfile-peer-softhsm .

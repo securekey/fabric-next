@@ -1,0 +1,78 @@
+# Copyright IBM Corp, SecureKey Technologies Inc. All Rights Reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# This image is for testing purposes only.
+# PKCS11 needs to be tested with snaps.
+# This Dockerfile uses 'multi-stage' and rfequires docker 17.05 or higher
+
+
+# Build stage - build peer and fabric-ca-client binaries
+FROM hyperledger/fabric-baseos:x86_64-0.3.1 AS builder
+
+# LABELS
+LABEL maintainer="George Bolo <george.bolo@securekey.com>"
+
+# ARGUMENTS
+ARG   baseimage_release=0.3.1
+ARG   project_version=1.1.0
+ARG   go_version=1.7.6
+ARG   temp_pkg='zlib1g-dev libbz2-dev libyaml-dev libltdl-dev libtool curl ca-certificates openssl git'
+ARG   perm_pkg='libltdl7'
+
+# ENVIRONMENT VARIABLES
+ENV FABRIC_CFG_PATH /etc/hyperledger/fabric \
+
+# HACK - GET SOURCE CODE
+RUN mkdir -p /tmp/gopath/src/github.com/hyperledger/fabric
+COPY . /tmp/gopath/src/github.com/hyperledger/fabric/
+
+# INSTALL
+RUN mkdir -p /var/hyperledger/production $FABRIC_CFG_PATH && \
+    apt-get update && \
+    apt-get install -y ${temp_pkg} &&  \
+    apt-get install -y --no-install-recommends ${perm_pkg} && \
+    export GOPATH=/tmp/gopath && export GOROOT=/tmp/go && \
+    curl -sL -o /tmp/go.tgz https://storage.googleapis.com/golang/go${go_version}.linux-amd64.tar.gz && \
+    tar -xf /tmp/go.tgz -C /tmp && \
+    rm -rf /tmp/go.tgz && \
+    cd ${GOPATH}/src/github.com/hyperledger/fabric/peer && \
+    LD_FLAGS="-X github.com/hyperledger/fabric/common/metadata.Version=${project_version} \
+              -X github.com/hyperledger/fabric/common/metadata.BaseVersion=${baseimage_release} \
+              -X github.com/hyperledger/fabric/common/metadata.BaseDockerLabel=org.hyperledger.fabric \
+              -X github.com/hyperledger/fabric/common/metadata.DockerNamespace=hyperledger \
+              -X github.com/hyperledger/fabric/common/metadata.BaseDockerNamespace=hyperledger" && \
+    ${GOROOT}/bin/go build -o /usr/local/bin/peer -ldflags "$LD_FLAGS" && \
+    mkdir -p ${GOPATH}/src/github/hyperledger/fabric-ca && \
+    git clone --single-branch -b release https://github.com/hyperledger/fabric-ca ${GOPATH}/src/github.com/hyperledger/fabric-ca && \
+    cd ${GOPATH}/src/github.com/hyperledger/fabric-ca/cmd/fabric-ca-client && \
+    git checkout v1.0.2 && \
+    ${GOROOT}/bin/go build -o /usr/local/bin/fabric-ca-client && \
+    apt-get remove -y ${temp_pkg} && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /tmp/gopath && rm -rf /tmp/go
+
+
+# Build final container
+FROM hyperledger/fabric-baseos:x86_64-0.3.1
+
+COPY --from=builder /usr/local/bin/peer /usr/local/bin
+COPY --from=builder /usr/local/bin/fabric-ca-client /usr/local/bin
+
+LABEL org.hyperledger.fabric.version=1.1.0 \
+      org.hyperledger.fabric.base.version=0.3.1
+
+ENV FABRIC_CFG_PATH /etc/hyperledger/fabric
+RUN mkdir -p /var/hyperledger/production $FABRIC_CFG_PATH && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends libltdl7 softhsm2 && \
+    mkdir -p /var/lib/softhsm/tokens/ && \
+    softhsm2-util --init-token --slot 0 --label "ForFabric" --so-pin 1234 --pin 98765432 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY sampleconfig/msp $FABRIC_CFG_PATH/
+COPY sampleconfig/core-pkcs11.yaml $FABRIC_CFG_PATH/core.yaml
+
+CMD ["peer","node","start"]
