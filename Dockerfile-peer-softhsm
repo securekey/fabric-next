@@ -5,7 +5,7 @@
 
 # This image is for testing purposes only.
 # PKCS11 needs to be tested with snaps.
-# This Dockerfile uses 'multi-stage' and rfequires docker 17.05 or higher
+# This Dockerfile uses 'multi-stage' and requires docker 17.05 or newer to build
 
 
 # Build stage - build peer and fabric-ca-client binaries
@@ -67,7 +67,7 @@ LABEL org.hyperledger.fabric.version=1.1.0 \
 ENV FABRIC_CFG_PATH /etc/hyperledger/fabric
 RUN mkdir -p /var/hyperledger/production $FABRIC_CFG_PATH && \
     apt-get update && \
-    apt-get install -y --no-install-recommends libltdl7 softhsm2 && \
+    apt-get install -y --no-install-recommends libltdl7 softhsm2 opensc && \
     mkdir -p /var/lib/softhsm/tokens/ && \
     softhsm2-util --init-token --slot 0 --label "ForFabric" --so-pin 1234 --pin 98765432 && \
     rm -rf /var/lib/apt/lists/*

@@ -35,7 +35,7 @@
 #   - dist-clean - clean release packages for all target platforms
 #   - unit-test-clean - cleans unit test state (particularly from docker)
 #
-#   - peer-softhsm-docker - creates a peer image with softhsm for pkcs11 testing
+#   - peer-softhsm-docker - (temp/testing) creates a peer image with softhsm for pkcs11 testing
 #
 
 PROJECT_NAME   = hyperledger/fabric
@@ -99,7 +99,7 @@ pkgmap.cryptogen      := $(PKGNAME)/common/tools/cryptogen
 
 include docker-env.mk
 
-all: native docker checks peer-softhsm-docker
+all: native docker checks
 
 checks: license spelling linter unit-test behave
 
