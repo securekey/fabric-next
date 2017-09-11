@@ -86,7 +86,7 @@ func WriteFolderToTarPackage(tw *tar.Writer, srcPath string, excludeDir string, 
 		newPath := fmt.Sprintf("src%s", path[rootDirLen:])
 		//newPath := path[len(rootDirectory):]
 
-		err = WriteFileToPackage(path, newPath, tw)
+		err = WriteFileToPackage(path, newPath, tw, 0)
 		if err != nil {
 			return fmt.Errorf("Error writing file to package: %s", err)
 		}
@@ -122,7 +122,7 @@ func WriteJavaProjectToPackage(tw *tar.Writer, srcPath string) error {
 }
 
 //WriteFileToPackage writes a file to the tarball
-func WriteFileToPackage(localpath string, packagepath string, tw *tar.Writer) error {
+func WriteFileToPackage(localpath string, packagepath string, tw *tar.Writer, headerMode int64) error {
 	fd, err := os.Open(localpath)
 	if err != nil {
 		return fmt.Errorf("%s: %s", localpath, err)
@@ -130,12 +130,12 @@ func WriteFileToPackage(localpath string, packagepath string, tw *tar.Writer) er
 	defer fd.Close()
 
 	is := bufio.NewReader(fd)
-	return WriteStreamToPackage(is, localpath, packagepath, tw)
+	return WriteStreamToPackage(is, localpath, packagepath, tw, headerMode)
 
 }
 
 //WriteStreamToPackage writes bytes (from a file reader) to the tarball
-func WriteStreamToPackage(is io.Reader, localpath string, packagepath string, tw *tar.Writer) error {
+func WriteStreamToPackage(is io.Reader, localpath string, packagepath string, tw *tar.Writer, headerMode int64) error {
 	info, err := os.Stat(localpath)
 	if err != nil {
 		return fmt.Errorf("%s: %s", localpath, err)
@@ -152,7 +152,10 @@ func WriteStreamToPackage(is io.Reader, localpath string, packagepath string, tw
 	header.ModTime = zeroTime
 	header.ChangeTime = zeroTime
 	header.Name = packagepath
-	header.Mode = 0100644
+	if headerMode == 0 {
+		headerMode = 0100644
+	}
+	header.Mode = headerMode
 
 	if err = tw.WriteHeader(header); err != nil {
 		return fmt.Errorf("Error write header for (path: %s, oldname:%s,newname:%s,sz:%d) : %s", localpath, oldname, packagepath, header.Size, err)

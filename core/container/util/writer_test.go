@@ -33,7 +33,7 @@ func Test_WriteFileToPackage(t *testing.T) {
 	buf := bytes.NewBuffer(nil)
 	gw := gzip.NewWriter(buf)
 	tw := tar.NewWriter(gw)
-	err := WriteFileToPackage("blah", "", tw)
+	err := WriteFileToPackage("blah", "", tw, 0)
 	assert.Error(t, err, "Expected error writing non existent file to package")
 
 	// Create a file and write it to tar writer
@@ -44,7 +44,7 @@ func Test_WriteFileToPackage(t *testing.T) {
 	assert.NoError(t, err, "Error creating file %s", filepath)
 	defer os.Remove(filepath)
 
-	err = WriteFileToPackage(filepath, filename, tw)
+	err = WriteFileToPackage(filepath, filename, tw, 0)
 	assert.NoError(t, err, "Error returned by WriteFileToPackage while writing existing file")
 	tw.Close()
 	gw.Close()
@@ -67,7 +67,7 @@ func Test_WriteFileToPackage(t *testing.T) {
 
 	// tar writer is closed. Call WriteFileToPackage again, this should
 	// return an error
-	err = WriteFileToPackage(filepath, "", tw)
+	err = WriteFileToPackage(filepath, "", tw, 0)
 	fmt.Println(err)
 	assert.Error(t, err, "Expected error writing using a closed writer")
 }
@@ -77,17 +77,17 @@ func Test_WriteStreamToPackage(t *testing.T) {
 	input := bytes.NewReader([]byte("hello"))
 
 	// Error case 1
-	err := WriteStreamToPackage(nil, "/nonexistentpath", "", tarw)
+	err := WriteStreamToPackage(nil, "/nonexistentpath", "", tarw, 0)
 	assert.Error(t, err, "Expected error getting info of non existent file")
 
 	// Error case 2
-	err = WriteStreamToPackage(input, os.TempDir(), "", tarw)
+	err = WriteStreamToPackage(input, os.TempDir(), "", tarw, 0)
 	assert.Error(t, err, "Expected error copying to the tar writer (tarw)")
 
 	tarw.Close()
 
 	// Error case 3
-	err = WriteStreamToPackage(input, os.TempDir(), "", tarw)
+	err = WriteStreamToPackage(input, os.TempDir(), "", tarw, 0)
 	assert.Error(t, err, "Expected error copying to closed tar writer (tarw)")
 
 	// Success case
@@ -110,7 +110,7 @@ func Test_WriteStreamToPackage(t *testing.T) {
 	is := bytes.NewReader(b)
 
 	// Write contents of the file stream to tar writer
-	err = WriteStreamToPackage(is, filepath, filename, tw)
+	err = WriteStreamToPackage(is, filepath, filename, tw, 0)
 	assert.NoError(t, err, "Error copying file to the tar writer (tw)")
 
 	// Close the writers

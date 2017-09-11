@@ -47,7 +47,7 @@ endif
 
 ifneq ($(IS_RELEASE),true)
 EXTRA_VERSION ?= snapshot-$(shell git rev-parse --short HEAD)
-PROJECT_VERSION=$(BASE_VERSION)-$(EXTRA_VERSION)
+PROJECT_VERSION=$(BASE_VERSION)
 else
 PROJECT_VERSION=$(BASE_VERSION)
 endif

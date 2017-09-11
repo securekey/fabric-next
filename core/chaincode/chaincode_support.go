@@ -19,6 +19,8 @@ package chaincode
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -417,7 +419,7 @@ func (chaincodeSupport *ChaincodeSupport) getLaunchConfigs(cccid *ccprovider.CCC
 		envs = append(envs, "CORE_CHAINCODE_LOGGING_FORMAT="+chaincodeSupport.logFormat)
 	}
 	switch cLang {
-	case pb.ChaincodeSpec_GOLANG, pb.ChaincodeSpec_CAR:
+	case pb.ChaincodeSpec_GOLANG, pb.ChaincodeSpec_CAR, pb.ChaincodeSpec_BINARY:
 		args = []string{"chaincode", fmt.Sprintf("-peer.address=%s", chaincodeSupport.peerAddress)}
 	case pb.ChaincodeSpec_JAVA:
 		args = []string{"java", "-jar", "chaincode.jar", "--peerAddress", chaincodeSupport.peerAddress}
@@ -429,6 +431,18 @@ func (chaincodeSupport *ChaincodeSupport) getLaunchConfigs(cccid *ccprovider.CCC
 	}
 
 	filesToUpload = theChaincodeSupport.getTLSFiles(certKeyPair)
+
+	// Write key pair to filesystem for external sys cc
+	err = ioutil.WriteFile(TLSClientCertPath, []byte(certKeyPair.Cert), 0644)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	err = ioutil.WriteFile(TLSClientKeyPath, []byte(certKeyPair.Key), 0644)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	os.Setenv("CORE_TLS_CLIENT_CERT_PATH", TLSClientCertPath)
+	os.Setenv("CORE_TLS_CLIENT_KEY_PATH", TLSClientKeyPath)
 
 	chaincodeLogger.Debugf("Executable is %s", args[0])
 	chaincodeLogger.Debugf("Args %v", args)
@@ -688,7 +702,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 			}
 		}
 
-		builder := func() (io.Reader, error) { return platforms.GenerateDockerBuild(cds) }
+		builder := func() (io.Reader, error) { return platforms.GenerateBuild(cds) }
 
 		cLang := cds.ChaincodeSpec.Type
 		err = chaincodeSupport.launchAndWaitForRegister(context, cccid, cds, cLang, builder)
@@ -722,6 +736,9 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 func (chaincodeSupport *ChaincodeSupport) getVMType(cds *pb.ChaincodeDeploymentSpec) (string, error) {
 	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM {
 		return container.SYSTEM, nil
+	}
+	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		return container.SYSTEM_EXT, nil
 	}
 	return container.DOCKER, nil
 }
