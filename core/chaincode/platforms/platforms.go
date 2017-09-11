@@ -18,10 +18,12 @@ package platforms
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"strings"
 
@@ -29,10 +31,12 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metadata"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/binary"
 	"github.com/hyperledger/fabric/core/chaincode/platforms/car"
 	"github.com/hyperledger/fabric/core/chaincode/platforms/golang"
 	"github.com/hyperledger/fabric/core/chaincode/platforms/java"
 	"github.com/hyperledger/fabric/core/chaincode/platforms/node"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/util"
 	"github.com/hyperledger/fabric/core/config"
 	cutil "github.com/hyperledger/fabric/core/container/util"
 	pb "github.com/hyperledger/fabric/protos/peer"
@@ -74,6 +78,8 @@ func Find(chaincodeType pb.ChaincodeSpec_Type) (Platform, error) {
 		return &java.Platform{}, nil
 	case pb.ChaincodeSpec_NODE:
 		return &node.Platform{}, nil
+	case pb.ChaincodeSpec_BINARY:
+		return &binary.Platform{}, nil
 	default:
 		return nil, fmt.Errorf("Unknown chaincodeType: %s", chaincodeType)
 	}
@@ -179,6 +185,48 @@ func generateDockerBuild(platform Platform, cds *pb.ChaincodeDeploymentSpec, inp
 	}
 
 	return nil
+}
+
+func GenerateBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
+	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_DOCKER {
+		return GenerateDockerBuild(cds)
+	} else if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		return GenerateExtBuild(cds)
+	} else {
+		return nil, fmt.Errorf("Failed to generate platform-specific build: execution environment is not supported: %s", cds.ExecEnv.String())
+	}
+}
+
+func GenerateExtBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {
+	// extract binary from cds and write to filesystem
+	binOutDir := filepath.Join(config.GetPath("peer.fileSystemPath"), "extscc",
+		cds.ChaincodeSpec.ChaincodeId.Name)
+
+	permissions := int(0755)
+	err := os.MkdirAll(binOutDir, os.FileMode(permissions))
+	if err != nil {
+		return nil, fmt.Errorf("Error creating ext scc binary output directory %s: %s", binOutDir, err)
+	}
+
+	gr, err := gzip.NewReader(bytes.NewReader(cds.CodePackage))
+	if err != nil {
+		return nil, fmt.Errorf("Error opening gzip reader for code package: %v", err)
+	}
+
+	binOutFile := filepath.Join(binOutDir, "chaincode")
+	err = util.ExtractFileFromTar(gr, "chaincode", binOutFile)
+	gr.Close()
+	if err != nil {
+		return nil, fmt.Errorf("Error extracting chaincode binary from codepackage: %v", err)
+	}
+
+	f, err := os.Open(binOutFile)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading binary for chaincode with path %s: %s", binOutFile, err)
+	}
+	f.Close()
+
+	return strings.NewReader(binOutFile), nil
 }
 
 func GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec) (io.Reader, error) {

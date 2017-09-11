@@ -82,7 +82,7 @@ func HashFilesInDir(rootDir string, dir string, hash []byte, tw *tar.Writer) ([]
 
 		if tw != nil {
 			is := bytes.NewReader(buf)
-			if err = cutil.WriteStreamToPackage(is, fqp, filepath.Join("src", name), tw); err != nil {
+			if err = cutil.WriteStreamToPackage(is, fqp, filepath.Join("src", name), tw, 0); err != nil {
 				return hash, fmt.Errorf("Error adding file to tar %s", err)
 			}
 		}
@@ -104,6 +104,40 @@ func IsCodeExist(tmppath string) error {
 
 	if !fi.IsDir() {
 		return fmt.Errorf("File %s is not dir\n", file.Name())
+	}
+
+	return nil
+}
+
+// ExtractFileFromTar takes an io.Reader that is reading a tar file, and extracts
+// the file with header fileHeaderName into the outputFilePath
+func ExtractFileFromTar(fileReader io.Reader, fileHeaderName string, outputFilePath string) error {
+	tr := tar.NewReader(fileReader)
+
+	for {
+		header, err := tr.Next()
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		if header.Name == fileHeaderName {
+			f, err := os.OpenFile(outputFilePath, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+
+			// copy over contents
+			if _, err := io.Copy(f, tr); err != nil {
+				return err
+			}
+			f.Close()
+			break
+		}
 	}
 
 	return nil

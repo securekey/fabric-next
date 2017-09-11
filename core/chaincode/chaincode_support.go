@@ -403,7 +403,7 @@ func (chaincodeSupport *ChaincodeSupport) getArgsAndEnv(cccid *ccprovider.CCCont
 		envs = append(envs, "CORE_CHAINCODE_LOGGING_FORMAT="+chaincodeSupport.logFormat)
 	}
 	switch cLang {
-	case pb.ChaincodeSpec_GOLANG, pb.ChaincodeSpec_CAR:
+	case pb.ChaincodeSpec_GOLANG, pb.ChaincodeSpec_CAR, pb.ChaincodeSpec_BINARY:
 		args = []string{"chaincode", fmt.Sprintf("-peer.address=%s", chaincodeSupport.peerAddress)}
 		args = theChaincodeSupport.appendTLScerts(args, certKeyPair)
 	case pb.ChaincodeSpec_JAVA:
@@ -667,7 +667,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 			}
 		}
 
-		builder := func() (io.Reader, error) { return platforms.GenerateDockerBuild(cds) }
+		builder := func() (io.Reader, error) { return platforms.GenerateBuild(cds) }
 
 		cLang := cds.ChaincodeSpec.Type
 		err = chaincodeSupport.launchAndWaitForRegister(context, cccid, cds, cLang, builder)
@@ -701,6 +701,9 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, cccid 
 func (chaincodeSupport *ChaincodeSupport) getVMType(cds *pb.ChaincodeDeploymentSpec) (string, error) {
 	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM {
 		return container.SYSTEM, nil
+	}
+	if cds.ExecEnv == pb.ChaincodeDeploymentSpec_SYSTEM_EXT {
+		return container.SYSTEM_EXT, nil
 	}
 	return container.DOCKER, nil
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	ccprovider2 "github.com/hyperledger/fabric/core/mocks/ccprovider"
 	"github.com/hyperledger/fabric/core/peer"
+	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -54,6 +55,41 @@ func TestDeDeploySysCC(t *testing.T) {
 	DeDeploySysCCs("")
 	f := func() {
 		DeDeploySysCCs("a")
+	}
+	assert.NotPanics(t, f)
+}
+
+func TestDeployExtSCC(t *testing.T) {
+	oldChaincodes := viper.GetStringMapString("chaincode.system")
+	chaincodes := viper.GetStringMapString("chaincode.system")
+	chaincodes["extscc"] = "enable"
+	viper.Set("chaincode.system", chaincodes)
+	defer viper.Set("chaincode.system", oldChaincodes)
+
+	f := func() {
+		deploySysCC("", &SystemChaincode{
+			Enabled: true,
+			Name:    "extscc",
+			CDS: &pb.ChaincodeDeploymentSpec{
+				ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: &pb.ChaincodeID{Version: "1"}},
+				ExecEnv:       pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+			},
+		})
+	}
+
+	assert.NotPanics(t, f)
+}
+
+func TestDeDeployExtSCC(t *testing.T) {
+	f := func() {
+		DeDeploySysCC("", &SystemChaincode{
+			Enabled: true,
+			Name:    "extscc",
+			CDS: &pb.ChaincodeDeploymentSpec{
+				ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: &pb.ChaincodeID{Version: "1"}},
+				ExecEnv:       pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+			},
+		})
 	}
 	assert.NotPanics(t, f)
 }
@@ -115,3 +151,48 @@ func TestRegisterSysCC(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, "path already registered", err)
 }
+
+func TestRegisterExtSysCC(t *testing.T) {
+	_, err := registerSysCC(&SystemChaincode{
+		Enabled: true,
+		Name:    "extscc",
+		CDS: &pb.ChaincodeDeploymentSpec{
+			ChaincodeSpec: &pb.ChaincodeSpec{ChaincodeId: &pb.ChaincodeID{Version: "1"}},
+			ExecEnv:       pb.ChaincodeDeploymentSpec_SYSTEM_EXT,
+		},
+	})
+	assert.NoError(t, err)
+}
+
+func TestMockRegisterAndResetWithExtSysCCsAndNoCDSPathSet(t *testing.T) {
+	enabled := viper.Get("chaincode.systemext.enabled")
+	viper.Set("chaincode.systemext.enabled", true)
+	defer viper.Set("chaincode.systemext.enabled", enabled)
+	orig := MockRegisterSysCCs([]*SystemChaincode{})
+	assert.NotEmpty(t, orig)
+	MockResetSysCCs(orig)
+	assert.Equal(t, len(orig), len(systemChaincodes))
+}
+
+func TestMockRegisterWithExtSysCCs(t *testing.T) {
+	enabled := viper.Get("chaincode.systemext.enabled")
+	cdsPath := viper.Get("chaincode.systemext.cds.path")
+	extScc3Enabled := viper.Get("chaincode.systemext.extscc3.Enabled")
+	viper.Set("chaincode.systemext.enabled", true)
+	viper.Set("chaincode.systemext.cds.path", "/opt/gopath/src/github.com/hyperledger/fabric/test/extscc/fixtures/deploy")
+	viper.Set("chaincode.systemext.extscc3.Enabled", true)
+	defer viper.Set("chaincode.systemext.enabled", enabled)
+	defer viper.Set("chaincode.systemext.cds.path", cdsPath)
+	defer viper.Set("chaincode.systemext.extscc3.Enabled", extScc3Enabled)
+
+	orig := MockRegisterSysCCs([]*SystemChaincode{})
+	assert.NotEmpty(t, orig)
+	MockResetSysCCs(orig)
+	assert.Equal(t, len(orig), len(systemChaincodes))
+}
+
+// cds path not a dir
+
+// cds path doesnt exist
+
+// found cds but its not enabled
