@@ -433,13 +433,15 @@ func (chaincodeSupport *ChaincodeSupport) getLaunchConfigs(cccid *ccprovider.CCC
 	filesToUpload = theChaincodeSupport.getTLSFiles(certKeyPair)
 
 	// Write key pair to filesystem for external sys cc
-	err = ioutil.WriteFile(TLSClientCertPath, []byte(certKeyPair.Cert), 0644)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	err = ioutil.WriteFile(TLSClientKeyPath, []byte(certKeyPair.Key), 0644)
-	if err != nil {
-		return nil, nil, nil, err
+	if certKeyPair != nil {
+		err = ioutil.WriteFile(TLSClientCertPath, []byte(certKeyPair.Cert), 0644)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		err = ioutil.WriteFile(TLSClientKeyPath, []byte(certKeyPair.Key), 0644)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	os.Setenv("CORE_TLS_CLIENT_CERT_PATH", TLSClientCertPath)
 	os.Setenv("CORE_TLS_CLIENT_KEY_PATH", TLSClientKeyPath)
