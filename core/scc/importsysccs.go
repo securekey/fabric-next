@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/fabric/core/scc/cscc"
 	"github.com/hyperledger/fabric/core/scc/escc"
 	"github.com/hyperledger/fabric/core/scc/lscc"
+	"github.com/hyperledger/fabric/core/scc/mscc"
 	"github.com/hyperledger/fabric/core/scc/qscc"
 	"github.com/hyperledger/fabric/core/scc/rscc"
 	"github.com/hyperledger/fabric/core/scc/vscc"
@@ -78,6 +79,15 @@ var systemChaincodes = []*SystemChaincode{
 		Chaincode:         rscc.NewRscc(),
 		InvokableExternal: true,  // rscc can be invoked to update policies
 		InvokableCC2CC:    false, // rscc cannot be invoked from a cc
+	},
+	{
+		Enabled:           true,
+		Name:              "mscc",
+		Path:              "github.com/hyperledger/fabric/core/chaincode/mscc",
+		InitArgs:          [][]byte{[]byte("")},
+		Chaincode:         &mscc.MembershipSCC{},
+		InvokableExternal: true, // mscc can be invoked externally
+		InvokableCC2CC:    true, // mscc can be invoked by other chaincodes
 	},
 }
 
