@@ -71,6 +71,9 @@ type Gossip interface {
 
 	// Stop stops the gossip component
 	Stop()
+
+	// GetOrgOfPeer returns the organization for a peer, given the peer's PKI ID
+	GetOrgOfPeer(PKIID common.PKIidType) api.OrgIdentityType
 }
 
 // SendCriteria defines how to send a specific message

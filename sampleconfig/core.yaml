@@ -435,6 +435,7 @@ chaincode:
         vscc: enable
         qscc: enable
         rscc: disable
+        mscc: enable
 
     # Logging section for the chaincode container
     logging:
