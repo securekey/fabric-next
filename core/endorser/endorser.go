@@ -17,8 +17,8 @@ import (
 
 	"errors"
 
-	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/aclmgmt"
 	"github.com/hyperledger/fabric/core/chaincode"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -27,10 +27,8 @@ import (
 	"github.com/hyperledger/fabric/core/handlers/library"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/peer"
-	"github.com/hyperledger/fabric/core/policy"
 	syscc "github.com/hyperledger/fabric/core/scc"
 	"github.com/hyperledger/fabric/msp"
-	"github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	putils "github.com/hyperledger/fabric/protos/utils"
@@ -58,7 +56,6 @@ type privateDataDistributor func(channel string, txID string, privateData *rwset
 
 // Endorser provides the Endorser service ProcessProposal
 type Endorser struct {
-	policyChecker         policy.PolicyChecker
 	distributePrivateData privateDataDistributor
 }
 
@@ -66,11 +63,6 @@ type Endorser struct {
 func NewEndorserServer(privDist privateDataDistributor) pb.EndorserServer {
 	e := &Endorser{
 		distributePrivateData: privDist,
-		policyChecker: policy.NewPolicyChecker(
-			peer.NewChannelPolicyManagerGetter(),
-			mgmt.GetLocalMSP(),
-			mgmt.NewLocalMSPPrincipalGetter(),
-		),
 	}
 	return e
 }
@@ -78,7 +70,7 @@ func NewEndorserServer(privDist privateDataDistributor) pb.EndorserServer {
 // checkACL checks that the supplied proposal complies
 // with the writers policy of the chain
 func (e *Endorser) checkACL(signedProp *pb.SignedProposal, chdr *common.ChannelHeader, shdr *common.SignatureHeader, hdrext *pb.ChaincodeHeaderExtension) error {
-	return e.policyChecker.CheckPolicy(chdr.ChannelId, policies.ChannelApplicationWriters, signedProp)
+	return aclmgmt.GetACLProvider().CheckACL(aclmgmt.PROPOSE, chdr.ChannelId, signedProp)
 }
 
 //TODO - check for escc and vscc
