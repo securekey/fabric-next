@@ -62,9 +62,7 @@ DOCKER_TAG=$(ARCH)-$(PROJECT_VERSION)
 BASE_DOCKER_LABEL=org.hyperledger.fabric
 
 DOCKER_GO_LDFLAGS += $(GO_LDFLAGS)
-#Original static build , fix for pks11
-#DOCKER_GO_LDFLAGS += -linkmode external -extldflags '-static -lpthread'
-DOCKER_GO_LDFLAGS += -linkmode external -extldflags '-lpthread'
+DOCKER_GO_LDFLAGS += -linkmode external -extldflags '-static -lpthread'
 
 #
 # What is a .dummy file?
