@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+version: '2'
+
 vp:
   image: hyperledger/fabric-peer
   log_driver: none
@@ -38,4 +40,3 @@ couchdb:
   log_driver: none
   ports:
     - "5984:5984"
-
