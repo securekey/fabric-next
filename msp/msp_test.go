@@ -84,7 +84,7 @@ func TestMSPSetupNoCryptoConf(t *testing.T) {
 	b, err := proto.Marshal(mspconf)
 	assert.NoError(t, err)
 	conf.Config = b
-	newmsp, err := newBccspMsp()
+	newmsp, err := NewBccspMsp()
 	assert.NoError(t, err)
 	err = newmsp.Setup(conf)
 	assert.NoError(t, err)
@@ -97,7 +97,7 @@ func TestMSPSetupNoCryptoConf(t *testing.T) {
 	b, err = proto.Marshal(mspconf)
 	assert.NoError(t, err)
 	conf.Config = b
-	newmsp, err = newBccspMsp()
+	newmsp, err = NewBccspMsp()
 	assert.NoError(t, err)
 	err = newmsp.Setup(conf)
 	assert.NoError(t, err)
@@ -109,7 +109,7 @@ func TestMSPSetupNoCryptoConf(t *testing.T) {
 	b, err = proto.Marshal(mspconf)
 	assert.NoError(t, err)
 	conf.Config = b
-	newmsp, err = newBccspMsp()
+	newmsp, err = NewBccspMsp()
 	assert.NoError(t, err)
 	err = newmsp.Setup(conf)
 	assert.NoError(t, err)
@@ -157,7 +157,7 @@ func TestNotFoundInBCCSP(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	thisMSP, err := newBccspMsp()
+	thisMSP, err := NewBccspMsp()
 	assert.NoError(t, err)
 	ks, err := sw.NewFileBasedKeyStore(nil, filepath.Join(dir, "keystore"), true)
 	assert.NoError(t, err)
@@ -208,7 +208,7 @@ func TestGetSigningIdentityFromVerifyingMSP(t *testing.T) {
 		os.Exit(-1)
 	}
 
-	newmsp, err := newBccspMsp()
+	newmsp, err := NewBccspMsp()
 	assert.NoError(t, err)
 	err = newmsp.Setup(conf)
 	assert.NoError(t, err)
@@ -327,7 +327,7 @@ func TestBadAdminIdentity(t *testing.T) {
 	conf, err := GetLocalMspConfig("testdata/badadmin", nil, "DEFAULT")
 	assert.NoError(t, err)
 
-	thisMSP, err := newBccspMsp()
+	thisMSP, err := NewBccspMsp()
 	assert.NoError(t, err)
 	ks, err := sw.NewFileBasedKeyStore(nil, filepath.Join("testdata/badadmin", "keystore"), true)
 	assert.NoError(t, err)
@@ -913,13 +913,13 @@ func TestMain(m *testing.M) {
 		os.Exit(-1)
 	}
 
-	localMsp, err = newBccspMsp()
+	localMsp, err = NewBccspMsp()
 	if err != nil {
 		fmt.Printf("Constructor for msp should have succeeded, got err %s instead", err)
 		os.Exit(-1)
 	}
 
-	localMspBad, err = newBccspMsp()
+	localMspBad, err = NewBccspMsp()
 	if err != nil {
 		fmt.Printf("Constructor for msp should have succeeded, got err %s instead", err)
 		os.Exit(-1)
@@ -982,7 +982,7 @@ func getLocalMSP(t *testing.T, dir string) MSP {
 	conf, err := GetLocalMspConfig(dir, nil, "DEFAULT")
 	assert.NoError(t, err)
 
-	thisMSP, err := newBccspMsp()
+	thisMSP, err := NewBccspMsp()
 	assert.NoError(t, err)
 	ks, err := sw.NewFileBasedKeyStore(nil, filepath.Join(dir, "keystore"), true)
 	assert.NoError(t, err)

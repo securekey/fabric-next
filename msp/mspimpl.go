@@ -68,11 +68,11 @@ type bccspmsp struct {
 	cryptoConfig *m.FabricCryptoConfig
 }
 
-// newBccspMsp returns an MSP instance backed up by a BCCSP
+// NewBccspMsp returns an MSP instance backed up by a BCCSP
 // crypto provider. It handles x.509 certificates and can
 // generate identities and signing identities backed by
 // certificates and keypairs
-func newBccspMsp() (MSP, error) {
+func NewBccspMsp() (MSP, error) {
 	mspLogger.Debugf("Creating BCCSP-based MSP instance")
 
 	bccsp := factory.GetDefault()

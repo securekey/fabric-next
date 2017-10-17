@@ -48,7 +48,7 @@ func New(opts NewOpts) (MSP, error) {
 	case *BCCSPNewOpts:
 		switch opts.GetVersion() {
 		case MSPv1_0:
-			return newBccspMsp()
+			return NewBccspMsp()
 		default:
 			return nil, errors.Errorf("Invalid *BCCSPNewOpts. Version not recognized [%v]", opts.GetVersion())
 		}
