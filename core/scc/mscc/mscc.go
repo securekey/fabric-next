@@ -79,7 +79,7 @@ func (t *MembershipSCC) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 
 //getAllPeers retrieves all of the peers (excluding this one) that are currently alive
 func (t *MembershipSCC) getAllPeers(stub shim.ChaincodeStubInterface, args [][]byte) pb.Response {
-	payload, err := t.marshalEndpoints(t.gossip().Peers(), true)
+	payload, err := t.marshalEndpoints(t.Gossip().Peers(), true)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -105,7 +105,7 @@ func (t *MembershipSCC) getPeersOfChannel(stub shim.ChaincodeStubInterface, args
 		}
 	}
 
-	payload, err := t.marshalEndpoints(t.gossip().PeersOfChannel(common.ChainID(channelID)), localPeerJoined)
+	payload, err := t.marshalEndpoints(t.Gossip().PeersOfChannel(common.ChainID(channelID)), localPeerJoined)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -116,7 +116,7 @@ func (t *MembershipSCC) getPeersOfChannel(stub shim.ChaincodeStubInterface, args
 }
 
 func (t *MembershipSCC) marshalEndpoints(members []discovery.NetworkMember, includeLocalPeer bool) ([]byte, error) {
-	gossip := t.gossip()
+	gossip := t.Gossip()
 
 	peerEndpoints := &protos.PeerEndpoints{}
 	for _, member := range members {
@@ -155,7 +155,7 @@ func (t *MembershipSCC) marshalEndpoints(members []discovery.NetworkMember, incl
 	return payload, nil
 }
 
-func (t *MembershipSCC) gossip() service.GossipService {
+func (t *MembershipSCC) Gossip() service.GossipService {
 	if t.gossipServiceOverride != nil {
 		return t.gossipServiceOverride
 	}
