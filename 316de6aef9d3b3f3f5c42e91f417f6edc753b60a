@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "32ec142f_0e05ae75",
+        "filename": ".gitreview",
+        "patchSetId": 1
+      },
+      "lineNbr": 5,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2017-10-27T15:35:32Z",
+      "side": 0,
+      "message": "can we change this to\n[gerrit]\nhost\u003dgerrit.securekey.com\nport\u003d29418\nproject\u003dfabric-next\n\n(rather than delete)",
+      "revId": "316de6aef9d3b3f3f5c42e91f417f6edc753b60a",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}

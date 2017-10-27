@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f422b032_1a7e14f5",
+        "filename": "pull_fabric.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2017-10-27T15:35:32Z",
+      "side": 1,
+      "message": "Can we put this in a scripts directory? We may want to add other items to this repo later.",
+      "revId": "6c8783cd7036e4d77eed633ede89ecdefc50372e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
