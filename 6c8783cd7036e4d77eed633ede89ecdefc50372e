@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "0041a9e4_d3ac4390",
+        "filename": "pull_fabric.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2017-10-27T16:05:51Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "f422b032_1a7e14f5",
+      "revId": "6c8783cd7036e4d77eed633ede89ecdefc50372e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "3cf07f81_c3a3a598",
         "filename": "pull_fabric.sh",
         "patchSetId": 1
@@ -30,6 +48,30 @@
       "writtenOn": "2017-10-27T15:36:15Z",
       "side": 1,
       "message": "apache license please",
+      "range": {
+        "startLine": 3,
+        "startChar": 0,
+        "endLine": 6,
+        "endChar": 1
+      },
+      "revId": "6c8783cd7036e4d77eed633ede89ecdefc50372e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "00192879_cd8674e5",
+        "filename": "pull_fabric.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 6,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2017-10-27T16:05:51Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "3cf07f81_c3a3a598",
       "range": {
         "startLine": 3,
         "startChar": 0,
