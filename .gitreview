@@ -1,4 +1,4 @@
 [gerrit]
-host=gerrit.hyperledger.org
+host=gerrit.securekey.com
 port=29418
-project=fabric
+project=fabric-next
