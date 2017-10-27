@@ -22,6 +22,30 @@
       "revId": "7630a38b5ee2b75aef0771fc06d0f8daf31b7fea",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "01b0b328_14f45e13",
+        "filename": "pull_fabric.sh",
+        "patchSetId": 2
+      },
+      "lineNbr": 89,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2017-10-27T16:07:58Z",
+      "side": 1,
+      "message": "We will keep this cherry pick until we have the alternative solution ready",
+      "parentUuid": "ba001cc5_aa361a2c",
+      "range": {
+        "startLine": 87,
+        "startChar": 0,
+        "endLine": 89,
+        "endChar": 103
+      },
+      "revId": "7630a38b5ee2b75aef0771fc06d0f8daf31b7fea",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
