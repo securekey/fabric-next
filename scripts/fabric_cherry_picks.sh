@@ -9,8 +9,8 @@ set -e
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
-git config --global user.name "jenkins"
-git config --global user.email jenkins@jenkins.com
+git config user.name "jenkins"
+git config user.email jenkins@jenkins.com
 
 
 ##Private Data:
