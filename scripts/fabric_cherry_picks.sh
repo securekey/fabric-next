@@ -7,6 +7,13 @@
 set -e
 
 
+mkdir -p $GOPATH/src/github.com/hyperledger/
+cd $GOPATH/src/github.com/hyperledger/
+git clone https://gerrit.hyperledger.org/r/fabric
+cd fabric
+git config advice.detachedHead false
+git checkout 4f7a7c8d696e866d06780e14b10704614a68564b
+
 cd $GOPATH/src/github.com/hyperledger/fabric
 
 git config user.name "jenkins"
@@ -70,4 +77,3 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/83/15183/2 && git
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/63/15363/5 && git cherry-pick FETCH_HEAD
 
 ##TODO cherry pick service discovery##
-
