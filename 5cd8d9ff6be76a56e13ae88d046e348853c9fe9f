@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "4235cf08_36aa4877",
+        "filename": "README.md",
+        "patchSetId": 1
+      },
+      "lineNbr": 9,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2017-11-15T15:26:48Z",
+      "side": 1,
+      "message": "is this assumption dependent on the merge of :\nhttps://gerrit.hyperledger.org/r/15143\n?",
+      "range": {
+        "startLine": 9,
+        "startChar": 33,
+        "endLine": 9,
+        "endChar": 39
+      },
+      "revId": "5cd8d9ff6be76a56e13ae88d046e348853c9fe9f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
