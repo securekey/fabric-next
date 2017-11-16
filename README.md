@@ -6,7 +6,14 @@ Fabric Next is a custom build of Hyperledger Fabric with the following enhanceme
 - Dynamic build to allow loading plugins
 
 ##### Build
-Note: We assume a working Golang(v1.9.2) and Docker(v17.09.0-ce) setup.
+
+Prerequisites:
+- A Git Client
+- Go - 1.9 or later
+- Docker - 17.06.2-ce or later
+- Docker Compose - 1.14.0 or later
+- You may need libtool - sudo apt-get install -y libtool (linux) or brew install libtool (macOS)
+- You may need GNU tar on macOS -  brew install gnu-tar --with-default-names
 
 *Note:* The tagged version of fabric-next being used must match the corresponding tag in fabric-snaps. e.g v17.11.1 of fabric-next is compatible with v17.11.1 of fabric-snaps.
 
