@@ -12,8 +12,8 @@ ARCH=$(uname -m)
 
 if [ $IS_RELEASE == false ]
 then
-  EXTRA_VERSION=snapshot.$(git rev-parse --short=7 HEAD)
-  PROJECT_VERSION=$BASE_VERSION+$EXTRA_VERSION
+  EXTRA_VERSION=snapshot-$(git rev-parse --short=7 HEAD)
+  PROJECT_VERSION=$BASE_VERSION-$EXTRA_VERSION
 else
   PROJECT_VERSION=$BASE_VERSION
 fi
