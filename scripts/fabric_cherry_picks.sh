@@ -12,7 +12,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout f82469711e114704f37e9a4b4ebdc59e3c5173d2
+git checkout 8becdf080399963ab3e2d5bd1dd19c3f69f455f0
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -24,17 +24,17 @@ git config user.email jenkins@jenkins.com
 
 #Collection Store and Collection configuration upon instantiate:
 #https://gerrit.hyperledger.org/r/#/c/14515/ - Open - [FAB-6574] Integrate simpleCollectionStore for gossip
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/15/14515/8 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/15/14515/9 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14517/ - Open - [FAB-6563] Merge External and Internal peers in config
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/14517/6 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/14517/7 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14291/ - Open - [FAB-5871] create collections at deploy time
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14291/24 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14291/25 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14367/ - Open - [FAB-5871] VSCC to ensure no collection exists
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/14367/15 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/14367/16 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14371/ - Open - [FAB-6563] CLI support to specify collections
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/14371/20 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/14371/21 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14519/ - Open - [FAB-6620] Prevent private data send in instantiate
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/14519/12 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/14519/13 && git cherry-pick FETCH_HEAD
 
 #Purge of private data based on block-to-live:
 #https://gerrit.hyperledger.org/r/#/c/14347/ - Open - [FAB-6552] Block-to-live policy for pvtdata
