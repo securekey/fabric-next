@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "3d1756c5_3562e3f7",
+        "filename": "scripts/pull_fabric.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 10,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2017-12-15T18:19:05Z",
+      "side": 1,
+      "message": "I\u0027ve asked Alex M. to make these snapshots publicly available as well.\n\nCan we merge this in the meanwhile to fix the fabric-next build for SK users?\n\nAnother option is to revert the parent change if it\u0027s important to enable builds outside our VPN until Alex is done.",
+      "parentUuid": "d2d1ed19_a1a1ad07",
+      "range": {
+        "startLine": 10,
+        "startChar": 11,
+        "endLine": 10,
+        "endChar": 82
+      },
+      "revId": "5ac420db3d5953aeaa066ba07ff1c8fdf51af34a",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "448a412e_12765d90",
         "filename": "scripts/pull_fabric.sh",
         "patchSetId": 1
