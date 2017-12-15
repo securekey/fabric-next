@@ -6,10 +6,11 @@
 #
 set -e
 
-declare -x FABRIC_BASE_OS_IMAGE=hyperledger/fabric-baseos
 # Using images built from the tip of https://github.com/hyperledger/fabric-baseimage until hyperledger tags new images with Go1.9.2
+declare -x FABRIC_BASE_OS_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-baseos
 declare -x FABRIC_BASE_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-baseimage
 declare -x BASE_VERSION=0.4.3-snapshot-168b4d5
+
 declare -x BASE_NAMESPACE=securekey
 # This must match the version of fabric that is being cherry-picked
 declare -x BASE_OUTPUT_VERSION=0.4.2
