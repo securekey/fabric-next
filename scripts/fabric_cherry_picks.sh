@@ -20,6 +20,7 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 
+
 ##Private Data:
 
 #Collection Store and Collection configuration upon instantiate:
@@ -55,6 +56,11 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/4 && git
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/3 && git cherry-pick FETCH_HEAD
+
+
+#temp fix for gossip tls
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/73/16273/2 && git cherry-pick FETCH_HEAD
+
 
 
 ##Filtered Channel Events:
