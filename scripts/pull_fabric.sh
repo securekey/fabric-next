@@ -44,6 +44,8 @@ GOPATH=$TMP
 $MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
+#Mutual TLS fix for peer CLI
+git apply $MY_PATH/../patches/peerCLITLS.patch
 make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
 
