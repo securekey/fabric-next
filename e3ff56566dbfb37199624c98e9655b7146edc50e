@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b14dfffa_29b831bc",
+        "filename": "scripts/peerCLITLS.patch",
+        "patchSetId": 1
+      },
+      "lineNbr": 5,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2017-12-17T16:54:15Z",
+      "side": 1,
+      "message": "probably should be in a patches directory rather than scripts :)",
+      "revId": "e3ff56566dbfb37199624c98e9655b7146edc50e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
