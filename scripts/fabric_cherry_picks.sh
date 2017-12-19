@@ -59,7 +59,7 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/3 && git
 
 
 #temp fix for gossip tls
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/73/16273/2 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/16319/5 && git cherry-pick FETCH_HEAD
 
 
 
