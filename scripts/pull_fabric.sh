@@ -7,8 +7,8 @@
 set -e
 
 # Using images built from the tip of https://github.com/hyperledger/fabric-baseimage until hyperledger tags new images with Go1.9.2
-declare -x FABRIC_BASE_OS_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-baseos
-declare -x FABRIC_BASE_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-baseimage
+declare -x FABRIC_BASE_OS_IMAGE=securekey/fabric-baseos
+declare -x FABRIC_BASE_IMAGE=securekey/fabric-baseimage
 declare -x BASE_VERSION=0.4.3-snapshot-168b4d5
 
 declare -x BASE_NAMESPACE=securekey
