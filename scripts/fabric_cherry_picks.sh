@@ -12,7 +12,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout 8becdf080399963ab3e2d5bd1dd19c3f69f455f0
+git checkout f0ad5510827f01e2184e3a5059c8236ce85226b2
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -25,17 +25,17 @@ git config user.email jenkins@jenkins.com
 
 #Collection Store and Collection configuration upon instantiate:
 #https://gerrit.hyperledger.org/r/#/c/14515/ - Open - [FAB-6574] Integrate simpleCollectionStore for gossip
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/15/14515/9 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/15/14515/10 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14517/ - Open - [FAB-6563] Merge External and Internal peers in config
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/14517/7 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/14517/8 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14291/ - Open - [FAB-5871] create collections at deploy time
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14291/25 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14291/28 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14367/ - Open - [FAB-5871] VSCC to ensure no collection exists
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/14367/16 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/14367/19 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14371/ - Open - [FAB-6563] CLI support to specify collections
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/14371/21 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/14371/25 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14519/ - Open - [FAB-6620] Prevent private data send in instantiate
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/14519/13 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/14519/17 && git cherry-pick FETCH_HEAD
 
 #Purge of private data based on block-to-live:
 #https://gerrit.hyperledger.org/r/#/c/14347/ - Open - [FAB-6552] Block-to-live policy for pvtdata
@@ -51,8 +51,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/55/14355/4 && git
 #https://gerrit.hyperledger.org/r/#/c/14511/ - Open - [FAB-6619] purge pvtdata from pvt block store
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/4 && git cherry-pick FETCH_HEAD
 
-# private data timeout
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/43/16343/1 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/16343/ - Open -[FAB-7522] Customize private data push ack timeout
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/43/16343/3 && git cherry-pick FETCH_HEAD
 
 #Other:
 #https://gerrit.hyperledger.org/r/#/c/14769/ - Open - [FAB-6600] Sample chaincode for prvt data
@@ -60,23 +60,10 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/3 && git cherry-pick FETCH_HEAD
 
-
-#temp fix for gossip tls
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/16319/8 && git cherry-pick FETCH_HEAD
-
-
-
-##Filtered Channel Events:
-#https://gerrit.hyperledger.org/r/#/c/15177/ - [FAB-5742] Add channel service listener sample
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/77/15177/4 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/#/c/15175/ - [FAB-5744] Add UT coverage for Channel Service server
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/75/15175/4 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/#/c/15173/ - [FAB-5738] Implement client logic for Channel Service
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/73/15173/4 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/#/c/15171/ - [FAB-5737] Implement server logic for Channel Service
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/15171/4 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/#/c/15183/ - [FAB-5785] Add Envelope based valid. to RSCC/defaultACL
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/83/15183/2 && git cherry-pick FETCH_HEAD
-
+# Filtered Block Events:
+#https://gerrit.hyperledger.org/r/c/16341/ - Open - [FAB-7521] Lookup correct policy name
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/2 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/16179/ - Open - [FAB-7419]: FilteredBlock events
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/18 && git cherry-pick FETCH_HEAD
 
 ##TODO cherry pick service discovery##
