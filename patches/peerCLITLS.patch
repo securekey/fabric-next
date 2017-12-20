@@ -1,5 +1,5 @@
 diff --git a/bddtests/conn.go b/bddtests/conn.go
-index 7df13c6..a09a931 100644
+index 7df13c60..a09a931a 100644
 --- a/bddtests/conn.go
 +++ b/bddtests/conn.go
 @@ -20,6 +20,7 @@ import (
@@ -20,7 +20,7 @@ index 7df13c6..a09a931 100644
  	tmpConn, err = comm.NewClientConnectionWithAddress(peerAddress, true, false, nil)
  	if err != nil {
 diff --git a/core/comm/connection.go b/core/comm/connection.go
-index 6a76bc4..8036f22 100644
+index 9657fc72..8036f223 100644
 --- a/core/comm/connection.go
 +++ b/core/comm/connection.go
 @@ -19,11 +19,9 @@ import (
@@ -53,7 +53,7 @@ index 6a76bc4..8036f22 100644
 -			grpclog.Fatalf("Failed to create TLS credentials %v", err)
 -		}
 -	} else {
--		creds = credentials.NewClientTLSFromCert(nil, sn)
+-		logger.Panic("peer.tls.rootcert.file isn't configured")
 -	}
 -	return creds
 -}
@@ -62,10 +62,10 @@ index 6a76bc4..8036f22 100644
  	var sn string
  	priv, err := base64.StdEncoding.DecodeString(key)
 diff --git a/core/peer/peer.go b/core/peer/peer.go
-index 74ee6fe..add53be 100644
+index b4698996..8eecd7b0 100644
 --- a/core/peer/peer.go
 +++ b/core/peer/peer.go
-@@ -7,7 +7,10 @@ SPDX-License-Identifier: Apache-2.0
+@@ -7,11 +7,16 @@ SPDX-License-Identifier: Apache-2.0
  package peer
  
  import (
@@ -76,15 +76,13 @@ index 74ee6fe..add53be 100644
  	"net"
  	"runtime"
  	"sync"
-@@ -25,6 +28,7 @@ import (
- 	"github.com/hyperledger/fabric/core/committer"
- 	"github.com/hyperledger/fabric/core/committer/txvalidator"
- 	"github.com/hyperledger/fabric/core/common/privdata"
+ 
 +	"github.com/hyperledger/fabric/core/config"
- 	"github.com/hyperledger/fabric/core/ledger"
- 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
- 	"github.com/hyperledger/fabric/core/transientstore"
-@@ -39,6 +43,8 @@ import (
++
+ 	"github.com/hyperledger/fabric/common/channelconfig"
+ 	cc "github.com/hyperledger/fabric/common/config"
+ 	"github.com/hyperledger/fabric/common/configtx"
+@@ -45,6 +50,8 @@ import (
  	"github.com/spf13/viper"
  	"golang.org/x/sync/semaphore"
  	"google.golang.org/grpc"
@@ -93,7 +91,7 @@ index 74ee6fe..add53be 100644
  )
  
  var peerLogger = flogging.MustGetLogger("peer")
-@@ -633,7 +639,7 @@ func GetLocalIP() string {
+@@ -671,7 +678,7 @@ func GetLocalIP() string {
  func NewPeerClientConnectionWithAddress(peerAddress string) (*grpc.ClientConn, error) {
  	if comm.TLSEnabled() {
  		return comm.NewClientConnectionWithAddress(peerAddress, true, true,
@@ -102,9 +100,9 @@ index 74ee6fe..add53be 100644
  	}
  	return comm.NewClientConnectionWithAddress(peerAddress, true, false,
  		nil, nil)
-@@ -703,3 +709,43 @@ func (*collectionSupport) GetCollectionKVSKey(cc common.CollectionCriteria) stri
- func (*collectionSupport) GetIdentityDeserializer(chainID string) msp.IdentityDeserializer {
- 	return mspmgmt.GetManagerForChain(chainID)
+@@ -823,3 +830,43 @@ func (*configSupport) GetPolicyMapper(channel string) resourcesconfig.PolicyMapp
+ 	}
+ 	return chain.cs.bundleSource.APIPolicyMapper()
  }
 +
 +// InitTLSForPeer returns TLS credentials for peer
@@ -147,7 +145,7 @@ index 74ee6fe..add53be 100644
 +	return cp, nil
 +}
 diff --git a/events/consumer/consumer.go b/events/consumer/consumer.go
-index aeb6fd5..523feea 100644
+index aeb6fd54..523feea8 100644
 --- a/events/consumer/consumer.go
 +++ b/events/consumer/consumer.go
 @@ -30,6 +30,7 @@ import (
@@ -167,3 +165,6 @@ index aeb6fd5..523feea 100644
  	}
  	return comm.NewClientConnectionWithAddress(peerAddress, true, false,
  		nil, nil)
+-- 
+2.14.3 (Apple Git-98)
+
