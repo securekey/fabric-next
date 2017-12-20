@@ -51,6 +51,9 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/55/14355/4 && git
 #https://gerrit.hyperledger.org/r/#/c/14511/ - Open - [FAB-6619] purge pvtdata from pvt block store
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/4 && git cherry-pick FETCH_HEAD
 
+# private data timeout
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/43/16343/1 && git cherry-pick FETCH_HEAD
+
 #Other:
 #https://gerrit.hyperledger.org/r/#/c/14769/ - Open - [FAB-6600] Sample chaincode for prvt data
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git cherry-pick FETCH_HEAD
@@ -59,7 +62,7 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/3 && git
 
 
 #temp fix for gossip tls
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/16319/7 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/16319/8 && git cherry-pick FETCH_HEAD
 
 
 

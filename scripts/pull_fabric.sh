@@ -36,16 +36,17 @@ if [ -z "$MY_PATH" ] ; then
   exit 1  # fail
 fi
 
-
 TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
+echo "Build tmp directory is $TMP ..."
 
-GOPATH=$TMP
+export GOPATH=$TMP
 
 $MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 #Mutual TLS fix for peer CLI
 git apply $MY_PATH/../patches/peerCLITLS.patch
+git apply $MY_PATH/../patches/gossipViperImport.patch
 make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
 
