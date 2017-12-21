@@ -1,0 +1,366 @@
+From 38cebcc9e099393858cd5e138c40e40a2a161d57 Mon Sep 17 00:00:00 2001
+From: yacovm <yacovm@il.ibm.com>
+Date: Mon, 9 Oct 2017 22:54:27 +0300
+Subject: [PATCH] [FAB-6563] CLI support to specify collections
+
+This change set adds a new option ('--collections-config') so that the
+chaincode developer can specify the configuration of a collection when
+deploying a new chaincode. The option expects a file name; the content of the
+file will be read and parsed as a JSON-formatted array of the following struct
+
+type collectionConfigJson struct {
+	Name              string `json:"name"`
+	Policy            string `json:"policy"`
+        RequiredCount int32  `json:"requiredPeerCount"`
+	MaxPeerCount  int32  `json:"maxPeerCount"`
+}
+
+Change-Id: Ifceed0db612b36c793937ef6704e8a179981413d
+Signed-off-by: Alessandro Sorniotti <ale.linux@sopit.net>
+Signed-off-by: yacovm <yacovm@il.ibm.com>
+---
+ core/chaincode/exectransaction_test.go |  2 +-
+ peer/chaincode/chaincode.go            | 42 +++++++++++---------
+ peer/chaincode/common.go               | 72 +++++++++++++++++++++++++++++++++-
+ peer/chaincode/common_test.go          | 43 ++++++++++++++++++++
+ peer/chaincode/instantiate.go          |  5 ++-
+ protos/utils/proputils.go              | 26 +++++++++---
+ protos/utils/proputils_test.go         |  2 +-
+ 7 files changed, 164 insertions(+), 28 deletions(-)
+
+diff --git a/core/chaincode/exectransaction_test.go b/core/chaincode/exectransaction_test.go
+index 4bd5c5b1..34c0b6b0 100644
+--- a/core/chaincode/exectransaction_test.go
++++ b/core/chaincode/exectransaction_test.go
+@@ -190,7 +190,7 @@ func endTxSimulationCDS(chainID string, txid string, txsim ledger.TxSimulator, p
+ 	}
+ 
+ 	// get a proposal - we need it to get a transaction
+-	prop, _, err := putils.CreateDeployProposalFromCDS(chainID, cds, ss, nil, nil, nil)
++	prop, _, err := putils.CreateDeployProposalFromCDS(chainID, cds, ss, nil, nil, nil, nil)
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/peer/chaincode/chaincode.go b/peer/chaincode/chaincode.go
+index 888ec3c0..f2f069ce 100644
+--- a/peer/chaincode/chaincode.go
++++ b/peer/chaincode/chaincode.go
+@@ -50,24 +50,28 @@ func Cmd(cf *ChaincodeCmdFactory) *cobra.Command {
+ 
+ // Chaincode-related variables.
+ var (
+-	chaincodeLang     string
+-	chaincodeCtorJSON string
+-	chaincodePath     string
+-	chaincodeName     string
+-	chaincodeUsr      string // Not used
+-	chaincodeQueryRaw bool
+-	chaincodeQueryHex bool
+-	customIDGenAlg    string
+-	channelID         string
+-	chaincodeVersion  string
+-	policy            string
+-	escc              string
+-	vscc              string
+-	policyMarshalled  []byte
+-	orderingEndpoint  string
+-	tls               bool
+-	caFile            string
+-	transient         string
++	chaincodeLang            string
++	chaincodeCtorJSON        string
++	chaincodePath            string
++	chaincodeName            string
++	chaincodeUsr             string // Not used
++	chaincodeQueryRaw        bool
++	chaincodeQueryHex        bool
++	customIDGenAlg           string
++	channelID                string
++	chaincodeVersion         string
++	policy                   string
++	escc                     string
++	vscc                     string
++	policyMarshalled         []byte
++	orderingEndpoint         string
++	tls                      bool
++	caFile                   string
++	transient                string
++	resourceEnvelopeSavePath string
++	resourceEnvelopeLoadPath string
++	collectionsConfigFile    string
++	collectionConfigBytes    []byte
+ )
+ 
+ var chaincodeCmd = &cobra.Command{
+@@ -112,6 +116,8 @@ func resetFlags() {
+ 		"Get the installed chaincodes on a peer")
+ 	flags.BoolVarP(&getInstantiatedChaincodes, "instantiated", "", false,
+ 		"Get the instantiated chaincodes on a channel")
++	flags.StringVar(&collectionsConfigFile, "collections-config", common.UndefinedParamValue,
++		fmt.Sprint("The file containing the configuration for the chaincode's collection"))
+ }
+ 
+ func attachFlags(cmd *cobra.Command, names []string) {
+diff --git a/peer/chaincode/common.go b/peer/chaincode/common.go
+index e07a28a3..9faf5584 100644
+--- a/peer/chaincode/common.go
++++ b/peer/chaincode/common.go
+@@ -8,11 +8,12 @@ package chaincode
+ 
+ import (
+ 	"encoding/json"
+-	"errors"
+ 	"fmt"
++	"io/ioutil"
+ 	"os"
+ 	"strings"
+ 
++	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/common/cauthdsl"
+ 	"github.com/hyperledger/fabric/core/chaincode"
+ 	"github.com/hyperledger/fabric/core/chaincode/platforms"
+@@ -23,6 +24,7 @@ import (
+ 	pcommon "github.com/hyperledger/fabric/protos/common"
+ 	pb "github.com/hyperledger/fabric/protos/peer"
+ 	putils "github.com/hyperledger/fabric/protos/utils"
++	"github.com/pkg/errors"
+ 	"github.com/spf13/cobra"
+ 	"golang.org/x/net/context"
+ )
+@@ -155,6 +157,66 @@ func chaincodeInvokeOrQuery(cmd *cobra.Command, args []string, invoke bool, cf *
+ 	return nil
+ }
+ 
++type collectionConfigJson struct {
++	Name          string `json:"name"`
++	Policy        string `json:"policy"`
++	RequiredCount int32  `json:"requiredPeerCount"`
++	MaxPeerCount  int32  `json:"maxPeerCount"`
++}
++
++// getCollectionConfig retrieves the collection configuration
++// from the supplied file; the supplied file must contain a
++// json-formatted array of collectionConfigJson elements
++func getCollectionConfigFromFile(ccFile string) ([]byte, error) {
++	fileBytes, err := ioutil.ReadFile(ccFile)
++	if err != nil {
++		return nil, errors.Wrapf(err, "could not read file '%s'", ccFile)
++	}
++
++	return getCollectionConfigFromBytes(fileBytes)
++}
++
++// getCollectionConfig retrieves the collection configuration
++// from the supplied byte array; the byte array must contain a
++// json-formatted array of collectionConfigJson elements
++func getCollectionConfigFromBytes(cconfBytes []byte) ([]byte, error) {
++	cconf := &[]collectionConfigJson{}
++	err := json.Unmarshal(cconfBytes, cconf)
++	if err != nil {
++		return nil, errors.Wrap(err, "could not parse the collection configuration")
++	}
++
++	ccarray := make([]*pcommon.CollectionConfig, 0, len(*cconf))
++	for _, cconfitem := range *cconf {
++		p, err := cauthdsl.FromString(cconfitem.Policy)
++		if err != nil {
++			return nil, errors.WithMessage(err, fmt.Sprintf("invalid policy %s", cconfitem.Policy))
++		}
++
++		cpc := &pcommon.CollectionPolicyConfig{
++			Payload: &pcommon.CollectionPolicyConfig_SignaturePolicy{
++				SignaturePolicy: p,
++			},
++		}
++
++		cc := &pcommon.CollectionConfig{
++			Payload: &pcommon.CollectionConfig_StaticCollectionConfig{
++				StaticCollectionConfig: &pcommon.StaticCollectionConfig{
++					Name:              cconfitem.Name,
++					MemberOrgsPolicy:  cpc,
++					RequiredPeerCount: cconfitem.RequiredCount,
++					MaximumPeerCount:  cconfitem.MaxPeerCount,
++				},
++			},
++		}
++
++		ccarray = append(ccarray, cc)
++	}
++
++	ccp := &pcommon.CollectionConfigPackage{ccarray}
++	return proto.Marshal(ccp)
++}
++
+ func checkChaincodeCmdParams(cmd *cobra.Command) error {
+ 	//we need chaincode name for everything, including deploy
+ 	if chaincodeName == common.UndefinedParamValue {
+@@ -190,6 +252,14 @@ func checkChaincodeCmdParams(cmd *cobra.Command) error {
+ 		policyMarshalled = putils.MarshalOrPanic(p)
+ 	}
+ 
++	if collectionsConfigFile != common.UndefinedParamValue {
++		var err error
++		collectionConfigBytes, err = getCollectionConfigFromFile(collectionsConfigFile)
++		if err != nil {
++			return errors.WithMessage(err, fmt.Sprintf("invalid collection configuration in file %s", collectionsConfigFile))
++		}
++	}
++
+ 	// Check that non-empty chaincode parameters contain only Args as a key.
+ 	// Type checking is done later when the JSON is actually unmarshaled
+ 	// into a pb.ChaincodeInput. To better understand what's going
+diff --git a/peer/chaincode/common_test.go b/peer/chaincode/common_test.go
+index ba91b01b..767683b9 100644
+--- a/peer/chaincode/common_test.go
++++ b/peer/chaincode/common_test.go
+@@ -20,10 +20,13 @@ import (
+ 	"encoding/json"
+ 	"testing"
+ 
++	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/bccsp/factory"
++	"github.com/hyperledger/fabric/common/cauthdsl"
+ 	"github.com/hyperledger/fabric/common/tools/configtxgen/encoder"
+ 	genesisconfig "github.com/hyperledger/fabric/common/tools/configtxgen/localconfig"
+ 	"github.com/hyperledger/fabric/peer/common"
++	common2 "github.com/hyperledger/fabric/protos/common"
+ 	pb "github.com/hyperledger/fabric/protos/peer"
+ 	"github.com/hyperledger/fabric/protos/utils"
+ 	"github.com/spf13/cobra"
+@@ -173,3 +176,43 @@ func TestGetOrdererEndpointFail(t *testing.T) {
+ 	_, err = common.GetOrdererEndpointOfChain(mockchain, signer, mockEndorserClient)
+ 	assert.Error(t, err, "GetOrdererEndpointOfChain from invalid response")
+ }
++
++const sampleCollectionConfigGood = `[
++	{
++		"name": "foo",
++		"policy": "OR('A.member', 'B.member')",
++		"requiredPeerCount": 3,
++		"maxPeerCount": 483279847
++	}
++]`
++
++const sampleCollectionConfigBad = `[
++	{
++		"name": "foo",
++		"policy": "barf",
++		"requiredPeerCount": 3,
++		"maxPeerCount": 483279847
++	}
++]`
++
++func TestCollectionParsing(t *testing.T) {
++	cc, err := getCollectionConfigFromBytes([]byte(sampleCollectionConfigGood))
++	assert.NoError(t, err)
++	assert.NotNil(t, cc)
++	ccp := &common2.CollectionConfigPackage{}
++	proto.Unmarshal(cc, ccp)
++	conf := ccp.Config[0].GetStaticCollectionConfig()
++	pol, _ := cauthdsl.FromString("OR('A.member', 'B.member')")
++	assert.Equal(t, 3, int(conf.RequiredPeerCount))
++	assert.Equal(t, 483279847, int(conf.MaximumPeerCount))
++	assert.Equal(t, "foo", conf.Name)
++	assert.Equal(t, pol, conf.MemberOrgsPolicy.GetSignaturePolicy())
++
++	cc, err = getCollectionConfigFromBytes([]byte(sampleCollectionConfigBad))
++	assert.Error(t, err)
++	assert.Nil(t, cc)
++
++	cc, err = getCollectionConfigFromBytes([]byte("barf"))
++	assert.Error(t, err)
++	assert.Nil(t, cc)
++}
+diff --git a/peer/chaincode/instantiate.go b/peer/chaincode/instantiate.go
+index e967a44f..447ba53c 100644
+--- a/peer/chaincode/instantiate.go
++++ b/peer/chaincode/instantiate.go
+@@ -53,6 +53,9 @@ func instantiateCmd(cf *ChaincodeCmdFactory) *cobra.Command {
+ 		"policy",
+ 		"escc",
+ 		"vscc",
++		"resourceEnvelopeSavePath",
++		"resourceEnvelopeLoadPath",
++		"collections-config",
+ 	}
+ 	attachFlags(chaincodeInstantiateCmd, flagList)
+ 
+@@ -76,7 +79,7 @@ func instantiate(cmd *cobra.Command, cf *ChaincodeCmdFactory) (*protcommon.Envel
+ 		return nil, fmt.Errorf("Error serializing identity for %s: %s", cf.Signer.GetIdentifier(), err)
+ 	}
+ 
+-	prop, _, err := utils.CreateDeployProposalFromCDS(channelID, cds, creator, policyMarshalled, []byte(escc), []byte(vscc))
++	prop, _, err := utils.CreateDeployProposalFromCDS(channelID, cds, creator, policyMarshalled, []byte(escc), []byte(vscc), collectionConfigBytes)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("Error creating proposal  %s: %s", chainFuncName, err)
+ 	}
+diff --git a/protos/utils/proputils.go b/protos/utils/proputils.go
+index 10bda4e8..1720a695 100644
+--- a/protos/utils/proputils.go
++++ b/protos/utils/proputils.go
+@@ -445,21 +445,32 @@ func CreateGetInstalledChaincodesProposal(creator []byte) (*peer.Proposal, strin
+ 
+ // CreateInstallProposalFromCDS returns a install proposal given a serialized identity and a ChaincodeDeploymentSpec
+ func CreateInstallProposalFromCDS(ccpack proto.Message, creator []byte) (*peer.Proposal, string, error) {
+-	return createProposalFromCDS("", ccpack, creator, nil, nil, nil, "install")
++	return createProposalFromCDS("", ccpack, creator, "install")
+ }
+ 
+ // CreateDeployProposalFromCDS returns a deploy proposal given a serialized identity and a ChaincodeDeploymentSpec
+-func CreateDeployProposalFromCDS(chainID string, cds *peer.ChaincodeDeploymentSpec, creator []byte, policy []byte, escc []byte, vscc []byte) (*peer.Proposal, string, error) {
+-	return createProposalFromCDS(chainID, cds, creator, policy, escc, vscc, "deploy")
++func CreateDeployProposalFromCDS(
++	chainID string,
++	cds *peer.ChaincodeDeploymentSpec,
++	creator []byte,
++	policy []byte,
++	escc []byte,
++	vscc []byte,
++	collectionConfig []byte) (*peer.Proposal, string, error) {
++	if collectionConfig == nil {
++		return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc)
++	} else {
++		return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc, collectionConfig)
++	}
+ }
+ 
+ // CreateUpgradeProposalFromCDS returns a upgrade proposal given a serialized identity and a ChaincodeDeploymentSpec
+ func CreateUpgradeProposalFromCDS(chainID string, cds *peer.ChaincodeDeploymentSpec, creator []byte, policy []byte, escc []byte, vscc []byte) (*peer.Proposal, string, error) {
+-	return createProposalFromCDS(chainID, cds, creator, policy, escc, vscc, "upgrade")
++	return createProposalFromCDS(chainID, cds, creator, "upgrade", policy, escc, vscc)
+ }
+ 
+ // createProposalFromCDS returns a deploy or upgrade proposal given a serialized identity and a ChaincodeDeploymentSpec
+-func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, policy []byte, escc []byte, vscc []byte, propType string) (*peer.Proposal, string, error) {
++func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, propType string, args ...[]byte) (*peer.Proposal, string, error) {
+ 	//in the new mode, cds will be nil, "deploy" and "upgrade" are instantiates.
+ 	var ccinp *peer.ChaincodeInput
+ 	var b []byte
+@@ -478,7 +489,10 @@ func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, po
+ 		if !ok || cds == nil {
+ 			return nil, "", fmt.Errorf("invalid message for creating lifecycle chaincode proposal from")
+ 		}
+-		ccinp = &peer.ChaincodeInput{Args: [][]byte{[]byte(propType), []byte(chainID), b, policy, escc, vscc}}
++		Args := [][]byte{[]byte(propType), []byte(chainID), b}
++		Args = append(Args, args...)
++
++		ccinp = &peer.ChaincodeInput{Args: Args}
+ 	case "install":
+ 		ccinp = &peer.ChaincodeInput{Args: [][]byte{[]byte(propType), b}}
+ 	}
+diff --git a/protos/utils/proputils_test.go b/protos/utils/proputils_test.go
+index e8c48960..7a1697e8 100644
+--- a/protos/utils/proputils_test.go
++++ b/protos/utils/proputils_test.go
+@@ -210,7 +210,7 @@ func TestCDSProposals(t *testing.T) {
+ 	assert.NotEqual(t, "", txid, "txid should not be empty")
+ 
+ 	// deploy
+-	prop, txid, err = utils.CreateDeployProposalFromCDS(chainID, cds, creator, policy, escc, vscc)
++	prop, txid, err = utils.CreateDeployProposalFromCDS(chainID, cds, creator, policy, escc, vscc, nil)
+ 	assert.NotNil(t, prop, "Deploy proposal should not be nil")
+ 	assert.NoError(t, err, "Unexpected error creating deploy proposal")
+ 	assert.NotEqual(t, "", txid, "txid should not be empty")
+-- 
+2.14.3 (Apple Git-98)
+
