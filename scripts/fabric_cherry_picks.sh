@@ -63,6 +63,9 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/3 && git cherry-pick FETCH_HEAD
 
+# Temp workaround for tlsCertHash issue
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/99/16399/1 && git cherry-pick FETCH_HEAD
+
 # Filtered Block Events:
 #https://gerrit.hyperledger.org/r/c/16341/ - Open - [FAB-7521] Lookup correct policy name
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/2 && git cherry-pick FETCH_HEAD
