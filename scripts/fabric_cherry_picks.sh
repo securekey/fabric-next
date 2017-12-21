@@ -65,8 +65,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/3 && git
 
 # Filtered Block Events:
 #https://gerrit.hyperledger.org/r/c/16341/ - Open - [FAB-7521] Lookup correct policy name
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/2 && git cherry-pick FETCH_HEAD
+#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/2 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/16179/ - Open - [FAB-7419]: FilteredBlock events
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/18 && git cherry-pick FETCH_HEAD
+#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/18 && git cherry-pick FETCH_HEAD
 
 ##TODO cherry pick service discovery##
