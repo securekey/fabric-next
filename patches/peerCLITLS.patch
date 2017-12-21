@@ -62,10 +62,10 @@ index 9657fc72..8036f223 100644
  	var sn string
  	priv, err := base64.StdEncoding.DecodeString(key)
 diff --git a/core/peer/peer.go b/core/peer/peer.go
-index b4698996..8eecd7b0 100644
+index e09f758a..cbecb3d3 100644
 --- a/core/peer/peer.go
-+++ b/core/peer/peer.go
-@@ -7,11 +7,16 @@ SPDX-License-Identifier: Apache-2.0
++++ b/tmp/peer.go
+@@ -7,7 +7,10 @@ SPDX-License-Identifier: Apache-2.0
  package peer
  
  import (
@@ -76,13 +76,15 @@ index b4698996..8eecd7b0 100644
  	"net"
  	"runtime"
  	"sync"
- 
+@@ -30,6 +33,7 @@ import (
+ 	"github.com/hyperledger/fabric/core/committer"
+ 	"github.com/hyperledger/fabric/core/committer/txvalidator"
+ 	"github.com/hyperledger/fabric/core/common/privdata"
 +	"github.com/hyperledger/fabric/core/config"
-+
- 	"github.com/hyperledger/fabric/common/channelconfig"
- 	cc "github.com/hyperledger/fabric/common/config"
- 	"github.com/hyperledger/fabric/common/configtx"
-@@ -45,6 +50,8 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/customtx"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
+@@ -45,6 +49,8 @@ import (
  	"github.com/spf13/viper"
  	"golang.org/x/sync/semaphore"
  	"google.golang.org/grpc"
@@ -91,7 +93,7 @@ index b4698996..8eecd7b0 100644
  )
  
  var peerLogger = flogging.MustGetLogger("peer")
-@@ -671,7 +678,7 @@ func GetLocalIP() string {
+@@ -671,7 +677,7 @@ func GetLocalIP() string {
  func NewPeerClientConnectionWithAddress(peerAddress string) (*grpc.ClientConn, error) {
  	if comm.TLSEnabled() {
  		return comm.NewClientConnectionWithAddress(peerAddress, true, true,
@@ -100,9 +102,9 @@ index b4698996..8eecd7b0 100644
  	}
  	return comm.NewClientConnectionWithAddress(peerAddress, true, false,
  		nil, nil)
-@@ -823,3 +830,43 @@ func (*configSupport) GetPolicyMapper(channel string) resourcesconfig.PolicyMapp
+@@ -809,3 +815,43 @@ func (*configSupport) GetResourceConfig(channel string) cc.Config {
  	}
- 	return chain.cs.bundleSource.APIPolicyMapper()
+ 	return chain.cs.bundleSource.ConfigtxValidator()
  }
 +
 +// InitTLSForPeer returns TLS credentials for peer
@@ -144,27 +146,6 @@ index b4698996..8eecd7b0 100644
 +	}
 +	return cp, nil
 +}
-diff --git a/events/consumer/consumer.go b/events/consumer/consumer.go
-index aeb6fd54..523feea8 100644
---- a/events/consumer/consumer.go
-+++ b/events/consumer/consumer.go
-@@ -30,6 +30,7 @@ import (
- 	"github.com/hyperledger/fabric/common/flogging"
- 	"github.com/hyperledger/fabric/common/util"
- 	"github.com/hyperledger/fabric/core/comm"
-+	"github.com/hyperledger/fabric/core/peer"
- 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
- 	ehpb "github.com/hyperledger/fabric/protos/peer"
- 	"github.com/hyperledger/fabric/protos/utils"
-@@ -70,7 +71,7 @@ func NewEventsClient(peerAddress string, regTimeout time.Duration, adapter Event
- func newEventsClientConnectionWithAddress(peerAddress string) (*grpc.ClientConn, error) {
- 	if comm.TLSEnabled() {
- 		return comm.NewClientConnectionWithAddress(peerAddress, true, true,
--			comm.InitTLSForPeer(), nil)
-+			peer.InitTLSForPeer(), nil)
- 	}
- 	return comm.NewClientConnectionWithAddress(peerAddress, true, false,
- 		nil, nil)
 -- 
 2.14.3 (Apple Git-98)
 
