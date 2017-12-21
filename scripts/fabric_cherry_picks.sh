@@ -46,6 +46,9 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git
 
 # Temp workaround for tlsCertHash issue
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/99/16399/1 && git cherry-pick FETCH_HEAD
+# Temp workaround for SampleSingleMSPChannelV11Profile shouldn't be loaded outside tests
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/09/16409/1 && git cherry-pick FETCH_HEAD
+
 
 # Filtered Block Events (WIP):
 #https://gerrit.hyperledger.org/r/c/16341/ - Open - [FAB-7521] Lookup correct policy name
