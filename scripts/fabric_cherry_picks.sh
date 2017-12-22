@@ -12,7 +12,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout 1cc8c20fdda7bfc29b3a545af658128ce476c3c4
+git checkout fbd51ae42ac83f29482c2baafc54efd1488d518c
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -52,7 +52,7 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/09/16409/1 && git
 
 # Filtered Block Events (WIP):
 #https://gerrit.hyperledger.org/r/c/16341/ - Open - [FAB-7521] Lookup correct policy name
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/4 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/5 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/16179/ - Open - [FAB-7419] FilteredBlock events
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/22 && git cherry-pick FETCH_HEAD
 
