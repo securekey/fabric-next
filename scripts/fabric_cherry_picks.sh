@@ -44,8 +44,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git cherry-pick FETCH_HEAD
 
-# Temp workaround for tlsCertHash issue
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/99/16399/1 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/16405/ - Open - [FAB-7542] add TLS cert hash to deliver client
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/05/16405/4 && git cherry-pick FETCH_HEAD
 # Temp workaround for SampleSingleMSPChannelV11Profile shouldn't be loaded outside tests
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/09/16409/1 && git cherry-pick FETCH_HEAD
 
