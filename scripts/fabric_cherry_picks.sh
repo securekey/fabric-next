@@ -12,17 +12,13 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout 1cc8c20fdda7bfc29b3a545af658128ce476c3c4
+git checkout 9dbcbb7
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
-
-##Private Data:
-#https://gerrit.hyperledger.org/r/c/16403/  - Open - [FAB-7497] fix typos in previous commit
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/03/16403/2 && git cherry-pick FETCH_HEAD
 
 #Purge of private data based on block-to-live:
 #https://gerrit.hyperledger.org/r/#/c/14347/ - Open - [FAB-6552] Block-to-live policy for pvtdata
@@ -44,16 +40,19 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git cherry-pick FETCH_HEAD
 
-# Temp workaround for tlsCertHash issue
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/99/16399/1 && git cherry-pick FETCH_HEAD
 # Temp workaround for SampleSingleMSPChannelV11Profile shouldn't be loaded outside tests
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/09/16409/1 && git cherry-pick FETCH_HEAD
 
+# Temp workaround for mutual TLS in peer CLI
+# https://gerrit.hyperledger.org/r/c/16263/
+#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/63/16263/3 && git cherry-pick FETCH_HEAD
+# 16263 (above) conflicts with 16341 (below) so moved to patch file (../patches/peerCLITLS.patch)
 
 # Filtered Block Events (WIP):
 #https://gerrit.hyperledger.org/r/c/16341/ - Open - [FAB-7521] Lookup correct policy name
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/4 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/16341/7 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/16179/ - Open - [FAB-7419] FilteredBlock events
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/22 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/24 && git cherry-pick FETCH_HEAD
+
 
 ##TODO cherry pick service discovery##
