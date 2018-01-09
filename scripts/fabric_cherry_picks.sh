@@ -12,7 +12,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout 97fdf3dec6b373cb4d319b6ab4e8d23192ee1348
+git checkout 3178dbf3e5bc1d21a3e0297f393facc7d0e69d0a
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -41,12 +41,10 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git cherry-pick FETCH_HEAD
 
 # Filtered Block Events
-#https://gerrit.hyperledger.org/r/c/16179/ - Abandoned - [FAB-7419] FilteredBlock events
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/16179/29 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/c/16569/ - [FAB-7644] (WIP) Generalize deliver API handler
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/16569/8 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/c/16645/ - Open - [FAB-7419] WIP (UT is missing)
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/45/16645/5 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/16569/ - Open - [FAB-7644]  Generalize deliver API handler
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/16569/12 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/16645/ - Open - [FAB-7419] Filtering block to levarage deliver impl.
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/45/16645/16 && git cherry-pick FETCH_HEAD
 
 
 ##TODO cherry pick service discovery##
