@@ -48,3 +48,14 @@ make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
 
 rm -Rf $TMP
+
+# Build dynamic ccenv image
+
+# Fabric ccenv image
+declare -x FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv
+# Use latest tag as that was the image produced by the fabric build above
+declare -x FABRIC_CCENV_TAG=latest
+
+docker build -f ./images/fabric-dynamic-ccenv/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-dynamic-ccenv:${ARCH}-${BASE_OUTPUT_VERSION} \
+--build-arg FABRIC_CCENV_IMAGE=$(FABRIC_CCENV_IMAGE) \
+--build-arg FABRIC_CCENV_TAG=$(FABRIC_CCENV_TAG) .
