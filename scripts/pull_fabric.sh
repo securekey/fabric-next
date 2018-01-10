@@ -6,6 +6,8 @@
 #
 set -e
 
+source ../.ci-properties
+
 # Using images built from the tip of https://github.com/hyperledger/fabric-baseimage until hyperledger tags new images with Go1.9.2
 declare -x FABRIC_BASE_OS_IMAGE=securekey/fabric-baseos
 declare -x FABRIC_BASE_IMAGE=securekey/fabric-baseimage
@@ -48,3 +50,15 @@ make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
 
 rm -Rf $TMP
+
+# Build dynamic ccenv image
+
+cd $MY_PATH
+# Fabric ccenv image
+declare -x FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv
+# Use latest tag as that was the image produced by the fabric build above
+declare -x FABRIC_CCENV_TAG=latest
+
+docker build -f ./images/fabric-dynamic-ccenv/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-dynamic-ccenv:${FABRIC_NEXT_IMAGE_TAG} \
+--build-arg FABRIC_CCENV_IMAGE=${FABRIC_CCENV_IMAGE} \
+--build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} .
