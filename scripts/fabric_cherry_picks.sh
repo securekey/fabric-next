@@ -12,7 +12,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout 3178dbf3e5bc1d21a3e0297f393facc7d0e69d0a
+git checkout 60fc1e99f863bb5c47c1dde78e5e32acf9e7e203
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -39,12 +39,6 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/5 && git
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git cherry-pick FETCH_HEAD
-
-# Filtered Block Events
-#https://gerrit.hyperledger.org/r/c/16569/ - Open - [FAB-7644]  Generalize deliver API handler
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/16569/12 && git cherry-pick FETCH_HEAD
-#https://gerrit.hyperledger.org/r/c/16645/ - Open - [FAB-7419] Filtering block to levarage deliver impl.
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/45/16645/16 && git cherry-pick FETCH_HEAD
 
 
 ##TODO cherry pick service discovery##
