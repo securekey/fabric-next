@@ -6,6 +6,8 @@
 #
 set -e
 
+source ../.ci-properties
+
 # Using images built from the tip of https://github.com/hyperledger/fabric-baseimage until hyperledger tags new images with Go1.9.2
 declare -x FABRIC_BASE_OS_IMAGE=securekey/fabric-baseos
 declare -x FABRIC_BASE_IMAGE=securekey/fabric-baseimage
@@ -46,5 +48,13 @@ $MY_PATH/fabric_cherry_picks.sh
 cd $GOPATH/src/github.com/hyperledger/fabric
 make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
+
+# build softhsm peer
+cd $MY_PATH
+
+docker build -f ./images/fabric-peer-softhsm/Dockerfile \
+ -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
+ ./images/fabric-peer-softhsm
+
 
 rm -Rf $TMP
