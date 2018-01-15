@@ -16,6 +16,24 @@
       "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "2006fe68_d2d843e0",
+        "filename": "scripts/images/fabric-peer-softhsm/Dockerfile",
+        "patchSetId": 3
+      },
+      "lineNbr": 18,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-01-15T21:31:33Z",
+      "side": 1,
+      "message": "And needs correct license headers / file - can\u0027t use it in Go SDK without it.",
+      "parentUuid": "f484ae94_d4ae670c",
+      "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
