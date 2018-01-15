@@ -34,6 +34,24 @@
       "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "0ae7d4d4_e8deb66b",
+        "filename": "scripts/images/fabric-peer-softhsm/Dockerfile",
+        "patchSetId": 3
+      },
+      "lineNbr": 18,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-01-15T21:32:08Z",
+      "side": 1,
+      "message": "(apache v2)",
+      "parentUuid": "2006fe68_d2d843e0",
+      "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
