@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f484ae94_d4ae670c",
+        "filename": "scripts/images/fabric-peer-softhsm/Dockerfile",
+        "patchSetId": 3
+      },
+      "lineNbr": 18,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2018-01-15T18:55:05Z",
+      "side": 1,
+      "message": "This should go to an SK hosted repo at some point",
+      "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
