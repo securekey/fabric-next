@@ -70,6 +70,24 @@
       "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "27c24f69_0d023253",
+        "filename": "scripts/images/fabric-peer-softhsm/Dockerfile",
+        "patchSetId": 3
+      },
+      "lineNbr": 18,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-01-16T15:14:47Z",
+      "side": 1,
+      "message": "regardless - don\u0027t want to link/download/use code without license headers.\nbtw - it can be imported into the sdk under scripts/_go (see the existing cmd there).",
+      "parentUuid": "96482543_e75c28d2",
+      "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
