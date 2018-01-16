@@ -52,6 +52,24 @@
       "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "96482543_e75c28d2",
+        "filename": "scripts/images/fabric-peer-softhsm/Dockerfile",
+        "patchSetId": 3
+      },
+      "lineNbr": 18,
+      "author": {
+        "id": 1000046
+      },
+      "writtenOn": "2018-01-16T15:13:15Z",
+      "side": 1,
+      "message": "Sure we can mirror this to SK repo. Troy this is a generic standalone binary, not code that\u0027s imported to the SDK.",
+      "parentUuid": "0ae7d4d4_e8deb66b",
+      "revId": "930740acc6149b14036ac0cd42122f2fe0313fa6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
