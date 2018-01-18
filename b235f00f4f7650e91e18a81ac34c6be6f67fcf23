@@ -1,0 +1,44 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "412ce5d1_27e3e70b",
+        "filename": "scripts/images/fabric-dynamic-ccenv/Dockerfile",
+        "patchSetId": 3
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-01-18T01:19:10Z",
+      "side": 1,
+      "message": "fabric-next is a public repo",
+      "revId": "b235f00f4f7650e91e18a81ac34c6be6f67fcf23",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "96d8f5de_30fc425d",
+        "filename": "scripts/images/fabric-dynamic-ccenv/go",
+        "patchSetId": 3
+      },
+      "lineNbr": 6,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-01-18T01:19:10Z",
+      "side": 1,
+      "message": "fabric-next is a public repo",
+      "range": {
+        "startLine": 2,
+        "startChar": 0,
+        "endLine": 6,
+        "endChar": 1
+      },
+      "revId": "b235f00f4f7650e91e18a81ac34c6be6f67fcf23",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
