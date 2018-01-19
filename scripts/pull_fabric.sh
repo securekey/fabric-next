@@ -50,6 +50,14 @@ git am $MY_PATH/../patches/0001-DRAFT-Remote-EP11-BCCSP.patch
 make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
 
+# build softhsm peer
+cd $MY_PATH
+
+docker build -f ./images/fabric-peer-softhsm/Dockerfile \
+ -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
+ ./images/fabric-peer-softhsm
+
+
 rm -Rf $TMP
 
 # Build dynamic ccenv image
