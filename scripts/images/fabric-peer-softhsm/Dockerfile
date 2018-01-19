@@ -15,7 +15,8 @@ FROM  ${FABRIC_PEER_BASE_IMAGE}:${FABRIC_PEER_TAG}
 ARG   go_version=1.9.2
 ARG   gopath=/opt/gopath
 ARG   goroot=/opt/go
-ARG   pkcs11_tool_url=github.com/gbolo/go-util/p11tool
+ARG   pkcs11_tool_url=https://github.com/hyperledger/fabric-sdk-go
+ARG   ARCH=x86_64
 
 LABEL maintainer=sk-service-eng-team
 
@@ -29,9 +30,16 @@ RUN   set -xe; \
       rm -rf /var/lib/apt/lists/* && \
       mkdir -p /var/lib/softhsm/tokens/ && \
       softhsm2-util --init-token --slot 0 --label "ForFabric" --so-pin 1234 --pin 98765432 && \
-      mkdir -p ${GOROOT} ${GOPATH} && \
-      GO_URL=https://storage.googleapis.com/golang/go${go_version}.linux-amd64.tar.gz; \
+      mkdir -p ${GOROOT} ${GOPATH}/src && \
+      export ARCH_URL=amd64 && \
+      if [ "${ARCH}" = "s390x" ]; then export ARCH_URL=s390x; fi && \
+      GO_URL=https://storage.googleapis.com/golang/go${go_version}.linux-${ARCH_URL}.tar.gz; \
       curl -o /tmp/go.tar.gz ${GO_URL} && \
       tar -xvzf /tmp/go.tar.gz -C /opt/ && \
       rm -rf /tmp/go.tar.gz && \
-      go get ${pkcs11_tool_url}
+      go get -u github.com/golang/dep/cmd/dep && \
+      git clone ${pkcs11_tool_url} /tmp/pk11 && \
+      cp -rp /tmp/pk11/scripts/_go/src/pkcs11helper ${GOPATH}/src/ && \
+      rm -rf /tmp/pk11 && \
+      cd ${GOPATH}/src/pkcs11helper && dep ensure -vendor-only -v && \
+      go install pkcs11helper/cmd/pkcs11helper

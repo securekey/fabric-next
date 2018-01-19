@@ -54,6 +54,7 @@ DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
 cd $MY_PATH
 
 docker build -f ./images/fabric-peer-softhsm/Dockerfile \
+ --build-arg ARCH=${ARCH} \
  -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
  ./images/fabric-peer-softhsm
 
