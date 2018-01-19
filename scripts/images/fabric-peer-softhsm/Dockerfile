@@ -24,15 +24,17 @@ ENV   GOROOT=${goroot} \
       GOPATH=${gopath} \
       PATH=${PATH}:${gopath}/bin:${goroot}/bin
 
+# some difference in logic for x86_64 vs s390x because of different OS :/
 RUN   set -xe; \
+      export ARCH_URL=amd64 && \
+      if [ "${ARCH}" = "s390x" ]; then export ARCH_URL=s390x; \
+      echo 'deb http://ftp.debian.org/debian jessie-backports main' >> /etc/apt/sources.list; fi && \
       apt-get update && \
       apt-get install -y --no-install-recommends softhsm2 curl git gcc g++ libtool libltdl-dev && \
       rm -rf /var/lib/apt/lists/* && \
       mkdir -p /var/lib/softhsm/tokens/ && \
       softhsm2-util --init-token --slot 0 --label "ForFabric" --so-pin 1234 --pin 98765432 && \
       mkdir -p ${GOROOT} ${GOPATH}/src && \
-      export ARCH_URL=amd64 && \
-      if [ "${ARCH}" = "s390x" ]; then export ARCH_URL=s390x; fi && \
       GO_URL=https://storage.googleapis.com/golang/go${go_version}.linux-${ARCH_URL}.tar.gz; \
       curl -o /tmp/go.tar.gz ${GO_URL} && \
       tar -xvzf /tmp/go.tar.gz -C /opt/ && \
