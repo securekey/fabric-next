@@ -28,13 +28,13 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/49/14349/7 && git
 #https://gerrit.hyperledger.org/r/#/c/14351/ - Open - [FAB-6554] Expiry schedule keeper for pvt-statedb data
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/51/14351/7 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14353/ - Open - [FAB-6555] Purge manager for pvt statedb data
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/53/14353/7 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/53/14353/8 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14355/ - Open - [FAB-6556] Enable purge from pvt statedb
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/55/14355/7 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/55/14355/8 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/#/c/14511/ - Open - [FAB-6619] purge pvtdata from pvt block store
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/7 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/8 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/16971/ - Open - [FAB-7810] Enable BTL via collection config
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/16971/3 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/16971/6 && git cherry-pick FETCH_HEAD
 
 
 #Other Private Data
