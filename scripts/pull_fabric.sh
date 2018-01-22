@@ -48,22 +48,19 @@ $MY_PATH/fabric_cherry_picks.sh
 cd $GOPATH/src/github.com/hyperledger/fabric
 git am $MY_PATH/../patches/0001-DRAFT-Remote-EP11-BCCSP.patch
 make clean
-DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE make docker
+DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE GO_TAGS=pluginsenabled make docker
 
-# build softhsm peer
+rm -Rf $TMP
+
 cd $MY_PATH
 
+# Build softhsm peer
 docker build -f ./images/fabric-peer-softhsm/Dockerfile \
  --build-arg ARCH=${ARCH} \
  -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
  ./images/fabric-peer-softhsm
 
-
-rm -Rf $TMP
-
 # Build dynamic ccenv image
-
-cd $MY_PATH
 # Fabric ccenv image
 declare -x FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv
 # Use latest tag as that was the image produced by the fabric build above

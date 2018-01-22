@@ -27,4 +27,6 @@ This script will cherry-pick fabric next and build it.
 'Make' flags used:
 - DOCKER_DYNAMIC_LINK=true : Dynamic builds are required to load Go plugins into fabric.
 - BASE_DOCKER_NS=securekey : These custom base images include Go 1.9.2 and the C libraries required by fabric for dynamic linking (currently libtool). The Dockerfiles that produce these images can be found in the `scripts/images` directory. Images are also produced by the script.
+
 (the two flags above may be omitted if you already have a dynamically compiled fabric peer)
+- GO_TAGS=pluginsenabled : Enable loading system chaincodes as plugins.
