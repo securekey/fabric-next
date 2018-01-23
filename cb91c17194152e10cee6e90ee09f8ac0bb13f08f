@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "52ce479e_0f264b09",
+        "filename": "scripts/images/fabric-cross-compile/Dockerfile",
+        "patchSetId": 1
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2018-01-23T21:33:01Z",
+      "side": 1,
+      "message": "Apache2",
+      "revId": "cb91c17194152e10cee6e90ee09f8ac0bb13f08f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
