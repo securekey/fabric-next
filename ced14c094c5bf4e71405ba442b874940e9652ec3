@@ -16,6 +16,24 @@
       "revId": "ced14c094c5bf4e71405ba442b874940e9652ec3",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f3f61dcb_095187fd",
+        "filename": "scripts/pull_fabric.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 15,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-01-23T19:28:19Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "5ead069a_b7c06606",
+      "revId": "ced14c094c5bf4e71405ba442b874940e9652ec3",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
