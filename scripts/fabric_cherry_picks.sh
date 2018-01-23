@@ -12,13 +12,12 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout fa31016a8709fd809065d99c30497449a35444ed
+git checkout a43c6cd66e563bda05b258329265d4ee1a373da8
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
-
 
 #Purge of private data based on block-to-live
 #https://gerrit.hyperledger.org/r/#/c/14347/ - Open - [FAB-6552] Block-to-live policy for pvtdata
