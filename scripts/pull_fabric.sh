@@ -8,14 +8,13 @@ set -e
 
 source ../.ci-properties
 
-# Using images built from the tip of https://github.com/hyperledger/fabric-baseimage until hyperledger tags new images with Go1.9.2
-declare -x FABRIC_BASE_OS_IMAGE=securekey/fabric-baseos
-declare -x FABRIC_BASE_IMAGE=securekey/fabric-baseimage
-declare -x BASE_VERSION=0.4.3-snapshot-168b4d5
+declare -x FABRIC_BASE_OS_IMAGE=hyperledger/fabric-baseos
+declare -x FABRIC_BASE_IMAGE=hyperledger/fabric-baseimage
+declare -x BASE_VERSION=0.4.5
 
-declare -x BASE_NAMESPACE=securekey
+declare -x BASE_NAMESPACE=hyperledger
 # This must match the version of fabric that is being cherry-picked
-declare -x BASE_OUTPUT_VERSION=0.4.2
+declare -x BASE_OUTPUT_VERSION=0.4.5
 declare -x ARCH=$(uname -m)
 
 # Build base images to enable dynamic build

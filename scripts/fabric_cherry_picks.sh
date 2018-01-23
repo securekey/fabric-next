@@ -12,13 +12,15 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout fa31016a8709fd809065d99c30497449a35444ed
+git checkout 88fd880d8535a46a004e42a16d92dd81fcd4c5ba
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
+# FAB-7817 FAB-7815 update baseimage ver. to 0.4.5
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/01/17001/3 && git cherry-pick FETCH_HEAD
 
 #Purge of private data based on block-to-live
 #https://gerrit.hyperledger.org/r/#/c/14347/ - Open - [FAB-6552] Block-to-live policy for pvtdata
