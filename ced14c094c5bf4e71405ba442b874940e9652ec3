@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5ead069a_b7c06606",
+        "filename": "scripts/pull_fabric.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 15,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2018-01-23T19:23:38Z",
+      "side": 1,
+      "message": "This variable should remain \u0027securekey\u0027 as it is the namespace for the image produced.",
+      "revId": "ced14c094c5bf4e71405ba442b874940e9652ec3",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
