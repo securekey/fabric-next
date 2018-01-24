@@ -72,7 +72,8 @@ docker build -f ./images/fabric-dynamic-ccenv/Dockerfile --no-cache -t ${BASE_NA
 
 # Build cross compile image
 # Note cross compile currently uses dynamic-ccenv image for now
-docker build -f ./images/fabric-cross-compile/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} \
---build-arg FABRIC_CCENV_IMAGE=${BASE_NAMESPACE}/fabric-dynamic-ccenv \
---build-arg FABRIC_CCENV_TAG=${FABRIC_NEXT_IMAGE_TAG} .
-
+if [[ "x86_64" = "${ARCH}" ]]; then
+  docker build -f ./images/fabric-cross-compile/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} \
+  --build-arg FABRIC_CCENV_IMAGE=${BASE_NAMESPACE}/fabric-dynamic-ccenv \
+  --build-arg FABRIC_CCENV_TAG=${FABRIC_NEXT_IMAGE_TAG} .
+fi
