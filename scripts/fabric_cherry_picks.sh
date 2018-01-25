@@ -12,7 +12,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout a43c6cd66e563bda05b258329265d4ee1a373da8
+git checkout 2dca155e8407366d49e531f1daa27b786c545374
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
