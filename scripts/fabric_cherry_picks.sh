@@ -19,6 +19,9 @@ cd $GOPATH/src/github.com/hyperledger/fabric
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
+#https://gerrit.hyperledger.org/r/c/12169/ [DRAFT] Remote EP11 BCCSP
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/12169/7 && git cherry-pick FETCH_HEAD
+
 #Purge of private data based on block-to-live
 #https://gerrit.hyperledger.org/r/#/c/14347/ - Open - [FAB-6552] Block-to-live policy for pvtdata
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/47/14347/8 && git cherry-pick FETCH_HEAD

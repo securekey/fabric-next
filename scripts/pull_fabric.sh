@@ -45,7 +45,6 @@ export GOPATH=$TMP
 $MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
-git am $MY_PATH/../patches/0001-DRAFT-Remote-EP11-BCCSP.patch
 make clean
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE GO_TAGS=pluginsenabled make docker
 
