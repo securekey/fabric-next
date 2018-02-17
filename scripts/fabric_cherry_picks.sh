@@ -37,7 +37,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/55/14355/8 && git
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/11/14511/8 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/16971/ - Open - [FAB-7810] Enable BTL via collection config
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/16971/6 && git cherry-pick FETCH_HEAD
-
+#https://gerrit.hyperledger.org/r/c/18003/ - Open - [FAB-8347] Fix re-entrant lock isuue
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/03/18003/1 && git cherry-pick FETCH_HEAD
 
 #Other Private Data
 #https://gerrit.hyperledger.org/r/#/c/14769/ - Open - [FAB-6600] Sample chaincode for prvt data
