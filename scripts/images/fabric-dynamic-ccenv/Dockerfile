@@ -15,3 +15,6 @@ RUN apt-get install -y libltdl7
 RUN patch -p1 $GOROOT/src/cmd/link/internal/ld/data.go /tmp/scripts/patches/linker.patch
 RUN go install -a cmd
 RUN go install -a std
+RUN mkdir -p /chaincode/input/src/github.com/hyperledger/fabric
+RUN mv  $GOPATH/src/github.com/hyperledger/fabric /chaincode/input/src/github.com/hyperledger/
+ENV GOPATH="/chaincode/input"
