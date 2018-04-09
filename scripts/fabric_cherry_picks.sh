@@ -46,5 +46,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/14769/7 && git
 #https://gerrit.hyperledger.org/r/#/c/14791/ - Open - [FAB-6717] - Implement Private Data Funcs in MockStub
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git cherry-pick FETCH_HEAD
 
+#Deliver Service bug fix
+#https://gerrit.hyperledger.org/r/c/20239/ - Closed - [FAB-9389] peer deliver client crashes when it is started and stopped immediately after
+git fetch ssh://divyank@gerrit.hyperledger.org:29418/fabric refs/changes/39/20239/1 && git cherry-pick FETCH_HEAD
 
 ##TODO cherry pick service discovery##
