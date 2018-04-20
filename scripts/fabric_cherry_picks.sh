@@ -6,6 +6,14 @@
 #
 set -e
 
+# NEEDED for ACL 1.2 FAB-9401 patch
+MY_PATH="`dirname \"$0\"`"              # relative
+MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
+if [ -z "$MY_PATH" ] ; then
+  # error; for some reason, the path is not accessible
+  # to the script (e.g. permissions re-evaled after suid)
+  exit 1  # fail
+fi
 
 mkdir -p $GOPATH/src/github.com/hyperledger/
 cd $GOPATH/src/github.com/hyperledger/
@@ -49,5 +57,24 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git
 #Deliver Service bug fix
 #https://gerrit.hyperledger.org/r/c/20239/ - Closed - [FAB-9389] peer deliver client crashes when it is started and stopped immediately after
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/39/20239/1 && git cherry-pick FETCH_HEAD
+
+# Fabric v1.2 ACL implementation (see FAB-8727)
+#https://gerrit.hyperledger.org/r/c/19967/ - Merged - [FAB-9252] Add ImplicitMetaPolicy parser
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/19967/2 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/20117/ - Merged - [FAB-9254] Specify policies in configtx.yaml
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/20117/1 && git cherry-pick -Xours FETCH_HEAD 
+#https://gerrit.hyperledger.org/r/c/20119/ - Merged - [FAB-9255] configtxgen encode policy specs
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/20119/2 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/20225/ - Merged - [FAB-9409] add ACL spec to configtx
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/25/20225/7 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/20323/ - Merged - [FAB-9401] sanitize resource names and add doc
+#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/23/20323/8 && git cherry-pick FETCH_HEAD
+git am $MY_PATH/../patches/0001-FAB-9401-sanitize-resource-names-and-add-doc.patch
+#https://gerrit.hyperledger.org/r/c/20519/ - Merged - [FAB-9014] Add new config element for peer ACLs
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/20519/3 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/20541/ - Merged - [FAB-9507] replace "." from resource names
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/20541/7 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/c/20621/ - Merged - [FAB-9531] implement ACL in channelconfig
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/21/20621/9 && git cherry-pick FETCH_HEAD
 
 ##TODO cherry pick service discovery##
