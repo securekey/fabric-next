@@ -62,7 +62,7 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/39/20239/1 && git
 #https://gerrit.hyperledger.org/r/c/19967/ - Merged - [FAB-9252] Add ImplicitMetaPolicy parser
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/19967/2 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/20117/ - Merged - [FAB-9254] Specify policies in configtx.yaml
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/20117/1 && git cherry-pick -Xours FETCH_HEAD 
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/20117/1 && git cherry-pick -Xours FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/20119/ - Merged - [FAB-9255] configtxgen encode policy specs
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/20119/2 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/20225/ - Merged - [FAB-9409] add ACL spec to configtx
@@ -76,5 +76,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/20519/3 && git
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/41/20541/7 && git cherry-pick FETCH_HEAD
 #https://gerrit.hyperledger.org/r/c/20621/ - Merged - [FAB-9531] implement ACL in channelconfig
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/21/20621/9 && git cherry-pick FETCH_HEAD
+
+#https://gerrit.hyperledger.org/r/c/19281/ - Merged - [FAB-8918] Save viper lookup in GetLocalMSP
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/81/19281/6 && git cherry-pick FETCH_HEAD
 
 ##TODO cherry pick service discovery##
