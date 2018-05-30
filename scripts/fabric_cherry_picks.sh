@@ -58,6 +58,9 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/91/14791/5 && git
 #https://gerrit.hyperledger.org/r/c/20239/ - Closed - [FAB-9389] peer deliver client crashes when it is started and stopped immediately after
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/39/20239/1 && git cherry-pick FETCH_HEAD
 
+# https://gerrit.hyperledger.org/r/c/22553/ - Open - Gossip deadlock issue
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/53/22553/1 && git cherry-pick FETCH_HEAD
+
 # Fabric v1.2 ACL implementation (see FAB-8727)
 #https://gerrit.hyperledger.org/r/c/19967/ - Merged - [FAB-9252] Add ImplicitMetaPolicy parser
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/67/19967/2 && git cherry-pick FETCH_HEAD
