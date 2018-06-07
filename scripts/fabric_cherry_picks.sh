@@ -27,6 +27,10 @@ cd $GOPATH/src/github.com/hyperledger/fabric
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
+
+#https://gerrit.hyperledger.org/r/#/c/22763/ [FAB-10538]: Fix gossip scatter of pvt data
+git fetch ssh://firas.qutishat@gerrit.hyperledger.org:29418/fabric refs/changes/63/22763/1 && git cherry-pick FETCH_HEAD
+
 #https://gerrit.hyperledger.org/r/c/12169/ [DRAFT] Remote EP11 BCCSP
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/69/12169/7 && git cherry-pick FETCH_HEAD
 
