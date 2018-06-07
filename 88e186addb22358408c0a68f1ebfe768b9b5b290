@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "76c39fa2_b2611017",
+        "filename": "scripts/fabric_cherry_picks.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 27,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-06-07T20:23:53Z",
+      "side": 1,
+      "message": "LOL - still cherry picks! :(",
+      "range": {
+        "startLine": 26,
+        "startChar": 0,
+        "endLine": 27,
+        "endChar": 103
+      },
+      "revId": "88e186addb22358408c0a68f1ebfe768b9b5b290",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
