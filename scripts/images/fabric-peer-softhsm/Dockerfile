@@ -12,11 +12,11 @@ ARG   FABRIC_PEER_TAG=latest
 
 FROM  ${FABRIC_PEER_BASE_IMAGE}:${FABRIC_PEER_TAG}
 
-ARG   go_version=1.9.2
+ARG   go_version=1.10
 ARG   gopath=/opt/gopath
 ARG   goroot=/opt/go
 ARG   pkcs11_tool_url=https://github.com/hyperledger/fabric-sdk-go
-ARG   ARCH=x86_64
+ARG   ARCH=amd64
 
 LABEL maintainer=sk-service-eng-team
 

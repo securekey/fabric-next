@@ -5,10 +5,10 @@
 #
 
 # Release Parameters
-BASE_VERSION=1.1.0-0.2.1
+BASE_VERSION=1.2.0-0.1.0
 IS_RELEASE=false
 
-ARCH=$(uname -m)
+ARCH=$(go env GOARCH)
 
 if [ $IS_RELEASE == false ]
 then
