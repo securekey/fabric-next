@@ -1,0 +1,50 @@
+From b6d5d905f01980625036f6530682ac519305603b Mon Sep 17 00:00:00 2001
+From: Artem Barger <bartem@il.ibm.com>
+Date: Thu, 7 Jun 2018 23:44:48 +0300
+Subject: [PATCH] [FAB-10576]: Check if puller got valid pvt rwset
+
+While puller retrieves missing pvt data, whenever it's from ledger or
+from transient store there is might be case it has failed due to some
+error. In that case we need to add proper log message to the body of the
+puller createResponse function and skip to the next digest. This commit
+add such check for rwSets is not nil to prevent peer from crashing with
+panic.
+
+Change-Id: Ie6bb6e85520eac6992872da862d24c30dc2ffe34
+Signed-off-by: Artem Barger <bartem@il.ibm.com>
+---
+ gossip/privdata/pull.go | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/gossip/privdata/pull.go b/gossip/privdata/pull.go
+index 48e5b505d..bea4ca9b3 100644
+--- a/gossip/privdata/pull.go
++++ b/gossip/privdata/pull.go
+@@ -133,12 +133,18 @@ func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataE
+ 	}()
+ 	msg := message.GetGossipMessage()
+ 	for _, dig := range msg.GetPrivateReq().Digests {
+-		colAP, err := p.cs.RetrieveCollectionAccessPolicy(fcommon.CollectionCriteria{
+-			Channel:    p.channel,
+-			Collection: dig.Collection,
+-			TxId:       dig.TxId,
+-			Namespace:  dig.Namespace,
+-		})
++		rwSets := p.CollectionRWSet(dig)
++		if rwSets == nil {
++			logger.Debugf("Wasn't able to get private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s], skipping...",
++				p.channel, dig.Namespace, dig.Collection, dig.TxId)
++			continue
++		}
++		logger.Debug("Found", len(rwSets.RWSet), "for TxID", dig.TxId, ", collection", dig.Collection, "for", message.GetConnectionInfo().Endpoint)
++		if len(rwSets.RWSet) == 0 {
++			continue
++		}
++
++		colAP, err := p.AccessPolicy(rwSets.CollectionConfig, p.channel)
+ 		if err != nil {
+ 			logger.Debug("No policy found for channel", p.channel, ", collection", dig.Collection, "txID", dig.TxId, ":", err, "skipping...")
+ 			continue
+-- 
+2.15.0
+
