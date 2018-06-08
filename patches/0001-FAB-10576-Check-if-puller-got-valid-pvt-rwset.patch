@@ -1,0 +1,279 @@
+From 9fd11ef8b8717fe88f6ee390a827539da39db79d Mon Sep 17 00:00:00 2001
+From: Artem Barger <bartem@il.ibm.com>
+Date: Thu, 7 Jun 2018 23:44:48 +0300
+Subject: [PATCH] [FAB-10576]: Check if puller got valid pvt rwset
+
+While puller retrieves missing pvt data, whenever it's from ledger or
+from transient store there is might be case it has failed due to some
+error. In that case we need to add proper log message to the body of the
+puller createResponse function and skip to the next digest. This commit
+add such check for rwSets is not nil to prevent peer from crashing with
+panic.
+
+Change-Id: Ie6bb6e85520eac6992872da862d24c30dc2ffe34
+Signed-off-by: Artem Barger <bartem@il.ibm.com>
+---
+ gossip/privdata/dataretriever.go      | 14 +++++++++-----
+ gossip/privdata/dataretriever_test.go | 16 +++++++++-------
+ gossip/privdata/pull.go               | 14 ++++++++++++--
+ gossip/privdata/pull_test.go          | 24 ++++++++++++------------
+ 4 files changed, 42 insertions(+), 26 deletions(-)
+
+diff --git a/gossip/privdata/dataretriever.go b/gossip/privdata/dataretriever.go
+index 5e659d323..e90ec5bbf 100644
+--- a/gossip/privdata/dataretriever.go
++++ b/gossip/privdata/dataretriever.go
+@@ -7,6 +7,9 @@ SPDX-License-Identifier: Apache-2.0
+ package privdata
+ 
+ import (
++	"errors"
++	"fmt"
++
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/transientstore"
+ 	"github.com/hyperledger/fabric/gossip/util"
+@@ -18,7 +21,8 @@ import (
+ type StorageDataRetriever interface {
+ 	// CollectionRWSet retrieves for give digest relevant private data if
+ 	// available otherwise returns nil
+-	CollectionRWSet(dig *gossip2.PvtDataDigest) []util.PrivateRWSet
++
++	CollectionRWSet(dig *gossip2.PvtDataDigest, error) []util.PrivateRWSet
+ }
+ 
+ // DataStore defines set of APIs need to get private data
+@@ -49,7 +53,7 @@ func NewDataRetriever(store DataStore) StorageDataRetriever {
+ 
+ // CollectionRWSet retrieves for give digest relevant private data if
+ // available otherwise returns nil
+-func (dr *dataRetriever) CollectionRWSet(dig *gossip2.PvtDataDigest) []util.PrivateRWSet {
++func (dr *dataRetriever) CollectionRWSet(dig *gossip2.PvtDataDigest, error) []util.PrivateRWSet {
+ 	filter := map[string]ledger.PvtCollFilter{
+ 		dig.Namespace: map[string]bool{
+ 			dig.Collection: true,
+@@ -75,7 +79,7 @@ func (dr *dataRetriever) CollectionRWSet(dig *gossip2.PvtDataDigest) []util.Priv
+ 		if err != nil {
+ 			logger.Error("Was not able to retrieve private data from transient store, namespace", dig.Namespace,
+ 				", collection name", dig.Collection, ", txID", dig.TxId, ", due to", err)
+-			return nil
++			return nil, err
+ 		}
+ 		defer it.Close()
+ 
+@@ -84,10 +88,10 @@ func (dr *dataRetriever) CollectionRWSet(dig *gossip2.PvtDataDigest) []util.Priv
+ 			if err != nil {
+ 				logger.Error("Error getting next element out of private data iterator, namespace", dig.Namespace,
+ 					", collection name", dig.Collection, ", txID", dig.TxId, ", due to", err)
+-				return nil
++				return nil, err
+ 			}
+ 			if res == nil {
+-				return pRWsets
++				return pRWsets, nil
+ 			}
+ 			rws := res.PvtSimulationResults
+ 			if rws == nil {
+diff --git a/gossip/privdata/dataretriever_test.go b/gossip/privdata/dataretriever_test.go
+index fc3fa306e..e72376569 100644
+--- a/gossip/privdata/dataretriever_test.go
++++ b/gossip/privdata/dataretriever_test.go
+@@ -108,7 +108,7 @@ func TestNewDataRetriever_GetDataFromTransientStore(t *testing.T) {
+ 
+ 	// Request digest for private data which is greater than current ledger height
+ 	// to make it query transient store for missed private data
+-	rwSets := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
++	rwSets, err := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
+ 		Namespace:  namespace,
+ 		Collection: collectionName,
+ 		BlockSeq:   2,
+@@ -117,6 +117,7 @@ func TestNewDataRetriever_GetDataFromTransientStore(t *testing.T) {
+ 	})
+ 
+ 	assertion := assert.New(t)
++	assertion.NoError(err)
+ 	assertion.NotNil(rwSets)
+ 	assertion.NotEmpty(rwSets)
+ 	assertion.Equal(2, len(rwSets))
+@@ -173,7 +174,7 @@ func TestNewDataRetriever_GetDataFromLedger(t *testing.T) {
+ 
+ 	// Request digest for private data which is greater than current ledger height
+ 	// to make it query ledger for missed private data
+-	rwSets := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
++	rwSets, err := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
+ 		Namespace:  namespace,
+ 		Collection: collectionName,
+ 		BlockSeq:   uint64(5),
+@@ -182,6 +183,7 @@ func TestNewDataRetriever_GetDataFromLedger(t *testing.T) {
+ 	})
+ 
+ 	assertion := assert.New(t)
++	assertion.NoError(err)
+ 	assertion.NotNil(rwSets)
+ 	assertion.NotEmpty(rwSets)
+ 	assertion.Equal(2, len(rwSets))
+@@ -211,7 +213,7 @@ func TestNewDataRetriever_FailGetPvtDataFromLedger(t *testing.T) {
+ 
+ 	// Request digest for private data which is greater than current ledger height
+ 	// to make it query transient store for missed private data
+-	rwSets := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
++	rwSets, err := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
+ 		Namespace:  namespace,
+ 		Collection: collectionName,
+ 		BlockSeq:   uint64(5),
+@@ -220,9 +222,8 @@ func TestNewDataRetriever_FailGetPvtDataFromLedger(t *testing.T) {
+ 	})
+ 
+ 	assertion := assert.New(t)
+-	assertion.NotNil(rwSets)
+-	assertion.Empty(rwSets)
+-
++	assertion.Error(err)
++	assertion.Nil(rwSets)
+ }
+ 
+ func TestNewDataRetriever_GetOnlyRelevantPvtData(t *testing.T) {
+@@ -276,7 +277,7 @@ func TestNewDataRetriever_GetOnlyRelevantPvtData(t *testing.T) {
+ 
+ 	// Request digest for private data which is greater than current ledger height
+ 	// to make it query transient store for missed private data
+-	rwSets := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
++	rwSets, err := retriever.CollectionRWSet(&gossip2.PvtDataDigest{
+ 		Namespace:  namespace,
+ 		Collection: collectionName,
+ 		BlockSeq:   uint64(5),
+@@ -285,6 +286,7 @@ func TestNewDataRetriever_GetOnlyRelevantPvtData(t *testing.T) {
+ 	})
+ 
+ 	assertion := assert.New(t)
++	assertion.NoError(err)
+ 	assertion.NotNil(rwSets)
+ 	assertion.NotEmpty(rwSets)
+ 	assertion.Equal(2, len(rwSets))
+diff --git a/gossip/privdata/pull.go b/gossip/privdata/pull.go
+index 0dcd82672..b65ef76a3 100644
+--- a/gossip/privdata/pull.go
++++ b/gossip/privdata/pull.go
+@@ -36,7 +36,7 @@ const (
+ // of retrieving required private data
+ type PrivateDataRetriever interface {
+ 	// CollectionRWSet returns the bytes of CollectionPvtReadWriteSet for a given txID and collection from the transient store
+-	CollectionRWSet(dig *proto.PvtDataDigest) []util.PrivateRWSet
++	CollectionRWSet(dig *proto.PvtDataDigest) ([]util.PrivateRWSet, error)
+ }
+ 
+ // gossip defines capabilities that the gossip module gives the Coordinator
+@@ -159,7 +159,17 @@ func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataE
+ 			continue
+ 		}
+ 
+-		rwSets := p.CollectionRWSet(dig)
++		rwSets, err := p.CollectionRWSet(dig)
++		if err != nil {
++			logger.Errorf("Wasn't able to get private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s], due to [%s]",
++				p.channel, dig.Namespace, dig.Collection, dig.TxId, err)
++			continue
++		}
++		if rwSets == nil {
++			logger.Errorf("No private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s] is available, skipping...",
++				p.channel, dig.Namespace, dig.Collection, dig.TxId)
++			continue
++		}
+ 		logger.Debug("Found", len(rwSets), "for TxID", dig.TxId, ", collection", dig.Collection, "for", message.GetConnectionInfo().Endpoint)
+ 		if len(rwSets) == 0 {
+ 			continue
+diff --git a/gossip/privdata/pull_test.go b/gossip/privdata/pull_test.go
+index 2a53b2256..4b7ffd5c3 100644
+--- a/gossip/privdata/pull_test.go
++++ b/gossip/privdata/pull_test.go
+@@ -107,8 +107,8 @@ type dataRetrieverMock struct {
+ 	mock.Mock
+ }
+ 
+-func (dr *dataRetrieverMock) CollectionRWSet(dig *proto.PvtDataDigest) []util.PrivateRWSet {
+-	return dr.Called(dig).Get(0).([]util.PrivateRWSet)
++func (dr *dataRetrieverMock) CollectionRWSet(dig *proto.PvtDataDigest) ([]util.PrivateRWSet, error) {
++	return dr.Called(dig).Get(0).([]util.PrivateRWSet), dr.Called(dig).Error(1)
+ }
+ 
+ type receivedMsg struct {
+@@ -240,7 +240,7 @@ func TestPullerFromOnly1Peer(t *testing.T) {
+ 		Collection: "col1",
+ 		Namespace:  "ns1",
+ 	}
+-	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(p2TransientStore)
++	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(p2TransientStore, nil)
+ 
+ 	p3 := gn.newPuller("p3", newCollectionStore())
+ 	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Run(func(_ mock.Arguments) {
+@@ -273,7 +273,7 @@ func TestPullerDataNotAvailable(t *testing.T) {
+ 		Namespace:  "ns1",
+ 	}
+ 
+-	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return([]util.PrivateRWSet{})
++	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return([]util.PrivateRWSet{}, nil)
+ 
+ 	p3 := gn.newPuller("p3", newCollectionStore())
+ 	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Run(func(_ mock.Arguments) {
+@@ -366,7 +366,7 @@ func TestPullerDifferentPeersDifferentCollections(t *testing.T) {
+ 		Namespace:  "ns1",
+ 	}
+ 
+-	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig1).Return(p2TransientStore)
++	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig1).Return(p2TransientStore, nil)
+ 
+ 	p3TransientStore := newPRWSet()
+ 	policyStore = newCollectionStore().withPolicy("col3").thatMapsTo("p1")
+@@ -377,7 +377,7 @@ func TestPullerDifferentPeersDifferentCollections(t *testing.T) {
+ 		Namespace:  "ns1",
+ 	}
+ 
+-	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig2).Return(p3TransientStore)
++	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig2).Return(p3TransientStore, nil)
+ 
+ 	dasf := &digestsAndSourceFactory{}
+ 	fetchedMessages, err := p1.fetch(dasf.mapDigest(dig1).toSources().mapDigest(dig2).toSources().create())
+@@ -415,22 +415,22 @@ func TestPullerRetries(t *testing.T) {
+ 	// p2
+ 	policyStore = newCollectionStore().withPolicy("col1").thatMapsTo("p2")
+ 	p2 := gn.newPuller("p2", policyStore)
+-	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore)
++	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore, nil)
+ 
+ 	// p3
+ 	policyStore = newCollectionStore().withPolicy("col1").thatMapsTo("p1")
+ 	p3 := gn.newPuller("p3", policyStore)
+-	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore)
++	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore, nil)
+ 
+ 	// p4
+ 	policyStore = newCollectionStore().withPolicy("col1").thatMapsTo("p4")
+ 	p4 := gn.newPuller("p4", policyStore)
+-	p4.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore)
++	p4.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore, nil)
+ 
+ 	// p5
+ 	policyStore = newCollectionStore().withPolicy("col1").thatMapsTo("p5")
+ 	p5 := gn.newPuller("p5", policyStore)
+-	p5.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore)
++	p5.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig).Return(transientStore, nil)
+ 
+ 	// Fetch from someone
+ 	dasf := &digestsAndSourceFactory{}
+@@ -476,11 +476,11 @@ func TestPullerPreferEndorsers(t *testing.T) {
+ 
+ 	// We only define an action for dig2 on p2, and the test would fail with panic if any other peer is asked for
+ 	// a private RWSet on dig2
+-	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig2).Return(p2TransientStore)
++	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig2).Return(p2TransientStore, nil)
+ 
+ 	// We only define an action for dig1 on p3, and the test would fail with panic if any other peer is asked for
+ 	// a private RWSet on dig1
+-	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig1).Return(p3TransientStore)
++	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", dig1).Return(p3TransientStore, nil)
+ 
+ 	dasf := &digestsAndSourceFactory{}
+ 	d2s := dasf.mapDigest(dig1).toSources("p3").mapDigest(dig2).toSources().create()
+-- 
+2.15.0
+

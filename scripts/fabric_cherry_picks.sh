@@ -20,7 +20,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout v1.1.0
+git checkout release-1.1
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -90,9 +90,8 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/81/19281/6 && git
 
 ##TODO cherry pick service discovery##
 
-# https://jira.hyperledger.org/browse/FAB-10576 - Open - [FAB-10576] Prevent peer from crashing while processing pull request in absense of collection config
-git fetch https://gerrit.hyperledger.org:29418/fabric refs/changes/71/22871/1 && git cherry-pick FETCH_HEAD
 
-# latest 1.1 branch release commit including previous bug fixes that were not cherry picked before
-# https://jira.hyperledger.org/browse/FAB-10521 - Merged - [FAB-10521] Block-cutter should refetch config
-git fetch https://gerrit.hyperledger.org:29418/fabric refs/changes/55/22855/2 && git cherry-pick FETCH_HEAD
+# https://gerrit.hyperledger.org/r/c/22871/ - Merged -  [FAB-10576]: Check if puller got valid pvt rwset
+#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/71/22871/3 && git cherry-pick FETCH_HEAD
+git am $MY_PATH/../patches/0001-FAB-10576-Check-if-puller-got-valid-pvt-rwset.patch
+
