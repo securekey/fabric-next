@@ -1,0 +1,29 @@
+diff --git a/gossip/privdata/pull.go b/gossip/privdata/pull.go
+index 48e5b505d..bea4ca9b3 100644
+--- a/gossip/privdata/pull.go
++++ b/gossip/privdata/pull.go
+@@ -133,12 +133,18 @@ func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataE
+ 	}()
+ 	msg := message.GetGossipMessage()
+ 	for _, dig := range msg.GetPrivateReq().Digests {
+-		colAP, err := p.cs.RetrieveCollectionAccessPolicy(fcommon.CollectionCriteria{
+-			Channel:    p.channel,
+-			Collection: dig.Collection,
+-			TxId:       dig.TxId,
+-			Namespace:  dig.Namespace,
+-		})
++		rwSets := p.CollectionRWSet(dig)
++		if rwSets == nil {
++			logger.Debugf("Wasn't able to get private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s], skipping...",
++				p.channel, dig.Namespace, dig.Collection, dig.TxId)
++			continue
++		}
++		logger.Debug("Found", len(rwSets.RWSet), "for TxID", dig.TxId, ", collection", dig.Collection, "for", message.GetConnectionInfo().Endpoint)
++		if len(rwSets.RWSet) == 0 {
++			continue
++		}
++
++		colAP, err := p.AccessPolicy(rwSets.CollectionConfig, p.channel)
+ 		if err != nil {
+ 			logger.Debug("No policy found for channel", p.channel, ", collection", dig.Collection, "txID", dig.TxId, ":", err, "skipping...")
+ 			continue
