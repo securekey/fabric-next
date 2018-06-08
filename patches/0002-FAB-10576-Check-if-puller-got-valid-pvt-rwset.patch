@@ -1,0 +1,18 @@
+diff --cc gossip/privdata/pull.go
+index 48e5b505d,fbb0e74df..000000000
+--- a/gossip/privdata/pull.go
++++ b/gossip/privdata/pull.go
+diff --git a/test/chaincodes/BadImport/main.go b/test/chaincodes/BadImport/main.go
+index f354fdb6a..2029716d8 100644
+--- a/test/chaincodes/BadImport/main.go
++++ b/test/chaincodes/BadImport/main.go
+@@ -8,8 +8,8 @@
+ package main
+ 
+ import (
+-	"bogus/package"
+ 	"fmt"
++
+ 	"github.com/hyperledger/fabric/core/chaincode/shim"
+ )
+ 
