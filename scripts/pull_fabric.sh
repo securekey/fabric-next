@@ -13,7 +13,6 @@ declare -x FABRIC_BASE_IMAGE=hyperledger/fabric-baseimage
 declare -x BASE_VERSION=0.4.8
 
 declare -x BASE_NAMESPACE=securekey
-declare -x GO_BUILD_TAGS=pluginsenabled pkcs11
 
 # This must match the version of fabric that is being cherry-picked
 declare -x BASE_OUTPUT_VERSION=0.4.8
@@ -48,7 +47,7 @@ $MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 make clean
-DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=true GO_TAGS=$GO_BUILD_TAGS make docker
+DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" make docker
 
 rm -Rf $TMP
 
