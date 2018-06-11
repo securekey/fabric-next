@@ -70,6 +70,6 @@ declare -x FABRIC_CCENV_TAG=latest
 # Note cross compile currently uses fabric-ccenv image for now
 if [[ "amd64" = "${ARCH}" ]]; then
   docker build -f ./images/fabric-cross-compile/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} \
-  --build-arg FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv \
-  --build-arg FABRIC_CCENV_TAG=${FABRIC_NEXT_IMAGE_TAG} .
+  --build-arg FABRIC_CCENV_IMAGE=${FABRIC_CCENV_IMAGE} \
+  --build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} .
 fi
