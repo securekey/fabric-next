@@ -5,7 +5,7 @@
 #
 
 # Start from the sk dynamic ccenv for now, but will be fabric-ccenv image in future
-ARG    FABRIC_CCENV_IMAGE=securekey/fabric-dynamic-ccenv
+ARG    FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv
 ARG    FABRIC_CCENV_TAG=ARG_REQUIRED
 
 # FROM CONTAINER
