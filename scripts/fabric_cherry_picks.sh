@@ -21,7 +21,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout 25342999b62eb522e8bf303e18a54ec3013e58a7
+git checkout fef758e95c6f3bec1f2841c71b4013c2c4835cb9
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -30,5 +30,3 @@ git config user.email jenkins@jenkins.com
 
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
-
-
