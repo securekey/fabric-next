@@ -18,16 +18,16 @@ declare -x BASE_NAMESPACE=securekey
 declare -x BASE_OUTPUT_VERSION=0.4.8
 declare -x ARCH=$(go env GOARCH)
 
-# Build base images to enable dynamic build
-docker build -f ./images/fabric-baseos/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseos:${ARCH}-${BASE_OUTPUT_VERSION} \
---build-arg FABRIC_BASE_OS_IMAGE=${FABRIC_BASE_OS_IMAGE} \
---build-arg ARCH=${ARCH} \
---build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
-
-docker build -f ./images/fabric-baseimage/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseimage:${ARCH}-${BASE_OUTPUT_VERSION} \
---build-arg FABRIC_BASE_IMAGE=${FABRIC_BASE_IMAGE} \
---build-arg ARCH=${ARCH} \
---build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+# # Build base images to enable dynamic build
+# docker build -f ./images/fabric-baseos/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseos:${ARCH}-${BASE_OUTPUT_VERSION} \
+# --build-arg FABRIC_BASE_OS_IMAGE=${FABRIC_BASE_OS_IMAGE} \
+# --build-arg ARCH=${ARCH} \
+# --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+#
+# docker build -f ./images/fabric-baseimage/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseimage:${ARCH}-${BASE_OUTPUT_VERSION} \
+# --build-arg FABRIC_BASE_IMAGE=${FABRIC_BASE_IMAGE} \
+# --build-arg ARCH=${ARCH} \
+# --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
 
 MY_PATH="`dirname \"$0\"`"              # relative
