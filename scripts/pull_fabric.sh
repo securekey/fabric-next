@@ -67,17 +67,12 @@ declare -x FABRIC_CCENV_TAG=latest
 
 
 
-docker build -f ./images/fabric-dynamic-ccenv/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-dynamic-ccenv:${FABRIC_NEXT_IMAGE_TAG} \
---build-arg FABRIC_CCENV_IMAGE=${FABRIC_CCENV_IMAGE} \
---build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} .
-docker tag ${BASE_NAMESPACE}/fabric-dynamic-ccenv:${FABRIC_NEXT_IMAGE_TAG} ${BASE_NAMESPACE}/fabric-dynamic-ccenv:${ARCH}-latest
-
 
 # Build cross compile image
-# Note cross compile currently uses fabric-dynamic-ccenv image for now
+# Note cross compile currently uses fabric-ccenv image for now
 if [[ "amd64" = "${ARCH}" ]]; then
   docker build -f ./images/fabric-cross-compile/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} \
-  --build-arg FABRIC_CCENV_IMAGE=${BASE_NAMESPACE}/fabric-dynamic-ccenv \
+  --build-arg FABRIC_CCENV_IMAGE=${BASE_NAMESPACE}/fabric-ccenv \
   --build-arg FABRIC_CCENV_TAG=${FABRIC_NEXT_IMAGE_TAG} .
   docker tag ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} ${BASE_NAMESPACE}/fabric-cross-compile:${ARCH}-latest
 fi
