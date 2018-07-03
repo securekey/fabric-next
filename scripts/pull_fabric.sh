@@ -59,13 +59,17 @@ docker build -f ./images/fabric-peer-softhsm/Dockerfile \
  -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
  ./images/fabric-peer-softhsm
 
+# Fabric ccenv image
+declare -x FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv
+# Use latest tag as that was the image produced by the fabric build above
+declare -x FABRIC_CCENV_TAG=latest
 
 
 # Build cross compile image
 # Note cross compile currently uses fabric-ccenv image for now
 if [[ "amd64" = "${ARCH}" ]]; then
   docker build -f ./images/fabric-cross-compile/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} \
-  --build-arg FABRIC_CCENV_IMAGE=${BASE_NAMESPACE}/fabric-ccenv \
-  --build-arg FABRIC_CCENV_TAG=${FABRIC_NEXT_IMAGE_TAG} .
+  --build-arg FABRIC_CCENV_IMAGE=${FABRIC_CCENV_IMAGE} \
+  --build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} .
   docker tag ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} ${BASE_NAMESPACE}/fabric-cross-compile:${ARCH}-latest
 fi
