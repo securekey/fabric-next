@@ -30,3 +30,5 @@ git config user.email jenkins@jenkins.com
 
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
+
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/19/24619/2 && git cherry-pick FETCH_HEAD
