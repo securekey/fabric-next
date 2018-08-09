@@ -32,3 +32,5 @@ git config user.email jenkins@jenkins.com
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
 git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_change.patch
+
+git apply $MY_PATH/../patches/metric_1.patch

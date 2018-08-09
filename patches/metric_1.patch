@@ -1,0 +1,103 @@
+diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
+index 7ebe52af9..2af874e62 100644
+--- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
++++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
+@@ -20,6 +20,8 @@ import (
+ 	"sync"
+ 
+ 	"github.com/hyperledger/fabric/common/ledger"
++	"github.com/hyperledger/fabric/common/metrics"
++	"github.com/uber-go/tally"
+ )
+ 
+ // blocksItr - an iterator for iterating over a sequence of blocks
+@@ -30,13 +32,17 @@ type blocksItr struct {
+ 	stream               *blockStream
+ 	closeMarker          bool
+ 	closeMarkerLock      *sync.Mutex
++	waitForBlockTimer    tally.Timer
+ }
+ 
+ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
+-	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}}
++	waitForBlockTimer := metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
++	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}, waitForBlockTimer}
+ }
+ 
+ func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
++	stopWatch := itr.waitForBlockTimer.Start()
++	defer stopWatch.Stop()
+ 	itr.mgr.cpInfoCond.L.Lock()
+ 	defer itr.mgr.cpInfoCond.L.Unlock()
+ 	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
+diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
+index 5655969d5..03629bcbd 100644
+--- a/core/ledger/ledgerstorage/store.go
++++ b/core/ledger/ledgerstorage/store.go
+@@ -23,11 +23,13 @@ import (
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+ 	"github.com/hyperledger/fabric/protos/common"
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("ledgerstorage")
+@@ -41,8 +43,11 @@ type Provider struct {
+ // Store encapsulates two stores 1) block store and pvt data store
+ type Store struct {
+ 	blkstorage.BlockStore
+-	pvtdataStore pvtdatastorage.Store
+-	rwlock       *sync.RWMutex
++	pvtdataStore                 pvtdatastorage.Store
++	rwlock                       *sync.RWMutex
++	commitWithPvtDataTimer       tally.Timer
++	getPvtDataAndBlockByNumTimer tally.Timer
++	getPvtDataByNumTimer         tally.Timer
+ }
+ 
+ // NewProvider returns the handle to the provider
+@@ -77,7 +82,10 @@ func (p *Provider) Open(ledgerid string) (*Store, error) {
+ 	if pvtdataStore, err = p.pvtdataStoreProvider.OpenStore(ledgerid); err != nil {
+ 		return nil, err
+ 	}
+-	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}}
++	commitWithPvtDataTimer := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
++	getPvtDataAndBlockByNumTimer := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
++	getPvtDataByNumTimer := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
++	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}, commitWithPvtDataTimer, getPvtDataAndBlockByNumTimer, getPvtDataByNumTimer}
+ 	if err := store.init(); err != nil {
+ 		return nil, err
+ 	}
+@@ -97,6 +105,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+ 
+ // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
+ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
++	stopWatch := s.commitWithPvtDataTimer.Start()
++	defer stopWatch.Stop()
+ 	blockNum := blockAndPvtdata.Block.Header.Number
+ 	s.rwlock.Lock()
+ 	defer s.rwlock.Unlock()
+@@ -137,6 +147,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+ // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
+ // The pvt data is filtered by the list of 'collections' supplied
+ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
++	stopWatch := s.getPvtDataAndBlockByNumTimer.Start()
++	defer stopWatch.Stop()
+ 	s.rwlock.RLock()
+ 	defer s.rwlock.RUnlock()
+ 
+@@ -156,6 +168,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+ // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
+ // A nil filter does not filter any results
+ func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
++	stopWatch := s.getPvtDataByNumTimer.Start()
++	defer stopWatch.Stop()
+ 	s.rwlock.RLock()
+ 	defer s.rwlock.RUnlock()
+ 	return s.getPvtDataByNumWithoutLock(blockNum, filter)
