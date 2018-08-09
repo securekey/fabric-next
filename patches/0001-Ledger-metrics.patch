@@ -1,0 +1,1643 @@
+From 29cfd3ed7fc9ee0a8a9211571fde5838fac17dee Mon Sep 17 00:00:00 2001
+From: Aleksandar Likic <aleksandar.likic@securekey.com>
+Date: Thu, 9 Aug 2018 18:21:13 -0400
+Subject: [PATCH] Ledger metrics
+
+Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
+Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
+---
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |   8 +-
+ common/metrics/server.go                           | 194 ++++-----
+ common/metrics/server_test.go                      | 242 -----------
+ common/metrics/tally_provider.go                   | 372 ++---------------
+ common/metrics/tally_provider_test.go              | 462 ---------------------
+ common/metrics/types.go                            |  45 --
+ core/ledger/ledgerstorage/store.go                 |  20 +-
+ 7 files changed, 144 insertions(+), 1199 deletions(-)
+ delete mode 100644 common/metrics/server_test.go
+ delete mode 100644 common/metrics/tally_provider_test.go
+ delete mode 100644 common/metrics/types.go
+
+diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
+index 7ebe52af9..2af874e62 100644
+--- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
++++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
+@@ -20,6 +20,8 @@ import (
+ 	"sync"
+ 
+ 	"github.com/hyperledger/fabric/common/ledger"
++	"github.com/hyperledger/fabric/common/metrics"
++	"github.com/uber-go/tally"
+ )
+ 
+ // blocksItr - an iterator for iterating over a sequence of blocks
+@@ -30,13 +32,17 @@ type blocksItr struct {
+ 	stream               *blockStream
+ 	closeMarker          bool
+ 	closeMarkerLock      *sync.Mutex
++	waitForBlockTimer    tally.Timer
+ }
+ 
+ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
+-	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}}
++	waitForBlockTimer := metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
++	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}, waitForBlockTimer}
+ }
+ 
+ func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
++	stopWatch := itr.waitForBlockTimer.Start()
++	defer stopWatch.Stop()
+ 	itr.mgr.cpInfoCond.L.Lock()
+ 	defer itr.mgr.cpInfoCond.L.Unlock()
+ 	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
+diff --git a/common/metrics/server.go b/common/metrics/server.go
+index 677151e78..9256daf87 100644
+--- a/common/metrics/server.go
++++ b/common/metrics/server.go
+@@ -8,11 +8,15 @@ package metrics
+ 
+ import (
+ 	"fmt"
+-	"sync"
++	"io"
+ 	"time"
+ 
++	"sync"
++
++	"github.com/pkg/errors"
+ 	"github.com/spf13/viper"
+ 	"github.com/uber-go/tally"
++	promreporter "github.com/uber-go/tally/prometheus"
+ )
+ 
+ const (
+@@ -28,21 +32,45 @@ const (
+ 	defaultStatsdReporterFlushBytes    = 1432
+ )
+ 
+-var RootScope Scope
+-var once sync.Once
++// RootScope tally.NoopScope is a scope that does nothing
++var RootScope = tally.NoopScope
+ var rootScopeMutex = &sync.Mutex{}
+ var running bool
+ 
+-// NewOpts create metrics options based config file
+-func NewOpts() Opts {
++// StatsdReporterOpts ...
++type StatsdReporterOpts struct {
++	Address       string
++	FlushInterval time.Duration
++	FlushBytes    int
++}
++
++// PromReporterOpts ...
++type PromReporterOpts struct {
++	ListenAddress string
++}
++
++// Opts ...
++type Opts struct {
++	Reporter           string
++	Interval           time.Duration
++	Enabled            bool
++	StatsdReporterOpts StatsdReporterOpts
++	PromReporterOpts   PromReporterOpts
++}
++
++// NewOpts create metrics options based config file.
++// TODO: Currently this is only for peer node which uses global viper.
++// As for orderer, which uses its local viper, we are unable to get
++// metrics options with the function NewOpts()
++func NewOpts(peerConfig *viper.Viper) Opts {
+ 	opts := Opts{}
+-	opts.Enabled = viper.GetBool("metrics.enabled")
+-	if report := viper.GetString("metrics.reporter"); report != "" {
++	opts.Enabled = peerConfig.GetBool("metrics.enabled")
++	if report := peerConfig.GetString("metrics.reporter"); report != "" {
+ 		opts.Reporter = report
+ 	} else {
+ 		opts.Reporter = defaultReporterType
+ 	}
+-	if interval := viper.GetDuration("metrics.interval"); interval > 0 {
++	if interval := peerConfig.GetDuration("metrics.interval"); interval > 0 {
+ 		opts.Interval = interval
+ 	} else {
+ 		opts.Interval = defaultInterval
+@@ -50,13 +78,13 @@ func NewOpts() Opts {
+ 
+ 	if opts.Reporter == statsdReporterType {
+ 		statsdOpts := StatsdReporterOpts{}
+-		statsdOpts.Address = viper.GetString("metrics.statsdReporter.address")
+-		if flushInterval := viper.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
++		statsdOpts.Address = peerConfig.GetString("metrics.statsdReporter.address")
++		if flushInterval := peerConfig.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
+ 			statsdOpts.FlushInterval = flushInterval
+ 		} else {
+ 			statsdOpts.FlushInterval = defaultStatsdReporterFlushInterval
+ 		}
+-		if flushBytes := viper.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
++		if flushBytes := peerConfig.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
+ 			statsdOpts.FlushBytes = flushBytes
+ 		} else {
+ 			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
+@@ -66,45 +94,47 @@ func NewOpts() Opts {
+ 
+ 	if opts.Reporter == promReporterType {
+ 		promOpts := PromReporterOpts{}
+-		promOpts.ListenAddress = viper.GetString("metrics.promReporter.listenAddress")
++		promOpts.ListenAddress = peerConfig.GetString("metrics.promReporter.listenAddress")
+ 		opts.PromReporterOpts = promOpts
+ 	}
+ 
+ 	return opts
+ }
+ 
+-//Init initializes global root metrics scope instance, all callers can only use it to extend sub scope
+-func Init(opts Opts) (err error) {
+-	once.Do(func() {
+-		RootScope, err = create(opts)
+-	})
+-
+-	return
+-}
+-
+-//Start starts metrics server
+-func Start() error {
++// Start starts metrics server
++func Start(opts Opts) error {
++	if !opts.Enabled {
++		return errors.New("Unable to start metrics server because is disbled")
++	}
+ 	rootScopeMutex.Lock()
+ 	defer rootScopeMutex.Unlock()
+-	if running {
+-		return nil
++	if !running {
++		rootScope, err := create(opts)
++		if err == nil {
++			running = true
++			RootScope = rootScope
++		}
++		return err
+ 	}
+-	running = true
+-	return RootScope.Start()
++	return errors.New("metrics server was already started")
+ }
+ 
+-//Shutdown closes underlying resources used by metrics server
++// Shutdown closes underlying resources used by metrics server
+ func Shutdown() error {
+ 	rootScopeMutex.Lock()
+ 	defer rootScopeMutex.Unlock()
+-	if !running {
+-		return nil
++	if running {
++		var err error
++		if closer, ok := RootScope.(io.Closer); ok {
++			if err = closer.Close(); err != nil {
++				return err
++			}
++		}
++		running = false
++		RootScope = tally.NoopScope
++		return err
+ 	}
+-
+-	err := RootScope.Close()
+-	RootScope = nil
+-	running = false
+-	return err
++	return nil
+ }
+ 
+ func isRunning() bool {
+@@ -113,109 +143,35 @@ func isRunning() bool {
+ 	return running
+ }
+ 
+-type StatsdReporterOpts struct {
+-	Address       string
+-	FlushInterval time.Duration
+-	FlushBytes    int
+-}
+-
+-type PromReporterOpts struct {
+-	ListenAddress string
+-}
+-
+-type Opts struct {
+-	Reporter           string
+-	Interval           time.Duration
+-	Enabled            bool
+-	StatsdReporterOpts StatsdReporterOpts
+-	PromReporterOpts   PromReporterOpts
+-}
+-
+-type noOpCounter struct {
+-}
+-
+-func (c *noOpCounter) Inc(v int64) {
+-
+-}
+-
+-type noOpGauge struct {
+-}
+-
+-func (g *noOpGauge) Update(v float64) {
+-
+-}
+-
+-type noOpScope struct {
+-	counter *noOpCounter
+-	gauge   *noOpGauge
+-}
+-
+-func (s *noOpScope) Counter(name string) Counter {
+-	return s.counter
+-}
+-
+-func (s *noOpScope) Gauge(name string) Gauge {
+-	return s.gauge
+-}
+-
+-func (s *noOpScope) Tagged(tags map[string]string) Scope {
+-	return s
+-}
+-
+-func (s *noOpScope) SubScope(prefix string) Scope {
+-	return s
+-}
+-
+-func (s *noOpScope) Close() error {
+-	return nil
+-}
+-
+-func (s *noOpScope) Start() error {
+-	return nil
+-}
+-
+-func newNoOpScope() Scope {
+-	return &noOpScope{
+-		counter: &noOpCounter{},
+-		gauge:   &noOpGauge{},
+-	}
+-}
+-
+-func create(opts Opts) (rootScope Scope, e error) {
++func create(opts Opts) (rootScope tally.Scope, e error) {
+ 	if !opts.Enabled {
+-		rootScope = newNoOpScope()
+-		return
++		rootScope = tally.NoopScope
+ 	} else {
+ 		if opts.Interval <= 0 {
+ 			e = fmt.Errorf("invalid Interval option %d", opts.Interval)
+ 			return
+ 		}
+-
+-		if opts.Reporter != statsdReporterType && opts.Reporter != promReporterType {
+-			e = fmt.Errorf("not supported Reporter type %s", opts.Reporter)
+-			return
+-		}
+-
+ 		var reporter tally.StatsReporter
+ 		var cachedReporter tally.CachedStatsReporter
+-		if opts.Reporter == statsdReporterType {
++		switch opts.Reporter {
++		case statsdReporterType:
+ 			reporter, e = newStatsdReporter(opts.StatsdReporterOpts)
+-		}
+-
+-		if opts.Reporter == promReporterType {
++		case promReporterType:
+ 			cachedReporter, e = newPromReporter(opts.PromReporterOpts)
++		default:
++			e = fmt.Errorf("not supported Reporter type %s", opts.Reporter)
++			return
+ 		}
+-
+ 		if e != nil {
+ 			return
+ 		}
+-
+ 		rootScope = newRootScope(
+ 			tally.ScopeOptions{
+ 				Prefix:         namespace,
+ 				Reporter:       reporter,
+ 				CachedReporter: cachedReporter,
++				Separator:      promreporter.DefaultSeparator,
+ 			}, opts.Interval)
+-		return
+ 	}
++	return
+ }
+diff --git a/common/metrics/server_test.go b/common/metrics/server_test.go
+deleted file mode 100644
+index 07d010ca8..000000000
+--- a/common/metrics/server_test.go
++++ /dev/null
+@@ -1,242 +0,0 @@
+-/*
+-Copyright IBM Corp. All Rights Reserved.
+-
+-SPDX-License-Identifier: Apache-2.0
+-*/
+-
+-package metrics
+-
+-import (
+-	"fmt"
+-	"strings"
+-	"testing"
+-	"time"
+-
+-	"github.com/hyperledger/fabric/core/config/configtest"
+-	. "github.com/onsi/gomega"
+-	"github.com/spf13/viper"
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestStartSuccessStatsd(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Reporter: statsdReporterType,
+-		Interval: 1 * time.Second,
+-		StatsdReporterOpts: StatsdReporterOpts{
+-			Address:       "127.0.0.1:0",
+-			FlushInterval: 2 * time.Second,
+-			FlushBytes:    512,
+-		}}
+-	s, err := create(opts)
+-	go s.Start()
+-	defer s.Close()
+-	assert.NotNil(t, s)
+-	assert.NoError(t, err)
+-}
+-
+-func TestStartSuccessProm(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Reporter: promReporterType,
+-		Interval: 1 * time.Second,
+-		PromReporterOpts: PromReporterOpts{
+-			ListenAddress: "127.0.0.1:0",
+-		}}
+-	s, err := create(opts)
+-	go s.Start()
+-	defer s.Close()
+-	assert.NotNil(t, s)
+-	assert.NoError(t, err)
+-}
+-
+-func TestStartDisabled(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled: false,
+-	}
+-	s, err := create(opts)
+-	go s.Start()
+-	defer s.Close()
+-	assert.NotNil(t, s)
+-	assert.NoError(t, err)
+-}
+-
+-func TestStartInvalidInterval(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Interval: 0,
+-	}
+-	s, err := create(opts)
+-	assert.Nil(t, s)
+-	assert.Error(t, err)
+-}
+-
+-func TestStartStatsdInvalidAddress(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Interval: 1 * time.Second,
+-		Reporter: statsdReporterType,
+-		StatsdReporterOpts: StatsdReporterOpts{
+-			Address:       "",
+-			FlushInterval: 2 * time.Second,
+-			FlushBytes:    512,
+-		},
+-	}
+-	s, err := create(opts)
+-	assert.Nil(t, s)
+-	assert.Error(t, err)
+-}
+-
+-func TestStartStatsdInvalidFlushInterval(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Interval: 1 * time.Second,
+-		Reporter: statsdReporterType,
+-		StatsdReporterOpts: StatsdReporterOpts{
+-			Address:       "127.0.0.1:0",
+-			FlushInterval: 0,
+-			FlushBytes:    512,
+-		},
+-	}
+-	s, err := create(opts)
+-	assert.Nil(t, s)
+-	assert.Error(t, err)
+-}
+-
+-func TestStartPromInvalidListernAddress(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Interval: 1 * time.Second,
+-		Reporter: statsdReporterType,
+-		PromReporterOpts: PromReporterOpts{
+-			ListenAddress: "",
+-		},
+-	}
+-	s, err := create(opts)
+-	assert.Nil(t, s)
+-	assert.Error(t, err)
+-}
+-
+-func TestStartStatsdInvalidFlushBytes(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Interval: 1 * time.Second,
+-		Reporter: statsdReporterType,
+-		StatsdReporterOpts: StatsdReporterOpts{
+-			Address:       "127.0.0.1:0",
+-			FlushInterval: 2 * time.Second,
+-			FlushBytes:    0,
+-		},
+-	}
+-	s, err := create(opts)
+-	assert.Nil(t, s)
+-	assert.Error(t, err)
+-}
+-
+-func TestStartInvalidReporter(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled:  true,
+-		Interval: 1 * time.Second,
+-		Reporter: "test",
+-	}
+-	s, err := create(opts)
+-	assert.Nil(t, s)
+-	assert.Error(t, err)
+-}
+-
+-func TestStartAndClose(t *testing.T) {
+-	t.Parallel()
+-	gt := NewGomegaWithT(t)
+-	defer Shutdown()
+-	opts := Opts{
+-		Enabled:  true,
+-		Reporter: statsdReporterType,
+-		Interval: 1 * time.Second,
+-		StatsdReporterOpts: StatsdReporterOpts{
+-			Address:       "127.0.0.1:0",
+-			FlushInterval: 2 * time.Second,
+-			FlushBytes:    512,
+-		}}
+-	Init(opts)
+-	assert.NotNil(t, RootScope)
+-	go Start()
+-	gt.Eventually(isRunning).Should(BeTrue())
+-}
+-
+-func TestNoOpScopeMetrics(t *testing.T) {
+-	t.Parallel()
+-	opts := Opts{
+-		Enabled: false,
+-	}
+-	s, err := create(opts)
+-	go s.Start()
+-	defer s.Close()
+-	assert.NotNil(t, s)
+-	assert.NoError(t, err)
+-
+-	// make sure no error throws when invoke noOpScope
+-	subScope := s.SubScope("test")
+-	subScope.Counter("foo").Inc(2)
+-	subScope.Gauge("bar").Update(1.33)
+-	tagSubScope := subScope.Tagged(map[string]string{"env": "test"})
+-	tagSubScope.Counter("foo").Inc(2)
+-	tagSubScope.Gauge("bar").Update(1.33)
+-}
+-
+-func TestNewOpts(t *testing.T) {
+-	t.Parallel()
+-	defer viper.Reset()
+-	setupTestConfig()
+-	opts := NewOpts()
+-	assert.False(t, opts.Enabled)
+-	assert.Equal(t, 1*time.Second, opts.Interval)
+-	assert.Equal(t, statsdReporterType, opts.Reporter)
+-	assert.Equal(t, 1432, opts.StatsdReporterOpts.FlushBytes)
+-	assert.Equal(t, 2*time.Second, opts.StatsdReporterOpts.FlushInterval)
+-	assert.Equal(t, "0.0.0.0:8125", opts.StatsdReporterOpts.Address)
+-	viper.Reset()
+-
+-	setupTestConfig()
+-	viper.Set("metrics.Reporter", promReporterType)
+-	opts1 := NewOpts()
+-	assert.False(t, opts1.Enabled)
+-	assert.Equal(t, 1*time.Second, opts1.Interval)
+-	assert.Equal(t, promReporterType, opts1.Reporter)
+-	assert.Equal(t, "0.0.0.0:8080", opts1.PromReporterOpts.ListenAddress)
+-}
+-
+-func TestNewOptsDefaultVar(t *testing.T) {
+-	t.Parallel()
+-	opts := NewOpts()
+-	assert.False(t, opts.Enabled)
+-	assert.Equal(t, 1*time.Second, opts.Interval)
+-	assert.Equal(t, statsdReporterType, opts.Reporter)
+-	assert.Equal(t, 1432, opts.StatsdReporterOpts.FlushBytes)
+-	assert.Equal(t, 2*time.Second, opts.StatsdReporterOpts.FlushInterval)
+-}
+-
+-func setupTestConfig() {
+-	viper.SetConfigName("core")
+-	viper.SetEnvPrefix("CORE")
+-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+-	viper.AutomaticEnv()
+-
+-	err := configtest.AddDevConfigPath(nil)
+-	if err != nil {
+-		panic(fmt.Errorf("Fatal error adding dev dir: %s \n", err))
+-	}
+-
+-	err = viper.ReadInConfig()
+-	if err != nil { // Handle errors reading the config file
+-		panic(fmt.Errorf("Fatal error config file: %s \n", err))
+-	}
+-}
+diff --git a/common/metrics/tally_provider.go b/common/metrics/tally_provider.go
+index cf1e3deff..660078d52 100644
+--- a/common/metrics/tally_provider.go
++++ b/common/metrics/tally_provider.go
+@@ -7,17 +7,16 @@ SPDX-License-Identifier: Apache-2.0
+ package metrics
+ 
+ import (
+-	"context"
+ 	"errors"
+-	"fmt"
+-	"io"
+ 	"net/http"
+-	"sort"
+-	"sync"
+ 	"time"
+ 
++	"net"
++
++	"sort"
++
+ 	"github.com/cactus/go-statsd-client/statsd"
+-	"github.com/op/go-logging"
++	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/prometheus/client_golang/prometheus"
+ 	"github.com/prometheus/client_golang/prometheus/promhttp"
+ 	"github.com/uber-go/tally"
+@@ -25,74 +24,11 @@ import (
+ 	statsdreporter "github.com/uber-go/tally/statsd"
+ )
+ 
+-var logger = logging.MustGetLogger("common/metrics/tally")
+-
+-var scopeRegistryKey = tally.KeyForPrefixedStringMap
+-
+-type counter struct {
+-	tallyCounter tally.Counter
+-}
+-
+-func newCounter(tallyCounter tally.Counter) *counter {
+-	return &counter{tallyCounter: tallyCounter}
+-}
+-
+-func (c *counter) Inc(v int64) {
+-	c.tallyCounter.Inc(v)
+-}
+-
+-type gauge struct {
+-	tallyGauge tally.Gauge
+-}
+-
+-func newGauge(tallyGauge tally.Gauge) *gauge {
+-	return &gauge{tallyGauge: tallyGauge}
+-}
++var logger = flogging.MustGetLogger("common/metrics/tally")
+ 
+-func (g *gauge) Update(v float64) {
+-	g.tallyGauge.Update(v)
+-}
+-
+-type scopeRegistry struct {
+-	sync.RWMutex
+-	subScopes map[string]*scope
+-}
+-
+-type scope struct {
+-	separator    string
+-	prefix       string
+-	tags         map[string]string
+-	tallyScope   tally.Scope
+-	registry     *scopeRegistry
+-	baseReporter tally.BaseStatsReporter
+-
+-	cm sync.RWMutex
+-	gm sync.RWMutex
+-
+-	counters map[string]*counter
+-	gauges   map[string]*gauge
+-}
+-
+-func newRootScope(opts tally.ScopeOptions, interval time.Duration) Scope {
++func newRootScope(opts tally.ScopeOptions, interval time.Duration) tally.Scope {
+ 	s, _ := tally.NewRootScope(opts, interval)
+-
+-	var baseReporter tally.BaseStatsReporter
+-	if opts.Reporter != nil {
+-		baseReporter = opts.Reporter
+-	} else if opts.CachedReporter != nil {
+-		baseReporter = opts.CachedReporter
+-	}
+-
+-	return &scope{
+-		prefix:     opts.Prefix,
+-		separator:  opts.Separator,
+-		tallyScope: s,
+-		registry: &scopeRegistry{
+-			subScopes: make(map[string]*scope),
+-		},
+-		baseReporter: baseReporter,
+-		counters:     make(map[string]*counter),
+-		gauges:       make(map[string]*gauge)}
++	return s
+ }
+ 
+ func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReporter, error) {
+@@ -115,7 +51,7 @@ func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReport
+ 	}
+ 	opts := statsdreporter.Options{}
+ 	reporter := statsdreporter.NewReporter(statter, opts)
+-	statsdReporter := &statsdReporter{reporter: reporter, statter: statter}
++	statsdReporter := &statsdReporter{StatsReporter: reporter, statter: statter}
+ 	return statsdReporter, nil
+ }
+ 
+@@ -127,159 +63,52 @@ func newPromReporter(promReporterOpts PromReporterOpts) (promreporter.Reporter,
+ 	opts := promreporter.Options{Registerer: prometheus.NewRegistry()}
+ 	reporter := promreporter.NewReporter(opts)
+ 	mux := http.NewServeMux()
+-	handler := promReporterHttpHandler(opts.Registerer.(*prometheus.Registry))
++	handler := promReporterHTTPHandler(opts.Registerer.(*prometheus.Registry))
+ 	mux.Handle("/metrics", handler)
+-	server := &http.Server{Addr: promReporterOpts.ListenAddress, Handler: mux}
++	server := &http.Server{Handler: mux}
++	addr := promReporterOpts.ListenAddress
++	if addr == "" {
++		addr = ":http"
++	}
++	listener, err := net.Listen("tcp", addr)
++	if err != nil {
++		return nil, err
++	}
+ 	promReporter := &promReporter{
+-		reporter: reporter,
++		Reporter: reporter,
+ 		server:   server,
+-		registry: opts.Registerer.(*prometheus.Registry)}
++		registry: opts.Registerer.(*prometheus.Registry),
++		listener: listener}
++	go server.Serve(listener)
+ 	return promReporter, nil
+ }
+ 
+-func (s *scope) Counter(name string) Counter {
+-	s.cm.RLock()
+-	val, ok := s.counters[name]
+-	s.cm.RUnlock()
+-	if !ok {
+-		s.cm.Lock()
+-		val, ok = s.counters[name]
+-		if !ok {
+-			counter := s.tallyScope.Counter(name)
+-			val = newCounter(counter)
+-			s.counters[name] = val
+-		}
+-		s.cm.Unlock()
+-	}
+-	return val
+-}
+-
+-func (s *scope) Gauge(name string) Gauge {
+-	s.gm.RLock()
+-	val, ok := s.gauges[name]
+-	s.gm.RUnlock()
+-	if !ok {
+-		s.gm.Lock()
+-		val, ok = s.gauges[name]
+-		if !ok {
+-			gauge := s.tallyScope.Gauge(name)
+-			val = newGauge(gauge)
+-			s.gauges[name] = val
+-		}
+-		s.gm.Unlock()
+-	}
+-	return val
+-}
+-
+-func (s *scope) Tagged(tags map[string]string) Scope {
+-	originTags := tags
+-	tags = mergeRightTags(s.tags, tags)
+-	key := scopeRegistryKey(s.prefix, tags)
+-
+-	s.registry.RLock()
+-	existing, ok := s.registry.subScopes[key]
+-	if ok {
+-		s.registry.RUnlock()
+-		return existing
+-	}
+-	s.registry.RUnlock()
+-
+-	s.registry.Lock()
+-	defer s.registry.Unlock()
+-
+-	existing, ok = s.registry.subScopes[key]
+-	if ok {
+-		return existing
+-	}
+-
+-	subScope := &scope{
+-		separator: s.separator,
+-		prefix:    s.prefix,
+-		// NB(r): Take a copy of the tags on creation
+-		// so that it cannot be modified after set.
+-		tags:       copyStringMap(tags),
+-		tallyScope: s.tallyScope.Tagged(originTags),
+-		registry:   s.registry,
+-
+-		counters: make(map[string]*counter),
+-		gauges:   make(map[string]*gauge),
+-	}
+-
+-	s.registry.subScopes[key] = subScope
+-	return subScope
+-}
+-
+-func (s *scope) SubScope(prefix string) Scope {
+-	key := scopeRegistryKey(s.fullyQualifiedName(prefix), s.tags)
+-
+-	s.registry.RLock()
+-	existing, ok := s.registry.subScopes[key]
+-	if ok {
+-		s.registry.RUnlock()
+-		return existing
+-	}
+-	s.registry.RUnlock()
+-
+-	s.registry.Lock()
+-	defer s.registry.Unlock()
+-
+-	existing, ok = s.registry.subScopes[key]
+-	if ok {
+-		return existing
+-	}
+-
+-	subScope := &scope{
+-		separator: s.separator,
+-		prefix:    s.prefix,
+-		// NB(r): Take a copy of the tags on creation
+-		// so that it cannot be modified after set.
+-		tags:       copyStringMap(s.tags),
+-		tallyScope: s.tallyScope.SubScope(prefix),
+-		registry:   s.registry,
+-
+-		counters: make(map[string]*counter),
+-		gauges:   make(map[string]*gauge),
+-	}
+-
+-	s.registry.subScopes[key] = subScope
+-	return subScope
+-}
+-
+-func (s *scope) Close() error {
+-	if closer, ok := s.tallyScope.(io.Closer); ok {
+-		return closer.Close()
+-	}
+-	return nil
+-}
+-
+-func (s *scope) Start() error {
+-	if server, ok := s.baseReporter.(serve); ok {
+-		return server.Start()
+-	}
+-	return nil
+-}
+-
+ type statsdReporter struct {
+-	reporter tally.StatsReporter
+-	statter  statsd.Statter
++	tally.StatsReporter
++	statter statsd.Statter
+ }
+ 
+ type promReporter struct {
+-	reporter promreporter.Reporter
++	promreporter.Reporter
+ 	server   *http.Server
++	listener net.Listener
+ 	registry *prometheus.Registry
+ }
+ 
++func (r *statsdReporter) Close() error {
++	return r.statter.Close()
++}
++
+ func (r *statsdReporter) ReportCounter(name string, tags map[string]string, value int64) {
+-	r.reporter.ReportCounter(tagsToName(name, tags), tags, value)
++	r.StatsReporter.ReportCounter(tagsToName(name, tags), tags, value)
+ }
+ 
+ func (r *statsdReporter) ReportGauge(name string, tags map[string]string, value float64) {
+-	r.reporter.ReportGauge(tagsToName(name, tags), tags, value)
++	r.StatsReporter.ReportGauge(tagsToName(name, tags), tags, value)
+ }
+ 
+ func (r *statsdReporter) ReportTimer(name string, tags map[string]string, interval time.Duration) {
+-	r.reporter.ReportTimer(tagsToName(name, tags), tags, interval)
++	r.StatsReporter.ReportTimer(tagsToName(name, tags), tags, interval)
+ }
+ 
+ func (r *statsdReporter) ReportHistogramValueSamples(
+@@ -290,7 +119,7 @@ func (r *statsdReporter) ReportHistogramValueSamples(
+ 	bucketUpperBound float64,
+ 	samples int64,
+ ) {
+-	r.reporter.ReportHistogramValueSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
++	r.StatsReporter.ReportHistogramValueSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
+ }
+ 
+ func (r *statsdReporter) ReportHistogramDurationSamples(
+@@ -301,7 +130,7 @@ func (r *statsdReporter) ReportHistogramDurationSamples(
+ 	bucketUpperBound time.Duration,
+ 	samples int64,
+ ) {
+-	r.reporter.ReportHistogramDurationSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
++	r.StatsReporter.ReportHistogramDurationSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
+ }
+ 
+ func (r *statsdReporter) Capabilities() tally.Capabilities {
+@@ -316,127 +145,20 @@ func (r *statsdReporter) Tagging() bool {
+ 	return true
+ }
+ 
+-func (r *statsdReporter) Flush() {
+-	// no-op
+-}
+-
+-func (r *statsdReporter) Close() error {
+-	return r.statter.Close()
+-}
+-
+-func (r *promReporter) RegisterCounter(
+-	name string,
+-	tagKeys []string,
+-	desc string,
+-) (*prometheus.CounterVec, error) {
+-	return r.reporter.RegisterCounter(name, tagKeys, desc)
+-}
+-
+-// AllocateCounter implements tally.CachedStatsReporter.
+-func (r *promReporter) AllocateCounter(name string, tags map[string]string) tally.CachedCount {
+-	return r.reporter.AllocateCounter(name, tags)
+-}
+-
+-func (r *promReporter) RegisterGauge(
+-	name string,
+-	tagKeys []string,
+-	desc string,
+-) (*prometheus.GaugeVec, error) {
+-	return r.reporter.RegisterGauge(name, tagKeys, desc)
+-}
+-
+-// AllocateGauge implements tally.CachedStatsReporter.
+-func (r *promReporter) AllocateGauge(name string, tags map[string]string) tally.CachedGauge {
+-	return r.reporter.AllocateGauge(name, tags)
+-}
+-
+-func (r *promReporter) RegisterTimer(
+-	name string,
+-	tagKeys []string,
+-	desc string,
+-	opts *promreporter.RegisterTimerOptions,
+-) (promreporter.TimerUnion, error) {
+-	return r.reporter.RegisterTimer(name, tagKeys, desc, opts)
+-}
+-
+-// AllocateTimer implements tally.CachedStatsReporter.
+-func (r *promReporter) AllocateTimer(name string, tags map[string]string) tally.CachedTimer {
+-	return r.reporter.AllocateTimer(name, tags)
+-}
+-
+-func (r *promReporter) AllocateHistogram(
+-	name string,
+-	tags map[string]string,
+-	buckets tally.Buckets,
+-) tally.CachedHistogram {
+-	return r.reporter.AllocateHistogram(name, tags, buckets)
+-}
+-
+-func (r *promReporter) Capabilities() tally.Capabilities {
+-	return r
+-}
+-
+-func (r *promReporter) Reporting() bool {
+-	return true
+-}
+-
+-func (r *promReporter) Tagging() bool {
+-	return true
+-}
+-
+-// Flush does nothing for prometheus
+-func (r *promReporter) Flush() {
+-
+-}
+-
+ func (r *promReporter) Close() error {
+-	//TODO: Timeout here?
+-	return r.server.Shutdown(context.Background())
+-}
+-
+-func (r *promReporter) Start() error {
+-	return r.server.ListenAndServe()
++	//TODO: Shutdown server gracefully?
++	// Close() is not a graceful way since it closes server immediately
++	err := r.server.Close()
++	r.listener.Close()
++	return err
+ }
+ 
+ func (r *promReporter) HTTPHandler() http.Handler {
+-	return promReporterHttpHandler(r.registry)
++	return promReporterHTTPHandler(r.registry)
+ }
+ 
+-func (s *scope) fullyQualifiedName(name string) string {
+-	if len(s.prefix) == 0 {
+-		return name
+-	}
+-	return fmt.Sprintf("%s%s%s", s.prefix, s.separator, name)
+-}
+-
+-// mergeRightTags merges 2 sets of tags with the tags from tagsRight overriding values from tagsLeft
+-func mergeRightTags(tagsLeft, tagsRight map[string]string) map[string]string {
+-	if tagsLeft == nil && tagsRight == nil {
+-		return nil
+-	}
+-	if len(tagsRight) == 0 {
+-		return tagsLeft
+-	}
+-	if len(tagsLeft) == 0 {
+-		return tagsRight
+-	}
+-
+-	result := make(map[string]string, len(tagsLeft)+len(tagsRight))
+-	for k, v := range tagsLeft {
+-		result[k] = v
+-	}
+-	for k, v := range tagsRight {
+-		result[k] = v
+-	}
+-	return result
+-}
+-
+-func copyStringMap(stringMap map[string]string) map[string]string {
+-	result := make(map[string]string, len(stringMap))
+-	for k, v := range stringMap {
+-		result[k] = v
+-	}
+-	return result
++func promReporterHTTPHandler(registry *prometheus.Registry) http.Handler {
++	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+ }
+ 
+ func tagsToName(name string, tags map[string]string) string {
+@@ -447,12 +169,8 @@ func tagsToName(name string, tags map[string]string) string {
+ 	sort.Strings(keys)
+ 
+ 	for _, k := range keys {
+-		name = name + tally.DefaultSeparator + k + "-" + tags[k]
++		name = name + promreporter.DefaultSeparator + k + "-" + tags[k]
+ 	}
+ 
+ 	return name
+ }
+-
+-func promReporterHttpHandler(registry *prometheus.Registry) http.Handler {
+-	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+-}
+diff --git a/common/metrics/tally_provider_test.go b/common/metrics/tally_provider_test.go
+deleted file mode 100644
+index 9e911c275..000000000
+--- a/common/metrics/tally_provider_test.go
++++ /dev/null
+@@ -1,462 +0,0 @@
+-/*
+-Copyright IBM Corp. All Rights Reserved.
+-
+-SPDX-License-Identifier: Apache-2.0
+-*/
+-
+-package metrics
+-
+-import (
+-	"fmt"
+-	"io"
+-	"io/ioutil"
+-	"net"
+-	"net/http"
+-	"strings"
+-	"sync"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/uber-go/tally"
+-	promreporter "github.com/uber-go/tally/prometheus"
+-)
+-
+-const (
+-	statsdAddress = "127.0.0.1:8125"
+-	promAddress   = "127.0.0.1:8082"
+-)
+-
+-type testIntValue struct {
+-	val      int64
+-	tags     map[string]string
+-	reporter *testStatsReporter
+-}
+-
+-func (m *testIntValue) ReportCount(value int64) {
+-	m.val = value
+-	m.reporter.cg.Done()
+-}
+-
+-type testFloatValue struct {
+-	val      float64
+-	tags     map[string]string
+-	reporter *testStatsReporter
+-}
+-
+-func (m *testFloatValue) ReportGauge(value float64) {
+-	m.val = value
+-	m.reporter.gg.Done()
+-}
+-
+-type testStatsReporter struct {
+-	cg sync.WaitGroup
+-	gg sync.WaitGroup
+-
+-	scope Scope
+-
+-	counters map[string]*testIntValue
+-	gauges   map[string]*testFloatValue
+-
+-	flushes int32
+-}
+-
+-// newTestStatsReporter returns a new TestStatsReporter
+-func newTestStatsReporter() *testStatsReporter {
+-	return &testStatsReporter{
+-		counters: make(map[string]*testIntValue),
+-		gauges:   make(map[string]*testFloatValue)}
+-}
+-
+-func (r *testStatsReporter) WaitAll() {
+-	r.cg.Wait()
+-	r.gg.Wait()
+-}
+-
+-func (r *testStatsReporter) AllocateCounter(
+-	name string, tags map[string]string,
+-) tally.CachedCount {
+-	counter := &testIntValue{
+-		val:      0,
+-		tags:     tags,
+-		reporter: r,
+-	}
+-	r.counters[name] = counter
+-	return counter
+-}
+-
+-func (r *testStatsReporter) ReportCounter(name string, tags map[string]string, value int64) {
+-	r.counters[name] = &testIntValue{
+-		val:  value,
+-		tags: tags,
+-	}
+-	r.cg.Done()
+-}
+-
+-func (r *testStatsReporter) AllocateGauge(
+-	name string, tags map[string]string,
+-) tally.CachedGauge {
+-	gauge := &testFloatValue{
+-		val:      0,
+-		tags:     tags,
+-		reporter: r,
+-	}
+-	r.gauges[name] = gauge
+-	return gauge
+-}
+-
+-func (r *testStatsReporter) ReportGauge(name string, tags map[string]string, value float64) {
+-	r.gauges[name] = &testFloatValue{
+-		val:  value,
+-		tags: tags,
+-	}
+-	r.gg.Done()
+-}
+-
+-func (r *testStatsReporter) AllocateTimer(
+-	name string, tags map[string]string,
+-) tally.CachedTimer {
+-	return nil
+-}
+-
+-func (r *testStatsReporter) ReportTimer(name string, tags map[string]string, interval time.Duration) {
+-
+-}
+-
+-func (r *testStatsReporter) AllocateHistogram(
+-	name string,
+-	tags map[string]string,
+-	buckets tally.Buckets,
+-) tally.CachedHistogram {
+-	return nil
+-}
+-
+-func (r *testStatsReporter) ReportHistogramValueSamples(
+-	name string,
+-	tags map[string]string,
+-	buckets tally.Buckets,
+-	bucketLowerBound,
+-	bucketUpperBound float64,
+-	samples int64,
+-) {
+-
+-}
+-
+-func (r *testStatsReporter) ReportHistogramDurationSamples(
+-	name string,
+-	tags map[string]string,
+-	buckets tally.Buckets,
+-	bucketLowerBound,
+-	bucketUpperBound time.Duration,
+-	samples int64,
+-) {
+-
+-}
+-
+-func (r *testStatsReporter) Capabilities() tally.Capabilities {
+-	return nil
+-}
+-
+-func (r *testStatsReporter) Flush() {
+-	atomic.AddInt32(&r.flushes, 1)
+-}
+-
+-func TestCounter(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	r.cg.Add(1)
+-	s.Counter("foo").Inc(1)
+-	r.cg.Wait()
+-
+-	assert.Equal(t, int64(1), r.counters[namespace+".foo"].val)
+-
+-	defer func() {
+-		if r := recover(); r == nil {
+-			t.Errorf("Should panic when wrong key used")
+-		}
+-	}()
+-	assert.Equal(t, int64(1), r.counters[namespace+".foo1"].val)
+-}
+-
+-func TestMultiCounterReport(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 2*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	r.cg.Add(1)
+-	go s.Counter("foo").Inc(1)
+-	go s.Counter("foo").Inc(3)
+-	go s.Counter("foo").Inc(5)
+-	r.cg.Wait()
+-
+-	assert.Equal(t, int64(9), r.counters[namespace+".foo"].val)
+-}
+-
+-func TestGauge(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	r.gg.Add(1)
+-	s.Gauge("foo").Update(float64(1.33))
+-	r.gg.Wait()
+-
+-	assert.Equal(t, float64(1.33), r.gauges[namespace+".foo"].val)
+-}
+-
+-func TestMultiGaugeReport(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-
+-	r.gg.Add(1)
+-	s.Gauge("foo").Update(float64(1.33))
+-	s.Gauge("foo").Update(float64(3.33))
+-	r.gg.Wait()
+-
+-	assert.Equal(t, float64(3.33), r.gauges[namespace+".foo"].val)
+-}
+-
+-func TestSubScope(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	subs := s.SubScope("foo")
+-
+-	r.gg.Add(1)
+-	subs.Gauge("bar").Update(float64(1.33))
+-	r.gg.Wait()
+-
+-	assert.Equal(t, float64(1.33), r.gauges[namespace+".foo.bar"].val)
+-
+-	r.cg.Add(1)
+-	subs.Counter("haha").Inc(1)
+-	r.cg.Wait()
+-
+-	assert.Equal(t, int64(1), r.counters[namespace+".foo.haha"].val)
+-}
+-
+-func TestTagged(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	subs := s.Tagged(map[string]string{"env": "test"})
+-
+-	r.gg.Add(1)
+-	subs.Gauge("bar").Update(float64(1.33))
+-	r.gg.Wait()
+-
+-	assert.Equal(t, float64(1.33), r.gauges[namespace+".bar"].val)
+-	assert.EqualValues(t, map[string]string{
+-		"env": "test",
+-	}, r.gauges[namespace+".bar"].tags)
+-
+-	r.cg.Add(1)
+-	subs.Counter("haha").Inc(1)
+-	r.cg.Wait()
+-
+-	assert.Equal(t, int64(1), r.counters[namespace+".haha"].val)
+-	assert.EqualValues(t, map[string]string{
+-		"env": "test",
+-	}, r.counters[namespace+".haha"].tags)
+-}
+-
+-func TestTaggedExistingReturnsSameScope(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-
+-	for _, initialTags := range []map[string]string{
+-		nil,
+-		{"env": "test"},
+-	} {
+-		root := newRootScope(tally.ScopeOptions{Prefix: "foo", Tags: initialTags, Reporter: r}, 0)
+-		go root.Start()
+-		rootScope := root.(*scope)
+-		fooScope := root.Tagged(map[string]string{"foo": "bar"}).(*scope)
+-
+-		assert.NotEqual(t, rootScope, fooScope)
+-		assert.Equal(t, fooScope, fooScope.Tagged(nil))
+-
+-		fooBarScope := fooScope.Tagged(map[string]string{"bar": "baz"}).(*scope)
+-
+-		assert.NotEqual(t, fooScope, fooBarScope)
+-		assert.Equal(t, fooBarScope, fooScope.Tagged(map[string]string{"bar": "baz"}).(*scope))
+-		root.Close()
+-	}
+-}
+-
+-func TestSubScopeTagged(t *testing.T) {
+-	t.Parallel()
+-	r := newTestStatsReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	subs := s.SubScope("sub")
+-	subtags := subs.Tagged(map[string]string{"env": "test"})
+-
+-	r.gg.Add(1)
+-	subtags.Gauge("bar").Update(float64(1.33))
+-	r.gg.Wait()
+-
+-	assert.Equal(t, float64(1.33), r.gauges[namespace+".sub.bar"].val)
+-	assert.EqualValues(t, map[string]string{
+-		"env": "test",
+-	}, r.gauges[namespace+".sub.bar"].tags)
+-
+-	r.cg.Add(1)
+-	subtags.Counter("haha").Inc(1)
+-	r.cg.Wait()
+-
+-	assert.Equal(t, int64(1), r.counters[namespace+".sub.haha"].val)
+-	assert.EqualValues(t, map[string]string{
+-		"env": "test",
+-	}, r.counters[namespace+".sub.haha"].tags)
+-}
+-
+-func TestMetricsByStatsdReporter(t *testing.T) {
+-	t.Parallel()
+-	udpAddr, err := net.ResolveUDPAddr("udp", statsdAddress)
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	server, err := net.ListenUDP("udp", udpAddr)
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	defer server.Close()
+-
+-	r, _ := newTestStatsdReporter()
+-	opts := tally.ScopeOptions{
+-		Prefix:    namespace,
+-		Separator: tally.DefaultSeparator,
+-		Reporter:  r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-	subs := s.SubScope("peer").Tagged(map[string]string{"component": "committer", "env": "test"})
+-	subs.Counter("success_total").Inc(1)
+-	subs.Gauge("channel_total").Update(4)
+-
+-	buffer := make([]byte, 4096)
+-	n, _ := io.ReadAtLeast(server, buffer, 1)
+-	result := string(buffer[:n])
+-
+-	expected := []string{
+-		`hyperledger_fabric.peer.success_total.component-committer.env-test:1|c`,
+-		`hyperledger_fabric.peer.channel_total.component-committer.env-test:4|g`,
+-	}
+-
+-	for i, res := range strings.Split(result, "\n") {
+-		if res != expected[i] {
+-			t.Errorf("Got `%s`, expected `%s`", res, expected[i])
+-		}
+-	}
+-}
+-
+-func TestMetricsByPrometheusReporter(t *testing.T) {
+-	t.Parallel()
+-	r, _ := newTestPrometheusReporter()
+-
+-	opts := tally.ScopeOptions{
+-		Prefix:         namespace,
+-		Separator:      promreporter.DefaultSeparator,
+-		CachedReporter: r}
+-
+-	s := newRootScope(opts, 1*time.Second)
+-	go s.Start()
+-	defer s.Close()
+-
+-	scrape := func() string {
+-		resp, _ := http.Get(fmt.Sprintf("http://%s/metrics", promAddress))
+-		buf, _ := ioutil.ReadAll(resp.Body)
+-		return string(buf)
+-	}
+-	subs := s.SubScope("peer").Tagged(map[string]string{"component": "committer", "env": "test"})
+-	subs.Counter("success_total").Inc(1)
+-	subs.Gauge("channel_total").Update(4)
+-
+-	time.Sleep(2 * time.Second)
+-
+-	expected := []string{
+-		`# HELP hyperledger_fabric_peer_channel_total hyperledger_fabric_peer_channel_total gauge`,
+-		`# TYPE hyperledger_fabric_peer_channel_total gauge`,
+-		`hyperledger_fabric_peer_channel_total{component="committer",env="test"} 4`,
+-		`# HELP hyperledger_fabric_peer_success_total hyperledger_fabric_peer_success_total counter`,
+-		`# TYPE hyperledger_fabric_peer_success_total counter`,
+-		`hyperledger_fabric_peer_success_total{component="committer",env="test"} 1`,
+-		``,
+-	}
+-
+-	result := strings.Split(scrape(), "\n")
+-
+-	for i, res := range result {
+-		if res != expected[i] {
+-			t.Errorf("Got `%s`, expected `%s`", res, expected[i])
+-		}
+-	}
+-}
+-
+-func newTestStatsdReporter() (tally.StatsReporter, error) {
+-	opts := StatsdReporterOpts{
+-		Address:       statsdAddress,
+-		FlushInterval: defaultStatsdReporterFlushInterval,
+-		FlushBytes:    defaultStatsdReporterFlushBytes,
+-	}
+-	return newStatsdReporter(opts)
+-}
+-
+-func newTestPrometheusReporter() (promreporter.Reporter, error) {
+-	opts := PromReporterOpts{
+-		ListenAddress: promAddress,
+-	}
+-	return newPromReporter(opts)
+-}
+diff --git a/common/metrics/types.go b/common/metrics/types.go
+deleted file mode 100644
+index c70001ea1..000000000
+--- a/common/metrics/types.go
++++ /dev/null
+@@ -1,45 +0,0 @@
+-/*
+-Copyright IBM Corp. All Rights Reserved.
+-
+-SPDX-License-Identifier: Apache-2.0
+-*/
+-
+-package metrics
+-
+-import "io"
+-
+-// Counter is the interface for emitting Counter type metrics.
+-type Counter interface {
+-	// Inc increments the Counter by a delta.
+-	Inc(delta int64)
+-}
+-
+-// Gauge is the interface for emitting Gauge metrics.
+-type Gauge interface {
+-	// Update sets the gauges absolute value.
+-	Update(value float64)
+-}
+-
+-// Scope is a namespace wrapper around a stats Reporter, ensuring that
+-// all emitted values have a given prefix or set of tags.
+-type Scope interface {
+-	serve
+-	// Counter returns the Counter object corresponding to the name.
+-	Counter(name string) Counter
+-
+-	// Gauge returns the Gauge object corresponding to the name.
+-	Gauge(name string) Gauge
+-
+-	// Tagged returns a new child Scope with the given tags and current tags.
+-	Tagged(tags map[string]string) Scope
+-
+-	// SubScope returns a new child Scope appending a further name prefix.
+-	SubScope(name string) Scope
+-}
+-
+-// serve is the interface represents who can provide service
+-type serve interface {
+-	io.Closer
+-	// Start starts the server
+-	Start() error
+-}
+diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
+index 5655969d5..03629bcbd 100644
+--- a/core/ledger/ledgerstorage/store.go
++++ b/core/ledger/ledgerstorage/store.go
+@@ -23,11 +23,13 @@ import (
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+ 	"github.com/hyperledger/fabric/protos/common"
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("ledgerstorage")
+@@ -41,8 +43,11 @@ type Provider struct {
+ // Store encapsulates two stores 1) block store and pvt data store
+ type Store struct {
+ 	blkstorage.BlockStore
+-	pvtdataStore pvtdatastorage.Store
+-	rwlock       *sync.RWMutex
++	pvtdataStore                 pvtdatastorage.Store
++	rwlock                       *sync.RWMutex
++	commitWithPvtDataTimer       tally.Timer
++	getPvtDataAndBlockByNumTimer tally.Timer
++	getPvtDataByNumTimer         tally.Timer
+ }
+ 
+ // NewProvider returns the handle to the provider
+@@ -77,7 +82,10 @@ func (p *Provider) Open(ledgerid string) (*Store, error) {
+ 	if pvtdataStore, err = p.pvtdataStoreProvider.OpenStore(ledgerid); err != nil {
+ 		return nil, err
+ 	}
+-	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}}
++	commitWithPvtDataTimer := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
++	getPvtDataAndBlockByNumTimer := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
++	getPvtDataByNumTimer := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
++	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}, commitWithPvtDataTimer, getPvtDataAndBlockByNumTimer, getPvtDataByNumTimer}
+ 	if err := store.init(); err != nil {
+ 		return nil, err
+ 	}
+@@ -97,6 +105,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+ 
+ // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
+ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
++	stopWatch := s.commitWithPvtDataTimer.Start()
++	defer stopWatch.Stop()
+ 	blockNum := blockAndPvtdata.Block.Header.Number
+ 	s.rwlock.Lock()
+ 	defer s.rwlock.Unlock()
+@@ -137,6 +147,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+ // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
+ // The pvt data is filtered by the list of 'collections' supplied
+ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
++	stopWatch := s.getPvtDataAndBlockByNumTimer.Start()
++	defer stopWatch.Stop()
+ 	s.rwlock.RLock()
+ 	defer s.rwlock.RUnlock()
+ 
+@@ -156,6 +168,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+ // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
+ // A nil filter does not filter any results
+ func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
++	stopWatch := s.getPvtDataByNumTimer.Start()
++	defer stopWatch.Stop()
+ 	s.rwlock.RLock()
+ 	defer s.rwlock.RUnlock()
+ 	return s.getPvtDataByNumWithoutLock(blockNum, filter)
+-- 
+2.14.3 (Apple Git-98)
+
