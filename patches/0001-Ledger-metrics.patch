@@ -1,4 +1,4 @@
-From 925ab4da64d741acfa2ab5666658e087a19b6cd5 Mon Sep 17 00:00:00 2001
+From 92703cd562ec1b6a246ac66f1996ace75a15d0bc Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -6,25 +6,29 @@ Subject: [PATCH] Ledger metrics
 Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  10 +
- common/metrics/server.go                           | 246 +++++------
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  16 +
+ common/metrics/server.go                           | 207 +++++----
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
- core/ledger/ledgerstorage/store.go                 |  18 +
- 7 files changed, 200 insertions(+), 1195 deletions(-)
+ core/ledger/ledgerstorage/store.go                 |  36 ++
+ peer/node/start.go                                 |   3 +
+ 8 files changed, 194 insertions(+), 1189 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
 
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 7ebe52af9..1d16a7544 100644
+index 7ebe52af9..07a522052 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-@@ -20,8 +20,16 @@ import (
+@@ -19,9 +19,23 @@ package fsblkstorage
+ import (
  	"sync"
  
++	"fmt"
++
  	"github.com/hyperledger/fabric/common/ledger"
 +	"github.com/hyperledger/fabric/common/metrics"
 +	"github.com/uber-go/tally"
@@ -32,27 +36,31 @@ index 7ebe52af9..1d16a7544 100644
  
 +var waitForBlockTimer tally.Timer
 +
-+func init() {
-+	waitForBlockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
++func getWaitForBlockTimer() tally.Timer {
++	if waitForBlockTimer == nil {
++		waitForBlockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
++		fmt.Printf("=====> ledgerstorage_CommitWithPvtData_time_seconds initialized")
++	}
++	return waitForBlockTimer
 +}
 +
  // blocksItr - an iterator for iterating over a sequence of blocks
  type blocksItr struct {
  	mgr                  *blockfileMgr
-@@ -37,6 +45,8 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
+@@ -37,6 +51,8 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
  }
  
  func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
-+	stopWatch := waitForBlockTimer.Start()
++	stopWatch := getWaitForBlockTimer().Start()
 +	defer stopWatch.Stop()
  	itr.mgr.cpInfoCond.L.Lock()
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..eb9422f12 100644
+index 677151e78..c4599f577 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
-@@ -8,11 +8,19 @@ package metrics
+@@ -8,15 +8,21 @@ package metrics
  
  import (
  	"fmt"
@@ -61,8 +69,6 @@ index 677151e78..eb9422f12 100644
  	"time"
  
 +	"sync"
-+
-+	"strings"
 +
 +	"runtime"
 +
@@ -73,28 +79,23 @@ index 677151e78..eb9422f12 100644
  )
  
  const (
-@@ -28,21 +36,93 @@ const (
+-	namespace string = "hyperledger_fabric"
++	namespace = "hyperledger_fabric"
+ 
+ 	statsdReporterType = "statsd"
+ 	promReporterType   = "prom"
+@@ -28,15 +34,56 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
 -var RootScope Scope
 -var once sync.Once
-+const (
-+	peerConfigFileName = "core"
-+	peerConfigPath     = "/etc/hyperledger/fabric"
-+	cmdRootPrefix      = "core"
-+)
-+
-+var peerConfig *viper.Viper
-+var peerConfigPathOverride string
-+
 +// RootScope tally.NoopScope is a scope that does nothing
 +var RootScope = tally.NoopScope
  var rootScopeMutex = &sync.Mutex{}
  var running bool
  
 -// NewOpts create metrics options based config file
--func NewOpts() Opts {
 +// StatsdReporterOpts ...
 +type StatsdReporterOpts struct {
 +	Address       string
@@ -116,19 +117,14 @@ index 677151e78..eb9422f12 100644
 +	PromReporterOpts   PromReporterOpts
 +}
 +
-+func init() {
++func Initialize() {
 +
-+	// load peer config
-+	if err := initPeerConfig(); err != nil {
-+		panic(fmt.Sprintf("error initPeerConfig %v", err))
-+	}
-+
-+	if peerConfig.GetBool("peer.profile.enabled") {
++	if viper.GetBool("peer.profile.enabled") {
 +		runtime.SetMutexProfileFraction(5)
 +	}
 +
 +	// start metric server
-+	opts := NewOpts(peerConfig)
++	opts := NewOpts()
 +	err := Start(opts)
 +	if err != nil {
 +		logger.Errorf("Failed to start metrics collection: %s", err)
@@ -137,68 +133,49 @@ index 677151e78..eb9422f12 100644
 +	logger.Info("Fabric Bootstrap filter initialized")
 +}
 +
-+func initPeerConfig() error {
-+	peerConfig = viper.New()
-+	peerConfig.AddConfigPath(peerConfigPath)
-+	if peerConfigPathOverride != "" {
-+		peerConfig.AddConfigPath(peerConfigPathOverride)
-+	}
-+	peerConfig.SetConfigName(peerConfigFileName)
-+	peerConfig.SetEnvPrefix(cmdRootPrefix)
-+	peerConfig.AutomaticEnv()
-+	peerConfig.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-+	err := peerConfig.ReadInConfig()
-+	if err != nil {
-+		return err
-+	}
-+
-+	return nil
-+}
-+
 +// NewOpts create metrics options based config file.
 +// TODO: Currently this is only for peer node which uses global viper.
 +// As for orderer, which uses its local viper, we are unable to get
 +// metrics options with the function NewOpts()
-+func NewOpts(peerConfig *viper.Viper) Opts {
+ func NewOpts() Opts {
  	opts := Opts{}
--	opts.Enabled = viper.GetBool("metrics.enabled")
--	if report := viper.GetString("metrics.reporter"); report != "" {
-+	opts.Enabled = peerConfig.GetBool("metrics.enabled")
-+	if report := peerConfig.GetString("metrics.reporter"); report != "" {
+ 	opts.Enabled = viper.GetBool("metrics.enabled")
++	fmt.Printf("====> metrics.enabled: %v\n", opts.Enabled)
+ 	if report := viper.GetString("metrics.reporter"); report != "" {
  		opts.Reporter = report
  	} else {
- 		opts.Reporter = defaultReporterType
- 	}
--	if interval := viper.GetDuration("metrics.interval"); interval > 0 {
-+	if interval := peerConfig.GetDuration("metrics.interval"); interval > 0 {
- 		opts.Interval = interval
+@@ -47,64 +94,72 @@ func NewOpts() Opts {
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +130,13 @@ func NewOpts() Opts {
+ 	}
++	fmt.Printf("====> metrics.interval: %v\n", opts.Interval)
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
--		statsdOpts.Address = viper.GetString("metrics.statsdReporter.address")
--		if flushInterval := viper.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
-+		statsdOpts.Address = peerConfig.GetString("metrics.statsdReporter.address")
-+		if flushInterval := peerConfig.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
+ 		statsdOpts.Address = viper.GetString("metrics.statsdReporter.address")
++		fmt.Printf("====> metrics.statsdReporter.address: %v\n", statsdOpts.Address)
+ 		if flushInterval := viper.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
  			statsdOpts.FlushInterval = flushInterval
  		} else {
  			statsdOpts.FlushInterval = defaultStatsdReporterFlushInterval
  		}
--		if flushBytes := viper.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
-+		if flushBytes := peerConfig.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
++		fmt.Printf("====> metrics.statsdReporter.flushInterval: %v\n", statsdOpts.FlushInterval)
+ 		if flushBytes := viper.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +146,47 @@ func NewOpts() Opts {
+ 		}
+ 		opts.StatsdReporterOpts = statsdOpts
++		fmt.Printf("====> metrics.statsdReporter.flushBytes: %v\n", statsdOpts.FlushBytes)
+ 	}
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
 -		promOpts.ListenAddress = viper.GetString("metrics.promReporter.listenAddress")
-+		promOpts.ListenAddress = peerConfig.GetString("metrics.fabric.PromReporter.listenAddress")
++		promOpts.ListenAddress = viper.GetString("metrics.fabric.PromReporter.listenAddress")
  		opts.PromReporterOpts = promOpts
  	}
++	fmt.Printf("====> metrics.fabric.PromReporter.listenAddress: %v\n", opts.PromReporterOpts.ListenAddress)
  
  	return opts
  }
@@ -228,6 +205,7 @@ index 677151e78..eb9422f12 100644
 +		if err == nil {
 +			running = true
 +			RootScope = rootScope
++			fmt.Printf("====> metric sserver started\n")
 +		}
 +		return err
  	}
@@ -263,7 +241,7 @@ index 677151e78..eb9422f12 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +195,35 @@ func isRunning() bool {
+@@ -113,109 +168,35 @@ func isRunning() bool {
  	return running
  }
  
@@ -1618,10 +1596,10 @@ index c70001ea1..000000000
 -	Start() error
 -}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index 5655969d5..356a97357 100644
+index 5655969d5..c7a908311 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
-@@ -23,13 +23,25 @@ import (
+@@ -23,13 +23,43 @@ import (
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
@@ -1638,42 +1616,81 @@ index 5655969d5..356a97357 100644
 +var pvtDataAndBlockByNumTimer tally.Timer
 +var pvtDataByNumTimer tally.Timer
 +
-+func init() {
-+	commitWithPvtDataTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
-+	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
-+	pvtDataByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
++func getCommitWithPvtDataTimer() tally.Timer {
++	if commitWithPvtDataTimer == nil {
++		commitWithPvtDataTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
++		fmt.Printf("=====> ledgerstorage_CommitWithPvtData_time_seconds initialized")
++	}
++	return commitWithPvtDataTimer
++}
++
++func getPvtDataAndBlockByNumTimer() tally.Timer {
++	if pvtDataAndBlockByNumTimer == nil {
++		pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
++		fmt.Printf("=====> ledgerstorage_GetPvtDataAndBlockByNum_time_seconds initialized")
++	}
++	return pvtDataAndBlockByNumTimer
++}
++
++func getPvtDataByNumTimer() tally.Timer {
++	if pvtDataByNumTimer == nil {
++		pvtDataByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
++		fmt.Printf("=====> ledgerstorage_GetPvtDataByNum_time_seconds initialized")
++	}
++	return pvtDataByNumTimer
 +}
 +
  var logger = flogging.MustGetLogger("ledgerstorage")
  
  // Provider encapusaltes two providers 1) block store provider and 2) and pvt data store provider
-@@ -97,6 +109,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+@@ -97,6 +127,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
-+	stopWatch := commitWithPvtDataTimer.Start()
++	stopWatch := getCommitWithPvtDataTimer().Start()
 +	defer stopWatch.Stop()
  	blockNum := blockAndPvtdata.Block.Header.Number
  	s.rwlock.Lock()
  	defer s.rwlock.Unlock()
-@@ -137,6 +151,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -137,6 +169,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
-+	stopWatch := pvtDataAndBlockByNumTimer.Start()
++	stopWatch := getPvtDataAndBlockByNumTimer().Start()
 +	defer stopWatch.Stop()
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
  
-@@ -156,6 +172,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+@@ -156,6 +190,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
  func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-+	stopWatch := pvtDataByNumTimer.Start()
++	stopWatch := getPvtDataByNumTimer().Start()
 +	defer stopWatch.Stop()
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
+diff --git a/peer/node/start.go b/peer/node/start.go
+index 9735efe79..0c4a8cf69 100644
+--- a/peer/node/start.go
++++ b/peer/node/start.go
+@@ -23,6 +23,7 @@ import (
+ 	"github.com/hyperledger/fabric/common/deliver"
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/localmsp"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/common/policies"
+ 	"github.com/hyperledger/fabric/common/viperutil"
+ 	"github.com/hyperledger/fabric/core/aclmgmt"
+@@ -410,6 +411,8 @@ func serve(args []string) error {
+ 		}()
+ 	}
+ 
++	metrics.Initialize()
++
+ 	logger.Infof("Started peer with ID=[%s], network ID=[%s], address=[%s]",
+ 		peerEndpoint.Id, viper.GetString("peer.networkId"), peerEndpoint.Address)
+ 
 -- 
 2.14.3 (Apple Git-98)
 
