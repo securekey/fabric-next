@@ -1,4 +1,4 @@
-From 29cfd3ed7fc9ee0a8a9211571fde5838fac17dee Mon Sep 17 00:00:00 2001
+From 925ab4da64d741acfa2ab5666658e087a19b6cd5 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -6,23 +6,23 @@ Subject: [PATCH] Ledger metrics
 Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |   8 +-
- common/metrics/server.go                           | 194 ++++-----
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  10 +
+ common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
- core/ledger/ledgerstorage/store.go                 |  20 +-
- 7 files changed, 144 insertions(+), 1199 deletions(-)
+ core/ledger/ledgerstorage/store.go                 |  18 +
+ 7 files changed, 200 insertions(+), 1195 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
 
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 7ebe52af9..2af874e62 100644
+index 7ebe52af9..1d16a7544 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-@@ -20,6 +20,8 @@ import (
+@@ -20,8 +20,16 @@ import (
  	"sync"
  
  	"github.com/hyperledger/fabric/common/ledger"
@@ -30,31 +30,29 @@ index 7ebe52af9..2af874e62 100644
 +	"github.com/uber-go/tally"
  )
  
++var waitForBlockTimer tally.Timer
++
++func init() {
++	waitForBlockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
++}
++
  // blocksItr - an iterator for iterating over a sequence of blocks
-@@ -30,13 +32,17 @@ type blocksItr struct {
- 	stream               *blockStream
- 	closeMarker          bool
- 	closeMarkerLock      *sync.Mutex
-+	waitForBlockTimer    tally.Timer
- }
- 
- func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
--	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}}
-+	waitForBlockTimer := metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
-+	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}, waitForBlockTimer}
+ type blocksItr struct {
+ 	mgr                  *blockfileMgr
+@@ -37,6 +45,8 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
  }
  
  func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
-+	stopWatch := itr.waitForBlockTimer.Start()
++	stopWatch := waitForBlockTimer.Start()
 +	defer stopWatch.Stop()
  	itr.mgr.cpInfoCond.L.Lock()
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..9256daf87 100644
+index 677151e78..eb9422f12 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
-@@ -8,11 +8,15 @@ package metrics
+@@ -8,11 +8,19 @@ package metrics
  
  import (
  	"fmt"
@@ -64,6 +62,10 @@ index 677151e78..9256daf87 100644
  
 +	"sync"
 +
++	"strings"
++
++	"runtime"
++
 +	"github.com/pkg/errors"
  	"github.com/spf13/viper"
  	"github.com/uber-go/tally"
@@ -71,12 +73,21 @@ index 677151e78..9256daf87 100644
  )
  
  const (
-@@ -28,21 +32,45 @@ const (
+@@ -28,21 +36,93 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
 -var RootScope Scope
 -var once sync.Once
++const (
++	peerConfigFileName = "core"
++	peerConfigPath     = "/etc/hyperledger/fabric"
++	cmdRootPrefix      = "core"
++)
++
++var peerConfig *viper.Viper
++var peerConfigPathOverride string
++
 +// RootScope tally.NoopScope is a scope that does nothing
 +var RootScope = tally.NoopScope
  var rootScopeMutex = &sync.Mutex{}
@@ -105,6 +116,45 @@ index 677151e78..9256daf87 100644
 +	PromReporterOpts   PromReporterOpts
 +}
 +
++func init() {
++
++	// load peer config
++	if err := initPeerConfig(); err != nil {
++		panic(fmt.Sprintf("error initPeerConfig %v", err))
++	}
++
++	if peerConfig.GetBool("peer.profile.enabled") {
++		runtime.SetMutexProfileFraction(5)
++	}
++
++	// start metric server
++	opts := NewOpts(peerConfig)
++	err := Start(opts)
++	if err != nil {
++		logger.Errorf("Failed to start metrics collection: %s", err)
++	}
++
++	logger.Info("Fabric Bootstrap filter initialized")
++}
++
++func initPeerConfig() error {
++	peerConfig = viper.New()
++	peerConfig.AddConfigPath(peerConfigPath)
++	if peerConfigPathOverride != "" {
++		peerConfig.AddConfigPath(peerConfigPathOverride)
++	}
++	peerConfig.SetConfigName(peerConfigFileName)
++	peerConfig.SetEnvPrefix(cmdRootPrefix)
++	peerConfig.AutomaticEnv()
++	peerConfig.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
++	err := peerConfig.ReadInConfig()
++	if err != nil {
++		return err
++	}
++
++	return nil
++}
++
 +// NewOpts create metrics options based config file.
 +// TODO: Currently this is only for peer node which uses global viper.
 +// As for orderer, which uses its local viper, we are unable to get
@@ -124,7 +174,7 @@ index 677151e78..9256daf87 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +78,13 @@ func NewOpts() Opts {
+@@ -50,13 +130,13 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
@@ -141,12 +191,12 @@ index 677151e78..9256daf87 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +94,47 @@ func NewOpts() Opts {
+@@ -66,45 +146,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
 -		promOpts.ListenAddress = viper.GetString("metrics.promReporter.listenAddress")
-+		promOpts.ListenAddress = peerConfig.GetString("metrics.promReporter.listenAddress")
++		promOpts.ListenAddress = peerConfig.GetString("metrics.fabric.PromReporter.listenAddress")
  		opts.PromReporterOpts = promOpts
  	}
  
@@ -213,7 +263,7 @@ index 677151e78..9256daf87 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +143,35 @@ func isRunning() bool {
+@@ -113,109 +195,35 @@ func isRunning() bool {
  	return running
  }
  
@@ -1568,10 +1618,10 @@ index c70001ea1..000000000
 -	Start() error
 -}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index 5655969d5..03629bcbd 100644
+index 5655969d5..356a97357 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
-@@ -23,11 +23,13 @@ import (
+@@ -23,13 +23,25 @@ import (
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
@@ -1584,56 +1634,42 @@ index 5655969d5..03629bcbd 100644
 +	"github.com/uber-go/tally"
  )
  
++var commitWithPvtDataTimer tally.Timer
++var pvtDataAndBlockByNumTimer tally.Timer
++var pvtDataByNumTimer tally.Timer
++
++func init() {
++	commitWithPvtDataTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
++	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
++	pvtDataByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
++}
++
  var logger = flogging.MustGetLogger("ledgerstorage")
-@@ -41,8 +43,11 @@ type Provider struct {
- // Store encapsulates two stores 1) block store and pvt data store
- type Store struct {
- 	blkstorage.BlockStore
--	pvtdataStore pvtdatastorage.Store
--	rwlock       *sync.RWMutex
-+	pvtdataStore                 pvtdatastorage.Store
-+	rwlock                       *sync.RWMutex
-+	commitWithPvtDataTimer       tally.Timer
-+	getPvtDataAndBlockByNumTimer tally.Timer
-+	getPvtDataByNumTimer         tally.Timer
- }
  
- // NewProvider returns the handle to the provider
-@@ -77,7 +82,10 @@ func (p *Provider) Open(ledgerid string) (*Store, error) {
- 	if pvtdataStore, err = p.pvtdataStoreProvider.OpenStore(ledgerid); err != nil {
- 		return nil, err
- 	}
--	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}}
-+	commitWithPvtDataTimer := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
-+	getPvtDataAndBlockByNumTimer := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
-+	getPvtDataByNumTimer := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
-+	store := &Store{blockStore, pvtdataStore, &sync.RWMutex{}, commitWithPvtDataTimer, getPvtDataAndBlockByNumTimer, getPvtDataByNumTimer}
- 	if err := store.init(); err != nil {
- 		return nil, err
- 	}
-@@ -97,6 +105,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+ // Provider encapusaltes two providers 1) block store provider and 2) and pvt data store provider
+@@ -97,6 +109,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
-+	stopWatch := s.commitWithPvtDataTimer.Start()
++	stopWatch := commitWithPvtDataTimer.Start()
 +	defer stopWatch.Stop()
  	blockNum := blockAndPvtdata.Block.Header.Number
  	s.rwlock.Lock()
  	defer s.rwlock.Unlock()
-@@ -137,6 +147,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -137,6 +151,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
-+	stopWatch := s.getPvtDataAndBlockByNumTimer.Start()
++	stopWatch := pvtDataAndBlockByNumTimer.Start()
 +	defer stopWatch.Stop()
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
  
-@@ -156,6 +168,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+@@ -156,6 +172,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
  func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-+	stopWatch := s.getPvtDataByNumTimer.Start()
++	stopWatch := pvtDataByNumTimer.Start()
 +	defer stopWatch.Stop()
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
