@@ -1,4 +1,4 @@
-From 925ab4da64d741acfa2ab5666658e087a19b6cd5 Mon Sep 17 00:00:00 2001
+From c94fbbc83bc2c3b306537a90679148061593972f Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -12,11 +12,28 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/tally_provider.go                   | 372 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
+ core/endorser/endorser.go                          |  43 +-
  core/ledger/ledgerstorage/store.go                 |  18 +
- 7 files changed, 200 insertions(+), 1195 deletions(-)
+ util/concurrent/futurevalue/futurevalue.go         | 102 +++++
+ util/concurrent/lazycache/keys.go                  |  22 +
+ util/concurrent/lazycache/lazycache.go             | 258 ++++++++++++
+ util/concurrent/lazycache/refoptcheck.go           |  38 ++
+ util/concurrent/lazyref/expiration.go              |  32 ++
+ util/concurrent/lazyref/lazyref.go                 | 375 +++++++++++++++++
+ util/concurrent/lazyref/options.go                 | 133 ++++++
+ util/concurrent/options/options.go                 |  21 +
+ 16 files changed, 1223 insertions(+), 1196 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
+ create mode 100644 util/concurrent/futurevalue/futurevalue.go
+ create mode 100644 util/concurrent/lazycache/keys.go
+ create mode 100644 util/concurrent/lazycache/lazycache.go
+ create mode 100644 util/concurrent/lazycache/refoptcheck.go
+ create mode 100644 util/concurrent/lazyref/expiration.go
+ create mode 100644 util/concurrent/lazyref/lazyref.go
+ create mode 100644 util/concurrent/lazyref/options.go
+ create mode 100644 util/concurrent/options/options.go
 
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 index 7ebe52af9..1d16a7544 100644
@@ -1617,6 +1634,71 @@ index c70001ea1..000000000
 -	// Start starts the server
 -	Start() error
 -}
+diff --git a/core/endorser/endorser.go b/core/endorser/endorser.go
+index 2d29f43a4..7db5235b6 100644
+--- a/core/endorser/endorser.go
++++ b/core/endorser/endorser.go
+@@ -25,10 +25,38 @@ import (
+ 	putils "github.com/hyperledger/fabric/protos/utils"
+ 	"github.com/pkg/errors"
+ 	"golang.org/x/net/context"
++	"github.com/hyperledger/fabric/util/concurrent/lazycache"
++	"github.com/hyperledger/fabric/common/metrics"
++
++	"github.com/uber-go/tally"
+ )
+ 
+ var endorserLogger = flogging.MustGetLogger("endorser")
+ 
++var callChaincodeTimersCache *lazycache.Cache
++
++
++func init() {
++	callChaincodeTimersCache = lazycache.New(
++		"CC_Timer_Resolver_Cache",
++		func(key lazycache.Key) (interface{}, error) {
++			return metrics.RootScope.Timer(key.String()), nil
++		})
++}
++
++
++// timerCCKey contain ccName,fName
++type timerCCKey struct {
++	ccName string
++	fName  string
++}
++
++//String return string value for config key
++func (timerCCKey *timerCCKey) String() string {
++	return fmt.Sprintf("endorsement_CC_callChaincode_%s_%s_processing_time_seconds", timerCCKey.ccName, timerCCKey.fName)
++}
++
++
+ // The Jira issue that documents Endorser flow along with its relationship to
+ // the lifecycle chaincode - https://jira.hyperledger.org/browse/FAB-181
+ 
+@@ -122,7 +150,20 @@ func NewEndorserServer(privDist privateDataDistributor, s Support) *Endorser {
+ func (e *Endorser) callChaincode(ctxt context.Context, chainID string, version string, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, cis *pb.ChaincodeInvocationSpec, cid *pb.ChaincodeID, txsim ledger.TxSimulator) (*pb.Response, *pb.ChaincodeEvent, error) {
+ 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s version: %s", chainID, txid, cid, version)
+ 	defer endorserLogger.Debugf("[%s][%s] Exit", chainID, txid)
+-	var err error
++
++	// Report on the CC processing time
++	ccName := cis.ChaincodeSpec.ChaincodeId.Name
++	fName := "NIL"
++	if len(cis.ChaincodeSpec.Input.Args) > 0 {
++		fName = string(cis.ChaincodeSpec.Input.Args[0])
++	}
++	value, err := callChaincodeTimersCache.Get(&timerCCKey{ccName: ccName, fName: fName})
++	if err != nil {
++		return nil, nil, err
++	}
++	ccTimer := value.(tally.Timer)
++	ccStopWatch := ccTimer.Start()
++	defer ccStopWatch.Stop()
+ 	var res *pb.Response
+ 	var ccevent *pb.ChaincodeEvent
+ 
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
 index 5655969d5..356a97357 100644
 --- a/core/ledger/ledgerstorage/store.go
@@ -1674,6 +1756,1035 @@ index 5655969d5..356a97357 100644
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
+diff --git a/util/concurrent/futurevalue/futurevalue.go b/util/concurrent/futurevalue/futurevalue.go
+new file mode 100644
+index 000000000..834c961e1
+--- /dev/null
++++ b/util/concurrent/futurevalue/futurevalue.go
+@@ -0,0 +1,102 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package futurevalue
++
++import (
++	"fmt"
++	"sync"
++	"sync/atomic"
++	"unsafe"
++)
++
++// Initializer initializes the value
++type Initializer func() (interface{}, error)
++
++// valueHolder holds the actual value
++type valueHolder struct {
++	value interface{}
++	err   error
++}
++
++// Value implements a Future Value in which a reference is initialized once
++// (and only once) using the Initialize function. Only one Go routine can call
++// Initialize whereas multiple Go routines may invoke Get, and will wait
++// until the reference has been initialized.
++// Regardless of whether Initialize returns success or error,
++// the value cannot be initialized again.
++type Value struct {
++	sync.RWMutex
++	ref         unsafe.Pointer
++	initializer Initializer
++}
++
++// New returns a new future value
++func New(initializer Initializer) *Value {
++	f := &Value{
++		initializer: initializer,
++	}
++	f.Lock()
++	return f
++}
++
++// Initialize initializes the future value.
++// This function must be called only once. Subsequent
++// calls may result in deadlock.
++func (f *Value) Initialize() (interface{}, error) {
++	value, err := f.initializer()
++	f.set(value, err)
++	f.Unlock()
++
++	return value, err
++}
++
++// Get returns the value and/or error that occurred during initialization.
++func (f *Value) Get() (interface{}, error) {
++	// Try outside of a lock
++	if ok, value, err := f.get(); ok {
++		return value, err
++	}
++
++	f.RLock()
++	defer f.RUnlock()
++
++	_, value, err := f.get()
++	return value, err
++}
++
++// MustGet returns the value. If an error resulted
++// during initialization then this function will panic.
++func (f *Value) MustGet() interface{} {
++	value, err := f.Get()
++	if err != nil {
++		panic(fmt.Sprintf("get returned error: %s", err))
++	}
++	return value
++}
++
++// IsSet returns true if the value has been set, otherwise false is returned
++func (f *Value) IsSet() bool {
++	p := atomic.LoadPointer(&f.ref)
++	return p != nil
++}
++
++func (f *Value) get() (bool, interface{}, error) {
++	p := atomic.LoadPointer(&f.ref)
++	if p == nil {
++		return false, nil, nil
++	}
++	holder := (*valueHolder)(p)
++	return true, holder.value, holder.err
++}
++
++func (f *Value) set(value interface{}, err error) {
++	holder := &valueHolder{
++		value: value,
++		err:   err,
++	}
++	atomic.StorePointer(&f.ref, unsafe.Pointer(holder)) //nolint
++}
+diff --git a/util/concurrent/lazycache/keys.go b/util/concurrent/lazycache/keys.go
+new file mode 100644
+index 000000000..047c99fef
+--- /dev/null
++++ b/util/concurrent/lazycache/keys.go
+@@ -0,0 +1,22 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package lazycache
++
++// StringKey is a simple string cache key
++type StringKey struct {
++	key string
++}
++
++// NewStringKey returns a new StringKey
++func NewStringKey(key string) *StringKey {
++	return &StringKey{key: key}
++}
++
++// String returns the key as a string
++func (k *StringKey) String() string {
++	return k.key
++}
+diff --git a/util/concurrent/lazycache/lazycache.go b/util/concurrent/lazycache/lazycache.go
+new file mode 100644
+index 000000000..33ab3aeba
+--- /dev/null
++++ b/util/concurrent/lazycache/lazycache.go
+@@ -0,0 +1,258 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package lazycache
++
++import (
++	"fmt"
++	"sync"
++	"sync/atomic"
++
++	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/util/concurrent/futurevalue"
++	"github.com/hyperledger/fabric/util/concurrent/lazyref"
++	"github.com/pkg/errors"
++	"github.com/hyperledger/fabric/util/concurrent/options"
++)
++
++var logger = flogging.MustGetLogger("fabsdk/util")
++
++// Key holds the string key for the cache entry
++type Key interface {
++	String() string
++}
++
++// EntryInitializer creates a cache value for the given key
++type EntryInitializer func(key Key) (interface{}, error)
++
++// EntryInitializerWithData creates a cache value for the given key and the
++// additional data passed in from Get(). With expiring cache entries, the
++// initializer is called with the same key, but the latest data is passed from
++// the Get() call that triggered the data to be cached/re-cached.
++type EntryInitializerWithData func(key Key, data interface{}) (interface{}, error)
++
++type future interface {
++	Get() (interface{}, error)
++	MustGet() interface{}
++	IsSet() bool
++}
++
++type closable interface {
++	Close()
++}
++
++// Cache implements a lazy initializing cache. A cache entry is created
++// the first time a value is accessed (via Get or MustGet) by invoking
++// the provided Initializer. If the Initializer returns an error then the
++// entry will not be added.
++type Cache struct {
++	// name is useful for debugging
++	name        string
++	m           sync.Map
++	initializer EntryInitializerWithData
++	closed      int32
++	useRef      bool
++}
++
++// New creates a new lazy cache.
++// - name is the name of the cache and is only used for debugging purpose
++// - initializer is invoked the first time an entry is being cached
++// - opts are options for the cache. If any lazyref option is passed then a lazy reference
++//   is created for each of the cache entries to hold the actual value. This makes it possible
++//   to have expiring values and values that proactively refresh.
++func New(name string, initializer EntryInitializer, opts ...options.Opt) *Cache {
++	return NewWithData(name,
++		func(key Key, data interface{}) (interface{}, error) {
++			return initializer(key)
++		},
++		opts...,
++	)
++}
++
++// NewWithData creates a new lazy cache. The provided initializer accepts optional data that
++// is passed in from Get().
++// - name is the name of the cache and is only used for debugging purpose
++// - initializer is invoked the first time an entry is being cached
++// - opts are options for the cache. If any lazyref option is passed then a lazy reference
++//   is created for each of the cache entries to hold the actual value. This makes it possible
++//   to have expiring values and values that proactively refresh.
++func NewWithData(name string, initializer EntryInitializerWithData, opts ...options.Opt) *Cache {
++	useRef := useLazyRef(opts...)
++	if useRef {
++		initializer = newLazyRefInitializer(name, initializer, opts...)
++	}
++	return &Cache{
++		name:        name,
++		initializer: initializer,
++		useRef:      useRef,
++	}
++}
++
++// Name returns the name of the cache (useful for debugging)
++func (c *Cache) Name() string {
++	return c.name
++}
++
++// Get returns the value for the given key. If the
++// key doesn't exist then the initializer is invoked
++// to create the value, and the key is inserted. If the
++// initializer returns an error then the key is removed
++// from the cache.
++func (c *Cache) Get(key Key, data ...interface{}) (interface{}, error) {
++	keyStr := key.String()
++
++	f, ok := c.m.Load(keyStr)
++	if ok {
++		v, err := f.(future).Get()
++		if err != nil {
++			return nil, err
++		}
++		return c.value(v, first(data))
++	}
++
++	// The key wasn't found. Attempt to add one.
++	newFuture := futurevalue.New(
++		func() (interface{}, error) {
++			if closed := atomic.LoadInt32(&c.closed); closed == 1 {
++				return nil, errors.Errorf("%s - cache is closed", c.name)
++			}
++			return c.initializer(key, first(data))
++		},
++	)
++
++	f, loaded := c.m.LoadOrStore(keyStr, newFuture)
++	if loaded {
++		// Another thread has added the key before us. Return the value.
++		v, err := f.(future).Get()
++		if err != nil {
++			return nil, err
++		}
++		return c.value(v, first(data))
++	}
++
++	// We added the key. It must be initialized.
++	value, err := newFuture.Initialize()
++	if err != nil {
++		// Failed. Delete the key.
++		logger.Debugf("%s - Failed to initialize key [%s]: %s. Deleting key.", c.name, keyStr, err)
++		c.m.Delete(keyStr)
++		return nil, err
++	}
++	return c.value(value, first(data))
++}
++
++// MustGet returns the value for the given key. If the key doesn't
++// exist then the initializer is invoked to create the value and the
++// key is inserted. If an error is returned during initialization of the
++// value then this function will panic.
++func (c *Cache) MustGet(key Key) interface{} {
++	value, err := c.Get(key)
++	if err != nil {
++		panic(fmt.Sprintf("error returned from Get: %s", err))
++	}
++	return value
++}
++
++// Close does the following:
++// - calls Close on all values that implement a Close() function
++// - deletes all entries from the cache
++// - prevents further calls to the cache
++func (c *Cache) Close() {
++	if !atomic.CompareAndSwapInt32(&c.closed, 0, 1) {
++		// Already closed
++		return
++	}
++	logger.Debugf("%s - Closing cache", c.name)
++	c.DeleteAll()
++}
++
++// DeleteAll does the following:
++// - calls Close on all values that implement a Close() function
++// - deletes all entries from the cache
++func (c *Cache) DeleteAll() {
++	var keys []interface{}
++	c.m.Range(func(key interface{}, value interface{}) bool {
++		c.close(key.(string), value.(future))
++		keys = append(keys, key)
++		return true
++	})
++
++	for _, key := range keys {
++		c.m.Delete(key)
++	}
++}
++
++// Delete does the following:
++// - calls Close on all values that implement a Close() function
++// - deletes key from the cache
++func (c *Cache) Delete(key Key) {
++	logger.Debugf("%s - Deleting cache key", key.String())
++	value, ok := c.m.Load(key.String())
++	if ok {
++		c.close(key.String(), value.(future))
++		c.m.Delete(key.String())
++	}
++}
++
++func (c *Cache) close(key string, f future) {
++	if !f.IsSet() {
++		logger.Debugf("%s - Reference for [%q] is not set", c.name, key)
++		return
++	}
++	value, err := f.Get()
++	if err == nil && value != nil {
++		if clos, ok := value.(closable); ok && c != nil {
++			logger.Debugf("%s - Invoking Close on value for key [%q].", c.name, key)
++			clos.Close()
++		}
++	}
++}
++
++func newLazyRefInitializer(name string, initializer EntryInitializerWithData, opts ...options.Opt) EntryInitializerWithData {
++	return func(key Key, data interface{}) (interface{}, error) {
++		logger.Debugf("%s - Calling initializer for [%s], data [%#v]", name, key, data)
++		ref := lazyref.NewWithData(
++			func(data interface{}) (interface{}, error) {
++				logger.Debugf("%s - Calling lazyref initializer for [%s], data [%#v]", name, key, data)
++				return initializer(key, data)
++			},
++			opts...,
++		)
++
++		// Make sure no error is returned from lazyref.Get(). If there is
++		// then return the error. We don't want to cache a reference that always
++		// returns an error, especially if it's a refreshing reference.
++		_, err := ref.Get(data)
++		if err != nil {
++			logger.Debugf("%s - Error returned from lazyref initializer [%s], data [%#v]: %s", name, key, data, err)
++			ref.Close()
++			return nil, err
++		}
++		logger.Debugf("%s - Returning lazyref for [%s], data [%#v]", name, key, data)
++		return ref, nil
++	}
++}
++
++func (c *Cache) value(value interface{}, data interface{}) (interface{}, error) {
++	if value != nil && c.useRef {
++		return value.(*lazyref.Reference).Get(data)
++	}
++	return value, nil
++}
++
++func first(data []interface{}) interface{} {
++	if len(data) == 0 {
++		return nil
++	}
++	return data[0]
++}
++
++// useLazyRef returns true if the cache should used lazy references to hold the actual value
++func useLazyRef(opts ...options.Opt) bool {
++	chk := &refOptCheck{}
++	options.Apply(chk, opts)
++	return chk.useRef
++}
+diff --git a/util/concurrent/lazycache/refoptcheck.go b/util/concurrent/lazycache/refoptcheck.go
+new file mode 100644
+index 000000000..c6e6a2e4b
+--- /dev/null
++++ b/util/concurrent/lazycache/refoptcheck.go
+@@ -0,0 +1,38 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package lazycache
++
++import (
++	"time"
++
++	"github.com/hyperledger/fabric/util/concurrent/lazyref"
++)
++
++// refOptCheck is used to test whether any of the lazyref options have been passed in
++type refOptCheck struct {
++	useRef bool
++}
++
++func (p *refOptCheck) SetIdleExpiration(expiration time.Duration) {
++	p.useRef = true
++}
++
++func (p *refOptCheck) SetAbsoluteExpiration(expiration time.Duration) {
++	p.useRef = true
++}
++
++func (p *refOptCheck) SetExpirationProvider(expirationProvider lazyref.ExpirationProvider, expiryType lazyref.ExpirationType) {
++	p.useRef = true
++}
++
++func (p *refOptCheck) SetFinalizer(value lazyref.Finalizer) {
++	p.useRef = true
++}
++
++func (p *refOptCheck) SetRefreshInterval(initialInit, refreshPeriod time.Duration) {
++	p.useRef = true
++}
+diff --git a/util/concurrent/lazyref/expiration.go b/util/concurrent/lazyref/expiration.go
+new file mode 100644
+index 000000000..fc62048fd
+--- /dev/null
++++ b/util/concurrent/lazyref/expiration.go
+@@ -0,0 +1,32 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package lazyref
++
++import "time"
++
++// NewSimpleExpirationProvider returns an expiration provider
++// that sets the given expiration period
++func NewSimpleExpirationProvider(expiry time.Duration) ExpirationProvider {
++	return func() time.Duration {
++		return expiry
++	}
++}
++
++// NewGraduatingExpirationProvider returns an expiration provider
++// that has an initial expiration and then expires in graduated increments
++// with a maximum expiration time.
++func NewGraduatingExpirationProvider(initialExpiry, increments, maxExpiry time.Duration) ExpirationProvider {
++	var iteration uint32
++	return func() time.Duration {
++		expiry := initialExpiry + time.Duration(iteration)*increments
++		if expiry > maxExpiry {
++			return maxExpiry
++		}
++		iteration++
++		return expiry
++	}
++}
+diff --git a/util/concurrent/lazyref/lazyref.go b/util/concurrent/lazyref/lazyref.go
+new file mode 100644
+index 000000000..86b6386a8
+--- /dev/null
++++ b/util/concurrent/lazyref/lazyref.go
+@@ -0,0 +1,375 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package lazyref
++
++import (
++	"errors"
++	"fmt"
++	"sync"
++	"sync/atomic"
++	"time"
++	"unsafe"
++
++	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/util/concurrent/options"
++)
++
++var logger = flogging.MustGetLogger("fabsdk/util")
++
++// Initializer is a function that initializes the value
++type Initializer func() (interface{}, error)
++
++// InitializerWithData is a function that initializes the value
++// using the optional data.
++type InitializerWithData func(data interface{}) (interface{}, error)
++
++// Finalizer is a function that is called when the reference
++// is closed
++type Finalizer func(value interface{})
++
++// ExpirationProvider is a function that returns the
++// expiration time of a reference
++type ExpirationProvider func() time.Duration
++
++// valueHolder holds the actual value
++type valueHolder struct {
++	value interface{}
++}
++
++// expirationHandler is invoked when the
++// reference expires
++type expirationHandler func()
++
++// ExpirationType indicates how to handle expiration of the reference
++type ExpirationType uint
++
++const (
++	// LastAccessed specifies that the expiration time is calculated
++	// from the last access time
++	LastAccessed ExpirationType = iota
++
++	// LastInitialized specifies that the expiration time is calculated
++	// from the time the reference was initialized
++	LastInitialized
++
++	// Refreshing indicates that the reference should be periodically refreshed
++	Refreshing
++)
++
++// Reference holds a value that is initialized on first access using the provided
++// Initializer function. The Reference has an optional expiring feature
++// wherin the value is reset after the provided period of time. A subsequent call
++// to Get or MustGet causes the Initializer function to be invoked again.
++// The Reference also has a proactive refresh capability, in which the Initializer
++// function is periodically called out of band (out of band means that the caller
++// of Get or MustGet does not need to wait for the initializer function to complete:
++// the old value will be used until the new value has finished initializing).
++// An optional Finalizer function may be provided to be invoked whenever the Reference
++// is closed (via a call to Close) or if it expires. (Note: The Finalizer function
++// is not called every time the value is refreshed with the periodic refresh feature.)
++type Reference struct {
++	params
++	wg                sync.WaitGroup
++	expirationHandler expirationHandler
++	initializer       InitializerWithData
++	ref               unsafe.Pointer
++	lastTimeAccessed  unsafe.Pointer
++	closed            bool
++	running           bool
++	lock              sync.RWMutex
++	closech           chan bool
++}
++
++// New creates a new reference
++func New(initializer Initializer, opts ...options.Opt) *Reference {
++	return NewWithData(func(interface{}) (interface{}, error) {
++		return initializer()
++	}, opts...)
++}
++
++// NewWithData creates a new reference where data is passed from the Get
++// function to the initializer. This is useful for refreshing the reference
++// with dynamic data.
++func NewWithData(initializer InitializerWithData, opts ...options.Opt) *Reference {
++	lazyRef := &Reference{
++		params: params{
++			initialInit: InitOnFirstAccess,
++		},
++		initializer: initializer,
++	}
++
++	options.Apply(lazyRef, opts)
++
++	if lazyRef.expirationProvider != nil {
++		// This is an expiring reference. After the initializer is
++		// called, set a timer that will call the expiration handler.
++		initializer := lazyRef.initializer
++		initialExpiration := lazyRef.expirationProvider()
++		lazyRef.initializer = func(data interface{}) (interface{}, error) {
++			value, err := initializer(data)
++			if err == nil {
++				lazyRef.ensureTimerStarted(initialExpiration)
++			}
++			return value, err
++		}
++
++		lazyRef.closech = make(chan bool, 1)
++
++		if lazyRef.expirationHandler == nil {
++			if lazyRef.expiryType == Refreshing {
++				lazyRef.expirationHandler = lazyRef.refreshValue
++			} else {
++				lazyRef.expirationHandler = lazyRef.resetValue
++			}
++		}
++
++		if lazyRef.initialInit >= 0 {
++			lazyRef.ensureTimerStarted(lazyRef.initialInit)
++		}
++	}
++
++	return lazyRef
++}
++
++// Get returns the value, or an error if the initialiser returned an error.
++func (r *Reference) Get(data ...interface{}) (interface{}, error) {
++	// Try outside of a lock
++	if value, ok := r.get(); ok {
++		return value, nil
++	}
++
++	r.lock.Lock()
++	defer r.lock.Unlock()
++
++	if r.closed {
++		return nil, errors.New("reference is already closed")
++	}
++
++	// Try again inside the lock
++	if value, ok := r.get(); ok {
++		return value, nil
++	}
++
++	// Value hasn't been set yet
++	value, err := r.initializer(first(data))
++	if err != nil {
++		return nil, err
++	}
++	r.set(value)
++
++	return value, nil
++}
++
++// MustGet returns the value. If an error is returned
++// during initialization of the value then this function
++// will panic.
++func (r *Reference) MustGet() interface{} {
++	value, err := r.Get()
++	if err != nil {
++		panic(fmt.Sprintf("error returned from Get: %s", err))
++	}
++	return value
++}
++
++// Close ensures that the finalizer (if provided) is called.
++// Close should be called for expiring references and
++// rerences that specify finalizers.
++func (r *Reference) Close() {
++	if !r.setClosed() {
++		// Already closed
++		return
++	}
++
++	logger.Debug("Closing reference")
++
++	r.notifyClosing()
++	r.wg.Wait()
++	r.finalize()
++}
++
++func (r *Reference) setClosed() bool {
++	r.lock.Lock()
++	defer r.lock.Unlock()
++	if r.closed {
++		return false
++	}
++	r.closed = true
++	return true
++}
++
++func (r *Reference) notifyClosing() {
++	r.lock.Lock()
++	defer r.lock.Unlock()
++	if r.running {
++		logger.Debugf("Sending closed event...")
++		r.closech <- true
++	}
++}
++
++func (r *Reference) get() (interface{}, bool) {
++	r.setLastAccessed()
++	p := atomic.LoadPointer(&r.ref)
++	if p == nil {
++		return nil, false
++	}
++	return (*valueHolder)(p).value, true
++}
++
++func (r *Reference) isSet() bool {
++	return atomic.LoadPointer(&r.ref) != nil
++}
++
++func (r *Reference) set(value interface{}) {
++	atomic.StorePointer(&r.ref, unsafe.Pointer(&valueHolder{value: value})) // nolint: gas
++}
++
++func (r *Reference) setLastAccessed() {
++	now := time.Now()
++	atomic.StorePointer(&r.lastTimeAccessed, unsafe.Pointer(&now)) // nolint: gas
++}
++
++func (r *Reference) lastAccessed() time.Time {
++	p := atomic.LoadPointer(&r.lastTimeAccessed)
++	return *(*time.Time)(p)
++}
++
++func (r *Reference) setTimerRunning() bool {
++	r.lock.Lock()
++	defer r.lock.Unlock()
++
++	if r.running || r.closed {
++		logger.Debug("Cannot start timer since timer is either already running or it is closed")
++		return false
++	}
++
++	r.running = true
++	r.wg.Add(1)
++	logger.Debug("Timer started")
++	return true
++}
++
++func (r *Reference) setTimerStopped() {
++	r.lock.Lock()
++	defer r.lock.Unlock()
++	logger.Debug("Timer stopped")
++	r.running = false
++	r.wg.Done()
++}
++
++func (r *Reference) ensureTimerStarted(initialExpiration time.Duration) {
++	if r.running {
++		logger.Debug("Timer is already running")
++		return
++	}
++
++	r.setLastAccessed()
++
++	go checkTimeStarted(r, initialExpiration)
++}
++
++func checkTimeStarted(r *Reference, initialExpiration time.Duration) {
++	if !r.setTimerRunning() {
++		logger.Debug("Timer is already running")
++		return
++	}
++	defer r.setTimerStopped()
++
++	logger.Debug("Starting timer")
++
++	expiry := initialExpiration
++	for {
++		select {
++		case <-r.closech:
++			logger.Debug("Got closed event. Exiting timer.")
++			return
++
++		case <-time.After(expiry):
++			expiration := r.expirationProvider()
++
++			if !r.isSet() && r.expiryType != Refreshing {
++				expiry = expiration
++				logger.Debugf("Reference is not set. Will expire again in %s", expiry)
++				continue
++			}
++
++			if r.expiryType == LastInitialized || r.expiryType == Refreshing {
++				logger.Debugf("Handling expiration...")
++				r.handleExpiration()
++				expiry = expiration
++				logger.Debugf("... finished handling expiration. Setting expiration to %s", expiry)
++			} else {
++				// Check how long it's been since last access
++				durSinceLastAccess := time.Since(r.lastAccessed())
++				logger.Debugf("Duration since last access is %s", durSinceLastAccess)
++				if durSinceLastAccess > expiration {
++					logger.Debugf("... handling expiration...")
++					r.handleExpiration()
++					expiry = expiration
++					logger.Debugf("... finished handling expiration. Setting expiration to %s", expiry)
++				} else {
++					// Set another expiry for the remainder of the time
++					expiry = expiration - durSinceLastAccess
++					logger.Debugf("Not expired yet. Will check again in %s", expiry)
++				}
++			}
++		}
++	}
++}
++
++func (r *Reference) finalize() {
++	if r.finalizer == nil {
++		return
++	}
++
++	r.lock.Lock()
++	defer r.lock.Unlock()
++
++	if r.isSet() {
++		value, _ := r.get()
++		r.finalizer(value)
++	}
++}
++
++func (r *Reference) handleExpiration() {
++	r.lock.Lock()
++	defer r.lock.Unlock()
++
++	logger.Debug("Invoking expiration handler")
++	r.expirationHandler()
++}
++
++// resetValue is an expiration handler that calls the
++// finalizer and resets the reference to nil.
++// Note: This function is invoked from inside a write
++// lock so there's no need to lock
++func (r *Reference) resetValue() {
++	if r.finalizer != nil {
++		value, _ := r.get()
++		r.finalizer(value)
++	}
++	atomic.StorePointer(&r.ref, nil)
++}
++
++// refreshValue is an expiration handler that calls the
++// initializer and, if the initializer was successful, resets
++// the reference with the new value.
++// Note: This function is invoked from inside a write
++// lock so there's no need to lock
++func (r *Reference) refreshValue() {
++	if value, err := r.initializer(nil); err != nil {
++		logger.Warningf("Error - initializer returned error: %s. Will retry again later", err)
++	} else {
++		r.set(value)
++	}
++}
++
++func first(data []interface{}) interface{} {
++	if len(data) == 0 {
++		return nil
++	}
++	return data[0]
++}
+diff --git a/util/concurrent/lazyref/options.go b/util/concurrent/lazyref/options.go
+new file mode 100644
+index 000000000..64e54c571
+--- /dev/null
++++ b/util/concurrent/lazyref/options.go
+@@ -0,0 +1,133 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package lazyref
++
++import (
++	"time"
++
++	"github.com/hyperledger/fabric-sdk-go/pkg/common/options"
++)
++
++// WithIdleExpiration sets the idle-time expiration for the reference.
++// The reference is expired after not being accessed for the given duration.
++func WithIdleExpiration(value time.Duration) options.Opt {
++	return func(p options.Params) {
++		logger.Debug("Checking idleExpirationSetter")
++		if setter, ok := p.(idleExpirationSetter); ok {
++			setter.SetIdleExpiration(value)
++		}
++	}
++}
++
++// WithAbsoluteExpiration sets the expiration time for the reference.
++// It will expire after this time period, regardless of whether or not
++// it has been recently accessed.
++func WithAbsoluteExpiration(value time.Duration) options.Opt {
++	return func(p options.Params) {
++		logger.Debug("Checking absoluteExpirationSetter")
++		if setter, ok := p.(absoluteExpirationSetter); ok {
++			setter.SetAbsoluteExpiration(value)
++		}
++	}
++}
++
++// WithExpirationProvider sets the expiration provider, which determines
++// the expiration time of the reference
++func WithExpirationProvider(expirationProvider ExpirationProvider, expiryType ExpirationType) options.Opt {
++	return func(p options.Params) {
++		logger.Debug("Checking expirationProviderSetter")
++		if setter, ok := p.(expirationProviderSetter); ok {
++			setter.SetExpirationProvider(expirationProvider, expiryType)
++		}
++	}
++}
++
++// WithFinalizer sets a finalizer function that is called when the
++// reference is closed or if it expires
++func WithFinalizer(finalizer Finalizer) options.Opt {
++	return func(p options.Params) {
++		logger.Debug("Checking finalizerSetter")
++		if setter, ok := p.(finalizerSetter); ok {
++			setter.SetFinalizer(finalizer)
++		}
++	}
++}
++
++const (
++	// InitOnFirstAccess specifies that the reference should be initialized the first time it is accessed
++	InitOnFirstAccess time.Duration = time.Duration(-1)
++
++	// InitImmediately specifies that the reference should be initialized immediately after it is created
++	InitImmediately time.Duration = time.Duration(0)
++)
++
++// WithRefreshInterval specifies that the reference should be proactively refreshed.
++// Argument, initialInit, if greater than or equal to 0, indicates that the reference
++// should be initialized after this duration. If less than 0, the reference will be
++// initialized on first access.
++// Argument, refreshPeriod, is the period at which the reference will be refreshed.
++// Note that the Finalizer will not be invoked each time the value is refreshed.
++func WithRefreshInterval(initialInit, refreshPeriod time.Duration) options.Opt {
++	return func(p options.Params) {
++		logger.Debug("Checking refreshIntervalSetter")
++		if setter, ok := p.(refreshIntervalSetter); ok {
++			setter.SetRefreshInterval(initialInit, refreshPeriod)
++		}
++	}
++}
++
++type idleExpirationSetter interface {
++	SetIdleExpiration(expiration time.Duration)
++}
++
++type absoluteExpirationSetter interface {
++	SetAbsoluteExpiration(expiration time.Duration)
++}
++
++type expirationProviderSetter interface {
++	SetExpirationProvider(expirationProvider ExpirationProvider, expiryType ExpirationType)
++}
++
++type finalizerSetter interface {
++	SetFinalizer(value Finalizer)
++}
++
++type refreshIntervalSetter interface {
++	SetRefreshInterval(initialInit, refreshPeriod time.Duration)
++}
++
++type params struct {
++	initialInit        time.Duration
++	finalizer          Finalizer
++	expirationProvider ExpirationProvider
++	expiryType         ExpirationType
++}
++
++func (p *params) SetIdleExpiration(expiration time.Duration) {
++	p.expirationProvider = NewSimpleExpirationProvider(expiration)
++	p.expiryType = LastAccessed
++}
++
++func (p *params) SetAbsoluteExpiration(expiration time.Duration) {
++	p.expirationProvider = NewSimpleExpirationProvider(expiration)
++	p.expiryType = LastInitialized
++}
++
++func (p *params) SetExpirationProvider(expirationProvider ExpirationProvider, expiryType ExpirationType) {
++	p.expirationProvider = expirationProvider
++	p.expiryType = expiryType
++}
++
++func (p *params) SetFinalizer(value Finalizer) {
++	p.finalizer = value
++}
++
++func (p *params) SetRefreshInterval(initialInit, refreshPeriod time.Duration) {
++	p.expiryType = Refreshing
++	p.expirationProvider = NewSimpleExpirationProvider(refreshPeriod)
++	p.initialInit = initialInit
++}
+diff --git a/util/concurrent/options/options.go b/util/concurrent/options/options.go
+new file mode 100644
+index 000000000..1f5e935e5
+--- /dev/null
++++ b/util/concurrent/options/options.go
+@@ -0,0 +1,21 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package options
++
++// Params represents a construct that holds
++// a set of parameters
++type Params interface{}
++
++// Opt is an option that is applied to Params
++type Opt func(opts Params)
++
++// Apply applies the given options to the given Params
++func Apply(params Params, opts []Opt) {
++	for _, opt := range opts {
++		opt(params)
++	}
++}
 -- 
-2.14.3 (Apple Git-98)
+2.15.2 (Apple Git-101.1)
 
