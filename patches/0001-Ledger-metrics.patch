@@ -1,4 +1,4 @@
-From 299543ea49f6605fb57ab7d65d74089dfdd1775f Mon Sep 17 00:00:00 2001
+From b0475286ddf894a30e4ce98ae17511dcfc0aaf3e Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -7,8 +7,8 @@ Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  19 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  15 +
- .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  31 ++
+ .../ledger/util/leveldbhelper/leveldb_provider.go  |  22 +-
  common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
@@ -17,7 +17,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/endorser/endorser.go                          |  73 +++-
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
  core/ledger/ledgerstorage/store.go                 |  44 ++
- 11 files changed, 388 insertions(+), 1197 deletions(-)
+ 11 files changed, 406 insertions(+), 1197 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -64,7 +64,7 @@ index 7ebe52af9..908d7b175 100644
  		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
  			itr.mgr.cpInfo.lastBlockNumber, blockNum)
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..fa1fce221 100644
+index 9e2ab17df..239dc9fea 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
 @@ -26,6 +26,8 @@ import (
@@ -76,11 +76,17 @@ index 9e2ab17df..fa1fce221 100644
  )
  
  var logger = flogging.MustGetLogger("leveldbhelper")
-@@ -105,6 +107,11 @@ func (dbInst *DB) Close() {
+@@ -105,6 +107,17 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
-+	dbName:=strings.Replace(strings.Split(dbInst.conf.DBPath,"ledgersData/")[1],"/", "_", -1)
++	dbName:=dbInst.conf.DBPath
++	if strings.Contains(dbName,"ledgersData/") {
++		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++	}else{
++		dbName = strings.Replace(dbName, "/", "_", -1)
++	}
++	fmt.Printf("******* db name %s\n",dbName)
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
 +	ccStopWatch := ccTimer.Start()
 +	defer ccStopWatch.Stop()
@@ -88,22 +94,32 @@ index 9e2ab17df..fa1fce221 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +126,10 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -119,6 +132,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
-+	dbName:=strings.Replace(strings.Split(dbInst.conf.DBPath,"ledgersData/")[1],"/", "_", -1)
++	dbName:=dbInst.conf.DBPath
++	if strings.Contains(dbName,"ledgersData/") {
++		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++	}else{
++		dbName = strings.Replace(dbName, "/", "_", -1)
++	}
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
 +	ccStopWatch := ccTimer.Start()
 +	defer ccStopWatch.Stop()
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +144,10 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -133,6 +155,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
-+	dbName:=strings.Replace(strings.Split(dbInst.conf.DBPath,"ledgersData/")[1],"/", "_", -1)
++	dbName:=dbInst.conf.DBPath
++	if strings.Contains(dbName,"ledgersData/") {
++		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++	}else{
++		dbName = strings.Replace(dbName, "/", "_", -1)
++	}
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
 +	ccStopWatch := ccTimer.Start()
 +	defer ccStopWatch.Stop()
@@ -111,7 +127,7 @@ index 9e2ab17df..fa1fce221 100644
  	if sync {
  		wo = dbInst.writeOptsSync
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..b65c1c45a 100644
+index db41651d7..1317d6b6f 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
 @@ -22,6 +22,10 @@ import (
@@ -125,20 +141,22 @@ index db41651d7..b65c1c45a 100644
  )
  
  var dbNameKeySep = []byte{0x00}
-@@ -100,6 +104,12 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
+@@ -100,6 +104,14 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
  // The resultset contains all the keys that are present in the db between the startKey (inclusive) and the endKey (exclusive).
  // A nil startKey represents the first available key and a nil endKey represent a logical key after the last available key
  func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
 +	dbName:=h.dbName
 +	if strings.Contains(dbName,"ledgersData/") {
 +		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++	}else{
++		dbName = strings.Replace(dbName, "/", "_", -1)
 +	}
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_GetIterator_%s_processing_time_seconds",dbName))
 +	stopwatch := ccTimer.Start()
  	sKey := constructLevelKey(h.dbName, startKey)
  	eKey := constructLevelKey(h.dbName, endKey)
  	if endKey == nil {
-@@ -107,7 +117,7 @@ func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
+@@ -107,7 +119,7 @@ func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
  		eKey[len(eKey)-1] = lastKeyIndicator
  	}
  	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
@@ -147,7 +165,7 @@ index db41651d7..b65c1c45a 100644
  }
  
  // UpdateBatch encloses the details of multiple `updates`
-@@ -136,6 +146,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
+@@ -136,6 +148,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
  // Iterator extends actual leveldb iterator
  type Iterator struct {
  	iterator.Iterator
@@ -156,7 +174,7 @@ index db41651d7..b65c1c45a 100644
  }
  
  // Key wraps actual leveldb iterator method
-@@ -143,6 +155,12 @@ func (itr *Iterator) Key() []byte {
+@@ -143,6 +157,12 @@ func (itr *Iterator) Key() []byte {
  	return retrieveAppKey(itr.Iterator.Key())
  }
  
