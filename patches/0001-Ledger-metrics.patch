@@ -1,4 +1,4 @@
-From cf0502a735665865df16e60e4fbf3d890e625c02 Mon Sep 17 00:00:00 2001
+From 66ff853e7cd3e3cc34184929932de42a72c96116 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -6,7 +6,7 @@ Subject: [PATCH] Ledger metrics
 Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  10 +
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  19 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |   1 +
  common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
@@ -14,17 +14,18 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
  core/endorser/endorser.go                          |  73 +++-
- core/ledger/ledgerstorage/store.go                 |  18 +
- 9 files changed, 273 insertions(+), 1196 deletions(-)
+ core/ledger/kvledger/kv_ledger.go                  |  47 +++
+ core/ledger/ledgerstorage/store.go                 |  44 ++
+ 10 files changed, 355 insertions(+), 1196 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
 
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 7ebe52af9..1d16a7544 100644
+index 7ebe52af9..908d7b175 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-@@ -20,8 +20,16 @@ import (
+@@ -20,8 +20,18 @@ import (
  	"sync"
  
  	"github.com/hyperledger/fabric/common/ledger"
@@ -33,23 +34,34 @@ index 7ebe52af9..1d16a7544 100644
  )
  
 +var waitForBlockTimer tally.Timer
++var waitForBlockLockTimer tally.Timer
 +
 +func init() {
 +	waitForBlockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
++	waitForBlockLockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_Lock_time_seconds")
 +}
 +
  // blocksItr - an iterator for iterating over a sequence of blocks
  type blocksItr struct {
  	mgr                  *blockfileMgr
-@@ -37,6 +45,8 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
+@@ -37,8 +47,17 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
  }
  
  func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
++
++	// Measure the whole
 +	stopWatch := waitForBlockTimer.Start()
 +	defer stopWatch.Stop()
++
++	// Measure acquiring the lock
++	lockStopWatch := waitForBlockLockTimer.Start()
  	itr.mgr.cpInfoCond.L.Lock()
  	defer itr.mgr.cpInfoCond.L.Unlock()
++	lockStopWatch.Stop()
++
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
+ 		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
+ 			itr.mgr.cpInfo.lastBlockNumber, blockNum)
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
 index 9e2ab17df..2609ae82e 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
@@ -1748,11 +1760,114 @@ index 2d29f43a4..050c1a06f 100644
  	prop, hdrExt, chainID, txid := vr.prop, vr.hdrExt, vr.chainID, vr.txid
  
  	// obtaining once the tx simulator for this proposal. This will be nil
+diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
+index 385f90917..322d2c66d 100644
+--- a/core/ledger/kvledger/kv_ledger.go
++++ b/core/ledger/kvledger/kv_ledger.go
+@@ -15,6 +15,7 @@ import (
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	commonledger "github.com/hyperledger/fabric/common/ledger"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/common/util"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
+@@ -28,10 +29,27 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/peer"
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("kvledger")
+ 
++var commitWithPvtDataTimer tally.Timer
++var commitWithPvtDataLockTimer tally.Timer
++var pvtDataAndBlockByNumTimer tally.Timer
++var pvtDataAndBlockByNumLockTimer tally.Timer
++var pvtDataByNumTimer tally.Timer
++var pvtDataByNumLockTimer tally.Timer
++
++func init() {
++	commitWithPvtDataTimer = metrics.RootScope.Timer("kvledger_CommitWithPvtData_time_seconds")
++	commitWithPvtDataLockTimer = metrics.RootScope.Timer("kvledger_CommitWithPvtData_Lock_time_seconds")
++	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_time_seconds")
++	pvtDataAndBlockByNumLockTimer = metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_Lock_time_seconds")
++	pvtDataByNumTimer = metrics.RootScope.Timer("kvledger_GetPvtDataByNum_time_seconds")
++	pvtDataByNumLockTimer = metrics.RootScope.Timer("kvledger_GetPvtDataByNum_Lock_time_seconds")
++}
++
+ // KVLedger provides an implementation of `ledger.PeerLedger`.
+ // This implementation provides a key-value based data model
+ type kvLedger struct {
+@@ -249,6 +267,11 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
+ 
+ // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
+ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
++
++	// Measure the whole
++	stopWatch := commitWithPvtDataTimer.Start()
++	defer stopWatch.Stop()
++
+ 	var err error
+ 	block := pvtdataAndBlock.Block
+ 	blockNo := pvtdataAndBlock.Block.Header.Number
+@@ -261,8 +284,12 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ 
+ 	logger.Debugf("Channel [%s]: Committing block [%d] to storage", l.ledgerID, blockNo)
+ 
++	// Measure acquiring the lock
++	lockStopWatch := commitWithPvtDataLockTimer.Start()
+ 	l.blockAPIsRWLock.Lock()
+ 	defer l.blockAPIsRWLock.Unlock()
++	lockStopWatch.Stop()
++
+ 	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
+ 		return err
+ 	}
+@@ -286,8 +313,18 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
+ // The pvt data is filtered by the list of 'collections' supplied
+ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
++
++	// Measure the whole
++	stopWatch := pvtDataAndBlockByNumTimer.Start()
++	defer stopWatch.Stop()
++
+ 	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
++
++	// Measure acquiring the lock
++	lockStopWatch := pvtDataAndBlockByNumLockTimer.Start()
+ 	l.blockAPIsRWLock.RLock()
++	lockStopWatch.Stop()
++
+ 	l.blockAPIsRWLock.RUnlock()
+ 	return blockAndPvtdata, err
+ }
+@@ -295,8 +332,18 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+ // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
+ // The pvt data is filtered by the list of 'collections' supplied
+ func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
++
++	// Measure the whole
++	stopWatch := pvtDataByNumTimer.Start()
++	defer stopWatch.Stop()
++
+ 	pvtdata, err := l.blockStore.GetPvtDataByNum(blockNum, filter)
++
++	// Measure acquiring the lock
++	lockStopWatch := pvtDataByNumLockTimer.Start()
+ 	l.blockAPIsRWLock.RLock()
++	lockStopWatch.Stop()
++
+ 	l.blockAPIsRWLock.RUnlock()
+ 	return pvtdata, err
+ }
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index 5655969d5..356a97357 100644
+index 5655969d5..14ccfbf48 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
-@@ -23,13 +23,25 @@ import (
+@@ -23,13 +23,31 @@ import (
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
@@ -1766,45 +1881,78 @@ index 5655969d5..356a97357 100644
  )
  
 +var commitWithPvtDataTimer tally.Timer
++var commitWithPvtDataLockTimer tally.Timer
 +var pvtDataAndBlockByNumTimer tally.Timer
++var pvtDataAndBlockByNumLockTimer tally.Timer
 +var pvtDataByNumTimer tally.Timer
++var pvtDataByNumLockTimer tally.Timer
 +
 +func init() {
 +	commitWithPvtDataTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
++	commitWithPvtDataLockTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_Lock_time_seconds")
 +	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
++	pvtDataAndBlockByNumLockTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_Lock_time_seconds")
 +	pvtDataByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
++	pvtDataByNumLockTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_Lock_time_seconds")
 +}
 +
  var logger = flogging.MustGetLogger("ledgerstorage")
  
  // Provider encapusaltes two providers 1) block store provider and 2) and pvt data store provider
-@@ -97,6 +109,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+@@ -97,9 +115,18 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
++
++	// Measure the whole
 +	stopWatch := commitWithPvtDataTimer.Start()
 +	defer stopWatch.Stop()
++
  	blockNum := blockAndPvtdata.Block.Header.Number
++
++	// Measure acquiring the lock
++	lockStopWatch := commitWithPvtDataLockTimer.Start()
  	s.rwlock.Lock()
  	defer s.rwlock.Unlock()
-@@ -137,6 +151,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
++	lockStopWatch.Stop()
+ 
+ 	pvtBlkStoreHt, err := s.pvtdataStore.LastCommittedBlockHeight()
+ 	if err != nil {
+@@ -137,8 +164,16 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
++
++	// Measure the whole
 +	stopWatch := pvtDataAndBlockByNumTimer.Start()
 +	defer stopWatch.Stop()
++
++	// Measure acquiring the lock
++	lockStopWatch := pvtDataAndBlockByNumLockTimer.Start()
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
++	lockStopWatch.Stop()
  
-@@ -156,6 +172,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+ 	var block *common.Block
+ 	var pvtdata []*ledger.TxPvtData
+@@ -156,8 +191,17 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
  func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
++
++	// Measure the whole
 +	stopWatch := pvtDataByNumTimer.Start()
 +	defer stopWatch.Stop()
++
++	// Measure acquiring the lock
++	lockStopWatch := pvtDataByNumLockTimer.Start()
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
++	lockStopWatch.Stop()
++
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
+ }
+ 
 -- 
-2.15.2 (Apple Git-101.1)
+2.14.3 (Apple Git-98)
 
