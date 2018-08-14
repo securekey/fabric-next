@@ -1,4 +1,4 @@
-From fdcb469e96b4344e27ac942ba0f6b1ee3c01f7ea Mon Sep 17 00:00:00 2001
+From cf0502a735665865df16e60e4fbf3d890e625c02 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -7,6 +7,7 @@ Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  10 +
+ common/ledger/util/leveldbhelper/leveldb_helper.go |   1 +
  common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
@@ -14,7 +15,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/types.go                            |  45 --
  core/endorser/endorser.go                          |  73 +++-
  core/ledger/ledgerstorage/store.go                 |  18 +
- 8 files changed, 272 insertions(+), 1196 deletions(-)
+ 9 files changed, 273 insertions(+), 1196 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -49,6 +50,18 @@ index 7ebe52af9..1d16a7544 100644
  	itr.mgr.cpInfoCond.L.Lock()
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
+diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
+index 9e2ab17df..2609ae82e 100644
+--- a/common/ledger/util/leveldbhelper/leveldb_helper.go
++++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
+@@ -105,6 +105,7 @@ func (dbInst *DB) Close() {
+ 
+ // Get returns the value for the given key
+ func (dbInst *DB) Get(key []byte) ([]byte, error) {
++	fmt.Printf("***** leveldb_helper Get data from %v\n",dbInst.conf.DBPath)
+ 	value, err := dbInst.db.Get(key, dbInst.readOpts)
+ 	if err == leveldb.ErrNotFound {
+ 		value = nil
 diff --git a/common/metrics/server.go b/common/metrics/server.go
 index 677151e78..eb9422f12 100644
 --- a/common/metrics/server.go
