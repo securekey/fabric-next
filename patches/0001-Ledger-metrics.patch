@@ -1,4 +1,4 @@
-From 1cd0142fe7329923825bb2524f351b953e11c910 Mon Sep 17 00:00:00 2001
+From 299543ea49f6605fb57ab7d65d74089dfdd1775f Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -8,7 +8,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  19 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  15 +
- .../ledger/util/leveldbhelper/leveldb_provider.go  |  15 +-
+ .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
  common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
@@ -17,7 +17,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/endorser/endorser.go                          |  73 +++-
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
  core/ledger/ledgerstorage/store.go                 |  44 ++
- 11 files changed, 383 insertions(+), 1197 deletions(-)
+ 11 files changed, 388 insertions(+), 1197 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -111,29 +111,34 @@ index 9e2ab17df..fa1fce221 100644
  	if sync {
  		wo = dbInst.writeOptsSync
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..e54e58946 100644
+index db41651d7..b65c1c45a 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
-@@ -22,6 +22,9 @@ import (
+@@ -22,6 +22,10 @@ import (
  
  	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
 +	"github.com/hyperledger/fabric/common/metrics"
 +	"fmt"
 +	"github.com/uber-go/tally"
++	"strings"
  )
  
  var dbNameKeySep = []byte{0x00}
-@@ -100,6 +103,8 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
+@@ -100,6 +104,12 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
  // The resultset contains all the keys that are present in the db between the startKey (inclusive) and the endKey (exclusive).
  // A nil startKey represents the first available key and a nil endKey represent a logical key after the last available key
  func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_GetIterator_processing_time_seconds"))
++	dbName:=h.dbName
++	if strings.Contains(dbName,"ledgersData/") {
++		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++	}
++	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_GetIterator_%s_processing_time_seconds",dbName))
 +	stopwatch := ccTimer.Start()
  	sKey := constructLevelKey(h.dbName, startKey)
  	eKey := constructLevelKey(h.dbName, endKey)
  	if endKey == nil {
-@@ -107,7 +112,7 @@ func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
+@@ -107,7 +117,7 @@ func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
  		eKey[len(eKey)-1] = lastKeyIndicator
  	}
  	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
@@ -142,7 +147,7 @@ index db41651d7..e54e58946 100644
  }
  
  // UpdateBatch encloses the details of multiple `updates`
-@@ -136,6 +141,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
+@@ -136,6 +146,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
  // Iterator extends actual leveldb iterator
  type Iterator struct {
  	iterator.Iterator
@@ -151,7 +156,7 @@ index db41651d7..e54e58946 100644
  }
  
  // Key wraps actual leveldb iterator method
-@@ -143,6 +150,12 @@ func (itr *Iterator) Key() []byte {
+@@ -143,6 +155,12 @@ func (itr *Iterator) Key() []byte {
  	return retrieveAppKey(itr.Iterator.Key())
  }
  
