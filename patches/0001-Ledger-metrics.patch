@@ -1,4 +1,4 @@
-From 9243b9ba5afd454d4546bd9e6c299376ac23eaf0 Mon Sep 17 00:00:00 2001
+From d2e5597554d786bc4074eeb9cdbf4d6da3e03277 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -15,11 +15,13 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
  core/endorser/endorser.go                          |  73 +++-
+ .../historydb/historyleveldb/historyleveldb.go     |  15 +
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
  .../txmgmt/statedb/statecouchdb/batch_util.go      |   4 +-
+ .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  16 +
  core/ledger/ledgerstorage/store.go                 |  44 ++
  peer/main.go                                       |   2 +
- 13 files changed, 416 insertions(+), 1201 deletions(-)
+ 15 files changed, 447 insertions(+), 1201 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -1909,6 +1911,46 @@ index 2d29f43a4..050c1a06f 100644
  	prop, hdrExt, chainID, txid := vr.prop, vr.hdrExt, vr.chainID, vr.txid
  
  	// obtaining once the tx simulator for this proposal. This will be nil
+diff --git a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
+index 369787d44..a22498d15 100644
+--- a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
++++ b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
+@@ -18,6 +18,9 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/util"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	putils "github.com/hyperledger/fabric/protos/utils"
++	"github.com/uber-go/tally"
++	"github.com/hyperledger/fabric/common/metrics"
++
+ )
+ 
+ var logger = flogging.MustGetLogger("historyleveldb")
+@@ -25,6 +28,16 @@ var logger = flogging.MustGetLogger("historyleveldb")
+ var savePointKey = []byte{0x00}
+ var emptyValue = []byte{}
+ 
++
++
++var commitTimer tally.Timer
++
++
++func init() {
++	commitTimer = metrics.RootScope.Timer("historyleveldb_Commit_time_seconds")
++}
++
++
+ // HistoryDBProvider implements interface HistoryDBProvider
+ type HistoryDBProvider struct {
+ 	dbProvider *leveldbhelper.Provider
+@@ -72,6 +85,8 @@ func (historyDB *historyDB) Close() {
+ 
+ // Commit implements method in HistoryDB interface
+ func (historyDB *historyDB) Commit(block *common.Block) error {
++	stopwatch := commitTimer.Start()
++	defer  stopwatch.Stop()
+ 
+ 	blockNo := block.Header.Number
+ 	//Set the starting tranNo to 0
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
 index 385f90917..322d2c66d 100644
 --- a/core/ledger/kvledger/kv_ledger.go
@@ -2042,6 +2084,44 @@ index 2dd88237c..5ea849f2a 100644
  	if len(errsChan) > 0 {
  		return <-errsChan
  	}
+diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
+index d03bd0535..8b88d59b5 100644
+--- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
++++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
+@@ -20,10 +20,23 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
++	"github.com/hyperledger/fabric/common/metrics"
++
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("lockbasedtxmgr")
+ 
++
++var commitTimer tally.Timer
++
++
++func init() {
++	commitTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_time_seconds")
++}
++
++
++
+ // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
+ // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
+ type LockBasedTxMgr struct {
+@@ -129,6 +142,9 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
+ 
+ // Commit implements method in interface `txmgmt.TxMgr`
+ func (txmgr *LockBasedTxMgr) Commit() error {
++	stopwatch := commitTimer.Start()
++	defer  stopwatch.Stop()
++
+ 	// When using the purge manager for the first block commit after peer start, the asynchronous function
+ 	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
+ 	// in advance for the next block
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
 index 5655969d5..14ccfbf48 100644
 --- a/core/ledger/ledgerstorage/store.go
@@ -2133,7 +2213,7 @@ index 5655969d5..14ccfbf48 100644
  }
  
 diff --git a/peer/main.go b/peer/main.go
-index aa7d3018a..df333e808 100644
+index aa7d3018a..a5a6ae109 100644
 --- a/peer/main.go
 +++ b/peer/main.go
 @@ -23,6 +23,7 @@ import (
@@ -2148,7 +2228,7 @@ index aa7d3018a..df333e808 100644
  		loggingSpec = viper.GetString("logging.level")
  	}
  	flogging.InitFromSpec(loggingSpec)
-+	flogging.SetModuleLevel(util.LoggingPrivModule,"debug")
++	flogging.SetModuleLevel(util.LoggingPrivModule,"info")
  
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
