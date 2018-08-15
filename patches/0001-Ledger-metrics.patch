@@ -1,4 +1,4 @@
-From b0475286ddf894a30e4ce98ae17511dcfc0aaf3e Mon Sep 17 00:00:00 2001
+From 9243b9ba5afd454d4546bd9e6c299376ac23eaf0 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -7,8 +7,8 @@ Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  19 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  31 ++
- .../ledger/util/leveldbhelper/leveldb_provider.go  |  22 +-
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  30 ++
+ .../ledger/util/leveldbhelper/leveldb_provider.go  |  31 +-
  common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
@@ -16,8 +16,10 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/types.go                            |  45 --
  core/endorser/endorser.go                          |  73 +++-
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
+ .../txmgmt/statedb/statecouchdb/batch_util.go      |   4 +-
  core/ledger/ledgerstorage/store.go                 |  44 ++
- 11 files changed, 406 insertions(+), 1197 deletions(-)
+ peer/main.go                                       |   2 +
+ 13 files changed, 416 insertions(+), 1201 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -64,7 +66,7 @@ index 7ebe52af9..908d7b175 100644
  		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
  			itr.mgr.cpInfo.lastBlockNumber, blockNum)
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..239dc9fea 100644
+index 9e2ab17df..3cdfd6630 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
 @@ -26,6 +26,8 @@ import (
@@ -76,7 +78,7 @@ index 9e2ab17df..239dc9fea 100644
  )
  
  var logger = flogging.MustGetLogger("leveldbhelper")
-@@ -105,6 +107,17 @@ func (dbInst *DB) Close() {
+@@ -105,6 +107,16 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
@@ -86,7 +88,6 @@ index 9e2ab17df..239dc9fea 100644
 +	}else{
 +		dbName = strings.Replace(dbName, "/", "_", -1)
 +	}
-+	fmt.Printf("******* db name %s\n",dbName)
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
 +	ccStopWatch := ccTimer.Start()
 +	defer ccStopWatch.Stop()
@@ -94,7 +95,7 @@ index 9e2ab17df..239dc9fea 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +132,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -119,6 +131,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
@@ -110,7 +111,7 @@ index 9e2ab17df..239dc9fea 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +155,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -133,6 +154,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
@@ -127,7 +128,7 @@ index 9e2ab17df..239dc9fea 100644
  	if sync {
  		wo = dbInst.writeOptsSync
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..1317d6b6f 100644
+index db41651d7..2341ee8fd 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
 @@ -22,6 +22,10 @@ import (
@@ -141,31 +142,66 @@ index db41651d7..1317d6b6f 100644
  )
  
  var dbNameKeySep = []byte{0x00}
-@@ -100,6 +104,14 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
+@@ -32,13 +36,14 @@ type Provider struct {
+ 	db        *DB
+ 	dbHandles map[string]*DBHandle
+ 	mux       sync.Mutex
++	dbPath string
+ }
+ 
+ // NewProvider constructs a Provider
+ func NewProvider(conf *Conf) *Provider {
+ 	db := CreateDB(conf)
+ 	db.Open()
+-	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
++	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{},	conf.DBPath}
+ }
+ 
+ // GetDBHandle returns a handle to a named db
+@@ -47,7 +52,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
+ 	defer p.mux.Unlock()
+ 	dbHandle := p.dbHandles[dbName]
+ 	if dbHandle == nil {
+-		dbHandle = &DBHandle{dbName, p.db}
++		dbHandle = &DBHandle{dbName, p.db,p.dbPath}
+ 		p.dbHandles[dbName] = dbHandle
+ 	}
+ 	return dbHandle
+@@ -62,6 +67,8 @@ func (p *Provider) Close() {
+ type DBHandle struct {
+ 	dbName string
+ 	db     *DB
++	dbPath string
++
+ }
+ 
+ // Get returns the value for the given key
+@@ -100,14 +107,22 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
  // The resultset contains all the keys that are present in the db between the startKey (inclusive) and the endKey (exclusive).
  // A nil startKey represents the first available key and a nil endKey represent a logical key after the last available key
  func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
-+	dbName:=h.dbName
-+	if strings.Contains(dbName,"ledgersData/") {
-+		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++	dbPath:=h.dbPath
++	if strings.Contains(dbPath,"ledgersData/") {
++		dbPath = strings.Replace(strings.Split(dbPath, "ledgersData/")[1], "/", "_", -1)
 +	}else{
-+		dbName = strings.Replace(dbName, "/", "_", -1)
++		dbPath = strings.Replace(dbPath, "/", "_", -1)
 +	}
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_GetIterator_%s_processing_time_seconds",dbName))
++	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_GetIterator_%s_%s_processing_time_seconds",h.dbName,dbPath))
 +	stopwatch := ccTimer.Start()
  	sKey := constructLevelKey(h.dbName, startKey)
  	eKey := constructLevelKey(h.dbName, endKey)
  	if endKey == nil {
-@@ -107,7 +119,7 @@ func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
+ 		// replace the last byte 'dbNameKeySep' by 'lastKeyIndicator'
  		eKey[len(eKey)-1] = lastKeyIndicator
  	}
- 	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
+-	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
 -	return &Iterator{h.db.GetIterator(sKey, eKey)}
++	fmt.Printf("Getting iterator %s for range [%#v] - [%#v]\n",dbPath, sKey, eKey)
 +	return &Iterator{h.db.GetIterator(sKey, eKey),stopwatch}
  }
  
  // UpdateBatch encloses the details of multiple `updates`
-@@ -136,6 +148,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
+@@ -136,6 +151,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
  // Iterator extends actual leveldb iterator
  type Iterator struct {
  	iterator.Iterator
@@ -174,7 +210,7 @@ index db41651d7..1317d6b6f 100644
  }
  
  // Key wraps actual leveldb iterator method
-@@ -143,6 +157,12 @@ func (itr *Iterator) Key() []byte {
+@@ -143,6 +160,12 @@ func (itr *Iterator) Key() []byte {
  	return retrieveAppKey(itr.Iterator.Key())
  }
  
@@ -1976,6 +2012,36 @@ index 385f90917..322d2c66d 100644
  	l.blockAPIsRWLock.RUnlock()
  	return pvtdata, err
  }
+diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
+index 2dd88237c..5ea849f2a 100644
+--- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
++++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
+@@ -7,6 +7,7 @@ package statecouchdb
+ 
+ import (
+ 	"sync"
++	"fmt"
+ )
+ 
+ // batch is executed in a separate goroutine.
+@@ -17,7 +18,6 @@ type batch interface {
+ // executeBatches executes each batch in a separate goroutine and returns error if
+ // any of the batches return error during its execution
+ func executeBatches(batches []batch) error {
+-	logger.Debugf("Executing batches = %s", batches)
+ 	numBatches := len(batches)
+ 	if numBatches == 0 {
+ 		return nil
+@@ -38,7 +38,9 @@ func executeBatches(batches []batch) error {
+ 			}
+ 		}(b)
+ 	}
++	fmt.Printf("Wait Executing batches = %s\n", batches)
+ 	batchWG.Wait()
++	fmt.Printf("Done Executing batches = %s\n", batches)
+ 	if len(errsChan) > 0 {
+ 		return <-errsChan
+ 	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
 index 5655969d5..14ccfbf48 100644
 --- a/core/ledger/ledgerstorage/store.go
@@ -2066,6 +2132,26 @@ index 5655969d5..14ccfbf48 100644
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
  }
  
+diff --git a/peer/main.go b/peer/main.go
+index aa7d3018a..df333e808 100644
+--- a/peer/main.go
++++ b/peer/main.go
+@@ -23,6 +23,7 @@ import (
+ 	"github.com/hyperledger/fabric/peer/version"
+ 	"github.com/spf13/cobra"
+ 	"github.com/spf13/viper"
++	"github.com/hyperledger/fabric/gossip/util"
+ )
+ 
+ var logger = flogging.MustGetLogger("main")
+@@ -76,6 +77,7 @@ func main() {
+ 		loggingSpec = viper.GetString("logging.level")
+ 	}
+ 	flogging.InitFromSpec(loggingSpec)
++	flogging.SetModuleLevel(util.LoggingPrivModule,"debug")
+ 
+ 	// Init the MSP
+ 	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
 2.15.2 (Apple Git-101.1)
 
