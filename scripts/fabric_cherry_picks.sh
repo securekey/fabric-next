@@ -33,7 +33,7 @@ git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
 git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_change.patch
 
-git am $MY_PATH/../patches/0001-Ledger-metrics.patch
+#git am $MY_PATH/../patches/0001-Ledger-metrics.patch
 
 
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/24217/1 && git cherry-pick FETCH_HEAD
