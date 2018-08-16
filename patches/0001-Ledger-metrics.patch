@@ -1,4 +1,4 @@
-From 12150a1690c6ef791057e5a700ca9c0bbd9f0e97 Mon Sep 17 00:00:00 2001
+From 84664acb5043f1083d067a9bb3233be15c97ddcd Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -7,8 +7,8 @@ Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  30 ++
- .../ledger/util/leveldbhelper/leveldb_provider.go  |  31 +-
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  40 ++
+ .../ledger/util/leveldbhelper/leveldb_provider.go  |  38 +-
  common/metrics/server.go                           | 246 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 372 ++---------------
@@ -17,13 +17,17 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/endorser/endorser.go                          |  73 +++-
  .../historydb/historyleveldb/historyleveldb.go     |  12 +
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
+ .../privacyenabledstate/common_storage_db.go       |  14 +
+ .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |  10 +
  .../txmgmt/statedb/statecouchdb/batch_util.go      |   4 +-
+ .../txmgmt/statedb/statecouchdb/statecouchdb.go    |  12 +
+ .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  12 +
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
- .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  44 +-
+ .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
  core/ledger/ledgerstorage/store.go                 |  44 ++
  core/ledger/util/couchdb/couchdb.go                |  10 +
  peer/main.go                                       |   2 +
- 17 files changed, 480 insertions(+), 1208 deletions(-)
+ 21 files changed, 549 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -74,26 +78,42 @@ index 7ebe52af9..88af3b0cc 100644
  		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
  			itr.mgr.cpInfo.lastBlockNumber, blockNum)
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..3cdfd6630 100644
+index 9e2ab17df..c6981bd68 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
-@@ -26,6 +26,8 @@ import (
+@@ -20,14 +20,24 @@ import (
+ 	"fmt"
+ 	"sync"
+ 
++	"strings"
++
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/ledger/util"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
  	"github.com/syndtr/goleveldb/leveldb/opt"
  	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
-+	"github.com/hyperledger/fabric/common/metrics"
-+	"strings"
++	"github.com/uber-go/tally"
  )
  
++var writeBatch1Timer tally.Timer
++
++func init() {
++	writeBatch1Timer = metrics.RootScope.Timer("leveldbhelper_WriteBatch1_time_seconds")
++}
++
  var logger = flogging.MustGetLogger("leveldbhelper")
-@@ -105,6 +107,16 @@ func (dbInst *DB) Close() {
+ 
+ type dbState int32
+@@ -105,6 +115,16 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
-+	dbName:=dbInst.conf.DBPath
-+	if strings.Contains(dbName,"ledgersData/") {
++	dbName := dbInst.conf.DBPath
++	if strings.Contains(dbName, "ledgersData/") {
 +		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
-+	}else{
++	} else {
 +		dbName = strings.Replace(dbName, "/", "_", -1)
 +	}
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
@@ -103,14 +123,14 @@ index 9e2ab17df..3cdfd6630 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +131,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -119,6 +139,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
-+	dbName:=dbInst.conf.DBPath
-+	if strings.Contains(dbName,"ledgersData/") {
++	dbName := dbInst.conf.DBPath
++	if strings.Contains(dbName, "ledgersData/") {
 +		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
-+	}else{
++	} else {
 +		dbName = strings.Replace(dbName, "/", "_", -1)
 +	}
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
@@ -119,14 +139,14 @@ index 9e2ab17df..3cdfd6630 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +154,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -133,6 +162,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
-+	dbName:=dbInst.conf.DBPath
-+	if strings.Contains(dbName,"ledgersData/") {
++	dbName := dbInst.conf.DBPath
++	if strings.Contains(dbName, "ledgersData/") {
 +		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
-+	}else{
++	} else {
 +		dbName = strings.Replace(dbName, "/", "_", -1)
 +	}
 +	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
@@ -135,26 +155,46 @@ index 9e2ab17df..3cdfd6630 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
+@@ -154,6 +192,8 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+ 
+ // WriteBatch writes a batch
+ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
++	stopWatch := writeBatch1Timer.Start()
++	defer stopWatch.Stop()
+ 	wo := dbInst.writeOptsNoSync
+ 	if sync {
+ 		wo = dbInst.writeOptsSync
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..ab2ef1485 100644
+index db41651d7..9008d7738 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
-@@ -22,6 +22,10 @@ import (
+@@ -20,10 +20,21 @@ import (
+ 	"bytes"
+ 	"sync"
  
++	"fmt"
++	"strings"
++
++	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
-+	"github.com/hyperledger/fabric/common/metrics"
-+	"fmt"
 +	"github.com/uber-go/tally"
-+	"strings"
  )
  
++var writeBatchTimer tally.Timer
++
++func init() {
++	writeBatchTimer = metrics.RootScope.Timer("leveldbhelper_WriteBatch_time_seconds")
++}
++
  var dbNameKeySep = []byte{0x00}
-@@ -32,13 +36,14 @@ type Provider struct {
+ var lastKeyIndicator = byte(0x01)
+ 
+@@ -32,13 +43,14 @@ type Provider struct {
  	db        *DB
  	dbHandles map[string]*DBHandle
  	mux       sync.Mutex
-+	dbPath string
++	dbPath    string
  }
  
  // NewProvider constructs a Provider
@@ -162,39 +202,47 @@ index db41651d7..ab2ef1485 100644
  	db := CreateDB(conf)
  	db.Open()
 -	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
-+	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{},	conf.DBPath}
++	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}, conf.DBPath}
  }
  
  // GetDBHandle returns a handle to a named db
-@@ -47,7 +52,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
+@@ -47,7 +59,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
  	defer p.mux.Unlock()
  	dbHandle := p.dbHandles[dbName]
  	if dbHandle == nil {
 -		dbHandle = &DBHandle{dbName, p.db}
-+		dbHandle = &DBHandle{dbName, p.db,p.dbPath}
++		dbHandle = &DBHandle{dbName, p.db, p.dbPath}
  		p.dbHandles[dbName] = dbHandle
  	}
  	return dbHandle
-@@ -62,6 +67,8 @@ func (p *Provider) Close() {
+@@ -62,6 +74,7 @@ func (p *Provider) Close() {
  type DBHandle struct {
  	dbName string
  	db     *DB
 +	dbPath string
-+
  }
  
  // Get returns the value for the given key
-@@ -100,14 +107,22 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
+@@ -81,6 +94,8 @@ func (h *DBHandle) Delete(key []byte, sync bool) error {
+ 
+ // WriteBatch writes a batch in an atomic way
+ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
++	stopWatch := writeBatchTimer.Start()
++	defer stopWatch.Stop()
+ 	levelBatch := &leveldb.Batch{}
+ 	for k, v := range batch.KVs {
+ 		key := constructLevelKey(h.dbName, []byte(k))
+@@ -100,14 +115,22 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
  // The resultset contains all the keys that are present in the db between the startKey (inclusive) and the endKey (exclusive).
  // A nil startKey represents the first available key and a nil endKey represent a logical key after the last available key
  func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
-+	dbPath:=h.dbPath
-+	if strings.Contains(dbPath,"ledgersData/") {
++	dbPath := h.dbPath
++	if strings.Contains(dbPath, "ledgersData/") {
 +		dbPath = strings.Replace(strings.Split(dbPath, "ledgersData/")[1], "/", "_", -1)
-+	}else{
++	} else {
 +		dbPath = strings.Replace(dbPath, "/", "_", -1)
 +	}
-+	ccTimer := metrics.RootScope.Timer(strings.Replace(fmt.Sprintf("leveldb_GetIterator_%s_%s_processing_time_seconds",h.dbName,dbPath), "/", "_", -1))
++	ccTimer := metrics.RootScope.Timer(strings.Replace(fmt.Sprintf("leveldb_GetIterator_%s_%s_processing_time_seconds", h.dbName, dbPath), "/", "_", -1))
 +	stopwatch := ccTimer.Start()
  	sKey := constructLevelKey(h.dbName, startKey)
  	eKey := constructLevelKey(h.dbName, endKey)
@@ -204,21 +252,20 @@ index db41651d7..ab2ef1485 100644
  	}
 -	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
 -	return &Iterator{h.db.GetIterator(sKey, eKey)}
-+	fmt.Printf("Getting iterator %s for range [%#v] - [%#v]\n",dbPath, sKey, eKey)
-+	return &Iterator{h.db.GetIterator(sKey, eKey),stopwatch}
++	fmt.Printf("Getting iterator %s for range [%#v] - [%#v]\n", dbPath, sKey, eKey)
++	return &Iterator{h.db.GetIterator(sKey, eKey), stopwatch}
  }
  
  // UpdateBatch encloses the details of multiple `updates`
-@@ -136,6 +151,8 @@ func (batch *UpdateBatch) Delete(key []byte) {
+@@ -136,6 +159,7 @@ func (batch *UpdateBatch) Delete(key []byte) {
  // Iterator extends actual leveldb iterator
  type Iterator struct {
  	iterator.Iterator
 +	stopwatch tally.Stopwatch
-+
  }
  
  // Key wraps actual leveldb iterator method
-@@ -143,6 +160,12 @@ func (itr *Iterator) Key() []byte {
+@@ -143,6 +167,12 @@ func (itr *Iterator) Key() []byte {
  	return retrieveAppKey(itr.Iterator.Key())
  }
  
@@ -2061,6 +2108,87 @@ index 385f90917..322d2c66d 100644
  	l.blockAPIsRWLock.RUnlock()
  	return pvtdata, err
  }
+diff --git a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
+index f522ab2cc..e48aa6b0a 100644
+--- a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
++++ b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
+@@ -12,6 +12,7 @@ import (
+ 	"strings"
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/common/ccprovider"
+ 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
+ 
+@@ -20,10 +21,19 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("privacyenabledstate")
+ 
++var addPvtUpdatesTimer tally.Timer
++var addHashedUpdatesTimer tally.Timer
++
++func init() {
++	addPvtUpdatesTimer = metrics.RootScope.Timer("privacyenabledstate_addPvtUpdates_time_seconds")
++	addHashedUpdatesTimer = metrics.RootScope.Timer("privacyenabledstate_addHashedUpdatesTimer_time_seconds")
++}
++
+ const (
+ 	nsJoiner       = "$$"
+ 	pvtDataPrefix  = "p"
+@@ -257,6 +267,8 @@ func deriveHashedDataNs(namespace, collection string) string {
+ }
+ 
+ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
++	stopWatch := addPvtUpdatesTimer.Start()
++	defer stopWatch.Stop()
+ 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
+ 		for _, coll := range nsBatch.GetCollectionNames() {
+ 			for key, vv := range nsBatch.GetUpdates(coll) {
+@@ -267,6 +279,8 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
+ }
+ 
+ func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
++	stopWatch := addHashedUpdatesTimer.Start()
++	defer stopWatch.Stop()
+ 	for ns, nsBatch := range hashedUpdateBatch.UpdateMap {
+ 		for _, coll := range nsBatch.GetCollectionNames() {
+ 			for key, vv := range nsBatch.GetUpdates(coll) {
+diff --git a/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go b/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
+index 1d1436cb5..de2aff38d 100644
+--- a/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
++++ b/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
+@@ -11,9 +11,17 @@ import (
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/ledger/util"
+ 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
++	"github.com/uber-go/tally"
+ )
+ 
++var updateBookkeepingTimer tally.Timer
++
++func init() {
++	updateBookkeepingTimer = metrics.RootScope.Timer("pvtstatepurgemgmt_updateBookkeepingTimer_time_seconds")
++}
++
+ var logger = flogging.MustGetLogger("pvtstatepurgemgmt")
+ 
+ const (
+@@ -64,6 +72,8 @@ type expKeeper struct {
+ // at the time of the commit of the block number 45 and the second entry was created at the time of the commit of the block number 40, however
+ // both are expiring with the commit of block number 50.
+ func (ek *expKeeper) updateBookkeeping(toTrack []*expiryInfo, toClear []*expiryInfoKey) error {
++	stopWatch := updateBookkeepingTimer.Start()
++	defer stopWatch.Stop()
+ 	updateBatch := leveldbhelper.NewUpdateBatch()
+ 	for _, expinfo := range toTrack {
+ 		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 index 2dd88237c..5ea849f2a 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
@@ -2091,6 +2219,79 @@ index 2dd88237c..5ea849f2a 100644
  	if len(errsChan) > 0 {
  		return <-errsChan
  	}
+diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
+index b10b1d229..d0db360b8 100644
+--- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
++++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
+@@ -12,13 +12,21 @@ import (
+ 	"sync"
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/common/ccprovider"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
++	"github.com/uber-go/tally"
+ )
+ 
++var applyUpdatesTimer tally.Timer
++
++func init() {
++	applyUpdatesTimer = metrics.RootScope.Timer("statecouchdb_ApplyUpdates_time_seconds")
++}
++
+ var logger = flogging.MustGetLogger("statecouchdb")
+ 
+ // querySkip is implemented for future use by query paging
+@@ -290,6 +298,10 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+ 
+ // ApplyUpdates implements method in VersionedDB interface
+ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
++
++	stopWatch := applyUpdatesTimer.Start()
++	defer stopWatch.Stop()
++
+ 	// TODO a note about https://jira.hyperledger.org/browse/FAB-8622
+ 	// the function `Apply update can be split into three functions. Each carrying out one of the following three stages`.
+ 	// The write lock is needed only for the stage 2.
+diff --git a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
+index ba3be0ea3..e925d38e4 100644
+--- a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
++++ b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
+@@ -11,12 +11,20 @@ import (
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/syndtr/goleveldb/leveldb/iterator"
++	"github.com/uber-go/tally"
+ )
+ 
++var applyUpdatesTimer tally.Timer
++
++func init() {
++	applyUpdatesTimer = metrics.RootScope.Timer("stateleveldb_ApplyUpdates_time_seconds")
++}
++
+ var logger = flogging.MustGetLogger("stateleveldb")
+ 
+ var compositeKeySep = []byte{0x00}
+@@ -138,6 +146,10 @@ func (vdb *versionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+ 
+ // ApplyUpdates implements method in VersionedDB interface
+ func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
++
++	stopWatch := applyUpdatesTimer.Start()
++	defer stopWatch.Stop()
++
+ 	dbBatch := leveldbhelper.NewUpdateBatch()
+ 	namespaces := batch.GetUpdatedNamespaces()
+ 	for _, ns := range namespaces {
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
 index f13febb53..073c26630 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
@@ -2104,7 +2305,7 @@ index f13febb53..073c26630 100644
  		for _, itr := range h.itrs {
  			itr.Close()
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd0535..9ecee47d8 100644
+index d03bd0535..0e94e6813 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2115,7 +2316,7 @@ index d03bd0535..9ecee47d8 100644
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
-@@ -20,20 +21,33 @@ import (
+@@ -20,20 +21,35 @@ import (
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
  	"github.com/hyperledger/fabric/protos/common"
  	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
@@ -2127,11 +2328,13 @@ index d03bd0535..9ecee47d8 100644
 +var commitTimer tally.Timer
 +var commitLockTimer tally.Timer
 +var commitAfterLockTimer tally.Timer
++var updateStateListenersTimer tally.Timer
 +
 +func init() {
 +	commitTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_time_seconds")
 +	commitLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_Lock_time_seconds")
 +	commitAfterLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_After_Lock_time_seconds")
++	updateStateListenersTimer = metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_time_seconds")
 +}
 +
  // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
@@ -2156,7 +2359,7 @@ index d03bd0535..9ecee47d8 100644
  }
  
  type current struct {
-@@ -61,6 +75,7 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
+@@ -61,6 +77,7 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
  	}
  	txmgr.pvtdataPurgeMgr = &pvtdataPurgeMgr{pvtstatePurgeMgr, false}
  	txmgr.validator = valimpl.NewStatebasedValidator(txmgr, db)
@@ -2164,7 +2367,7 @@ index d03bd0535..9ecee47d8 100644
  	return txmgr, nil
  }
  
-@@ -74,6 +89,7 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
+@@ -74,6 +91,7 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
  func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
  	qe := newQueryExecutor(txmgr, txid)
  	txmgr.commitRWLock.RLock()
@@ -2172,7 +2375,7 @@ index d03bd0535..9ecee47d8 100644
  	return qe, nil
  }
  
-@@ -85,6 +101,7 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
+@@ -85,6 +103,7 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
  		return nil, err
  	}
  	txmgr.commitRWLock.RLock()
@@ -2180,7 +2383,7 @@ index d03bd0535..9ecee47d8 100644
  	return s, nil
  }
  
-@@ -129,6 +146,11 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
+@@ -129,6 +148,11 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
  
  // Commit implements method in interface `txmgmt.TxMgr`
  func (txmgr *LockBasedTxMgr) Commit() error {
@@ -2192,7 +2395,7 @@ index d03bd0535..9ecee47d8 100644
  	// When using the purge manager for the first block commit after peer start, the asynchronous function
  	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
  	// in advance for the next block
-@@ -153,8 +175,16 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+@@ -153,8 +177,16 @@ func (txmgr *LockBasedTxMgr) Commit() error {
  		return err
  	}
  
@@ -2209,6 +2412,15 @@ index d03bd0535..9ecee47d8 100644
  	logger.Debugf("Write lock acquired for committing updates to state database")
  	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
  	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
+@@ -223,6 +255,8 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
+ }
+ 
+ func (txmgr *LockBasedTxMgr) updateStateListeners() {
++	stopWatch := updateStateListenersTimer.Start()
++	defer stopWatch.Stop()
+ 	for _, l := range txmgr.current.listeners {
+ 		l.StateCommitDone(txmgr.ledgerid)
+ 	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
 index 5655969d5..14ccfbf48 100644
 --- a/core/ledger/ledgerstorage/store.go
@@ -2354,5 +2566,5 @@ index aa7d3018a..df333e808 100644
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
-2.15.2 (Apple Git-101.1)
+2.14.3 (Apple Git-98)
 
