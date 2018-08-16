@@ -1,4 +1,4 @@
-From a3b24e7fd6778b44bd34f0693a79effdb24e2fab Mon Sep 17 00:00:00 2001
+From 12150a1690c6ef791057e5a700ca9c0bbd9f0e97 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -136,7 +136,7 @@ index 9e2ab17df..3cdfd6630 100644
  	if sync {
  		wo = dbInst.writeOptsSync
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..2341ee8fd 100644
+index db41651d7..ab2ef1485 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
 @@ -22,6 +22,10 @@ import (
@@ -194,7 +194,7 @@ index db41651d7..2341ee8fd 100644
 +	}else{
 +		dbPath = strings.Replace(dbPath, "/", "_", -1)
 +	}
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_GetIterator_%s_%s_processing_time_seconds",h.dbName,dbPath))
++	ccTimer := metrics.RootScope.Timer(strings.Replace(fmt.Sprintf("leveldb_GetIterator_%s_%s_processing_time_seconds",h.dbName,dbPath), "/", "_", -1))
 +	stopwatch := ccTimer.Start()
  	sKey := constructLevelKey(h.dbName, startKey)
  	eKey := constructLevelKey(h.dbName, endKey)
@@ -2354,5 +2354,5 @@ index aa7d3018a..df333e808 100644
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
-2.14.3 (Apple Git-98)
+2.15.2 (Apple Git-101.1)
 
