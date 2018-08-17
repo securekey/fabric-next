@@ -1,4 +1,4 @@
-From 2ac20a37faf802afe4a98e480075c1b87f53b7ce Mon Sep 17 00:00:00 2001
+From fd2a83071af63382fd8bc0c18c6199863d4f44b8 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -21,15 +21,15 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
  .../privacyenabledstate/common_storage_db.go       |  14 +
  .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |  10 +
- .../txmgmt/statedb/statecouchdb/batch_util.go      |  14 +-
+ .../txmgmt/statedb/statecouchdb/batch_util.go      |  17 +-
  .../txmgmt/statedb/statecouchdb/statecouchdb.go    |  12 +
  .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  12 +
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
  core/ledger/ledgerstorage/store.go                 |  44 ++
- core/ledger/util/couchdb/couchdb.go                |  15 +
+ core/ledger/util/couchdb/couchdb.go                |  24 ++
  peer/main.go                                       |   2 +
- 23 files changed, 621 insertions(+), 1208 deletions(-)
+ 23 files changed, 633 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2339,10 +2339,10 @@ index 1d1436cb5..de2aff38d 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
-index 2dd88237c..8a21ea91e 100644
+index 2dd88237c..ad19868eb 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
-@@ -7,8 +7,17 @@ package statecouchdb
+@@ -7,8 +7,19 @@ package statecouchdb
  
  import (
  	"sync"
@@ -2352,15 +2352,17 @@ index 2dd88237c..8a21ea91e 100644
  )
  
 +var executeBatchesTimer tally.Timer
++var numBatchesGauge tally.Gauge
 +
 +func init() {
 +	executeBatchesTimer = metrics.RootScope.Timer("statecouchdb_executeBatches_time_seconds")
++	numBatchesGauge = metrics.RootScope.Gauge("statecouchdb_numBatches")
 +}
 +
  // batch is executed in a separate goroutine.
  type batch interface {
  	execute() error
-@@ -17,7 +26,10 @@ type batch interface {
+@@ -17,8 +28,12 @@ type batch interface {
  // executeBatches executes each batch in a separate goroutine and returns error if
  // any of the batches return error during its execution
  func executeBatches(batches []batch) error {
@@ -2370,8 +2372,10 @@ index 2dd88237c..8a21ea91e 100644
 +	defer stopWatch.Stop()
 +
  	numBatches := len(batches)
++	numBatchesGauge.Update(float64(numBatches))
  	if numBatches == 0 {
  		return nil
+ 	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 index b10b1d229..d0db360b8 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
@@ -2665,10 +2669,10 @@ index 5655969d5..14ccfbf48 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..1c579a81a 100644
+index 16d479802..b19e0687b 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -27,12 +27,22 @@ import (
+@@ -27,12 +27,24 @@ import (
  	"unicode/utf8"
  
  	"github.com/hyperledger/fabric/common/flogging"
@@ -2682,16 +2686,18 @@ index 16d479802..1c579a81a 100644
  
 +var invalidCouchDBReturnCounter tally.Counter
 +var saveDocTimer tally.Timer
++var handleRequestTimer tally.Timer
 +
 +func init() {
 +	invalidCouchDBReturnCounter = metrics.RootScope.Counter("couchdb_invalidCouchDBReturnCount")
 +	saveDocTimer = metrics.RootScope.Timer("couchdb_saveDoc_time_seconds")
++	handleRequestTimer = metrics.RootScope.Timer("couchdb_handleRequest_time_seconds")
 +}
 +
  //time between retry attempts in milliseconds
  const retryWaitTime = 125
  
-@@ -549,6 +559,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+@@ -549,6 +561,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2701,7 +2707,28 @@ index 16d479802..1c579a81a 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1838,6 +1851,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
+@@ -1280,6 +1295,10 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+ 	//URL to execute the view function associated with the index
+ 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
+ 
++	timer := metrics.RootScope.Timer("couchdb_WarmIndex_" + indexURL.Path)
++	stopWatch := timer.Start()
++	defer stopWatch.Stop()
++
+ 	queryParms := indexURL.Query()
+ 	//Query parameter that allows the execution of the URL to return immediately
+ 	//The update_after will cause the index update to run after the URL returns
+@@ -1650,6 +1669,9 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
+ 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
+ 
++	stopWatch := handleRequestTimer.Start()
++	defer stopWatch.Stop()
++
+ 	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
+ 
+ 	//create the return objects for couchDB
+@@ -1838,6 +1860,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
  //invalidCouchDBResponse checks to make sure either a valid response or error is returned
  func invalidCouchDBReturn(resp *http.Response, errResp error) bool {
  	if resp == nil && errResp == nil {
