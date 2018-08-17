@@ -1,4 +1,4 @@
-From fd2a83071af63382fd8bc0c18c6199863d4f44b8 Mon Sep 17 00:00:00 2001
+From 10c53be1145500e7b53fa19049796b594e76e132 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -22,14 +22,15 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../privacyenabledstate/common_storage_db.go       |  14 +
  .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |  10 +
  .../txmgmt/statedb/statecouchdb/batch_util.go      |  17 +-
+ .../txmgmt/statedb/statecouchdb/commit_handling.go |  12 +
  .../txmgmt/statedb/statecouchdb/statecouchdb.go    |  12 +
  .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  12 +
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
  core/ledger/ledgerstorage/store.go                 |  44 ++
- core/ledger/util/couchdb/couchdb.go                |  24 ++
+ core/ledger/util/couchdb/couchdb.go                |  29 ++
  peer/main.go                                       |   2 +
- 23 files changed, 633 insertions(+), 1208 deletions(-)
+ 24 files changed, 650 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2376,6 +2377,41 @@ index 2dd88237c..ad19868eb 100644
  	if numBatches == 0 {
  		return nil
  	}
+diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
+index 240667a73..141493742 100644
+--- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
++++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
+@@ -9,11 +9,19 @@ import (
+ 	"errors"
+ 	"fmt"
+ 
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
++	"github.com/uber-go/tally"
+ )
+ 
++var ensureFullCommitTimer tally.Timer
++
++func init() {
++	ensureFullCommitTimer = metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time_seconds")
++}
++
+ // nsCommittersBuilder implements `batch` interface. Each batch operates on a specific namespace in the updates and
+ // builds one or more batches of type subNsCommitter.
+ type nsCommittersBuilder struct {
+@@ -151,6 +159,10 @@ type nsFlusher struct {
+ }
+ 
+ func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
++
++	stopWatch := ensureFullCommitTimer.Start()
++	defer stopWatch.Stop()
++
+ 	var flushers []batch
+ 	for _, db := range dbs {
+ 		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 index b10b1d229..d0db360b8 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
@@ -2669,10 +2705,10 @@ index 5655969d5..14ccfbf48 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..b19e0687b 100644
+index 16d479802..1caea8b98 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -27,12 +27,24 @@ import (
+@@ -27,12 +27,26 @@ import (
  	"unicode/utf8"
  
  	"github.com/hyperledger/fabric/common/flogging"
@@ -2687,17 +2723,29 @@ index 16d479802..b19e0687b 100644
 +var invalidCouchDBReturnCounter tally.Counter
 +var saveDocTimer tally.Timer
 +var handleRequestTimer tally.Timer
++var ensureFullCommitTimer tally.Timer
 +
 +func init() {
 +	invalidCouchDBReturnCounter = metrics.RootScope.Counter("couchdb_invalidCouchDBReturnCount")
 +	saveDocTimer = metrics.RootScope.Timer("couchdb_saveDoc_time_seconds")
 +	handleRequestTimer = metrics.RootScope.Timer("couchdb_handleRequest_time_seconds")
++	ensureFullCommitTimer = metrics.RootScope.Timer("couchdb_ensureFullCommit_time_seconds")
 +}
 +
  //time between retry attempts in milliseconds
  const retryWaitTime = 125
  
-@@ -549,6 +561,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+@@ -491,6 +505,9 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+ // EnsureFullCommit calls _ensure_full_commit for explicit fsync
+ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
+ 
++	stopWatch := ensureFullCommitTimer.Start()
++	defer stopWatch.Stop()
++
+ 	logger.Debugf("Entering EnsureFullCommit()")
+ 
+ 	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+@@ -549,6 +566,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2707,7 +2755,7 @@ index 16d479802..b19e0687b 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1280,6 +1295,10 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1280,6 +1300,10 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2718,7 +2766,7 @@ index 16d479802..b19e0687b 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1650,6 +1669,9 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1650,6 +1674,9 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
@@ -2728,7 +2776,7 @@ index 16d479802..b19e0687b 100644
  	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
  
  	//create the return objects for couchDB
-@@ -1838,6 +1860,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
+@@ -1838,6 +1865,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
  //invalidCouchDBResponse checks to make sure either a valid response or error is returned
  func invalidCouchDBReturn(resp *http.Response, errResp error) bool {
  	if resp == nil && errResp == nil {
