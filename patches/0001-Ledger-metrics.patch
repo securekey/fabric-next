@@ -1,4 +1,4 @@
-From 4ea87d668518ea7fd2b57385050399baa8eb9224 Mon Sep 17 00:00:00 2001
+From 2ac20a37faf802afe4a98e480075c1b87f53b7ce Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -27,9 +27,9 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
  core/ledger/ledgerstorage/store.go                 |  44 ++
- core/ledger/util/couchdb/couchdb.go                |  16 +
+ core/ledger/util/couchdb/couchdb.go                |  15 +
  peer/main.go                                       |   2 +
- 23 files changed, 622 insertions(+), 1208 deletions(-)
+ 23 files changed, 621 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2665,10 +2665,10 @@ index 5655969d5..14ccfbf48 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..94ed169b7 100644
+index 16d479802..1c579a81a 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -27,12 +27,23 @@ import (
+@@ -27,12 +27,22 @@ import (
  	"unicode/utf8"
  
  	"github.com/hyperledger/fabric/common/flogging"
@@ -2682,7 +2682,6 @@ index 16d479802..94ed169b7 100644
  
 +var invalidCouchDBReturnCounter tally.Counter
 +var saveDocTimer tally.Timer
-+SaveDoc
 +
 +func init() {
 +	invalidCouchDBReturnCounter = metrics.RootScope.Counter("couchdb_invalidCouchDBReturnCount")
@@ -2692,7 +2691,7 @@ index 16d479802..94ed169b7 100644
  //time between retry attempts in milliseconds
  const retryWaitTime = 125
  
-@@ -549,6 +560,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+@@ -549,6 +559,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2702,7 +2701,7 @@ index 16d479802..94ed169b7 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1838,6 +1852,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
+@@ -1838,6 +1851,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
  //invalidCouchDBResponse checks to make sure either a valid response or error is returned
  func invalidCouchDBReturn(resp *http.Response, errResp error) bool {
  	if resp == nil && errResp == nil {
