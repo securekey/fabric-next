@@ -1,4 +1,4 @@
-From 84664acb5043f1083d067a9bb3233be15c97ddcd Mon Sep 17 00:00:00 2001
+From 4ea87d668518ea7fd2b57385050399baa8eb9224 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -6,6 +6,8 @@ Subject: [PATCH] Ledger metrics
 Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
+ .../blkstorage/fsblkstorage/blockfile_mgr.go       |  45 ++
+ .../ledger/blkstorage/fsblkstorage/blockindex.go   |  12 +
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  40 ++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  38 +-
@@ -19,19 +21,166 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/kvledger/kv_ledger.go                  |  47 +++
  .../privacyenabledstate/common_storage_db.go       |  14 +
  .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |  10 +
- .../txmgmt/statedb/statecouchdb/batch_util.go      |   4 +-
+ .../txmgmt/statedb/statecouchdb/batch_util.go      |  14 +-
  .../txmgmt/statedb/statecouchdb/statecouchdb.go    |  12 +
  .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  12 +
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
  core/ledger/ledgerstorage/store.go                 |  44 ++
- core/ledger/util/couchdb/couchdb.go                |  10 +
+ core/ledger/util/couchdb/couchdb.go                |  16 +
  peer/main.go                                       |   2 +
- 21 files changed, 549 insertions(+), 1208 deletions(-)
+ 23 files changed, 622 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
 
+diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
+index ab6caa8c4..ed84004c5 100644
+--- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
++++ b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
+@@ -29,11 +29,33 @@ import (
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+ 	"github.com/hyperledger/fabric/common/ledger/util"
+ 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/peer"
+ 	putil "github.com/hyperledger/fabric/protos/utils"
++	"github.com/uber-go/tally"
+ )
+ 
++var addBlockTimer tally.Timer
++var saveCurrentInfoTimer tally.Timer
++var moveToNextFileTimer tally.Timer
++var moveToNextFileCounter tally.Counter
++var appendBlockErrorCounter tally.Counter
++var blockfileSizeGauge tally.Gauge
++var updateCheckpointTimer tally.Timer
++var updateCheckpointLockTimer tally.Timer
++
++func init() {
++	addBlockTimer = metrics.RootScope.Timer("fsblkstorage_addBlock_time_seconds")
++	saveCurrentInfoTimer = metrics.RootScope.Timer("fsblkstorage_saveCurrentInfo_time_seconds")
++	moveToNextFileTimer = metrics.RootScope.Timer("fsblkstorage_moveToNextFile_time_seconds")
++	moveToNextFileCounter = metrics.RootScope.Counter("fsblkstorage_moveToNextFileCount")
++	appendBlockErrorCounter = metrics.RootScope.Counter("fsblkstorage_appendBlockErrorCount")
++	blockfileSizeGauge = metrics.RootScope.Gauge("fsblkstorage_blockfileSize")
++	updateCheckpointTimer = metrics.RootScope.Timer("fsblkstorage_updateCheckpoint_time_seconds")
++	updateCheckpointLockTimer = metrics.RootScope.Timer("fsblkstorage_updateCheckpoint_Lock_time_seconds")
++}
++
+ var logger = flogging.MustGetLogger("fsblkstorage")
+ 
+ const (
+@@ -226,6 +248,11 @@ func (mgr *blockfileMgr) close() {
+ }
+ 
+ func (mgr *blockfileMgr) moveToNextFile() {
++
++	moveToNextFileCounter.Inc(1)
++	stopWatch := moveToNextFileTimer.Start()
++	defer stopWatch.Stop()
++
+ 	cpInfo := &checkpointInfo{
+ 		latestFileChunkSuffixNum: mgr.cpInfo.latestFileChunkSuffixNum + 1,
+ 		latestFileChunksize:      0,
+@@ -247,6 +274,10 @@ func (mgr *blockfileMgr) moveToNextFile() {
+ }
+ 
+ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
++
++	stopWatch := addBlockTimer.Start()
++	defer stopWatch.Stop()
++
+ 	if block.Header.Number != mgr.getBlockchainInfo().Height {
+ 		return fmt.Errorf("Block number should have been %d but was %d", mgr.getBlockchainInfo().Height, block.Header.Number)
+ 	}
+@@ -265,6 +296,8 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
+ 	blockBytesEncodedLen := proto.EncodeVarint(uint64(blockBytesLen))
+ 	totalBytesToAppend := blockBytesLen + len(blockBytesEncodedLen)
+ 
++	blockfileSizeGauge.Update(float64(currentOffset))
++
+ 	//Determine if we need to start a new file since the size of this block
+ 	//exceeds the amount of space left in the current file
+ 	if currentOffset+totalBytesToAppend > mgr.conf.maxBlockfileSize {
+@@ -278,6 +311,7 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
+ 		err = mgr.currentFileWriter.append(blockBytes, true)
+ 	}
+ 	if err != nil {
++		appendBlockErrorCounter.Inc(1)
+ 		truncateErr := mgr.currentFileWriter.truncateFile(mgr.cpInfo.latestFileChunksize)
+ 		if truncateErr != nil {
+ 			panic(fmt.Sprintf("Could not truncate current file to known size after an error during block append: %s", err))
+@@ -294,6 +328,7 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
+ 		lastBlockNumber:          block.Header.Number}
+ 	//save the checkpoint information in the database
+ 	if err = mgr.saveCurrentInfo(newCPInfo, false); err != nil {
++		appendBlockErrorCounter.Inc(1)
+ 		truncateErr := mgr.currentFileWriter.truncateFile(currentCPInfo.latestFileChunksize)
+ 		if truncateErr != nil {
+ 			panic(fmt.Sprintf("Error in truncating current file to known size after an error in saving checkpoint info: %s", err))
+@@ -428,8 +463,16 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
+ }
+ 
+ func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
++
++	// Measure the whole
++	stopWatch := updateCheckpointTimer.Start()
++	defer stopWatch.Stop()
++
++	// Measure acquiring the lock
++	lockStopWatch := updateCheckpointLockTimer.Start()
+ 	mgr.cpInfoCond.L.Lock()
+ 	defer mgr.cpInfoCond.L.Unlock()
++	lockStopWatch.Stop()
+ 	mgr.cpInfo = cpInfo
+ 	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
+ 	mgr.cpInfoCond.Broadcast()
+@@ -590,6 +633,8 @@ func (mgr *blockfileMgr) loadCurrentInfo() (*checkpointInfo, error) {
+ }
+ 
+ func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
++	stopWatch := saveCurrentInfoTimer.Start()
++	defer stopWatch.Stop()
+ 	b, err := i.marshal()
+ 	if err != nil {
+ 		return err
+diff --git a/common/ledger/blkstorage/fsblkstorage/blockindex.go b/common/ledger/blkstorage/fsblkstorage/blockindex.go
+index 3d21b7e45..c643e6359 100644
+--- a/common/ledger/blkstorage/fsblkstorage/blockindex.go
++++ b/common/ledger/blkstorage/fsblkstorage/blockindex.go
+@@ -25,11 +25,19 @@ import (
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+ 	"github.com/hyperledger/fabric/common/ledger/util"
+ 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/peer"
++	"github.com/uber-go/tally"
+ )
+ 
++var indexBlockTimer tally.Timer
++
++func init() {
++	indexBlockTimer = metrics.RootScope.Timer("fsblkstorage_indexBlock_time_seconds")
++}
++
+ const (
+ 	blockNumIdxKeyPrefix           = 'n'
+ 	blockHashIdxKeyPrefix          = 'h'
+@@ -98,6 +106,10 @@ func (index *blockIndex) getLastBlockIndexed() (uint64, error) {
+ }
+ 
+ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
++
++	stopWatch := indexBlockTimer.Start()
++	defer stopWatch.Stop()
++
+ 	// do not index anything
+ 	if len(index.indexItemsMap) == 0 {
+ 		logger.Debug("Not indexing block... as nothing to index")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 index 7ebe52af9..88af3b0cc 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
@@ -165,7 +314,7 @@ index 9e2ab17df..c6981bd68 100644
  	if sync {
  		wo = dbInst.writeOptsSync
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..9008d7738 100644
+index db41651d7..4511c3b3b 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
 @@ -20,10 +20,21 @@ import (
@@ -252,7 +401,7 @@ index db41651d7..9008d7738 100644
  	}
 -	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
 -	return &Iterator{h.db.GetIterator(sKey, eKey)}
-+	fmt.Printf("Getting iterator %s for range [%#v] - [%#v]\n", dbPath, sKey, eKey)
++	logger.Debugf("Getting iterator %s for range [%#v] - [%#v]\n", dbPath, sKey, eKey)
 +	return &Iterator{h.db.GetIterator(sKey, eKey), stopwatch}
  }
  
@@ -2190,35 +2339,39 @@ index 1d1436cb5..de2aff38d 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
-index 2dd88237c..5ea849f2a 100644
+index 2dd88237c..8a21ea91e 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
-@@ -7,6 +7,7 @@ package statecouchdb
+@@ -7,8 +7,17 @@ package statecouchdb
  
  import (
  	"sync"
-+	"fmt"
++
++	"github.com/hyperledger/fabric/common/metrics"
++	"github.com/uber-go/tally"
  )
  
++var executeBatchesTimer tally.Timer
++
++func init() {
++	executeBatchesTimer = metrics.RootScope.Timer("statecouchdb_executeBatches_time_seconds")
++}
++
  // batch is executed in a separate goroutine.
-@@ -17,7 +18,6 @@ type batch interface {
+ type batch interface {
+ 	execute() error
+@@ -17,7 +26,10 @@ type batch interface {
  // executeBatches executes each batch in a separate goroutine and returns error if
  // any of the batches return error during its execution
  func executeBatches(batches []batch) error {
 -	logger.Debugf("Executing batches = %s", batches)
++
++	stopWatch := executeBatchesTimer.Start()
++	defer stopWatch.Stop()
++
  	numBatches := len(batches)
  	if numBatches == 0 {
  		return nil
-@@ -38,7 +38,9 @@ func executeBatches(batches []batch) error {
- 			}
- 		}(b)
- 	}
-+	fmt.Printf("Wait Executing batches = %s\n", batches)
- 	batchWG.Wait()
-+	fmt.Printf("Done Executing batches = %s\n", batches)
- 	if len(errsChan) > 0 {
- 		return <-errsChan
- 	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 index b10b1d229..d0db360b8 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
@@ -2512,10 +2665,10 @@ index 5655969d5..14ccfbf48 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..0a8b4cb90 100644
+index 16d479802..94ed169b7 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -27,12 +27,20 @@ import (
+@@ -27,12 +27,23 @@ import (
  	"unicode/utf8"
  
  	"github.com/hyperledger/fabric/common/flogging"
@@ -2528,15 +2681,28 @@ index 16d479802..0a8b4cb90 100644
  var logger = flogging.MustGetLogger("couchdb")
  
 +var invalidCouchDBReturnCounter tally.Counter
++var saveDocTimer tally.Timer
++SaveDoc
 +
 +func init() {
-+	invalidCouchDBReturnCounter = metrics.RootScope.Counter("invalidCouchDBReturnCount")
++	invalidCouchDBReturnCounter = metrics.RootScope.Counter("couchdb_invalidCouchDBReturnCount")
++	saveDocTimer = metrics.RootScope.Timer("couchdb_saveDoc_time_seconds")
 +}
 +
  //time between retry attempts in milliseconds
  const retryWaitTime = 125
  
-@@ -1838,6 +1846,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
+@@ -549,6 +560,9 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+ //SaveDoc method provides a function to save a document, id and byte array
+ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
+ 
++	stopWatch := saveDocTimer.Start()
++	defer stopWatch.Stop()
++
+ 	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
+ 
+ 	if !utf8.ValidString(id) {
+@@ -1838,6 +1852,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
  //invalidCouchDBResponse checks to make sure either a valid response or error is returned
  func invalidCouchDBReturn(resp *http.Response, errResp error) bool {
  	if resp == nil && errResp == nil {
