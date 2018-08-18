@@ -41,3 +41,6 @@ git am $MY_PATH/../patches/0001-Ledger-metrics.patch
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/24217/1 && git cherry-pick FETCH_HEAD
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/57/25357/1 && git cherry-pick FETCH_HEAD
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/77/25477/1 && git cherry-pick FETCH_HEAD
+
+# [FAB-11648] Release closeMarkerLock earlier
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/59/25659/2 && git cherry-pick FETCH_HEAD
