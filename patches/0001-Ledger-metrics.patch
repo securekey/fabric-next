@@ -1,4 +1,4 @@
-From 10c53be1145500e7b53fa19049796b594e76e132 Mon Sep 17 00:00:00 2001
+From ff929c37d5a7bd3713d64c2f421e3e3e0b2161bb Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -27,10 +27,11 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  12 +
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
- core/ledger/ledgerstorage/store.go                 |  44 ++
+ core/ledger/ledgerstorage/store.go                 |  50 +++
  core/ledger/util/couchdb/couchdb.go                |  29 ++
+ gossip/privdata/coordinator.go                     |   7 +
  peer/main.go                                       |   2 +
- 24 files changed, 650 insertions(+), 1208 deletions(-)
+ 25 files changed, 663 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2615,10 +2616,10 @@ index d03bd0535..0e94e6813 100644
  		l.StateCommitDone(txmgr.ledgerid)
  	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index 5655969d5..14ccfbf48 100644
+index 5655969d5..1bb1403ea 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
-@@ -23,13 +23,31 @@ import (
+@@ -23,13 +23,35 @@ import (
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
@@ -2637,10 +2638,14 @@ index 5655969d5..14ccfbf48 100644
 +var pvtDataAndBlockByNumLockTimer tally.Timer
 +var pvtDataByNumTimer tally.Timer
 +var pvtDataByNumLockTimer tally.Timer
++var commitWithPvtDataSkipCounter tally.Counter
++var commitWithPvtDataBlockDiff tally.Gauge
 +
 +func init() {
 +	commitWithPvtDataTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
 +	commitWithPvtDataLockTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_Lock_time_seconds")
++	commitWithPvtDataSkipCounter = metrics.RootScope.Counter("ledgerstorage_CommitWithPvtData_SkipCount")
++	commitWithPvtDataBlockDiff = metrics.RootScope.Gauge("ledgerstorage_CommitWithPvtData_BlockDiff")
 +	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
 +	pvtDataAndBlockByNumLockTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_Lock_time_seconds")
 +	pvtDataByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
@@ -2650,7 +2655,7 @@ index 5655969d5..14ccfbf48 100644
  var logger = flogging.MustGetLogger("ledgerstorage")
  
  // Provider encapusaltes two providers 1) block store provider and 2) and pvt data store provider
-@@ -97,9 +115,18 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+@@ -97,14 +119,24 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
@@ -2669,7 +2674,21 @@ index 5655969d5..14ccfbf48 100644
  
  	pvtBlkStoreHt, err := s.pvtdataStore.LastCommittedBlockHeight()
  	if err != nil {
-@@ -137,8 +164,16 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+ 		return err
+ 	}
++	commitWithPvtDataBlockDiff.Update(float64(blockNum - pvtBlkStoreHt))
+ 
+ 	writtenToPvtStore := false
+ 	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
+@@ -120,6 +152,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+ 		}
+ 		writtenToPvtStore = true
+ 	} else {
++		commitWithPvtDataSkipCounter.Inc(1)
+ 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
+ 	}
+ 
+@@ -137,8 +170,16 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2686,7 +2705,7 @@ index 5655969d5..14ccfbf48 100644
  
  	var block *common.Block
  	var pvtdata []*ledger.TxPvtData
-@@ -156,8 +191,17 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+@@ -156,8 +197,17 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
  func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2785,6 +2804,54 @@ index 16d479802..1caea8b98 100644
  		return true
  	}
  	return false
+diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
+index 1d1152bac..f6112b318 100644
+--- a/gossip/privdata/coordinator.go
++++ b/gossip/privdata/coordinator.go
+@@ -13,6 +13,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/golang/protobuf/proto"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	util2 "github.com/hyperledger/fabric/common/util"
+ 	"github.com/hyperledger/fabric/core/committer"
+ 	"github.com/hyperledger/fabric/core/committer/txvalidator"
+@@ -31,8 +32,11 @@ import (
+ 	"github.com/op/go-logging"
+ 	"github.com/pkg/errors"
+ 	"github.com/spf13/viper"
++	"github.com/uber-go/tally"
+ )
+ 
++var waitingForMissingKeysTimer tally.Timer
++
+ const (
+ 	pullRetrySleepInterval           = time.Second
+ 	transientBlockRetentionConfigKey = "peer.gossip.pvtData.transientstoreMaxBlockRetention"
+@@ -43,6 +47,7 @@ var logger *logging.Logger // package-level logger
+ 
+ func init() {
+ 	logger = util.GetLogger(util.LoggingPrivModule, "")
++	waitingForMissingKeysTimer = metrics.RootScope.Timer("privdata_waitingForMissingKeys_time_seconds")
+ }
+ 
+ // TransientStore holds private data that the corresponding blocks haven't been committed yet into the ledger
+@@ -193,6 +198,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+ 	}
+ 	start := time.Now()
+ 	limit := start.Add(retryThresh)
++	waitingForMissingKeysStopWatch := waitingForMissingKeysTimer.Start()
+ 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
+ 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
+ 		// If succeeded to fetch everything, no need to sleep before
+@@ -202,6 +208,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+ 		}
+ 		time.Sleep(pullRetrySleepInterval)
+ 	}
++	waitingForMissingKeysStopWatch.Stop()
+ 
+ 	// Only log results if we actually attempted to fetch
+ 	if bFetchFromPeers {
 diff --git a/peer/main.go b/peer/main.go
 index aa7d3018a..df333e808 100644
 --- a/peer/main.go
