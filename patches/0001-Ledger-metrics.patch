@@ -1,4 +1,4 @@
-From ff929c37d5a7bd3713d64c2f421e3e3e0b2161bb Mon Sep 17 00:00:00 2001
+From f70d8b4cee30bd1b0d41c7f6755d7f11c6f2359e Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -29,9 +29,9 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
  core/ledger/ledgerstorage/store.go                 |  50 +++
  core/ledger/util/couchdb/couchdb.go                |  29 ++
- gossip/privdata/coordinator.go                     |   7 +
+ gossip/privdata/coordinator.go                     |  19 +
  peer/main.go                                       |   2 +
- 25 files changed, 663 insertions(+), 1208 deletions(-)
+ 25 files changed, 675 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2805,7 +2805,7 @@ index 16d479802..1caea8b98 100644
  	}
  	return false
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 1d1152bac..f6112b318 100644
+index 1d1152bac..0aa4124be 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
@@ -2816,35 +2816,52 @@ index 1d1152bac..f6112b318 100644
  	util2 "github.com/hyperledger/fabric/common/util"
  	"github.com/hyperledger/fabric/core/committer"
  	"github.com/hyperledger/fabric/core/committer/txvalidator"
-@@ -31,8 +32,11 @@ import (
+@@ -31,6 +32,13 @@ import (
  	"github.com/op/go-logging"
  	"github.com/pkg/errors"
  	"github.com/spf13/viper"
 +	"github.com/uber-go/tally"
++)
++
++var (
++	gossipMissingKeysGauge           tally.Gauge
++	gossipWaitingForMissingKeysTimer tally.Timer
++	gossipStoreBlockCounter          tally.Counter
  )
  
-+var waitingForMissingKeysTimer tally.Timer
-+
  const (
- 	pullRetrySleepInterval           = time.Second
- 	transientBlockRetentionConfigKey = "peer.gossip.pvtData.transientstoreMaxBlockRetention"
-@@ -43,6 +47,7 @@ var logger *logging.Logger // package-level logger
+@@ -43,6 +51,9 @@ var logger *logging.Logger // package-level logger
  
  func init() {
  	logger = util.GetLogger(util.LoggingPrivModule, "")
-+	waitingForMissingKeysTimer = metrics.RootScope.Timer("privdata_waitingForMissingKeys_time_seconds")
++	gossipMissingKeysGauge = metrics.RootScope.Gauge("privdata_gossipMissingKeys")
++	gossipWaitingForMissingKeysTimer = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time_seconds")
++	gossipStoreBlockCounter = metrics.RootScope.Counter("privdata_gossipStoreBlockCount")
  }
  
  // TransientStore holds private data that the corresponding blocks haven't been committed yet into the ledger
-@@ -193,6 +198,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+@@ -150,6 +161,9 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
+ 
+ // StoreBlock stores block with private data into the ledger
+ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDataCollections) error {
++
++	gossipStoreBlockCounter.Inc(1)
++
+ 	if block.Data == nil {
+ 		return errors.New("Block data is empty")
+ 	}
+@@ -193,6 +207,10 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  	}
  	start := time.Now()
  	limit := start.Add(retryThresh)
-+	waitingForMissingKeysStopWatch := waitingForMissingKeysTimer.Start()
++
++	gossipMissingKeysGauge.Update(float64(len(privateInfo.missingKeys)))
++	waitingForMissingKeysStopWatch := gossipWaitingForMissingKeysTimer.Start()
++
  	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
  		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
  		// If succeeded to fetch everything, no need to sleep before
-@@ -202,6 +208,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+@@ -202,6 +220,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  		}
  		time.Sleep(pullRetrySleepInterval)
  	}
