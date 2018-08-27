@@ -21,7 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-git checkout v1.2.0
+# Tip of release-1.2 (August 27, 2018)
+git checkout 644f38d078108bdb276b21810223a9388cb7ed1c
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -31,17 +32,14 @@ git config user.email jenkins@jenkins.com
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
+# [FAB-11247] Add configuration to create _global_changes
 git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_change.patch
 
-git am $MY_PATH/../patches/0001-Ledger-metrics.patch
-
+# [FAB-8622] Reduce exclusive lock duration during commit
 #git am $MY_PATH/../patches/0001-FAB-8622-Red.-exclusive-lock-dur.-during-commit.patch
 
-
-
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/17/24217/1 && git cherry-pick FETCH_HEAD
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/57/25357/1 && git cherry-pick FETCH_HEAD
+# [FAB-11569] Fix public/sideDB updates final commit
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/77/25477/1 && git cherry-pick FETCH_HEAD
 
-# [FAB-11648] Release closeMarkerLock earlier
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/59/25659/2 && git cherry-pick FETCH_HEAD
+# **Temporary** metrics collection
+git am $MY_PATH/../patches/0001-Ledger-metrics.patch
