@@ -1,4 +1,4 @@
-From f70d8b4cee30bd1b0d41c7f6755d7f11c6f2359e Mon Sep 17 00:00:00 2001
+From 3a35d65122d2e49f84f8738f7c73003b05112daf Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -27,11 +27,12 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  12 +
  .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   1 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  48 ++-
+ .../kvledger/txmgmt/validator/valimpl/helper.go    |   4 +
  core/ledger/ledgerstorage/store.go                 |  50 +++
  core/ledger/util/couchdb/couchdb.go                |  29 ++
  gossip/privdata/coordinator.go                     |  19 +
  peer/main.go                                       |   2 +
- 25 files changed, 675 insertions(+), 1208 deletions(-)
+ 26 files changed, 679 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -184,7 +185,7 @@ index 3d21b7e45..c643e6359 100644
  	if len(index.indexItemsMap) == 0 {
  		logger.Debug("Not indexing block... as nothing to index")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 7ebe52af9..88af3b0cc 100644
+index 3e06887b6..d4d8325b0 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 @@ -20,8 +20,20 @@ import (
@@ -2615,6 +2616,35 @@ index d03bd0535..0e94e6813 100644
  	for _, l := range txmgr.current.listeners {
  		l.StateCommitDone(txmgr.ledgerid)
  	}
+diff --git a/core/ledger/kvledger/txmgmt/validator/valimpl/helper.go b/core/ledger/kvledger/txmgmt/validator/valimpl/helper.go
+index 73b2d70e3..43de347f5 100644
+--- a/core/ledger/kvledger/txmgmt/validator/valimpl/helper.go
++++ b/core/ledger/kvledger/txmgmt/validator/valimpl/helper.go
+@@ -10,6 +10,7 @@ import (
+ 	"bytes"
+ 	"fmt"
+ 
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/customtx"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
+@@ -25,6 +26,8 @@ import (
+ 	"github.com/hyperledger/fabric/protos/utils"
+ )
+ 
++var validatePvtdataFailedCounter = metrics.RootScope.Counter("valimpl_Validate_Pvtdata_Failed_Count")
++
+ // validateAndPreparePvtBatch pulls out the private write-set for the transactions that are marked as valid
+ // by the internal public data validator. Finally, it validates (if not already self-endorsed) the pvt rwset against the
+ // corresponding hash present in the public rwset
+@@ -43,6 +46,7 @@ func validateAndPreparePvtBatch(block *valinternal.Block, pvtdata map[uint64]*le
+ 		}
+ 		if requiresPvtdataValidation(txPvtdata) {
+ 			if err := validatePvtdata(tx, txPvtdata); err != nil {
++				validatePvtdataFailedCounter.Inc(1)
+ 				return nil, err
+ 			}
+ 		}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
 index 5655969d5..1bb1403ea 100644
 --- a/core/ledger/ledgerstorage/store.go
