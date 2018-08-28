@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -25,8 +24,6 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 )
-
-var validatePvtdataFailedCounter = metrics.RootScope.Counter("valimpl_Validate_Pvtdata_Failed_Count")
 
 // validateAndPreparePvtBatch pulls out the private write-set for the transactions that are marked as valid
 // by the internal public data validator. Finally, it validates (if not already self-endorsed) the pvt rwset against the
@@ -46,7 +43,6 @@ func validateAndPreparePvtBatch(block *valinternal.Block, pvtdata map[uint64]*le
 		}
 		if requiresPvtdataValidation(txPvtdata) {
 			if err := validatePvtdata(tx, txPvtdata); err != nil {
-				validatePvtdataFailedCounter.Inc(1)
 				return nil, err
 			}
 		}

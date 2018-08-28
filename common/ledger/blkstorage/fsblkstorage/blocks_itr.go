@@ -20,19 +20,7 @@ import (
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger"
-	"github.com/hyperledger/fabric/common/metrics"
-	"github.com/uber-go/tally"
 )
-
-var blockDiffGauge tally.Gauge
-var waitForBlockTimer tally.Timer
-var waitForBlockLockTimer tally.Timer
-
-func init() {
-	blockDiffGauge = metrics.RootScope.Gauge("fsblkstorage_waitForBlock_blockDiff")
-	waitForBlockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
-	waitForBlockLockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_Lock_time_seconds")
-}
 
 // blocksItr - an iterator for iterating over a sequence of blocks
 type blocksItr struct {
@@ -49,19 +37,8 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
 }
 
 func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
-
-	// Measure the whole
-	stopWatch := waitForBlockTimer.Start()
-	defer stopWatch.Stop()
-
-	// Measure acquiring the lock
-	lockStopWatch := waitForBlockLockTimer.Start()
 	itr.mgr.cpInfoCond.L.Lock()
 	defer itr.mgr.cpInfoCond.L.Unlock()
-	lockStopWatch.Stop()
-
-	blockDiffGauge.Update(float64(blockNum - itr.mgr.cpInfo.lastBlockNumber))
-
 	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
 			itr.mgr.cpInfo.lastBlockNumber, blockNum)

@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
@@ -21,18 +20,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("privacyenabledstate")
-
-var addPvtUpdatesTimer tally.Timer
-var addHashedUpdatesTimer tally.Timer
-
-func init() {
-	addPvtUpdatesTimer = metrics.RootScope.Timer("privacyenabledstate_addPvtUpdates_time_seconds")
-	addHashedUpdatesTimer = metrics.RootScope.Timer("privacyenabledstate_addHashedUpdatesTimer_time_seconds")
-}
 
 const (
 	nsJoiner       = "$$"
@@ -267,8 +257,6 @@ func deriveHashedDataNs(namespace, collection string) string {
 }
 
 func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
-	stopWatch := addPvtUpdatesTimer.Start()
-	defer stopWatch.Stop()
 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {
@@ -279,8 +267,6 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
 }
 
 func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
-	stopWatch := addHashedUpdatesTimer.Start()
-	defer stopWatch.Stop()
 	for ns, nsBatch := range hashedUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {

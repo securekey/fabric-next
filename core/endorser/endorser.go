@@ -25,18 +25,9 @@ import (
 	putils "github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"github.com/hyperledger/fabric/common/metrics"
-
 )
 
 var endorserLogger = flogging.MustGetLogger("endorser")
-
-
-
-
-
-
-
 
 // The Jira issue that documents Endorser flow along with its relationship to
 // the lifecycle chaincode - https://jira.hyperledger.org/browse/FAB-181
@@ -131,18 +122,8 @@ func NewEndorserServer(privDist privateDataDistributor, s Support) *Endorser {
 func (e *Endorser) callChaincode(ctxt context.Context, chainID string, version string, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, cis *pb.ChaincodeInvocationSpec, cid *pb.ChaincodeID, txsim ledger.TxSimulator) (*pb.Response, *pb.ChaincodeEvent, error) {
 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s version: %s", chainID, txid, cid, version)
 	defer endorserLogger.Debugf("[%s][%s] Exit", chainID, txid)
-
-	// Report on the CC processing time
-	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-	fName := "NIL"
-	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-		fName = string(cis.ChaincodeSpec.Input.Args[0])
-	}
-	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_callChaincode_%s_%s_processing_time_seconds", ccName, fName))
-	ccStopWatch := ccTimer.Start()
-	defer ccStopWatch.Stop()
-	var res *pb.Response
 	var err error
+	var res *pb.Response
 	var ccevent *pb.ChaincodeEvent
 
 	if txsim != nil {
@@ -275,16 +256,6 @@ func (e *Endorser) SimulateProposal(ctx context.Context, chainID string, txid st
 		return nil, nil, nil, nil, err
 	}
 
-	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-	fName := "NIL"
-	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-		fName = string(cis.ChaincodeSpec.Input.Args[0])
-	}
-	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_SimulateProposal_%s_%s_processing_time_seconds", ccName, fName))
-	ccStopWatch := ccTimer.Start()
-	defer ccStopWatch.Stop()
-
-
 	// disable Java install,instantiate,upgrade for now
 	if err = e.DisableJavaCCInst(cid, cis); err != nil {
 		return nil, nil, nil, nil, err
@@ -366,28 +337,6 @@ func (e *Endorser) SimulateProposal(ctx context.Context, chainID string, txid st
 func (e *Endorser) endorseProposal(_ context.Context, chainID string, txid string, signedProp *pb.SignedProposal, proposal *pb.Proposal, response *pb.Response, simRes []byte, event *pb.ChaincodeEvent, visibility []byte, ccid *pb.ChaincodeID, txsim ledger.TxSimulator, cd ccprovider.ChaincodeDefinition) (*pb.ProposalResponse, error) {
 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s", chainID, shorttxid(txid), ccid)
 	defer endorserLogger.Debugf("[%s][%s] Exit", chainID, shorttxid(txid))
-
-	// extract the Proposal message from signedProp
-	prop, err1 := putils.GetProposal(signedProp.ProposalBytes)
-	if err1 != nil {
-		return nil,err1
-	}
-
-	cis, err1 := putils.GetChaincodeInvocationSpec(prop)
-	if err1 != nil {
-		return nil,err1
-	}
-	// Report on the CC processing time
-	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-	fName := "NIL"
-	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-		fName = string(cis.ChaincodeSpec.Input.Args[0])
-	}
-	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_endorseProposal_%s_%s_processing_time_seconds", ccName, fName))
-	ccStopWatch := ccTimer.Start()
-	defer ccStopWatch.Stop()
-
-
 
 	isSysCC := cd == nil
 	// 1) extract the name of the escc that is requested to endorse this chaincode
@@ -511,26 +460,6 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 		resp := vr.resp
 		return resp, err
 	}
-
-	// extract the Proposal message from signedProp
-	prop, err := putils.GetProposal(signedProp.ProposalBytes)
-	if err != nil {
-		return nil,err
-	}
-
-	cis, err := putils.GetChaincodeInvocationSpec(prop)
-	if err != nil {
-		return nil,err
-	}
-	// Report on the CC processing time
-	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-	fName := "NIL"
-	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-		fName = string(cis.ChaincodeSpec.Input.Args[0])
-	}
-	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_ProcessProposal_%s_%s_processing_time_seconds", ccName, fName))
-	ccStopWatch := ccTimer.Start()
-	defer ccStopWatch.Stop()
 
 	prop, hdrExt, chainID, txid := vr.prop, vr.hdrExt, vr.chainID, vr.txid
 

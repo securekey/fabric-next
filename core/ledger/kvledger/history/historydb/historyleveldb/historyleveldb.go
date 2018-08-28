@@ -10,7 +10,6 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -19,16 +18,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	putils "github.com/hyperledger/fabric/protos/utils"
-	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("historyleveldb")
-
-var commitTimer tally.Timer
-
-func init() {
-	commitTimer = metrics.RootScope.Timer("historyleveldb_Commit_time_seconds")
-}
 
 var savePointKey = []byte{0x00}
 var emptyValue = []byte{}
@@ -80,10 +72,6 @@ func (historyDB *historyDB) Close() {
 
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
-
-	// Measure the whole
-	stopWatch := commitTimer.Start()
-	defer stopWatch.Stop()
 
 	blockNo := block.Header.Number
 	//Set the starting tranNo to 0

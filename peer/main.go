@@ -23,7 +23,6 @@ import (
 	"github.com/hyperledger/fabric/peer/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/hyperledger/fabric/gossip/util"
 )
 
 var logger = flogging.MustGetLogger("main")
@@ -77,7 +76,6 @@ func main() {
 		loggingSpec = viper.GetString("logging.level")
 	}
 	flogging.InitFromSpec(loggingSpec)
-	flogging.SetModuleLevel(util.LoggingPrivModule,"debug")
 
 	// Init the MSP
 	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")

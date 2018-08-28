@@ -20,20 +20,9 @@ import (
 	"bytes"
 	"sync"
 
-	"fmt"
-	"strings"
-
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/uber-go/tally"
 )
-
-var writeBatchTimer tally.Timer
-
-func init() {
-	writeBatchTimer = metrics.RootScope.Timer("leveldbhelper_WriteBatch_time_seconds")
-}
 
 var dbNameKeySep = []byte{0x00}
 var lastKeyIndicator = byte(0x01)
@@ -43,14 +32,13 @@ type Provider struct {
 	db        *DB
 	dbHandles map[string]*DBHandle
 	mux       sync.Mutex
-	dbPath    string
 }
 
 // NewProvider constructs a Provider
 func NewProvider(conf *Conf) *Provider {
 	db := CreateDB(conf)
 	db.Open()
-	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}, conf.DBPath}
+	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
 }
 
 // GetDBHandle returns a handle to a named db
@@ -59,7 +47,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
 	defer p.mux.Unlock()
 	dbHandle := p.dbHandles[dbName]
 	if dbHandle == nil {
-		dbHandle = &DBHandle{dbName, p.db, p.dbPath}
+		dbHandle = &DBHandle{dbName, p.db}
 		p.dbHandles[dbName] = dbHandle
 	}
 	return dbHandle
@@ -74,7 +62,6 @@ func (p *Provider) Close() {
 type DBHandle struct {
 	dbName string
 	db     *DB
-	dbPath string
 }
 
 // Get returns the value for the given key
@@ -94,8 +81,6 @@ func (h *DBHandle) Delete(key []byte, sync bool) error {
 
 // WriteBatch writes a batch in an atomic way
 func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
-	stopWatch := writeBatchTimer.Start()
-	defer stopWatch.Stop()
 	levelBatch := &leveldb.Batch{}
 	for k, v := range batch.KVs {
 		key := constructLevelKey(h.dbName, []byte(k))
@@ -115,22 +100,14 @@ func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
 // The resultset contains all the keys that are present in the db between the startKey (inclusive) and the endKey (exclusive).
 // A nil startKey represents the first available key and a nil endKey represent a logical key after the last available key
 func (h *DBHandle) GetIterator(startKey []byte, endKey []byte) *Iterator {
-	dbPath := h.dbPath
-	if strings.Contains(dbPath, "ledgersData/") {
-		dbPath = strings.Replace(strings.Split(dbPath, "ledgersData/")[1], "/", "_", -1)
-	} else {
-		dbPath = strings.Replace(dbPath, "/", "_", -1)
-	}
-	ccTimer := metrics.RootScope.Timer(strings.Replace(fmt.Sprintf("leveldb_GetIterator_%s_%s_processing_time_seconds", h.dbName, dbPath), "/", "_", -1))
-	stopwatch := ccTimer.Start()
 	sKey := constructLevelKey(h.dbName, startKey)
 	eKey := constructLevelKey(h.dbName, endKey)
 	if endKey == nil {
 		// replace the last byte 'dbNameKeySep' by 'lastKeyIndicator'
 		eKey[len(eKey)-1] = lastKeyIndicator
 	}
-	logger.Debugf("Getting iterator %s for range [%#v] - [%#v]\n", dbPath, sKey, eKey)
-	return &Iterator{h.db.GetIterator(sKey, eKey), stopwatch}
+	logger.Debugf("Getting iterator for range [%#v] - [%#v]", sKey, eKey)
+	return &Iterator{h.db.GetIterator(sKey, eKey)}
 }
 
 // UpdateBatch encloses the details of multiple `updates`
@@ -159,18 +136,11 @@ func (batch *UpdateBatch) Delete(key []byte) {
 // Iterator extends actual leveldb iterator
 type Iterator struct {
 	iterator.Iterator
-	stopwatch tally.Stopwatch
 }
 
 // Key wraps actual leveldb iterator method
 func (itr *Iterator) Key() []byte {
 	return retrieveAppKey(itr.Iterator.Key())
-}
-
-// Key wraps actual leveldb iterator method
-func (itr *Iterator) Release() {
-	defer itr.stopwatch.Stop()
-	itr.Iterator.Release()
 }
 
 func constructLevelKey(dbName string, key []byte) []byte {

@@ -11,16 +11,8 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
-	"github.com/uber-go/tally"
 )
-
-var updateBookkeepingTimer tally.Timer
-
-func init() {
-	updateBookkeepingTimer = metrics.RootScope.Timer("pvtstatepurgemgmt_updateBookkeepingTimer_time_seconds")
-}
 
 var logger = flogging.MustGetLogger("pvtstatepurgemgmt")
 
@@ -72,8 +64,6 @@ type expKeeper struct {
 // at the time of the commit of the block number 45 and the second entry was created at the time of the commit of the block number 40, however
 // both are expiring with the commit of block number 50.
 func (ek *expKeeper) updateBookkeeping(toTrack []*expiryInfo, toClear []*expiryInfoKey) error {
-	stopWatch := updateBookkeepingTimer.Start()
-	defer stopWatch.Stop()
 	updateBatch := leveldbhelper.NewUpdateBatch()
 	for _, expinfo := range toTrack {
 		k, v, err := encodeKV(expinfo)

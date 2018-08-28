@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/common/metrics"
 	util2 "github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/committer"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
@@ -32,13 +31,6 @@ import (
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"github.com/uber-go/tally"
-)
-
-var (
-	gossipMissingKeysGauge           tally.Gauge
-	gossipWaitingForMissingKeysTimer tally.Timer
-	gossipStoreBlockCounter          tally.Counter
 )
 
 const (
@@ -51,9 +43,6 @@ var logger *logging.Logger // package-level logger
 
 func init() {
 	logger = util.GetLogger(util.LoggingPrivModule, "")
-	gossipMissingKeysGauge = metrics.RootScope.Gauge("privdata_gossipMissingKeys")
-	gossipWaitingForMissingKeysTimer = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time_seconds")
-	gossipStoreBlockCounter = metrics.RootScope.Counter("privdata_gossipStoreBlockCount")
 }
 
 // TransientStore holds private data that the corresponding blocks haven't been committed yet into the ledger
@@ -161,9 +150,6 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
 
 // StoreBlock stores block with private data into the ledger
 func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDataCollections) error {
-
-	gossipStoreBlockCounter.Inc(1)
-
 	if block.Data == nil {
 		return errors.New("Block data is empty")
 	}
@@ -207,10 +193,6 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 	start := time.Now()
 	limit := start.Add(retryThresh)
-
-	gossipMissingKeysGauge.Update(float64(len(privateInfo.missingKeys)))
-	waitingForMissingKeysStopWatch := gossipWaitingForMissingKeysTimer.Start()
-
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
 		// If succeeded to fetch everything, no need to sleep before
@@ -220,7 +202,6 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 		}
 		time.Sleep(pullRetrySleepInterval)
 	}
-	waitingForMissingKeysStopWatch.Stop()
 
 	// Only log results if we actually attempted to fetch
 	if bFetchFromPeers {

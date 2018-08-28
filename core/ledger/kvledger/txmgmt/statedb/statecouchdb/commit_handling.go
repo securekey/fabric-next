@@ -9,18 +9,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"github.com/uber-go/tally"
 )
-
-var ensureFullCommitTimer tally.Timer
-
-func init() {
-	ensureFullCommitTimer = metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time_seconds")
-}
 
 // nsCommittersBuilder implements `batch` interface. Each batch operates on a specific namespace in the updates and
 // builds one or more batches of type subNsCommitter.
@@ -159,10 +151,6 @@ type nsFlusher struct {
 }
 
 func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
-
-	stopWatch := ensureFullCommitTimer.Start()
-	defer stopWatch.Stop()
-
 	var flushers []batch
 	for _, db := range dbs {
 		flushers = append(flushers, &nsFlusher{db})

@@ -11,7 +11,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -21,35 +20,20 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
-	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
 
-var commitTimer tally.Timer
-var commitLockTimer tally.Timer
-var commitAfterLockTimer tally.Timer
-var updateStateListenersTimer tally.Timer
-
-func init() {
-	commitTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_time_seconds")
-	commitLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_Lock_time_seconds")
-	commitAfterLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_After_Lock_time_seconds")
-	updateStateListenersTimer = metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_time_seconds")
-}
-
 // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
 // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
 type LockBasedTxMgr struct {
-	ledgerid                   string
-	db                         privacyenabledstate.DB
-	pvtdataPurgeMgr            *pvtdataPurgeMgr
-	validator                  validator.Validator
-	stateListeners             []ledger.StateListener
-	commitRWLock               sync.RWMutex
-	commitRWLockRLockTimer     tally.Timer
-	commitRWLockRLockStopwatch tally.Stopwatch
-	current                    *current
+	ledgerid        string
+	db              privacyenabledstate.DB
+	pvtdataPurgeMgr *pvtdataPurgeMgr
+	validator       validator.Validator
+	stateListeners  []ledger.StateListener
+	commitRWLock    sync.RWMutex
+	current         *current
 }
 
 type current struct {
@@ -77,7 +61,6 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 	}
 	txmgr.pvtdataPurgeMgr = &pvtdataPurgeMgr{pvtstatePurgeMgr, false}
 	txmgr.validator = valimpl.NewStatebasedValidator(txmgr, db)
-	txmgr.commitRWLockRLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_commitRWLockRLock_time_seconds")
 	return txmgr, nil
 }
 
@@ -91,7 +74,6 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
 	qe := newQueryExecutor(txmgr, txid)
 	txmgr.commitRWLock.RLock()
-	txmgr.commitRWLockRLockStopwatch = txmgr.commitRWLockRLockTimer.Start()
 	return qe, nil
 }
 
@@ -103,7 +85,6 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 		return nil, err
 	}
 	txmgr.commitRWLock.RLock()
-	txmgr.commitRWLockRLockStopwatch = txmgr.commitRWLockRLockTimer.Start()
 	return s, nil
 }
 
@@ -148,11 +129,6 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
 
 // Commit implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Commit() error {
-
-	// Measure the whole
-	stopWatch := commitTimer.Start()
-	defer stopWatch.Stop()
-
 	// When using the purge manager for the first block commit after peer start, the asynchronous function
 	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
 	// in advance for the next block
@@ -177,16 +153,8 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 		return err
 	}
 
-	// Measure acquiring the lock
-	lockStopWatch := commitLockTimer.Start()
 	txmgr.commitRWLock.Lock()
 	defer txmgr.commitRWLock.Unlock()
-	lockStopWatch.Stop()
-
-	// Measure after acquiring the lock
-	afterLockStopWatch := commitAfterLockTimer.Start()
-	defer afterLockStopWatch.Stop()
-
 	logger.Debugf("Write lock acquired for committing updates to state database")
 	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
 	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
@@ -255,8 +223,6 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
 }
 
 func (txmgr *LockBasedTxMgr) updateStateListeners() {
-	stopWatch := updateStateListenersTimer.Start()
-	defer stopWatch.Stop()
 	for _, l := range txmgr.current.listeners {
 		l.StateCommitDone(txmgr.ledgerid)
 	}

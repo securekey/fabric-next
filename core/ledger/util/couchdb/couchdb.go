@@ -27,25 +27,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	logging "github.com/op/go-logging"
-	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("couchdb")
-
-var invalidCouchDBReturnCounter tally.Counter
-var saveDocTimer tally.Timer
-var handleRequestTimer tally.Timer
-var ensureFullCommitTimer tally.Timer
-
-func init() {
-	invalidCouchDBReturnCounter = metrics.RootScope.Counter("couchdb_invalidCouchDBReturnCount")
-	saveDocTimer = metrics.RootScope.Timer("couchdb_saveDoc_time_seconds")
-	handleRequestTimer = metrics.RootScope.Timer("couchdb_handleRequest_time_seconds")
-	ensureFullCommitTimer = metrics.RootScope.Timer("couchdb_ensureFullCommit_time_seconds")
-}
 
 //time between retry attempts in milliseconds
 const retryWaitTime = 125
@@ -506,9 +492,6 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 // EnsureFullCommit calls _ensure_full_commit for explicit fsync
 func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
 
-	stopWatch := ensureFullCommitTimer.Start()
-	defer stopWatch.Stop()
-
 	logger.Debugf("Entering EnsureFullCommit()")
 
 	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
@@ -566,9 +549,6 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) 
 
 //SaveDoc method provides a function to save a document, id and byte array
 func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
-
-	stopWatch := saveDocTimer.Start()
-	defer stopWatch.Stop()
 
 	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
 
@@ -1301,10 +1281,6 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 	//URL to execute the view function associated with the index
 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
 
-	timer := metrics.RootScope.Timer("couchdb_WarmIndex_" + indexURL.Path)
-	stopWatch := timer.Start()
-	defer stopWatch.Stop()
-
 	queryParms := indexURL.Query()
 	//Query parameter that allows the execution of the URL to return immediately
 	//The update_after will cause the index update to run after the URL returns
@@ -1675,9 +1651,6 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
 
-	stopWatch := handleRequestTimer.Start()
-	defer stopWatch.Stop()
-
 	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
 
 	//create the return objects for couchDB
@@ -1866,8 +1839,6 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 //invalidCouchDBResponse checks to make sure either a valid response or error is returned
 func invalidCouchDBReturn(resp *http.Response, errResp error) bool {
 	if resp == nil && errResp == nil {
-		logger.Errorf("invalidCouchDBReturn(%v, %v)", resp == nil, errResp == nil)
-		invalidCouchDBReturnCounter.Inc(1)
 		return true
 	}
 	return false

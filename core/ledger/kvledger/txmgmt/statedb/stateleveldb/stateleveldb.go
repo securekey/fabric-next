@@ -11,19 +11,11 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/uber-go/tally"
 )
-
-var applyUpdatesTimer tally.Timer
-
-func init() {
-	applyUpdatesTimer = metrics.RootScope.Timer("stateleveldb_ApplyUpdates_time_seconds")
-}
 
 var logger = flogging.MustGetLogger("stateleveldb")
 
@@ -146,10 +138,6 @@ func (vdb *versionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 
 // ApplyUpdates implements method in VersionedDB interface
 func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
-
-	stopWatch := applyUpdatesTimer.Start()
-	defer stopWatch.Stop()
-
 	dbBatch := leveldbhelper.NewUpdateBatch()
 	namespaces := batch.GetUpdatedNamespaces()
 	for _, ns := range namespaces {

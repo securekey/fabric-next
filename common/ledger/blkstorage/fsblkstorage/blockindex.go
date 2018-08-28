@@ -25,18 +25,10 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
-	"github.com/uber-go/tally"
 )
-
-var indexBlockTimer tally.Timer
-
-func init() {
-	indexBlockTimer = metrics.RootScope.Timer("fsblkstorage_indexBlock_time_seconds")
-}
 
 const (
 	blockNumIdxKeyPrefix           = 'n'
@@ -106,10 +98,6 @@ func (index *blockIndex) getLastBlockIndexed() (uint64, error) {
 }
 
 func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
-
-	stopWatch := indexBlockTimer.Start()
-	defer stopWatch.Stop()
-
 	// do not index anything
 	if len(index.indexItemsMap) == 0 {
 		logger.Debug("Not indexing block... as nothing to index")

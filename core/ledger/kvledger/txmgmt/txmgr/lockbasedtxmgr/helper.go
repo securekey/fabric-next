@@ -185,7 +185,6 @@ func (h *queryHelper) done() {
 
 	defer func() {
 		h.txmgr.commitRWLock.RUnlock()
-		h.txmgr.commitRWLockRLockStopwatch.Stop()
 		h.doneInvoked = true
 		for _, itr := range h.itrs {
 			itr.Close()
