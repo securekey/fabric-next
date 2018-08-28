@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/capabilities"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/crypto"
 	mockchannelconfig "github.com/hyperledger/fabric/common/mocks/config"
 	mockconfigtx "github.com/hyperledger/fabric/common/mocks/configtx"
+	"github.com/hyperledger/fabric/common/tools/configtxgen/configtxgentest"
 	"github.com/hyperledger/fabric/common/tools/configtxgen/encoder"
 	genesisconfig "github.com/hyperledger/fabric/common/tools/configtxgen/localconfig"
 	cb "github.com/hyperledger/fabric/protos/common"
@@ -408,13 +410,15 @@ func (mdts *mockDefaultTemplatorSupport) Signer() crypto.LocalSigner {
 
 func TestNewChannelConfig(t *testing.T) {
 	channelID := "foo"
-	gConf := genesisconfig.Load(genesisconfig.SampleSingleMSPSoloProfile)
+	gConf := configtxgentest.Load(genesisconfig.SampleSingleMSPSoloProfile)
 	gConf.Orderer.Capabilities = map[string]bool{
 		capabilities.OrdererV1_1: true,
 	}
 	channelGroup, err := encoder.NewChannelGroup(gConf)
 	assert.NoError(t, err)
 	ctxm, err := channelconfig.NewBundle(channelID, &cb.Config{ChannelGroup: channelGroup})
+
+	originalCG := proto.Clone(ctxm.ConfigtxValidator().ConfigProto().ChannelGroup).(*cb.ConfigGroup)
 
 	templator := NewDefaultTemplator(&mockDefaultTemplatorSupport{
 		Resources: ctxm,
@@ -670,10 +674,76 @@ func TestNewChannelConfig(t *testing.T) {
 
 	// Successful
 	t.Run("Success", func(t *testing.T) {
-		createTx, err := encoder.MakeChannelCreationTransaction("foo", nil, nil, genesisconfig.Load(genesisconfig.SampleSingleMSPChannelProfile))
+		createTx, err := encoder.MakeChannelCreationTransaction("foo", nil, nil, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile))
 		assert.Nil(t, err)
 		res, err := templator.NewChannelConfig(createTx)
 		assert.Nil(t, err)
 		assert.NotEmpty(t, res.ConfigtxValidator().ConfigProto().ChannelGroup.ModPolicy)
+		assert.True(t, proto.Equal(originalCG, ctxm.ConfigtxValidator().ConfigProto().ChannelGroup), "Underlying system channel config proto was mutated")
 	})
+}
+
+func TestZeroVersions(t *testing.T) {
+	data := &cb.ConfigGroup{
+		Version: 7,
+		Groups: map[string]*cb.ConfigGroup{
+			"foo": {
+				Version: 6,
+			},
+			"bar": {
+				Values: map[string]*cb.ConfigValue{
+					"foo": {
+						Version: 3,
+					},
+				},
+				Policies: map[string]*cb.ConfigPolicy{
+					"bar": {
+						Version: 5,
+					},
+				},
+			},
+		},
+		Values: map[string]*cb.ConfigValue{
+			"foo": {
+				Version: 3,
+			},
+			"bar": {
+				Version: 9,
+			},
+		},
+		Policies: map[string]*cb.ConfigPolicy{
+			"foo": {
+				Version: 4,
+			},
+			"bar": {
+				Version: 5,
+			},
+		},
+	}
+
+	expected := &cb.ConfigGroup{
+		Groups: map[string]*cb.ConfigGroup{
+			"foo": {},
+			"bar": {
+				Values: map[string]*cb.ConfigValue{
+					"foo": {},
+				},
+				Policies: map[string]*cb.ConfigPolicy{
+					"bar": {},
+				},
+			},
+		},
+		Values: map[string]*cb.ConfigValue{
+			"foo": {},
+			"bar": {},
+		},
+		Policies: map[string]*cb.ConfigPolicy{
+			"foo": {},
+			"bar": {},
+		},
+	}
+
+	zeroVersions(data)
+
+	assert.True(t, proto.Equal(expected, data))
 }

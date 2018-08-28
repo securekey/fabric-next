@@ -24,34 +24,17 @@ import (
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
 
-// ccProviderFactory implements the ccprovider.ChaincodeProviderFactory
-// interface and returns instances of ccprovider.ChaincodeProvider
-type ccProviderFactory struct {
-}
-
-// NewChaincodeProvider returns pointers to ccProviderImpl as an
-// implementer of the ccprovider.ChaincodeProvider interface
-func (c *ccProviderFactory) NewChaincodeProvider() ccprovider.ChaincodeProvider {
-	return &ccProviderImpl{}
-}
-
-// init is called when this package is loaded. This implementation registers the factory
-func init() {
-	ccprovider.RegisterChaincodeProviderFactory(&ccProviderFactory{})
-}
-
 // ccProviderImpl is an implementation of the ccprovider.ChaincodeProvider interface
-type ccProviderImpl struct {
+type CCProviderImpl struct {
+	cs *ChaincodeSupport
 }
 
-// ccProviderContextImpl contains the state that is passed around to calls to methods of ccProviderImpl
-type ccProviderContextImpl struct {
-	ctx *ccprovider.CCContext
+func NewProvider(cs *ChaincodeSupport) *CCProviderImpl {
+	return &CCProviderImpl{cs: cs}
 }
 
 // GetContext returns a context for the supplied ledger, with the appropriate tx simulator
-func (c *ccProviderImpl) GetContext(ledger ledger.PeerLedger, txid string) (context.Context, ledger.TxSimulator, error) {
-	var err error
+func (c *CCProviderImpl) GetContext(ledger ledger.PeerLedger, txid string) (context.Context, ledger.TxSimulator, error) {
 	// get context for the chaincode execution
 	txsim, err := ledger.NewTxSimulator(txid)
 	if err != nil {
@@ -61,33 +44,24 @@ func (c *ccProviderImpl) GetContext(ledger ledger.PeerLedger, txid string) (cont
 	return ctxt, txsim, nil
 }
 
-// GetCCContext returns an interface that encapsulates a
-// chaincode context; the interface is required to avoid
-// referencing the chaincode package from the interface definition
-func (c *ccProviderImpl) GetCCContext(cid, name, version, txid string, syscc bool, signedProp *pb.SignedProposal, prop *pb.Proposal) interface{} {
-	ctx := ccprovider.NewCCContext(cid, name, version, txid, syscc, signedProp, prop)
-	return &ccProviderContextImpl{ctx: ctx}
-}
-
 // ExecuteChaincode executes the chaincode specified in the context with the specified arguments
-func (c *ccProviderImpl) ExecuteChaincode(ctxt context.Context, cccid interface{}, args [][]byte) (*pb.Response, *pb.ChaincodeEvent, error) {
-	return ExecuteChaincode(ctxt, cccid.(*ccProviderContextImpl).ctx, args)
+func (c *CCProviderImpl) ExecuteChaincode(ctxt context.Context, cccid *ccprovider.CCContext, args [][]byte) (*pb.Response, *pb.ChaincodeEvent, error) {
+	invocationSpec := &pb.ChaincodeInvocationSpec{
+		ChaincodeSpec: &pb.ChaincodeSpec{
+			Type:        pb.ChaincodeSpec_GOLANG,
+			ChaincodeId: &pb.ChaincodeID{Name: cccid.Name},
+			Input:       &pb.ChaincodeInput{Args: args},
+		},
+	}
+	return c.cs.Execute(ctxt, cccid, invocationSpec)
 }
 
 // Execute executes the chaincode given context and spec (invocation or deploy)
-func (c *ccProviderImpl) Execute(ctxt context.Context, cccid interface{}, spec interface{}) (*pb.Response, *pb.ChaincodeEvent, error) {
-	return Execute(ctxt, cccid.(*ccProviderContextImpl).ctx, spec)
-}
-
-// ExecuteWithErrorFilter executes the chaincode given context and spec and returns payload
-func (c *ccProviderImpl) ExecuteWithErrorFilter(ctxt context.Context, cccid interface{}, spec interface{}) ([]byte, *pb.ChaincodeEvent, error) {
-	return ExecuteWithErrorFilter(ctxt, cccid.(*ccProviderContextImpl).ctx, spec)
+func (c *CCProviderImpl) Execute(ctxt context.Context, cccid *ccprovider.CCContext, spec ccprovider.ChaincodeSpecGetter) (*pb.Response, *pb.ChaincodeEvent, error) {
+	return c.cs.Execute(ctxt, cccid, spec)
 }
 
 // Stop stops the chaincode given context and spec
-func (c *ccProviderImpl) Stop(ctxt context.Context, cccid interface{}, spec *pb.ChaincodeDeploymentSpec) error {
-	if theChaincodeSupport != nil {
-		return theChaincodeSupport.Stop(ctxt, cccid.(*ccProviderContextImpl).ctx, spec)
-	}
-	panic("ChaincodeSupport not initialized")
+func (c *CCProviderImpl) Stop(ctxt context.Context, cccid *ccprovider.CCContext, spec *pb.ChaincodeDeploymentSpec) error {
+	return c.cs.Stop(ctxt, cccid, spec)
 }

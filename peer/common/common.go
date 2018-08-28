@@ -1,5 +1,5 @@
 /*
-Copyright IBM Corp. 2016-2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
@@ -7,10 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package common
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hyperledger/fabric/bccsp/factory"
 	"github.com/hyperledger/fabric/common/channelconfig"
@@ -21,6 +23,7 @@ import (
 	"github.com/hyperledger/fabric/core/scc/cscc"
 	"github.com/hyperledger/fabric/msp"
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
+	"github.com/hyperledger/fabric/peer/common/api"
 	pcommon "github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	putils "github.com/hyperledger/fabric/protos/utils"
@@ -34,12 +37,24 @@ import (
 const UndefinedParamValue = ""
 
 var (
+	defaultConnTimeout = 3 * time.Second
 	// These function variables (xyzFnc) can be used to invoke corresponding xyz function
 	// this will allow the invoking packages to mock these functions in their unit test cases
 
-	// GetEndorserClientFnc is a function that returns a new endorser client connection,
+	// GetEndorserClientFnc is a function that returns a new endorser client connection
+	// to the provided peer address using the TLS root cert file,
 	// by default it is set to GetEndorserClient function
-	GetEndorserClientFnc func() (pb.EndorserClient, error)
+	GetEndorserClientFnc func(address, tlsRootCertFile string) (pb.EndorserClient, error)
+
+	// GetPeerDeliverClientFnc is a function that returns a new deliver client connection
+	// to the provided peer address using the TLS root cert file,
+	// by default it is set to GetDeliverClient function
+	GetPeerDeliverClientFnc func(address, tlsRootCertFile string) (api.PeerDeliverClient, error)
+
+	// GetDeliverClientFnc is a function that returns a new deliver client connection
+	// to the provided peer address using the TLS root cert file,
+	// by default it is set to GetDeliverClient function
+	GetDeliverClientFnc func(address, tlsRootCertFile string) (pb.Deliver_DeliverClient, error)
 
 	// GetDefaultSignerFnc is a function that returns a default Signer(Default/PERR)
 	// by default it is set to GetDefaultSigner function
@@ -53,10 +68,13 @@ var (
 	// by default it is set to GetOrdererEndpointOfChain function
 	GetOrdererEndpointOfChainFnc func(chainID string, signer msp.SigningIdentity,
 		endorserClient pb.EndorserClient) ([]string, error)
+
+	// GetCertificateFnc is a function that returns the client TLS certificate
+	GetCertificateFnc func() (tls.Certificate, error)
 )
 
 type commonClient struct {
-	comm.GRPCClient
+	*comm.GRPCClient
 	address string
 	sn      string
 }
@@ -66,9 +84,12 @@ func init() {
 	GetDefaultSignerFnc = GetDefaultSigner
 	GetBroadcastClientFnc = GetBroadcastClient
 	GetOrdererEndpointOfChainFnc = GetOrdererEndpointOfChain
+	GetDeliverClientFnc = GetDeliverClient
+	GetPeerDeliverClientFnc = GetPeerDeliverClient
+	GetCertificateFnc = GetCertificate
 }
 
-//InitConfig initializes viper config
+// InitConfig initializes viper config
 func InitConfig(cmdRoot string) error {
 	err := config.InitViper(nil, cmdRoot)
 	if err != nil {
@@ -83,14 +104,18 @@ func InitConfig(cmdRoot string) error {
 	return nil
 }
 
-//InitCrypto initializes crypto for this peer
+// InitCrypto initializes crypto for this peer
 func InitCrypto(mspMgrConfigDir, localMSPID, localMSPType string) error {
 	var err error
-	// Check whenever msp folder exists
-	_, err = os.Stat(mspMgrConfigDir)
-	if os.IsNotExist(err) {
+	// Check whether msp folder exists
+	fi, err := os.Stat(mspMgrConfigDir)
+	if os.IsNotExist(err) || !fi.IsDir() {
 		// No need to try to load MSP from folder which is not available
 		return errors.Errorf("cannot init crypto, missing %s folder", mspMgrConfigDir)
+	}
+	// Check whether localMSPID exists
+	if localMSPID == "" {
+		return errors.New("the local MSP must have an ID")
 	}
 
 	// Init the BCCSP
@@ -128,7 +153,6 @@ func GetDefaultSigner() (msp.SigningIdentity, error) {
 
 // GetOrdererEndpointOfChain returns orderer endpoints of given chain
 func GetOrdererEndpointOfChain(chainID string, signer msp.SigningIdentity, endorserClient pb.EndorserClient) ([]string, error) {
-
 	// query cscc for chain config block
 	invocation := &pb.ChaincodeInvocationSpec{
 		ChaincodeSpec: &pb.ChaincodeSpec{
@@ -163,7 +187,7 @@ func GetOrdererEndpointOfChain(chainID string, signer msp.SigningIdentity, endor
 	}
 
 	if proposalResp.Response.Status != 0 && proposalResp.Response.Status != 200 {
-		return nil, errors.Errorf("error bad proposal response %d", proposalResp.Response.Status)
+		return nil, errors.Errorf("error bad proposal response %d: %s", proposalResp.Response.Status, proposalResp.Response.Message)
 	}
 
 	// parse config block
@@ -213,11 +237,15 @@ func CheckLogLevel(level string) error {
 	return err
 }
 
-func configFromEnv(prefix string) (address, override string,
-	clientConfig comm.ClientConfig, err error) {
+func configFromEnv(prefix string) (address, override string, clientConfig comm.ClientConfig, err error) {
 	address = viper.GetString(prefix + ".address")
 	override = viper.GetString(prefix + ".tls.serverhostoverride")
 	clientConfig = comm.ClientConfig{}
+	connTimeout := viper.GetDuration(prefix + ".client.connTimeout")
+	if connTimeout == time.Duration(0) {
+		connTimeout = defaultConnTimeout
+	}
+	clientConfig.Timeout = connTimeout
 	secOpts := &comm.SecureOptions{
 		UseTLS:            viper.GetBool(prefix + ".tls.enabled"),
 		RequireClientCert: viper.GetBool(prefix + ".tls.clientAuthRequired")}

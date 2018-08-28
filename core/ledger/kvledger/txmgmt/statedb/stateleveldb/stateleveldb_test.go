@@ -62,8 +62,8 @@ func TestEncodeDecodeValueAndVersion(t *testing.T) {
 }
 
 func testValueAndVersionEncoding(t *testing.T, value []byte, version *version.Height) {
-	encodedValue := statedb.EncodeValue(value, version)
-	val, ver := statedb.DecodeValue(encodedValue)
+	encodedValue := EncodeValue(value, version)
+	val, ver := DecodeValue(encodedValue)
 	testutil.AssertEquals(t, val, value)
 	testutil.AssertEquals(t, ver, version)
 }
@@ -127,7 +127,6 @@ func TestUtilityFunctions(t *testing.T) {
 	byteKeySupported := db.BytesKeySuppoted()
 	testutil.AssertEquals(t, byteKeySupported, true)
 
-	// ValidateKey should return nil for a valid key
-	validKey := db.ValidateKey("testKey")
-	testutil.AssertNil(t, validKey)
+	// ValidateKeyValue should return nil for a valid key and value
+	testutil.AssertNoError(t, db.ValidateKeyValue("testKey", []byte("testValue")), "leveldb should accept all key-values")
 }

@@ -91,7 +91,7 @@ func NewGossipService(conf *Config, s *grpc.Server, secAdvisor api.SecurityAdvis
 	g.idMapper = identity.NewIdentityMapper(mcs, selfIdentity, func(pkiID common.PKIidType, identity api.PeerIdentityType) {
 		g.comm.CloseConn(&comm.RemotePeer{PKIID: pkiID})
 		g.certPuller.Remove(string(pkiID))
-	})
+	}, secAdvisor)
 
 	if s == nil {
 		g.comm, err = createCommWithServer(conf.BindPort, g.idMapper, selfIdentity, secureDialOpts)
@@ -193,13 +193,6 @@ func (g *gossipServiceImpl) LeaveChan(chainID common.ChainID) {
 		g.logger.Debug("No such channel", chainID)
 		return
 	}
-	b, _ := (&common.NodeMetastate{}).Bytes()
-	stateInfMsg, err := g.createStateInfoMsg(b, chainID, true)
-	if err != nil {
-		g.logger.Errorf("Failed creating StateInfo message: %+v", errors.WithStack(err))
-		return
-	}
-	gc.UpdateStateInfo(stateInfMsg)
 	gc.LeaveChannel()
 }
 
@@ -611,8 +604,16 @@ func (g *gossipServiceImpl) removeSelfLoop(msg *emittedGossipMessage, peers []*c
 	return result
 }
 
+// IdentityInfo returns information known peer identities
+func (g *gossipServiceImpl) IdentityInfo() api.PeerIdentitySet {
+	return g.idMapper.IdentityInfo()
+}
+
 // SendByCriteria sends a given message to all peers that match the given SendCriteria
 func (g *gossipServiceImpl) SendByCriteria(msg *proto.SignedGossipMessage, criteria SendCriteria) error {
+	if criteria.MaxPeers == 0 {
+		return nil
+	}
 	if criteria.Timeout == 0 {
 		return errors.New("Timeout should be specified")
 	}
@@ -622,9 +623,6 @@ func (g *gossipServiceImpl) SendByCriteria(msg *proto.SignedGossipMessage, crite
 	}
 
 	membership := g.disc.GetMembership()
-	if criteria.MaxPeers == 0 {
-		criteria.MaxPeers = len(membership)
-	}
 
 	if len(criteria.Channel) > 0 {
 		gc := g.chanState.getGossipChannelByChainID(criteria.Channel)
@@ -729,6 +727,20 @@ func (g *gossipServiceImpl) PeersOfChannel(channel common.ChainID) []discovery.N
 	return gc.GetPeers()
 }
 
+// SelfMembershipInfo returns the peer's membership information
+func (g *gossipServiceImpl) SelfMembershipInfo() discovery.NetworkMember {
+	return g.disc.Self()
+}
+
+// SelfChannelInfo returns the peer's latest StateInfo message of a given channel
+func (g *gossipServiceImpl) SelfChannelInfo(chain common.ChainID) *proto.SignedGossipMessage {
+	ch := g.chanState.getGossipChannelByChainID(chain)
+	if ch == nil {
+		return nil
+	}
+	return ch.Self()
+}
+
 // PeerFilter receives a SubChannelSelectionCriteria and returns a RoutingFilter that selects
 // only peer identities that match the given criteria, and that they published their channel participation
 func (g *gossipServiceImpl) PeerFilter(channel common.ChainID, messagePredicate api.SubChannelSelectionCriteria) (filter.RoutingFilter, error) {
@@ -768,20 +780,26 @@ func (g *gossipServiceImpl) UpdateMetadata(md []byte) {
 	g.disc.UpdateMetadata(md)
 }
 
-// UpdateChannelMetadata updates the self metadata the peer
-// publishes to other peers about its channel-related state
-func (g *gossipServiceImpl) UpdateChannelMetadata(md []byte, chainID common.ChainID) {
+// UpdateLedgerHeight updates the ledger height the peer
+// publishes to other peers in the channel
+func (g *gossipServiceImpl) UpdateLedgerHeight(height uint64, chainID common.ChainID) {
 	gc := g.chanState.getGossipChannelByChainID(chainID)
 	if gc == nil {
-		g.logger.Debug("No such channel", chainID)
+		g.logger.Warning("No such channel", chainID)
 		return
 	}
-	stateInfMsg, err := g.createStateInfoMsg(md, chainID, false)
-	if err != nil {
-		g.logger.Errorf("Failed creating StateInfo message: %+v", errors.WithStack(err))
+	gc.UpdateLedgerHeight(height)
+}
+
+// UpdateChaincodes updates the chaincodes the peer publishes
+// to other peers in the channel
+func (g *gossipServiceImpl) UpdateChaincodes(chaincodes []*proto.Chaincode, chainID common.ChainID) {
+	gc := g.chanState.getGossipChannelByChainID(chainID)
+	if gc == nil {
+		g.logger.Warning("No such channel", chainID)
 		return
 	}
-	gc.UpdateStateInfo(stateInfMsg)
+	gc.UpdateChaincodes(chaincodes)
 }
 
 // Accept returns a dedicated read-only channel for messages sent by other nodes that match a certain predicate.
@@ -1152,44 +1170,6 @@ func (g *gossipServiceImpl) connect2BootstrapPeers() {
 		}, identifier)
 	}
 
-}
-
-func (g *gossipServiceImpl) createStateInfoMsg(metadata []byte, chainID common.ChainID, leftChannel bool) (*proto.SignedGossipMessage, error) {
-	metaState, err := common.FromBytes(metadata)
-	if err != nil {
-		return nil, err
-	}
-	pkiID := g.comm.GetPKIid()
-	stateInfMsg := &proto.StateInfo{
-		Channel_MAC: channel.GenerateMAC(pkiID, chainID),
-		Metadata:    metadata,
-		PkiId:       g.comm.GetPKIid(),
-		Timestamp: &proto.PeerTime{
-			IncNum: uint64(g.incTime.UnixNano()),
-			SeqNum: uint64(time.Now().UnixNano()),
-		},
-		Properties: &proto.Properties{
-			LedgerHeight: metaState.LedgerHeight,
-		},
-	}
-	if leftChannel {
-		stateInfMsg.Properties.LeftChannel = true
-	}
-	m := &proto.GossipMessage{
-		Nonce: 0,
-		Tag:   proto.GossipMessage_CHAN_OR_ORG,
-		Content: &proto.GossipMessage_StateInfo{
-			StateInfo: stateInfMsg,
-		},
-	}
-	sMsg := &proto.SignedGossipMessage{
-		GossipMessage: m,
-	}
-	signer := func(msg []byte) ([]byte, error) {
-		return g.mcs.Sign(msg)
-	}
-	_, err = sMsg.Sign(signer)
-	return sMsg, errors.WithStack(err)
 }
 
 func (g *gossipServiceImpl) hasExternalEndpoint(PKIID common.PKIidType) bool {

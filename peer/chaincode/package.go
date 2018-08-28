@@ -153,10 +153,12 @@ func chaincodePackage(cmd *cobra.Command, args []string, cdsFact ccDepSpecFactor
 	if cdsFact == nil {
 		return fmt.Errorf("Error chaincode deployment spec factory not specified")
 	}
+	// Parsing of the command line is done so silence cmd usage
+	cmd.SilenceUsage = true
 
 	var err error
 	if cf == nil {
-		cf, err = InitCmdFactory(false, false)
+		cf, err = InitCmdFactory(cmd.Name(), false, false)
 		if err != nil {
 			return err
 		}
@@ -168,7 +170,7 @@ func chaincodePackage(cmd *cobra.Command, args []string, cdsFact ccDepSpecFactor
 
 	cds, err := cdsFact(spec)
 	if err != nil {
-		return fmt.Errorf("Error getting chaincode code %s: %s", chainFuncName, err)
+		return fmt.Errorf("error getting chaincode code %s: %s", chaincodeName, err)
 	}
 
 	var bytesToWrite []byte
@@ -185,7 +187,7 @@ func chaincodePackage(cmd *cobra.Command, args []string, cdsFact ccDepSpecFactor
 	fileToWrite := args[0]
 	err = ioutil.WriteFile(fileToWrite, bytesToWrite, 0700)
 	if err != nil {
-		logger.Errorf("Failed writing deployment spec to file [%s]: [%s]", fileToWrite, err)
+		logger.Errorf("failed writing deployment spec to file [%s]: [%s]", fileToWrite, err)
 		return err
 	}
 

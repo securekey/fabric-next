@@ -16,7 +16,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 )
 
-var defaultBLT uint64 = math.MaxUint64
+var defaultBTL uint64 = math.MaxUint64
 
 // BTLPolicy BlockToLive policy for the pvt data
 type BTLPolicy interface {
@@ -70,7 +70,7 @@ func (p *LSCCBasedBTLPolicy) GetBTL(namesapce string, collection string) (uint64
 		if btlConfigured > 0 {
 			btl = uint64(btlConfigured)
 		} else {
-			btl = defaultBLT
+			btl = defaultBTL
 		}
 		p.cache[key] = btl
 	}
@@ -96,10 +96,6 @@ type collectionSupport struct {
 
 func (cs *collectionSupport) GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error) {
 	return cs.lgr.NewQueryExecutor()
-}
-
-func (*collectionSupport) GetCollectionKVSKey(cc common.CollectionCriteria) string {
-	return privdata.BuildCollectionKVSKey(cc.Namespace)
 }
 
 func (*collectionSupport) GetIdentityDeserializer(chainID string) msp.IdentityDeserializer {

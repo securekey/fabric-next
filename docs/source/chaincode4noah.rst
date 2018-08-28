@@ -88,7 +88,7 @@ To create a signed chaincode package, use the following command:
 
 .. code:: bash
 
-    peer chaincode package -n mycc -p github.com/hyperledger/fabric/examples/chaincode/go/chaincode_example02 -v 0 -s -S -i "AND('OrgA.admin')" ccpack.out
+    peer chaincode package -n mycc -p github.com/hyperledger/fabric/examples/chaincode/go/example02/cmd -v 0 -s -S -i "AND('OrgA.admin')" ccpack.out
 
 The ``-s`` option creates a package that can be signed by multiple owners as
 opposed to simply creating a raw CDS. When ``-s`` is specified, the ``-S``
@@ -229,11 +229,11 @@ the state with ``john`` and ``0``, the command would look like the following:
 
 .. code:: bash
 
-    peer chaincode instantiate -n sacc -v 1.0 -c '{"Args":["john","0"]}' -P "OR ('Org1.member','Org2.member')"
+    peer chaincode instantiate -n sacc -v 1.0 -c '{"Args":["john","0"]}' -P "AND ('Org1.member','Org2.member')"
 
 .. note:: Note the endorsement policy (CLI uses polish notation), which requires an
-          endorsement from either member of Org1 or Org2 for all transactions to
-          **sacc**. That is, either Org1 or Org2 must sign the
+          endorsement from both a member of Org1 and Org2 for all transactions to
+          **sacc**. That is, both Org1 and Org2 must sign the
           result of executing the `Invoke` on **sacc** for the transactions to
           be valid.
 
@@ -318,32 +318,32 @@ Which shows output similar to the example below:
 
 .. code:: bash
 
-  Usage:
-    peer chaincode [command]
+    Usage:
+      peer chaincode [command]
 
-  Available Commands:
-    install     Package the specified chaincode into a deployment spec and save it on the peer's path.
-    instantiate Deploy the specified chaincode to the network.
-    invoke      Invoke the specified chaincode.
-    list        Get the instantiated chaincodes on a channel or installed chaincodes on a peer.
-    package     Package the specified chaincode into a deployment spec.
-    query       Query using the specified chaincode.
-    signpackage Sign the specified chaincode package
-    upgrade     Upgrade chaincode.
+    Available Commands:
+      install     Package the specified chaincode into a deployment spec and save it on the peer's path.
+      instantiate Deploy the specified chaincode to the network.
+      invoke      Invoke the specified chaincode.
+      list        Get the instantiated chaincodes on a channel or installed chaincodes on a peer.
+      package     Package the specified chaincode into a deployment spec.
+      query       Query using the specified chaincode.
+      signpackage Sign the specified chaincode package
+      upgrade     Upgrade chaincode.
 
-  Flags:
-      --cafile string      Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
-  -h, --help               help for chaincode
-  -o, --orderer string     Ordering service endpoint
-      --tls                Use TLS when communicating with the orderer endpoint
-      --transient string   Transient map of arguments in JSON encoding
+    Flags:
+          --cafile string      Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      -h, --help               help for chaincode
+      -o, --orderer string     Ordering service endpoint
+          --tls                Use TLS when communicating with the orderer endpoint
+          --transient string   Transient map of arguments in JSON encoding
 
-Global Flags:
-      --logging-level string       Default logging level and overrides, see core.yaml for full syntax
-      --test.coverprofile string   Done (default "coverage.cov")
-  -v, --version
+    Global Flags:
+          --logging-level string       Default logging level and overrides, see core.yaml for full syntax
+          --test.coverprofile string   Done (default "coverage.cov")
+      -v, --version
 
-  Use "peer chaincode [command] --help" for more information about a command.
+    Use "peer chaincode [command] --help" for more information about a command.
 
 To facilitate its use in scripted applications, the ``peer`` command always
 produces a non-zero return code in the event of command failure.

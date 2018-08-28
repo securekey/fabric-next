@@ -4,9 +4,9 @@ CouchDB as the State Database
 State Database options
 ----------------------
 
-State database options include LevelDB and CouchDB. LevelDB is the default key/value state
+State database options include LevelDB and CouchDB. LevelDB is the default key-value state
 database embedded in the peer process. CouchDB is an optional alternative external state database.
-Like the LevelDB key/value store, CouchDB can store any binary data that is modeled in chaincode
+Like the LevelDB key-value store, CouchDB can store any binary data that is modeled in chaincode
 (CouchDB attachment functionality is used internally for non-JSON binary data). But as a JSON
 document store, CouchDB additionally enables rich query against the chaincode data, when chaincode
 values (e.g. assets) are modeled as JSON data.
@@ -37,6 +37,12 @@ default embedded LevelDB, and move to CouchDB if you require the additional comp
 It is a good practice to model chaincode asset data as JSON, so that you have the option to perform
 complex rich queries if needed in the future.
 
+.. note:: The key for a CouchDB JSON document cannot begin with an underscore ("_").  Also, a JSON
+   document cannot use the following field names at the top level.  These are reserved for internal use.
+
+   - ``Any field beginning with an underscore, "_"``
+   - ``~version``
+
 Using CouchDB from Chaincode
 ----------------------------
 
@@ -48,7 +54,7 @@ the JSON in the state database by using the ``GetQueryResult`` API and passing a
 The query string follows the `CouchDB JSON query syntax <http://docs.couchdb.org/en/2.1.1/api/database/find.html>`__.
 
 The `marbles02 fabric sample <https://github.com/hyperledger/fabric-samples/blob/master/chaincode/marbles02/go/marbles_chaincode.go>`__
-demonstrates use of CouchDB queries from chaincode. It includes a ``getMarblesByOwner()`` function
+demonstrates use of CouchDB queries from chaincode. It includes a ``queryMarblesByOwner()`` function
 that demonstrates parameterized queries by passing an owner id into chaincode. It then queries the
 state data for JSON documents matching the docType of “marble” and the owner id using the JSON query
 syntax:
@@ -61,27 +67,26 @@ Indexes in CouchDB are required in order to make JSON queries efficient and are 
 any JSON query with a sort. Indexes can be packaged alongside chaincode in a
 ``/META-INF/statedb/couchdb/indexes`` directory. Each index must be defined in its own
 text file with extension ``*.json`` with the index definition formatted in JSON following the
-`CouchDB index JSON syntax <http://docs.couchdb.org/en/2.1.1/api/database/find.html#db-index>`__
+`CouchDB index JSON syntax <http://docs.couchdb.org/en/2.1.1/api/database/find.html#db-index>`__.
 For example, to support the above marble query, a sample index on the ``docType`` and ``owner``
 fields is provided:
 
 .. code:: bash
 
-  {"index":{"fields":["data.docType","data.owner"]},"ddoc":"indexOwnerDoc", "name":"indexOwner","type":"json"}
+  {"index":{"fields":["docType","owner"]},"ddoc":"indexOwnerDoc", "name":"indexOwner","type":"json"}
 
 The sample index can be found `here <https://github.com/hyperledger/fabric-samples/blob/master/chaincode/marbles02/go/META-INF/statedb/couchdb/indexes/indexOwner.json>`__.
 
-.. note:: In 1.1 alpha, the “data” wrapper must be specified for each field referenced
-          in the index definition. In subsequent releases the requirement to specify
-          the “data” wrapper may be lifted.
-
-Any index in the chaincode’s ``META-INF/statedb/couchdb/indexes`` directory will be packaged up and
-installed with the chaincode on a peer. When the chaincode is both installed on a peer and
-instantiated on one of the peer’s channels, the index will automatically be deployed to the peer’s
-channel state database (if it has been configured to use CouchDB). If you the install the chaincode
-first and then instantiate the chaincode on the channel, the index will be deployed at chaincode
-**instantiation** time. If the chaincode is already instantiated on a channel and you later install the
-chaincode on a peer, the index will be deployed at chaincode **installation** time.
+Any index in the chaincode’s ``META-INF/statedb/couchdb/indexes`` directory
+will be packaged up with the chaincode for deployment. When the chaincode is
+both installed on a peer and instantiated on one of the peer’s channels, the
+index will automatically be deployed to the peer’s channel and chaincode
+specific state database (if it has been configured to use CouchDB). If you
+install the chaincode first and then instantiate the chaincode on the channel,
+the index will be deployed at chaincode **instantiation** time. If the
+chaincode is already instantiated on a channel and you later install the
+chaincode on a peer, the index will be deployed at chaincode **installation**
+time.
 
 Upon deployment, the index will automatically be utilized by chaincode queries. CouchDB can automatically
 determine which index to use based on the fields being used in a query. Alternatively, in the
@@ -147,8 +152,11 @@ capability of setting the CouchDB username and password with environment
 variables passed in with the ``COUCHDB_USER`` and ``COUCHDB_PASSWORD`` environment
 variables using Docker Compose scripting.
 
-For CouchDB installations outside of the docker images supplied with Fabric, the
-*local.ini* file must be edited to set the admin username and password.
+For CouchDB installations outside of the docker images supplied with Fabric,
+the
+`local.ini file of that installation
+<http://docs.couchdb.org/en/2.1.1/config/intro.html#configuration-files>`__
+must be edited to set the admin username and password.
 
 Docker compose scripts only set the username and password at the creation of
 the container. The *local.ini* file must be edited if the username or password

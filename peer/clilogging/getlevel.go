@@ -39,13 +39,24 @@ func getLevelCmd(cf *LoggingCmdFactory) *cobra.Command {
 func getLevel(cf *LoggingCmdFactory, cmd *cobra.Command, args []string) (err error) {
 	err = checkLoggingCmdParams(cmd, args)
 	if err == nil {
+		// Parsing of the command line is done so silence cmd usage
+		cmd.SilenceUsage = true
+
 		if cf == nil {
 			cf, err = InitCmdFactory()
 			if err != nil {
 				return err
 			}
 		}
-		logResponse, err := cf.AdminClient.GetModuleLogLevel(context.Background(), &pb.LogLevelRequest{LogModule: args[0]})
+		op := &pb.AdminOperation{
+			Content: &pb.AdminOperation_LogReq{
+				LogReq: &pb.LogLevelRequest{
+					LogModule: args[0],
+				},
+			},
+		}
+		env := cf.wrapWithEnvelope(op)
+		logResponse, err := cf.AdminClient.GetModuleLogLevel(context.Background(), env)
 		if err != nil {
 			return err
 		}

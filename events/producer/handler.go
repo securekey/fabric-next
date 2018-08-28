@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package producer
@@ -23,8 +13,10 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/hyperledger/fabric/common/crypto"
+	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/msp/mgmt"
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
@@ -33,21 +25,19 @@ type handler struct {
 	ChatStream       pb.Events_ChatServer
 	interestedEvents map[string]*pb.Interest
 	sessionEndTime   time.Time
+	RemoteAddr       string
+	eventProcessor   *eventProcessor
 }
 
-func newEventHandler(stream pb.Events_ChatServer) *handler {
-	d := &handler{
-		ChatStream: stream,
+func newHandler(stream pb.Events_ChatServer, ep *eventProcessor) *handler {
+	h := &handler{
+		ChatStream:       stream,
+		interestedEvents: map[string]*pb.Interest{},
+		RemoteAddr:       util.ExtractRemoteAddress(stream.Context()),
+		eventProcessor:   ep,
 	}
-	d.interestedEvents = make(map[string]*pb.Interest)
-	return d
-}
-
-// Stop stops this handler
-func (d *handler) Stop() error {
-	d.deregisterAll()
-	d.interestedEvents = nil
-	return nil
+	logger.Debug("event handler created for", h.RemoteAddr)
+	return h
 }
 
 func getInterestKey(interest pb.Interest) string {
@@ -57,89 +47,106 @@ func getInterestKey(interest pb.Interest) string {
 		key = "/" + strconv.Itoa(int(pb.EventType_BLOCK))
 	case pb.EventType_FILTEREDBLOCK:
 		key = "/" + strconv.Itoa(int(pb.EventType_FILTEREDBLOCK))
-	case pb.EventType_REJECTION:
-		key = "/" + strconv.Itoa(int(pb.EventType_REJECTION))
-	case pb.EventType_CHAINCODE:
-		key = "/" + strconv.Itoa(int(pb.EventType_CHAINCODE)) + "/" + interest.GetChaincodeRegInfo().ChaincodeId + "/" + interest.GetChaincodeRegInfo().EventName
 	default:
-		logger.Errorf("unknown interest type %s", interest.EventType)
+		logger.Errorf("unsupported interest type: %s", interest.EventType)
 	}
 
 	return key
 }
 
-func (d *handler) register(iMsg []*pb.Interest) error {
+func (h *handler) register(iMsg []*pb.Interest) error {
 	// Could consider passing interest array to registerHandler
 	// and only lock once for entire array here
 	for _, v := range iMsg {
-		if err := registerHandler(v, d); err != nil {
-			logger.Errorf("could not register %s: %s", v, err)
+		if err := h.eventProcessor.registerHandler(v, h); err != nil {
+			logger.Errorf("could not register %s for %s: %s", v, h.RemoteAddr, err)
 			continue
 		}
-		d.interestedEvents[getInterestKey(*v)] = v
+		h.interestedEvents[getInterestKey(*v)] = v
 	}
 
 	return nil
 }
 
-func (d *handler) deregister(iMsg []*pb.Interest) error {
+func (h *handler) deregister(iMsg []*pb.Interest) error {
 	for _, v := range iMsg {
-		if err := deRegisterHandler(v, d); err != nil {
-			logger.Errorf("could not deregister %s", v)
+		if err := h.eventProcessor.deregisterHandler(v, h); err != nil {
+			logger.Errorf("could not deregister %s for %s: %s", v, h.RemoteAddr, err)
 			continue
 		}
-		delete(d.interestedEvents, getInterestKey(*v))
+		delete(h.interestedEvents, getInterestKey(*v))
 	}
 	return nil
-}
-
-func (d *handler) deregisterAll() {
-	for k, v := range d.interestedEvents {
-		if err := deRegisterHandler(v, d); err != nil {
-			logger.Errorf("could not deregister %s", v)
-			continue
-		}
-		delete(d.interestedEvents, k)
-	}
 }
 
 // HandleMessage handles the Openchain messages for the Peer.
-func (d *handler) HandleMessage(msg *pb.SignedEvent) error {
-	evt, err := d.validateEventMessage(msg)
+func (h *handler) HandleMessage(msg *pb.SignedEvent) error {
+	evt, err := h.validateEventMessage(msg)
 	if err != nil {
-		return fmt.Errorf("event message validation failed: [%s]", err)
+		return fmt.Errorf("event message validation failed for %s: %s", h.RemoteAddr, err)
 	}
 
 	switch evt.Event.(type) {
 	case *pb.Event_Register:
 		eventsObj := evt.GetRegister()
-		if err := d.register(eventsObj.Events); err != nil {
-			return fmt.Errorf("could not register events %s", err)
+		if err := h.register(eventsObj.Events); err != nil {
+			return fmt.Errorf("could not register events for %s: %s", h.RemoteAddr, err)
 		}
 	case *pb.Event_Unregister:
 		eventsObj := evt.GetUnregister()
-		if err := d.deregister(eventsObj.Events); err != nil {
-			return fmt.Errorf("could not unregister events %s", err)
+		if err := h.deregister(eventsObj.Events); err != nil {
+			return fmt.Errorf("could not deregister events for %s: %s", h.RemoteAddr, err)
 		}
 	case nil:
 	default:
-		return fmt.Errorf("invalid type from client %T", evt.Event)
+		return fmt.Errorf("invalid type from received from %s: %T", h.RemoteAddr, evt.Event)
 	}
-	//TODO return supported events.. for now just return the received msg
-	if err := d.ChatStream.Send(evt); err != nil {
-		return fmt.Errorf("error sending response to %v:  %s", msg, err)
+	// just return the received msg to confirm registration/deregistration
+	if err := h.SendMessageWithTimeout(evt, h.eventProcessor.SendTimeout); err != nil {
+		return fmt.Errorf("error sending response to %s: %s", h.RemoteAddr, err)
 	}
 
 	return nil
 }
 
-// SendMessage sends a message to the remote PEER through the stream
-func (d *handler) SendMessage(msg *pb.Event) error {
-	err := d.ChatStream.Send(msg)
-	if err != nil {
-		return fmt.Errorf("error Sending message through ChatStream: %s", err)
+// SendMessageWithTimeout sends a message to a remote peer but will time out
+// if it takes longer than the timeout
+func (h *handler) SendMessageWithTimeout(msg *pb.Event, timeout time.Duration) error {
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- h.sendMessage(msg)
+	}()
+	t := time.NewTimer(timeout)
+	select {
+	case <-t.C:
+		logger.Warningf("timed out sending event to %s", h.RemoteAddr)
+		return fmt.Errorf("timed out sending event")
+	case err := <-errChan:
+		t.Stop()
+		return err
 	}
+}
+
+// sendMessage sends a message to the remote PEER through the stream
+func (h *handler) sendMessage(msg *pb.Event) error {
+	logger.Debug("sending event to", h.RemoteAddr)
+	err := h.ChatStream.Send(msg)
+	if err != nil {
+		logger.Debugf("sending event failed for %s: %s", h.RemoteAddr, err)
+		return fmt.Errorf("error sending message through ChatStream: %s", err)
+	}
+	logger.Debug("event sent successfully to", h.RemoteAddr)
 	return nil
+}
+
+func (h *handler) hasSessionExpired() bool {
+	now := time.Now()
+	if !h.sessionEndTime.IsZero() && now.After(h.sessionEndTime) {
+		err := errors.Errorf("Client identity has expired for %s", h.RemoteAddr)
+		logger.Warning(err.Error())
+		return true
+	}
+	return false
 }
 
 // Validates event messages by validating the Creator and verifying
@@ -153,7 +160,7 @@ func (d *handler) SendMessage(msg *pb.Event) error {
 // However, this is not being done for v1.0 due to complexity concerns and the need to complex a stable,
 // minimally viable release. Eventually events will be made channel-specific, at which point this method
 // should be revisited
-func (d *handler) validateEventMessage(signedEvt *pb.SignedEvent) (*pb.Event, error) {
+func (h *handler) validateEventMessage(signedEvt *pb.SignedEvent) (*pb.Event, error) {
 	logger.Debugf("validating for signed event %p", signedEvt)
 
 	// messages from the client for registering and unregistering must be signed
@@ -168,19 +175,19 @@ func (d *handler) validateEventMessage(signedEvt *pb.SignedEvent) (*pb.Event, er
 	if !expirationTime.IsZero() && time.Now().After(expirationTime) {
 		return nil, fmt.Errorf("identity expired")
 	}
-	d.sessionEndTime = expirationTime
+	h.sessionEndTime = expirationTime
 
 	if evt.GetTimestamp() != nil {
 		evtTime := time.Unix(evt.GetTimestamp().Seconds, int64(evt.GetTimestamp().Nanos)).UTC()
 		peerTime := time.Now()
 
-		if math.Abs(float64(peerTime.UnixNano()-evtTime.UnixNano())) > float64(gEventProcessor.TimeWindow.Nanoseconds()) {
-			logger.Warningf("Message timestamp %s more than %s apart from current server time %s", evtTime, gEventProcessor.TimeWindow, peerTime)
-			return nil, fmt.Errorf("message timestamp out of acceptable range. must be within %s of current server time", gEventProcessor.TimeWindow)
+		if math.Abs(float64(peerTime.UnixNano()-evtTime.UnixNano())) > float64(h.eventProcessor.TimeWindow.Nanoseconds()) {
+			logger.Warningf("Message timestamp %s more than %s apart from current server time %s", evtTime, h.eventProcessor.TimeWindow, peerTime)
+			return nil, fmt.Errorf("message timestamp out of acceptable range. must be within %s of current server time", h.eventProcessor.TimeWindow)
 		}
 	}
 
-	err = gEventProcessor.BindingInspector(d.ChatStream.Context(), evt)
+	err = h.eventProcessor.BindingInspector(h.ChatStream.Context(), evt)
 	if err != nil {
 		return nil, err
 	}
@@ -191,18 +198,18 @@ func (d *handler) validateEventMessage(signedEvt *pb.SignedEvent) (*pb.Event, er
 	// Load MSPPrincipal for policy
 	principal, err := principalGetter.Get(mgmt.Members)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting local MSP principal [member]: [%s]", err)
+		return nil, fmt.Errorf("failed getting local MSP principal [member]: %s", err)
 	}
 
 	id, err := localMSP.DeserializeIdentity(evt.Creator)
 	if err != nil {
-		return nil, fmt.Errorf("failed deserializing event creator: [%s]", err)
+		return nil, fmt.Errorf("failed deserializing event creator: %s", err)
 	}
 
 	// Verify that event's creator satisfies the principal
 	err = id.SatisfiesPrincipal(principal)
 	if err != nil {
-		return nil, fmt.Errorf("failed verifying the creator satisfies local MSP's [member] principal: [%s]", err)
+		return nil, fmt.Errorf("failed verifying the creator satisfies local MSP's [member] principal: %s", err)
 	}
 
 	// Verify the signature

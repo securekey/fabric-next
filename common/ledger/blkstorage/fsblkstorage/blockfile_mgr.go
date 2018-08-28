@@ -29,10 +29,32 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	putil "github.com/hyperledger/fabric/protos/utils"
+	"github.com/uber-go/tally"
 )
+
+var addBlockTimer tally.Timer
+var saveCurrentInfoTimer tally.Timer
+var moveToNextFileTimer tally.Timer
+var moveToNextFileCounter tally.Counter
+var appendBlockErrorCounter tally.Counter
+var blockfileSizeGauge tally.Gauge
+var updateCheckpointTimer tally.Timer
+var updateCheckpointLockTimer tally.Timer
+
+func init() {
+	addBlockTimer = metrics.RootScope.Timer("fsblkstorage_addBlock_time_seconds")
+	saveCurrentInfoTimer = metrics.RootScope.Timer("fsblkstorage_saveCurrentInfo_time_seconds")
+	moveToNextFileTimer = metrics.RootScope.Timer("fsblkstorage_moveToNextFile_time_seconds")
+	moveToNextFileCounter = metrics.RootScope.Counter("fsblkstorage_moveToNextFileCount")
+	appendBlockErrorCounter = metrics.RootScope.Counter("fsblkstorage_appendBlockErrorCount")
+	blockfileSizeGauge = metrics.RootScope.Gauge("fsblkstorage_blockfileSize")
+	updateCheckpointTimer = metrics.RootScope.Timer("fsblkstorage_updateCheckpoint_time_seconds")
+	updateCheckpointLockTimer = metrics.RootScope.Timer("fsblkstorage_updateCheckpoint_Lock_time_seconds")
+}
 
 var logger = flogging.MustGetLogger("fsblkstorage")
 
@@ -142,7 +164,9 @@ func newBlockfileMgr(id string, conf *Conf, indexConfig *blkstorage.IndexConfig,
 	}
 
 	// Create a new KeyValue store database handler for the blocks index in the keyvalue database
-	mgr.index = newBlockIndex(indexConfig, indexStore)
+	if mgr.index, err = newBlockIndex(indexConfig, indexStore); err != nil {
+		panic(fmt.Sprintf("error in block index: %s", err))
+	}
 
 	// Update the manager with the checkpoint info and the file writer
 	mgr.cpInfo = cpInfo
@@ -224,6 +248,11 @@ func (mgr *blockfileMgr) close() {
 }
 
 func (mgr *blockfileMgr) moveToNextFile() {
+
+	moveToNextFileCounter.Inc(1)
+	stopWatch := moveToNextFileTimer.Start()
+	defer stopWatch.Stop()
+
 	cpInfo := &checkpointInfo{
 		latestFileChunkSuffixNum: mgr.cpInfo.latestFileChunkSuffixNum + 1,
 		latestFileChunksize:      0,
@@ -245,6 +274,10 @@ func (mgr *blockfileMgr) moveToNextFile() {
 }
 
 func (mgr *blockfileMgr) addBlock(block *common.Block) error {
+
+	stopWatch := addBlockTimer.Start()
+	defer stopWatch.Stop()
+
 	if block.Header.Number != mgr.getBlockchainInfo().Height {
 		return fmt.Errorf("Block number should have been %d but was %d", mgr.getBlockchainInfo().Height, block.Header.Number)
 	}
@@ -263,6 +296,8 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
 	blockBytesEncodedLen := proto.EncodeVarint(uint64(blockBytesLen))
 	totalBytesToAppend := blockBytesLen + len(blockBytesEncodedLen)
 
+	blockfileSizeGauge.Update(float64(currentOffset))
+
 	//Determine if we need to start a new file since the size of this block
 	//exceeds the amount of space left in the current file
 	if currentOffset+totalBytesToAppend > mgr.conf.maxBlockfileSize {
@@ -276,6 +311,7 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
 		err = mgr.currentFileWriter.append(blockBytes, true)
 	}
 	if err != nil {
+		appendBlockErrorCounter.Inc(1)
 		truncateErr := mgr.currentFileWriter.truncateFile(mgr.cpInfo.latestFileChunksize)
 		if truncateErr != nil {
 			panic(fmt.Sprintf("Could not truncate current file to known size after an error during block append: %s", err))
@@ -292,6 +328,7 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
 		lastBlockNumber:          block.Header.Number}
 	//save the checkpoint information in the database
 	if err = mgr.saveCurrentInfo(newCPInfo, false); err != nil {
+		appendBlockErrorCounter.Inc(1)
 		truncateErr := mgr.currentFileWriter.truncateFile(currentCPInfo.latestFileChunksize)
 		if truncateErr != nil {
 			panic(fmt.Sprintf("Error in truncating current file to known size after an error in saving checkpoint info: %s", err))
@@ -307,9 +344,11 @@ func (mgr *blockfileMgr) addBlock(block *common.Block) error {
 		txOffset.loc.offset += len(blockBytesEncodedLen)
 	}
 	//save the index in the database
-	mgr.index.indexBlock(&blockIdxInfo{
+	if err = mgr.index.indexBlock(&blockIdxInfo{
 		blockNum: block.Header.Number, blockHash: blockHash,
-		flp: blockFLP, txOffsets: txOffsets, metadata: block.Metadata})
+		flp: blockFLP, txOffsets: txOffsets, metadata: block.Metadata}); err != nil {
+		return err
+	}
 
 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
 	mgr.updateCheckpoint(newCPInfo)
@@ -424,8 +463,16 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
 }
 
 func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
+
+	// Measure the whole
+	stopWatch := updateCheckpointTimer.Start()
+	defer stopWatch.Stop()
+
+	// Measure acquiring the lock
+	lockStopWatch := updateCheckpointLockTimer.Start()
 	mgr.cpInfoCond.L.Lock()
 	defer mgr.cpInfoCond.L.Unlock()
+	lockStopWatch.Stop()
 	mgr.cpInfo = cpInfo
 	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
 	mgr.cpInfoCond.Broadcast()
@@ -586,6 +633,8 @@ func (mgr *blockfileMgr) loadCurrentInfo() (*checkpointInfo, error) {
 }
 
 func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
+	stopWatch := saveCurrentInfoTimer.Start()
+	defer stopWatch.Stop()
 	b, err := i.marshal()
 	if err != nil {
 		return err

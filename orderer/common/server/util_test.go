@@ -11,11 +11,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hyperledger/fabric/core/config/configtest"
 	config "github.com/hyperledger/fabric/orderer/common/localconfig"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateLedgerFactory(t *testing.T) {
+	cleanup := configtest.SetDevFabricConfigPath(t)
+	defer cleanup()
 	testCases := []struct {
 		name            string
 		ledgerType      string
@@ -30,7 +33,10 @@ func TestCreateLedgerFactory(t *testing.T) {
 		{"FilewithPathUnset", "file", "", "test-prefix", false},
 	}
 
-	conf := config.Load()
+	conf, err := config.Load()
+	if err != nil {
+		t.Fatal("failed to load config")
+	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

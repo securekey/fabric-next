@@ -8,16 +8,19 @@ package inproccontroller
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
-	container "github.com/hyperledger/fabric/core/container/api"
+	"github.com/hyperledger/fabric/core/container"
 	"github.com/hyperledger/fabric/core/container/ccintf"
 	pb "github.com/hyperledger/fabric/protos/peer"
 
 	"golang.org/x/net/context"
 )
+
+// ContainerType is the string which the inproc container type
+// is registered with the container.VMController
+const ContainerType = "SYSTEM"
 
 type inprocContainer struct {
 	chaincode shim.Chaincode
@@ -28,9 +31,10 @@ type inprocContainer struct {
 }
 
 var (
-	inprocLogger        = flogging.MustGetLogger("inproccontroller")
-	typeRegistry        = make(map[string]*inprocContainer)
-	instRegistry        = make(map[string]*inprocContainer)
+	inprocLogger = flogging.MustGetLogger("inproccontroller")
+
+	// TODO this is a very hacky way to do testing, we should find other ways
+	// to test, or not statically inject these depenencies.
 	_shimStartInProc    = shim.StartInProc
 	_inprocLoggerErrorf = inprocLogger.Errorf
 )
@@ -44,54 +48,62 @@ func (s SysCCRegisteredErr) Error() string {
 	return fmt.Sprintf("%s already registered", string(s))
 }
 
+// Registry stores registered system chaincodes.
+// It implements container.VMProvider and scc.Registrar
+type Registry struct {
+	typeRegistry map[string]*inprocContainer
+	instRegistry map[string]*inprocContainer
+}
+
+// NewRegistry creates an initialized registry, ready to register system chaincodes.
+func NewRegistry() *Registry {
+	return &Registry{
+		typeRegistry: make(map[string]*inprocContainer),
+		instRegistry: make(map[string]*inprocContainer),
+	}
+}
+
+// NewVM creates an inproc VM instance
+func (r *Registry) NewVM() container.VM {
+	return NewInprocVM(r)
+}
+
 //Register registers system chaincode with given path. The deploy should be called to initialize
-func Register(path string, cc shim.Chaincode) error {
-	tmp := typeRegistry[path]
+func (r *Registry) Register(ccid *ccintf.CCID, cc shim.Chaincode) error {
+	name := ccid.GetName()
+	inprocLogger.Debugf("Registering chaincode instance: %s", name)
+	tmp := r.typeRegistry[name]
 	if tmp != nil {
-		return SysCCRegisteredErr(path)
+		return SysCCRegisteredErr(name)
 	}
 
-	typeRegistry[path] = &inprocContainer{chaincode: cc}
+	r.typeRegistry[name] = &inprocContainer{chaincode: cc}
 	return nil
 }
 
 //InprocVM is a vm. It is identified by a executable name
 type InprocVM struct {
-	id string
+	id       string
+	registry *Registry
+}
+
+// NewInprocVM creates a new InprocVM
+func NewInprocVM(r *Registry) *InprocVM {
+	return &InprocVM{
+		registry: r,
+	}
 }
 
 func (vm *InprocVM) getInstance(ctxt context.Context, ipctemplate *inprocContainer, instName string, args []string, env []string) (*inprocContainer, error) {
-	ipc := instRegistry[instName]
+	ipc := vm.registry.instRegistry[instName]
 	if ipc != nil {
 		inprocLogger.Warningf("chaincode instance exists for %s", instName)
 		return ipc, nil
 	}
 	ipc = &inprocContainer{args: args, env: env, chaincode: ipctemplate.chaincode, stopChan: make(chan struct{})}
-	instRegistry[instName] = ipc
+	vm.registry.instRegistry[instName] = ipc
 	inprocLogger.Debugf("chaincode instance created for %s", instName)
 	return ipc, nil
-}
-
-//Deploy verifies chaincode is registered and creates an instance for it. Currently only one instance can be created
-func (vm *InprocVM) Deploy(ctxt context.Context, ccid ccintf.CCID, args []string, env []string, reader io.Reader) error {
-	path := ccid.ChaincodeSpec.ChaincodeId.Path
-
-	ipctemplate := typeRegistry[path]
-	if ipctemplate == nil {
-		return fmt.Errorf(fmt.Sprintf("%s not registered. Please register the system chaincode in inprocinstances.go", path))
-	}
-
-	if ipctemplate.chaincode == nil {
-		return fmt.Errorf(fmt.Sprintf("%s system chaincode does not contain chaincode instance", path))
-	}
-
-	instName, _ := vm.GetVMName(ccid, nil)
-	_, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
-
-	//FUTURE ... here is where we might check code for safety
-	inprocLogger.Debugf("registered : %s", path)
-
-	return err
 }
 
 func (ipc *inprocContainer) launchInProc(ctxt context.Context, id string, args []string, env []string, ccSupport ccintf.CCSupport) error {
@@ -100,6 +112,7 @@ func (ipc *inprocContainer) launchInProc(ctxt context.Context, id string, args [
 	var err error
 	ccchan := make(chan struct{}, 1)
 	ccsupportchan := make(chan struct{}, 1)
+	shimStartInProc := _shimStartInProc // shadow to avoid race in test
 	go func() {
 		defer close(ccchan)
 		inprocLogger.Debugf("chaincode started for %s", id)
@@ -109,12 +122,12 @@ func (ipc *inprocContainer) launchInProc(ctxt context.Context, id string, args [
 		if env == nil {
 			env = ipc.env
 		}
-		err := _shimStartInProc(env, args, ipc.chaincode, ccRcvPeerSend, peerRcvCCSend)
+		err := shimStartInProc(env, args, ipc.chaincode, ccRcvPeerSend, peerRcvCCSend)
 		if err != nil {
 			err = fmt.Errorf("chaincode-support ended with err: %s", err)
 			_inprocLoggerErrorf("%s", err)
 		}
-		inprocLogger.Debugf("chaincode ended with for  %s with err: %s", id, err)
+		inprocLogger.Debugf("chaincode ended for %s with err: %s", id, err)
 	}()
 
 	go func() {
@@ -126,7 +139,7 @@ func (ipc *inprocContainer) launchInProc(ctxt context.Context, id string, args [
 			err = fmt.Errorf("chaincode ended with err: %s", err)
 			_inprocLoggerErrorf("%s", err)
 		}
-		inprocLogger.Debugf("chaincode-support ended with for  %s with err: %s", id, err)
+		inprocLogger.Debugf("chaincode-support ended for %s with err: %s", id, err)
 	}()
 
 	select {
@@ -145,16 +158,16 @@ func (ipc *inprocContainer) launchInProc(ctxt context.Context, id string, args [
 }
 
 //Start starts a previously registered system codechain
-func (vm *InprocVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, env []string, filesToUpload map[string][]byte, builder container.BuildSpecFactory, prelaunchFunc container.PrelaunchFunc) error {
-	path := ccid.ChaincodeSpec.ChaincodeId.Path
+func (vm *InprocVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string, env []string, filesToUpload map[string][]byte, builder container.Builder) error {
+	path := ccid.GetName()
 
-	ipctemplate := typeRegistry[path]
+	ipctemplate := vm.registry.typeRegistry[path]
 
 	if ipctemplate == nil {
 		return fmt.Errorf(fmt.Sprintf("%s not registered", path))
 	}
 
-	instName, _ := vm.GetVMName(ccid, nil)
+	instName := vm.GetVMName(ccid)
 
 	ipc, err := vm.getInstance(ctxt, ipctemplate, instName, args, env)
 
@@ -173,12 +186,6 @@ func (vm *InprocVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string,
 		return fmt.Errorf("in-process communication generator not supplied")
 	}
 
-	if prelaunchFunc != nil {
-		if err = prelaunchFunc(); err != nil {
-			return err
-		}
-	}
-
 	ipc.running = true
 
 	go func() {
@@ -195,16 +202,16 @@ func (vm *InprocVM) Start(ctxt context.Context, ccid ccintf.CCID, args []string,
 
 //Stop stops a system codechain
 func (vm *InprocVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
-	path := ccid.ChaincodeSpec.ChaincodeId.Path
+	path := ccid.GetName()
 
-	ipctemplate := typeRegistry[path]
+	ipctemplate := vm.registry.typeRegistry[path]
 	if ipctemplate == nil {
 		return fmt.Errorf("%s not registered", path)
 	}
 
-	instName, _ := vm.GetVMName(ccid, nil)
+	instName := vm.GetVMName(ccid)
 
-	ipc := instRegistry[instName]
+	ipc := vm.registry.instRegistry[instName]
 
 	if ipc == nil {
 		return fmt.Errorf("%s not found", instName)
@@ -216,28 +223,14 @@ func (vm *InprocVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 
 	ipc.stopChan <- struct{}{}
 
-	delete(instRegistry, instName)
+	delete(vm.registry.instRegistry, instName)
 	//TODO stop
-	return nil
-}
-
-//Destroy destroys an image
-func (vm *InprocVM) Destroy(ctxt context.Context, ccid ccintf.CCID, force bool, noprune bool) error {
-	//not implemented
 	return nil
 }
 
 // GetVMName ignores the peer and network name as it just needs to be unique in
 // process.  It accepts a format function parameter to allow different
 // formatting based on the desired use of the name.
-func (vm *InprocVM) GetVMName(ccid ccintf.CCID, format func(string) (string, error)) (string, error) {
-	name := ccid.GetName()
-	if format != nil {
-		formattedName, err := format(name)
-		if err != nil {
-			return formattedName, err
-		}
-		name = formattedName
-	}
-	return name, nil
+func (vm *InprocVM) GetVMName(ccid ccintf.CCID) string {
+	return ccid.GetName()
 }

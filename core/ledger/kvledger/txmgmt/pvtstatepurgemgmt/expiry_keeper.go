@@ -11,8 +11,16 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
+	"github.com/uber-go/tally"
 )
+
+var updateBookkeepingTimer tally.Timer
+
+func init() {
+	updateBookkeepingTimer = metrics.RootScope.Timer("pvtstatepurgemgmt_updateBookkeepingTimer_time_seconds")
+}
 
 var logger = flogging.MustGetLogger("pvtstatepurgemgmt")
 
@@ -20,11 +28,16 @@ const (
 	expiryPrefix = '1'
 )
 
+// expiryInfoKey is used as a key of an entry in the bookkeeper (backed by a leveldb instance)
 type expiryInfoKey struct {
 	committingBlk uint64
 	expiryBlk     uint64
 }
 
+// expiryInfo encapsulates an 'expiryInfoKey' and corresponding private data keys.
+// In another words, this struct encapsulates the keys and key-hashes that are committed by
+// the block number 'expiryInfoKey.committingBlk' and should be expired (and hence purged)
+// with the commit of block number 'expiryInfoKey.expiryBlk'
 type expiryInfo struct {
 	expiryInfoKey *expiryInfoKey
 	pvtdataKeys   *PvtdataKeys
@@ -32,7 +45,7 @@ type expiryInfo struct {
 
 // expiryKeeper is used to keep track of the expired items in the pvtdata space
 type expiryKeeper interface {
-	// track keeps track of the list of keys and their corresponding expiry block number
+	// updateBookkeeping keeps track of the list of keys and their corresponding expiry block number
 	updateBookkeeping(toTrack []*expiryInfo, toClear []*expiryInfoKey) error
 	// retrieve returns the keys info that are supposed to be expired by the given block number
 	retrieve(expiringAtBlkNum uint64) ([]*expiryInfo, error)
@@ -46,7 +59,21 @@ type expKeeper struct {
 	db *leveldbhelper.DBHandle
 }
 
+// updateBookkeeping updates the information stored in the bookkeeper
+// 'toTrack' parameter causes new entries in the bookkeeper and  'toClear' parameter contains the entries that
+// are to be removed from the bookkeeper. This function is invoked with the commit of every block. As an
+// example, the commit of the block with block number 50, 'toTrack' parameter may contain following two entries:
+// (1) &expiryInfo{&expiryInfoKey{committingBlk: 50, expiryBlk: 55}, pvtdataKeys....} and
+// (2) &expiryInfo{&expiryInfoKey{committingBlk: 50, expiryBlk: 60}, pvtdataKeys....}
+// The 'pvtdataKeys' in the first entry contains all the keys (and key-hashes) that are to be expired at block 55 (i.e., these collections have a BTL configured to 4)
+// and the 'pvtdataKeys' in second entry contains all the keys (and key-hashes) that are to be expired at block 60 (i.e., these collections have a BTL configured to 9).
+// Similarly, continuing with the above example, the parameter 'toClear' may contain following two entries
+// (1) &expiryInfoKey{committingBlk: 45, expiryBlk: 50} and (2) &expiryInfoKey{committingBlk: 40, expiryBlk: 50}. The first entry was created
+// at the time of the commit of the block number 45 and the second entry was created at the time of the commit of the block number 40, however
+// both are expiring with the commit of block number 50.
 func (ek *expKeeper) updateBookkeeping(toTrack []*expiryInfo, toClear []*expiryInfoKey) error {
+	stopWatch := updateBookkeepingTimer.Start()
+	defer stopWatch.Stop()
 	updateBatch := leveldbhelper.NewUpdateBatch()
 	for _, expinfo := range toTrack {
 		k, v, err := encodeKV(expinfo)

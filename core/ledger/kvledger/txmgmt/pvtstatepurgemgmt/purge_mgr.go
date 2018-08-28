@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
-
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 )
@@ -21,17 +21,20 @@ import (
 type PurgeMgr interface {
 	// PrepareForExpiringKeys gives a chance to the PurgeMgr to do background work in advance if any
 	PrepareForExpiringKeys(expiringAtBlk uint64)
+	// WaitForPrepareToFinish holds the caller till the background goroutine lauched by 'PrepareForExpiringKeys' is finished
+	WaitForPrepareToFinish()
 	// DeleteExpiredAndUpdateBookkeeping updates the bookkeeping and modifies the update batch by adding the deletes for the expired pvtdata
 	DeleteExpiredAndUpdateBookkeeping(
 		pvtUpdates *privacyenabledstate.PvtUpdateBatch,
 		hashedUpdates *privacyenabledstate.HashedUpdateBatch) error
 	// BlockCommitDone is a callback to the PurgeMgr when the block is committed to the ledger
-	BlockCommitDone()
+	BlockCommitDone() error
 }
 
 type keyAndVersion struct {
 	key             string
 	committingBlock uint64
+	purgeKeyOnly    bool
 }
 
 type expiryInfoMap map[*privacyenabledstate.HashedCompositeKey]*keyAndVersion
@@ -77,6 +80,12 @@ func (p *purgeMgr) PrepareForExpiringKeys(expiringAtBlk uint64) {
 	p.waitGrp.Wait()
 }
 
+// WaitForPrepareToFinish implements function in the interface 'PurgeMgr'
+func (p *purgeMgr) WaitForPrepareToFinish() {
+	p.lock.Lock()
+	p.lock.Unlock()
+}
+
 // DeleteExpiredAndUpdateBookkeeping implements function in the interface 'PurgeMgr'
 func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 	pvtUpdates *privacyenabledstate.PvtUpdateBatch,
@@ -86,23 +95,36 @@ func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 	if p.workingset.err != nil {
 		return p.workingset.err
 	}
+
+	listExpiryInfo, err := buildExpirySchedule(p.btlPolicy, pvtUpdates, hashedUpdates)
+	if err != nil {
+		return err
+	}
+
+	// For each key selected for purging, check if the key is not getting updated in the current block,
+	// add its deletion in the update batches for pvt and hashed updates
 	for compositeHashedKey, keyAndVersion := range p.workingset.toPurge {
 		ns := compositeHashedKey.Namespace
 		coll := compositeHashedKey.CollectionName
 		keyHash := []byte(compositeHashedKey.KeyHash)
 		key := keyAndVersion.key
-		if hashedUpdates.Contains(ns, coll, keyHash) {
-			continue
-		}
+		purgeKeyOnly := keyAndVersion.purgeKeyOnly
+		hashUpdated := hashedUpdates.Contains(ns, coll, keyHash)
+		pvtKeyUpdated := pvtUpdates.Contains(ns, coll, key)
+
+		logger.Debugf("Checking whether the key [ns=%s, coll=%s, keyHash=%x, purgeKeyOnly=%t] "+
+			"is updated in the update batch for the committing block - hashUpdated=%t, and pvtKeyUpdated=%t",
+			ns, coll, keyHash, purgeKeyOnly, hashUpdated, pvtKeyUpdated)
+
 		expiringTxVersion := version.NewHeight(p.workingset.expiringBlk, math.MaxUint64)
-		hashedUpdates.Delete(ns, coll, keyHash, expiringTxVersion)
-		if keyAndVersion.key != "" {
+		if !hashUpdated && !purgeKeyOnly {
+			logger.Debugf("Adding the hashed key to be purged to the delete list in the update batch")
+			hashedUpdates.Delete(ns, coll, keyHash, expiringTxVersion)
+		}
+		if key != "" && !pvtKeyUpdated {
+			logger.Debugf("Adding the pvt key to be purged to the delete list in the update batch")
 			pvtUpdates.Delete(ns, coll, key, expiringTxVersion)
 		}
-	}
-	listExpiryInfo, err := buildExpirySchedule(p.btlPolicy, pvtUpdates, hashedUpdates)
-	if err != nil {
-		return err
 	}
 	return p.expKeeper.updateBookkeeping(listExpiryInfo, nil)
 }
@@ -115,34 +137,75 @@ func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 // Also, the another way is to club the delete of these entries in the same batch that adds entries for the future expirations -
 // however, that requires updating the expiry store by replaying the last block from blockchain in order to sustain a crash between
 // entries updates and block commit
-func (p *purgeMgr) BlockCommitDone() {
-	p.expKeeper.updateBookkeeping(nil, p.workingset.toClearFromSchedule)
-	p.workingset = nil
+func (p *purgeMgr) BlockCommitDone() error {
+	defer func() { p.workingset = nil }()
+	return p.expKeeper.updateBookkeeping(nil, p.workingset.toClearFromSchedule)
 }
 
+// prepareWorkingsetFor returns a working set for a given expiring block 'expiringAtBlk'.
+// This working set contains the pvt data keys that will expire with the commit of block 'expiringAtBlk'.
 func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
+	logger.Debugf("Preparing potential purge list working-set for expiringAtBlk [%d]", expiringAtBlk)
 	workingset := &workingset{expiringBlk: expiringAtBlk}
+	// Retrieve the keys from bookkeeper
 	expiryInfo, err := p.expKeeper.retrieve(expiringAtBlk)
 	if err != nil {
 		workingset.err = err
 		return workingset
 	}
+	// Transform the keys into the form such that for each hashed key that is eligible for purge appears in 'toPurge'
 	toPurge := transformToExpiryInfoMap(expiryInfo)
+	// Load the latest versions of the hashed keys
 	p.preloadCommittedVersionsInCache(toPurge)
 	var expiryInfoKeysToClear []*expiryInfoKey
 
-	for hashedKey, keyAndVersion := range toPurge {
-		expiryInfoKeysToClear = append(expiryInfoKeysToClear, &expiryInfoKey{committingBlk: keyAndVersion.committingBlock, expiryBlk: expiringAtBlk})
-		currentVersion, err := p.db.GetKeyHashVersion(hashedKey.Namespace, hashedKey.CollectionName, []byte(hashedKey.KeyHash))
+	if len(toPurge) == 0 {
+		logger.Debugf("No expiry entry found for expiringAtBlk [%d]", expiringAtBlk)
+		return workingset
+	}
+	logger.Debugf("Total [%d] expiring entries found. Evaluaitng whether some of these keys have been overwritten in later blocks...", len(toPurge))
+
+	for purgeEntryK, purgeEntryV := range toPurge {
+		logger.Debugf("Evaluating for hashedKey [%s]", purgeEntryK)
+		expiryInfoKeysToClear = append(expiryInfoKeysToClear, &expiryInfoKey{committingBlk: purgeEntryV.committingBlock, expiryBlk: expiringAtBlk})
+		currentVersion, err := p.db.GetKeyHashVersion(purgeEntryK.Namespace, purgeEntryK.CollectionName, []byte(purgeEntryK.KeyHash))
 		if err != nil {
 			workingset.err = err
 			return workingset
 		}
-		if !sameVersion(currentVersion, keyAndVersion.committingBlock) {
-			delete(toPurge, hashedKey)
+
+		if sameVersion(currentVersion, purgeEntryV.committingBlock) {
+			logger.Debugf(
+				"The version of the hashed key in the committed state and in the expiry entry is same " +
+					"hence, keeping the entry in the purge list")
+			continue
 		}
+
+		logger.Debugf("The version of the hashed key in the committed state and in the expiry entry is different")
+		if purgeEntryV.key != "" {
+			logger.Debugf("The expiry entry also contains the raw key along with the key hash")
+			committedPvtVerVal, err := p.db.GetPrivateData(purgeEntryK.Namespace, purgeEntryK.CollectionName, purgeEntryV.key)
+			if err != nil {
+				workingset.err = err
+				return workingset
+			}
+
+			if sameVersionFromVal(committedPvtVerVal, purgeEntryV.committingBlock) {
+				logger.Debugf(
+					"The version of the pvt key in the committed state and in the expiry entry is same" +
+						"Including only key in the purge list and not the hashed key")
+				purgeEntryV.purgeKeyOnly = true
+				continue
+			}
+		}
+
+		// If we reached here, the keyhash and private key (if present, in the expiry entry) have been updated in a later block, therefore remove from current purge list
+		logger.Debugf("Removing from purge list - the key hash and key (if present, in the expiry entry)")
+		delete(toPurge, purgeEntryK)
 	}
+	// Final keys to purge from state
 	workingset.toPurge = toPurge
+	// Keys to clear from bookkeeper
 	workingset.toClearFromSchedule = expiryInfoKeysToClear
 	return workingset
 }
@@ -175,4 +238,8 @@ func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {
 
 func sameVersion(version *version.Height, blockNum uint64) bool {
 	return version != nil && version.BlockNum == blockNum
+}
+
+func sameVersionFromVal(vv *statedb.VersionedValue, blockNum uint64) bool {
+	return vv != nil && sameVersion(vv.Version, blockNum)
 }

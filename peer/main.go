@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package main
 
 import (
-	"fmt"
 	_ "net/http/pprof"
 	"os"
 	"runtime"
@@ -24,6 +23,7 @@ import (
 	"github.com/hyperledger/fabric/peer/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/hyperledger/fabric/gossip/util"
 )
 
 var logger = flogging.MustGetLogger("main")
@@ -35,27 +35,7 @@ const cmdRoot = "core"
 // The main command describes the service and
 // defaults to printing the help message.
 var mainCmd = &cobra.Command{
-	Use: "peer",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// check for CORE_LOGGING_LEVEL environment variable, which should override
-		// all other log settings. otherwise, this will use the value for from
-		// core.yaml
-		loggingSpec := viper.GetString("logging.level")
-		flogging.InitFromSpec(loggingSpec)
-
-		return nil
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		if versionFlag {
-			fmt.Print(version.GetInfo())
-		} else {
-			cmd.HelpFunc()(cmd, args)
-		}
-	},
-}
-
-// Peer command version flag
-var versionFlag bool
+	Use: "peer"}
 
 func main() {
 	// For environment variables.
@@ -67,7 +47,6 @@ func main() {
 	// Define command-line flags that are valid for all peer commands and
 	// subcommands.
 	mainFlags := mainCmd.PersistentFlags()
-	mainFlags.BoolVarP(&versionFlag, "version", "v", false, "Display current version of fabric peer server")
 
 	mainFlags.String("logging-level", "", "Default logging level and overrides, see core.yaml for full syntax")
 	viper.BindPFlag("logging_level", mainFlags.Lookup("logging-level"))
@@ -84,10 +63,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	runtime.GOMAXPROCS(viper.GetInt("peer.gomaxprocs"))
-
 	// setup system-wide logging backend based on settings from core.yaml
 	flogging.InitBackend(flogging.SetFormat(viper.GetString("logging.format")), logOutput)
+
+	// check for --logging-level pflag first, which should override all other
+	// log settings. if --logging-level is not set, use CORE_LOGGING_LEVEL
+	// (environment variable takes priority; otherwise, the value set in
+	// core.yaml)
+	var loggingSpec string
+	if viper.GetString("logging_level") != "" {
+		loggingSpec = viper.GetString("logging_level")
+	} else {
+		loggingSpec = viper.GetString("logging.level")
+	}
+	flogging.InitFromSpec(loggingSpec)
+	flogging.SetModuleLevel(util.LoggingPrivModule,"debug")
 
 	// Init the MSP
 	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
@@ -101,10 +91,12 @@ func main() {
 		logger.Errorf("Cannot run peer because %s", err.Error())
 		os.Exit(1)
 	}
+
+	runtime.GOMAXPROCS(viper.GetInt("peer.gomaxprocs"))
+
 	// On failure Cobra prints the usage message and error string, so we only
 	// need to exit with a non-0 status
 	if mainCmd.Execute() != nil {
 		os.Exit(1)
 	}
-	logger.Info("Exiting.....")
 }

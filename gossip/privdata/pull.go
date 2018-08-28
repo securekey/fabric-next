@@ -9,6 +9,7 @@ package privdata
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
 	"time"
@@ -24,19 +25,21 @@ import (
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 const (
 	membershipPollingBackoff    = time.Second
 	responseWaitTime            = time.Second * 5
 	maxMembershipPollIterations = 5
+	btlPullMarginDefault        = 10
 )
 
 // PrivateDataRetriever interfacce which defines API capable
 // of retrieving required private data
 type PrivateDataRetriever interface {
 	// CollectionRWSet returns the bytes of CollectionPvtReadWriteSet for a given txID and collection from the transient store
-	CollectionRWSet(dig *proto.PvtDataDigest) []util.PrivateRWSet
+	CollectionRWSet(dig *proto.PvtDataDigest) (*util.PrivateRWSetWithConfig, error)
 }
 
 // gossip defines capabilities that the gossip module gives the Coordinator
@@ -60,24 +63,28 @@ type gossip interface {
 }
 
 type puller struct {
-	pubSub   *util.PubSub
-	stopChan chan struct{}
-	msgChan  <-chan proto.ReceivedMessage
-	channel  string
-	cs       privdata.CollectionStore
+	pubSub        *util.PubSub
+	stopChan      chan struct{}
+	msgChan       <-chan proto.ReceivedMessage
+	channel       string
+	cs            privdata.CollectionStore
+	btlPullMargin uint64
 	gossip
 	PrivateDataRetriever
+	CollectionAccessFactory
 }
 
 // NewPuller creates new private data puller
-func NewPuller(cs privdata.CollectionStore, g gossip, dataRetriever PrivateDataRetriever, channel string) *puller {
+func NewPuller(cs privdata.CollectionStore, g gossip, dataRetriever PrivateDataRetriever, factory CollectionAccessFactory, channel string) *puller {
 	p := &puller{
-		pubSub:               util.NewPubSub(),
-		stopChan:             make(chan struct{}),
-		channel:              channel,
-		cs:                   cs,
-		gossip:               g,
-		PrivateDataRetriever: dataRetriever,
+		pubSub:                  util.NewPubSub(),
+		stopChan:                make(chan struct{}),
+		channel:                 channel,
+		cs:                      cs,
+		btlPullMargin:           getBtlPullMargin(),
+		gossip:                  g,
+		PrivateDataRetriever:    dataRetriever,
+		CollectionAccessFactory: factory,
 	}
 	_, p.msgChan = p.Accept(func(o interface{}) bool {
 		msg := o.(proto.ReceivedMessage).GetGossipMessage()
@@ -133,12 +140,23 @@ func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataE
 	}()
 	msg := message.GetGossipMessage()
 	for _, dig := range msg.GetPrivateReq().Digests {
-		colAP, err := p.cs.RetrieveCollectionAccessPolicy(fcommon.CollectionCriteria{
-			Channel:    p.channel,
-			Collection: dig.Collection,
-			TxId:       dig.TxId,
-			Namespace:  dig.Namespace,
-		})
+		rwSets, err := p.CollectionRWSet(dig)
+		if err != nil {
+			logger.Errorf("Wasn't able to get private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s], due to [%s]",
+				p.channel, dig.Namespace, dig.Collection, dig.TxId, err)
+			continue
+		}
+		if rwSets == nil {
+			logger.Errorf("No private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s] is available, skipping...",
+				p.channel, dig.Namespace, dig.Collection, dig.TxId)
+			continue
+		}
+		logger.Debug("Found", len(rwSets.RWSet), "for TxID", dig.TxId, ", collection", dig.Collection, "for", message.GetConnectionInfo().Endpoint)
+		if len(rwSets.RWSet) == 0 {
+			continue
+		}
+
+		colAP, err := p.AccessPolicy(rwSets.CollectionConfig, p.channel)
 		if err != nil {
 			logger.Debug("No policy found for channel", p.channel, ", collection", dig.Collection, "txID", dig.TxId, ":", err, "skipping...")
 			continue
@@ -159,14 +177,9 @@ func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataE
 			continue
 		}
 
-		rwSets := p.CollectionRWSet(dig)
-		logger.Debug("Found", len(rwSets), "for TxID", dig.TxId, ", collection", dig.Collection, "for", message.GetConnectionInfo().Endpoint)
-		if len(rwSets) == 0 {
-			continue
-		}
 		returned = append(returned, &proto.PvtDataElement{
 			Digest:  dig,
-			Payload: util.PrivateRWSets(rwSets...),
+			Payload: util.PrivateRWSets(rwSets.RWSet...),
 		})
 	}
 	return returned
@@ -191,19 +204,20 @@ func (p *puller) handleResponse(message proto.ReceivedMessage) {
 
 func (p *puller) waitForMembership() []discovery.NetworkMember {
 	polIteration := 0
-	var members []discovery.NetworkMember
-	for len(members) == 0 {
-		members = p.PeersOfChannel(common.ChainID(p.channel))
+	for {
+		members := p.PeersOfChannel(common.ChainID(p.channel))
+		if len(members) != 0 {
+			return members
+		}
 		polIteration++
 		if polIteration == maxMembershipPollIterations {
 			return nil
 		}
 		time.Sleep(membershipPollingBackoff)
 	}
-	return members
 }
 
-func (p *puller) fetch(dig2src dig2sources) ([]*proto.PvtDataElement, error) {
+func (p *puller) fetch(dig2src dig2sources, blockSeq uint64) (*FetchedPvtDataContainer, error) {
 	// computeFilters returns a map from a digest to a routing filter
 	dig2Filter, err := p.computeFilters(dig2src)
 	if err != nil {
@@ -220,7 +234,7 @@ func (p *puller) fetch(dig2src dig2sources) ([]*proto.PvtDataElement, error) {
 		return nil, errors.New("Empty membership")
 	}
 	members = randomizeMemberList(members)
-	var res []*proto.PvtDataElement
+	res := &FetchedPvtDataContainer{}
 	// Distribute requests to peers, and obtain subscriptions for all their messages
 	// matchDigestToPeer returns a map from a peer to the digests which we would ask it for
 	var peer2digests peer2Digests
@@ -228,19 +242,40 @@ func (p *puller) fetch(dig2src dig2sources) ([]*proto.PvtDataElement, error) {
 	itemsLeftToCollect := len(dig2Filter)
 	// As long as we still have some data to collect and new members to ask the data for:
 	for itemsLeftToCollect > 0 && len(members) > 0 {
+		purgedPvt := p.getPurgedCollections(members, dig2Filter, blockSeq)
+		// Need to remove purged digest from mapping
+		for _, dig := range purgedPvt {
+			res.PurgedElements = append(res.PurgedElements, dig)
+			// remove digest so we won't even try to pull purged data
+			delete(dig2Filter, *dig)
+			itemsLeftToCollect--
+		}
+
+		if itemsLeftToCollect == 0 {
+			logger.Debug("No items left to collect")
+			return res, nil
+		}
+
 		peer2digests, members = p.assignDigestsToPeers(members, dig2Filter)
+		if len(peer2digests) == 0 {
+			logger.Warning("No available peers for digests request, "+
+				"cannot pull missing private data for following digests [%+v], peer membership: [%+v]",
+				dig2Filter.digests(), members)
+			return res, nil
+		}
+
 		logger.Debug("Matched", len(dig2Filter), "digests to", len(peer2digests), "peer(s)")
-		subscriptions := p.scatterRequests(members, peer2digests)
+		subscriptions := p.scatterRequests(peer2digests)
 		responses := p.gatherResponses(subscriptions)
 		for _, resp := range responses {
-			logger.Debug("Got empty response for", resp.Digest)
 			if len(resp.Payload) == 0 {
+				logger.Debug("Got empty response for", resp.Digest)
 				continue
 			}
 			delete(dig2Filter, *resp.Digest)
 			itemsLeftToCollect--
 		}
-		res = append(res, responses...)
+		res.AvailableElemenets = append(res.AvailableElemenets, responses...)
 	}
 	return res, nil
 }
@@ -272,7 +307,7 @@ func (p *puller) gatherResponses(subscriptions []util.Subscription) []*proto.Pvt
 	return res
 }
 
-func (p *puller) scatterRequests(members []discovery.NetworkMember, peersDigestMapping peer2Digests) []util.Subscription {
+func (p *puller) scatterRequests(peersDigestMapping peer2Digests) []util.Subscription {
 	var subscriptions []util.Subscription
 	for peer, digests := range peersDigestMapping {
 		msg := &proto.GossipMessage{
@@ -356,6 +391,14 @@ func (dig2f digestToFilterMapping) flattenFilterValues() []filter.RoutingFilter 
 	return filters
 }
 
+func (dig2f digestToFilterMapping) digests() []proto.PvtDataDigest {
+	var digs []proto.PvtDataDigest
+	for d := range dig2f {
+		digs = append(digs, d)
+	}
+	return digs
+}
+
 // String returns a string representation of t he digestToFilterMapping
 func (dig2f digestToFilterMapping) String() string {
 	var buffer bytes.Buffer
@@ -372,12 +415,13 @@ func (dig2f digestToFilterMapping) String() string {
 func (p *puller) computeFilters(dig2src dig2sources) (digestToFilterMapping, error) {
 	filters := make(map[proto.PvtDataDigest]collectionRoutingFilter)
 	for digest, sources := range dig2src {
-		collection, err := p.cs.RetrieveCollectionAccessPolicy(fcommon.CollectionCriteria{
+		cc := fcommon.CollectionCriteria{
 			Channel:    p.channel,
 			TxId:       digest.TxId,
 			Collection: digest.Collection,
 			Namespace:  digest.Namespace,
-		})
+		}
+		collection, err := p.cs.RetrieveCollectionAccessPolicy(cc)
 		if err != nil {
 			return nil, errors.WithMessage(err, fmt.Sprintf("failed obtaining collection policy for channel %s, txID %s, collection %s", p.channel, digest.TxId, digest.Collection))
 		}
@@ -418,6 +462,66 @@ func (p *puller) computeFilters(dig2src dig2sources) (digestToFilterMapping, err
 	return filters, nil
 }
 
+func (p *puller) getPurgedCollections(members []discovery.NetworkMember,
+	dig2Filter digestToFilterMapping, blockSeq uint64) []*proto.PvtDataDigest {
+
+	var res []*proto.PvtDataDigest
+	for dig := range dig2Filter {
+		dig := dig
+
+		purged, err := p.purgedFilter(dig, blockSeq)
+		if err != nil {
+			logger.Debug("Failed to obtain purged filter for digest %v", dig, "error", err)
+			continue
+		}
+
+		membersWithPurgedData := filter.AnyMatch(members, purged)
+		// at least one peer already purged the data
+		if len(membersWithPurgedData) > 0 {
+			logger.Debugf("Private data on channel [%s], chaincode [%s], collection name [%s] for txID = [%s],"+
+				"has been purged at peers [%v]", p.channel, dig.Namespace,
+				dig.Collection, dig.TxId, membersWithPurgedData)
+			res = append(res, &dig)
+		}
+	}
+	return res
+}
+
+func (p *puller) purgedFilter(dig proto.PvtDataDigest, blockSeq uint64) (filter.RoutingFilter, error) {
+	cc := fcommon.CollectionCriteria{
+		Channel:    p.channel,
+		TxId:       dig.TxId,
+		Collection: dig.Collection,
+		Namespace:  dig.Namespace,
+	}
+	colPersistConfig, err := p.cs.RetrieveCollectionPersistenceConfigs(cc)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return func(peer discovery.NetworkMember) bool {
+		if peer.Properties == nil {
+			logger.Debugf("No properties provided for peer %s", peer.Endpoint)
+			return false
+		}
+		// BTL equals to zero has semantic of never expires
+		if colPersistConfig.BlockToLive() == uint64(0) {
+			return false
+		}
+		// handle overflow
+		expirationSeqNum := addWithOverflow(blockSeq, colPersistConfig.BlockToLive())
+		peerLedgerHeightWithMargin := addWithOverflow(peer.Properties.LedgerHeight, p.btlPullMargin)
+
+		isPurged := peerLedgerHeightWithMargin >= expirationSeqNum
+		if isPurged {
+			logger.Debugf("skipping peer [%s], since pvt for channel [%s], txID = [%s], "+
+				"collection [%s] has been purged or will soon be purged, BTL=[%d]",
+				peer.Endpoint, p.channel, cc.TxId, cc.Collection, colPersistConfig.BlockToLive())
+		}
+		return isPurged
+	}, nil
+}
+
 func randomizeMemberList(members []discovery.NetworkMember) []discovery.NetworkMember {
 	rand.Seed(time.Now().UnixNano())
 	res := make([]discovery.NetworkMember, len(members))
@@ -430,6 +534,9 @@ func randomizeMemberList(members []discovery.NetworkMember) []discovery.NetworkM
 func digestsAsPointerSlice(digests []proto.PvtDataDigest) []*proto.PvtDataDigest {
 	res := make([]*proto.PvtDataDigest, len(digests))
 	for i, dig := range digests {
+		// re-introduce dig variable to allocate
+		// new address for each iteration
+		dig := dig
 		res[i] = &dig
 	}
 	return res
@@ -446,4 +553,27 @@ func (rp remotePeer) AsRemotePeer() *comm.RemotePeer {
 		PKIID:    common.PKIidType(rp.pkiID),
 		Endpoint: rp.endpoint,
 	}
+}
+
+func getBtlPullMargin() uint64 {
+	var result uint64
+	if viper.IsSet("peer.gossip.pvtData.btlPullMargin") {
+		btlMarginVal := viper.GetInt("peer.gossip.pvtData.btlPullMargin")
+		if btlMarginVal < 0 {
+			result = btlPullMarginDefault
+		} else {
+			result = uint64(btlMarginVal)
+		}
+	} else {
+		result = btlPullMarginDefault
+	}
+	return result
+}
+
+func addWithOverflow(a uint64, b uint64) uint64 {
+	res := a + b
+	if res < a {
+		return math.MaxUint64
+	}
+	return res
 }

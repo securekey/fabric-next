@@ -8,6 +8,7 @@ package statedb
 import (
 	"sort"
 
+	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
 )
@@ -42,9 +43,12 @@ type VersionedDB interface {
 	// GetLatestSavePoint returns the height of the highest transaction upto which
 	// the state db is consistent
 	GetLatestSavePoint() (*version.Height, error)
-	// ValidateKey tests whether the key is supported by the db implementation.
+	// ValidateKeyValue tests whether the key and value is supported by the db implementation.
 	// For instance, leveldb supports any bytes for the key while the couchdb supports only valid utf-8 string
-	ValidateKey(key string) error
+	// TODO make the function ValidateKeyValue return a specific error say ErrInvalidKeyValue
+	// However, as of now, the both implementations of this function (leveldb and couchdb) are deterministic in returing an error
+	// i.e., an error is returned only if the key-value are found to be invalid for the underlying db
+	ValidateKeyValue(key string, value []byte) error
 	// BytesKeySuppoted returns true if the implementation (underlying db) supports the any bytes to be used as key.
 	// For instance, leveldb supports any bytes for the key while the couchdb supports only valid utf-8 string
 	BytesKeySuppoted() bool
@@ -60,6 +64,13 @@ type BulkOptimizable interface {
 	LoadCommittedVersions(keys []*CompositeKey) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()
+}
+
+//IndexCapable interface provides additional functions for
+//databases capable of index operations
+type IndexCapable interface {
+	GetDBType() string
+	ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error
 }
 
 // CompositeKey encloses Namespace and Key components

@@ -1,4 +1,4 @@
-// +build !nopkcs11
+// +build pkcs11
 
 /*
 Copyright IBM Corp. All Rights Reserved.
@@ -13,7 +13,7 @@ import (
 
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric/bccsp/sw"
-	"github.com/vpaprots/bccsp/grep11"
+	"github.com/hyperledger/fabric/bccsp/grep11"
 )
 
 const (

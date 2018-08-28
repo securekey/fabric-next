@@ -20,24 +20,22 @@ import (
 	"github.com/hyperledger/fabric/common/channelconfig"
 	mockpolicies "github.com/hyperledger/fabric/common/mocks/policies"
 	"github.com/hyperledger/fabric/common/policies"
-	"github.com/hyperledger/fabric/common/resourcesconfig"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protos/common"
 )
 
 type Support struct {
-	LedgerVal     ledger.PeerLedger
-	MSPManagerVal msp.MSPManager
-	ApplyVal      error
-	ACVal         channelconfig.ApplicationCapabilities
-}
-
-func (ms *Support) ChaincodeByName(chainname, ccname string) (resourcesconfig.ChaincodeDefinition, bool) {
-	return nil, false
+	LedgerVal               ledger.PeerLedger
+	MSPManagerVal           msp.MSPManager
+	ApplyVal                error
+	ACVal                   channelconfig.ApplicationCapabilities
+	CapabilitiesInvokeCount int
+	MSPManagerInvokeCount   int
 }
 
 func (ms *Support) Capabilities() channelconfig.ApplicationCapabilities {
+	ms.CapabilitiesInvokeCount++
 	return ms.ACVal
 }
 
@@ -48,6 +46,7 @@ func (ms *Support) Ledger() ledger.PeerLedger {
 
 // MSPManager returns MSPManagerVal
 func (ms *Support) MSPManager() msp.MSPManager {
+	ms.MSPManagerInvokeCount++
 	return ms.MSPManagerVal
 }
 
@@ -61,5 +60,5 @@ func (ms *Support) PolicyManager() policies.Manager {
 }
 
 func (cs *Support) GetMSPIDs(cid string) []string {
-	return []string{"DEFAULT"}
+	return []string{"SampleOrg"}
 }

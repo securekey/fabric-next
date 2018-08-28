@@ -8,6 +8,21 @@ First things first, please review the Hyperledger `Code of
 Conduct <https://wiki.hyperledger.org/community/hyperledger-project-code-of-conduct>`__
 before participating. It is important that we keep things civil.
 
+.. toctree::
+   :maxdepth: 1
+
+   MAINTAINERS
+   jira_navigation
+   dev-setup/devenv
+   dev-setup/build
+   Gerrit/lf-account
+   Gerrit/gerrit
+   Gerrit/changes
+   Gerrit/reviewing
+   Gerrit/best-practices
+   testing
+   Style-guides/go-style
+
 Install prerequisites
 ---------------------
 
@@ -36,7 +51,7 @@ assistance in debugging a problem or working out a fix to an issue, our
 help. We hang out on
 `Chat <https://chat.hyperledger.org/channel/fabric/>`__, IRC
 (#hyperledger on freenode.net) and the `mailing
-lists <http://lists.hyperledger.org/>`__. Most of us don't bite :grin:
+lists <https://lists.hyperledger.org/>`__. Most of us don't bite :grin:
 and will be glad to help. The only silly question is the one you don't
 ask. Questions are in fact a great way to help improve the project as
 they highlight where our documentation could be clearer.
@@ -90,7 +105,7 @@ little more time.
 Reviewing submitted Change Requests (CRs)
 -----------------------------------------
 
-Another way to contribute and learn about Hyperledgr Fabric is to help the
+Another way to contribute and learn about Hyperledger Fabric is to help the
 maintainers with the review of the CRs that are open. Indeed
 maintainers have the difficult role of having to review all the CRs
 that are being submitted and evaluate whether they should be merged or
@@ -178,7 +193,7 @@ What makes a good change request?
    too. If you send a 1,000 or 2,000 LOC change, how long do you think
    it takes to review all of that code? Keep your changes to < 200-300
    LOC, if possible. If you have a larger change, decompose it into
-   multiple independent changess. If you are adding a bunch of new
+   multiple independent changes. If you are adding a bunch of new
    functions to fulfill the requirements of a new capability, add them
    separately with their tests, and then write the code that uses them
    to deliver the capability. Of course, there are always exceptions. If
@@ -228,7 +243,7 @@ and Google Hangouts™ for screen sharing between developers. Our
 development planning and prioritization is done in
 `JIRA <https://jira.hyperledger.org>`__, and we take longer running
 discussions/decisions to the `mailing
-list <http://lists.hyperledger.org/mailman/listinfo/hyperledger-fabric>`__.
+list <https://lists.hyperledger.org/mailman/listinfo/hyperledger-fabric>`__.
 
 Maintainers
 -----------
@@ -270,7 +285,7 @@ We have tried to make it as easy as possible to make contributions. This
 applies to how we handle the legal aspects of contribution. We use the
 same approach—the `Developer's Certificate of Origin 1.1
 (DCO) <https://github.com/hyperledger/fabric/blob/master/docs/source/DCO1.1.txt>`__—that the Linux® Kernel
-`community <http://elinux.org/Developer_Certificate_Of_Origin>`__ uses
+`community <https://elinux.org/Developer_Certificate_Of_Origin>`__ uses
 to manage code contributions.
 
 We simply ask that when submitting a patch for review, the developer
@@ -281,7 +296,7 @@ submitter accepts the DCO:
 
 ::
 
-    Signed-off-by: John Doe <john.doe@hisdomain.com>
+    Signed-off-by: John Doe <john.doe@example.com>
 
 You can include this automatically when you commit a change to your
 local git repository using ``git commit -s``.

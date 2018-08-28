@@ -11,6 +11,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -20,25 +21,53 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
 
+var commitTimer tally.Timer
+var commitLockTimer tally.Timer
+var commitAfterLockTimer tally.Timer
+var updateStateListenersTimer tally.Timer
+
+func init() {
+	commitTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_time_seconds")
+	commitLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_Lock_time_seconds")
+	commitAfterLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_Commit_After_Lock_time_seconds")
+	updateStateListenersTimer = metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_time_seconds")
+}
+
 // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
 // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
 type LockBasedTxMgr struct {
-	ledgerid        string
-	db              privacyenabledstate.DB
-	pvtdataPurgeMgr *pvtdataPurgeMgr
-	validator       validator.Validator
-	batch           *privacyenabledstate.UpdateBatch
-	currentBlock    *common.Block
-	stateListeners  ledger.StateListeners
-	commitRWLock    sync.RWMutex
+	ledgerid                   string
+	db                         privacyenabledstate.DB
+	pvtdataPurgeMgr            *pvtdataPurgeMgr
+	validator                  validator.Validator
+	stateListeners             []ledger.StateListener
+	commitRWLock               sync.RWMutex
+	commitRWLockRLockTimer     tally.Timer
+	commitRWLockRLockStopwatch tally.Stopwatch
+	current                    *current
+}
+
+type current struct {
+	block     *common.Block
+	batch     *privacyenabledstate.UpdateBatch
+	listeners []ledger.StateListener
+}
+
+func (c *current) blockNum() uint64 {
+	return c.block.Header.Number
+}
+
+func (c *current) maxTxNumber() uint64 {
+	return uint64(len(c.block.Data.Data)) - 1
 }
 
 // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
-func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners ledger.StateListeners,
+func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider) (*LockBasedTxMgr, error) {
 	db.Open()
 	txmgr := &LockBasedTxMgr{ledgerid: ledgerid, db: db, stateListeners: stateListeners}
@@ -48,6 +77,7 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 	}
 	txmgr.pvtdataPurgeMgr = &pvtdataPurgeMgr{pvtstatePurgeMgr, false}
 	txmgr.validator = valimpl.NewStatebasedValidator(txmgr, db)
+	txmgr.commitRWLockRLockTimer = metrics.RootScope.Timer("lockbasedtxmgr_commitRWLockRLock_time_seconds")
 	return txmgr, nil
 }
 
@@ -61,6 +91,7 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
 	qe := newQueryExecutor(txmgr, txid)
 	txmgr.commitRWLock.RLock()
+	txmgr.commitRWLockRLockStopwatch = txmgr.commitRWLockRLockTimer.Start()
 	return qe, nil
 }
 
@@ -72,43 +103,40 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 		return nil, err
 	}
 	txmgr.commitRWLock.RLock()
+	txmgr.commitRWLockRLockStopwatch = txmgr.commitRWLockRLockTimer.Start()
 	return s, nil
 }
 
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error {
 	block := blockAndPvtdata.Block
-	if !txmgr.pvtdataPurgeMgr.usedOnce {
-		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(block.Header.Number)
-		txmgr.pvtdataPurgeMgr.usedOnce = true
-	}
+	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
+	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
 	logger.Debugf("Validating new block with num trans = [%d]", len(block.Data.Data))
 	batch, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
-		txmgr.clearCache()
+		txmgr.reset()
 		return err
 	}
-	txmgr.currentBlock = block
-	txmgr.batch = batch
-	return txmgr.invokeNamespaceListeners(batch)
+	txmgr.current = &current{block: block, batch: batch}
+	if err := txmgr.invokeNamespaceListeners(); err != nil {
+		txmgr.reset()
+		return err
+	}
+	return nil
 }
 
-func (txmgr *LockBasedTxMgr) invokeNamespaceListeners(batch *privacyenabledstate.UpdateBatch) error {
-	namespaces := batch.PubUpdates.GetUpdatedNamespaces()
-	for _, namespace := range namespaces {
-		listerner := txmgr.stateListeners[namespace]
-		if listerner == nil {
+func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
+	for _, listener := range txmgr.stateListeners {
+		stateUpdatesForListener := extractStateUpdates(txmgr.current.batch, listener.InterestedInNamespaces())
+		if len(stateUpdatesForListener) == 0 {
 			continue
 		}
-		logger.Debugf("Invoking listener for state changes over namespace:%s", namespace)
-		updatesMap := batch.PubUpdates.GetUpdates(namespace)
-		var kvwrites []*kvrwset.KVWrite
-		for key, versionedValue := range updatesMap {
-			kvwrites = append(kvwrites, &kvrwset.KVWrite{Key: key, IsDelete: versionedValue.Value == nil, Value: versionedValue.Value})
-		}
-		if err := listerner.HandleStateUpdates(txmgr.ledgerid, kvwrites); err != nil {
+		txmgr.current.listeners = append(txmgr.current.listeners, listener)
+		if err := listener.HandleStateUpdates(txmgr.ledgerid, stateUpdatesForListener, txmgr.current.blockNum()); err != nil {
 			return err
 		}
+		logger.Debugf("Invoking listener for state changes:%s", listener)
 	}
 	return nil
 }
@@ -120,43 +148,65 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
 
 // Commit implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Commit() error {
+
+	// Measure the whole
+	stopWatch := commitTimer.Start()
+	defer stopWatch.Stop()
+
+	// When using the purge manager for the first block commit after peer start, the asynchronous function
+	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
+	// in advance for the next block
+	if !txmgr.pvtdataPurgeMgr.usedOnce {
+		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum())
+		txmgr.pvtdataPurgeMgr.usedOnce = true
+	}
 	defer func() {
-		txmgr.batch = nil
-		// If statedb implementation needed bulk read optimization, cache might have been populated by
-		// ValidateAndPrepare(). Once the block is validated and committed, populated cache needs to
-		// be cleared.
 		txmgr.clearCache()
-		txmgr.commitRWLock.Unlock()
-		txmgr.pvtdataPurgeMgr.BlockCommitDone()
-		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.currentBlock.Header.Number + 1)
+		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum() + 1)
+		logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
+		txmgr.reset()
 	}()
 
 	logger.Debugf("Committing updates to state database")
-	txmgr.commitRWLock.Lock()
-	logger.Debugf("Write lock acquired for committing updates to state database")
-	if txmgr.batch == nil {
+	if txmgr.current == nil {
 		panic("validateAndPrepare() method should have been called before calling commit()")
 	}
+
 	if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
-		txmgr.batch.PvtUpdates, txmgr.batch.HashUpdates); err != nil {
+		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
 		return err
 	}
-	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.batch,
-		version.NewHeight(txmgr.currentBlock.Header.Number, uint64(len(txmgr.currentBlock.Data.Data)-1))); err != nil {
+
+	// Measure acquiring the lock
+	lockStopWatch := commitLockTimer.Start()
+	txmgr.commitRWLock.Lock()
+	defer txmgr.commitRWLock.Unlock()
+	lockStopWatch.Stop()
+
+	// Measure after acquiring the lock
+	afterLockStopWatch := commitAfterLockTimer.Start()
+	defer afterLockStopWatch.Stop()
+
+	logger.Debugf("Write lock acquired for committing updates to state database")
+	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
+	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
 		return err
 	}
 	logger.Debugf("Updates committed to state database")
 
+	// purge manager should be called (in this call the purge mgr removes the expiry entries from schedules) after committing to statedb
+	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
+		return err
+	}
+	// In the case of error state listeners will not recieve this call - instead a peer panic is caused by the ledger upon receiveing
+	// an error from this function
+	txmgr.updateStateListeners()
 	return nil
 }
 
 // Rollback implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Rollback() {
-	txmgr.batch = nil
-	// If statedb implementation needed bulk read optimization, cache might have been populated by
-	// ValidateAndPrepareBatch(). As the block commit is rollbacked, populated cache needs to
-	// be cleared now.
-	txmgr.clearCache()
+	txmgr.reset()
 }
 
 // clearCache empty the cache maintained by the statedb implementation
@@ -189,6 +239,35 @@ func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvt
 	return txmgr.Commit()
 }
 
+func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []string) ledger.StateUpdates {
+	stateupdates := make(ledger.StateUpdates)
+	for _, namespace := range namespaces {
+		updatesMap := batch.PubUpdates.GetUpdates(namespace)
+		var kvwrites []*kvrwset.KVWrite
+		for key, versionedValue := range updatesMap {
+			kvwrites = append(kvwrites, &kvrwset.KVWrite{Key: key, IsDelete: versionedValue.Value == nil, Value: versionedValue.Value})
+			if len(kvwrites) > 0 {
+				stateupdates[namespace] = kvwrites
+			}
+		}
+	}
+	return stateupdates
+}
+
+func (txmgr *LockBasedTxMgr) updateStateListeners() {
+	stopWatch := updateStateListenersTimer.Start()
+	defer stopWatch.Stop()
+	for _, l := range txmgr.current.listeners {
+		l.StateCommitDone(txmgr.ledgerid)
+	}
+}
+
+func (txmgr *LockBasedTxMgr) reset() {
+	txmgr.current = nil
+}
+
+// pvtdataPurgeMgr wraps the actual purge manager and an additional flag 'usedOnce'
+// for usage of this additional flag, see the relevant comments in the txmgr.Commit() function above
 type pvtdataPurgeMgr struct {
 	pvtstatepurgemgmt.PurgeMgr
 	usedOnce bool

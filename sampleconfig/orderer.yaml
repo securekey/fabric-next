@@ -34,7 +34,7 @@ General:
         Certificate: tls/server.crt
         RootCAs:
           - tls/ca.crt
-        ClientAuthEnabled: false
+        ClientAuthRequired: false
         ClientRootCAs:
 
     # Keepalive settings for the GRPC server.
@@ -84,8 +84,8 @@ General:
     # manager. IMPORTANT: The local MSP ID of an orderer needs to match the MSP
     # ID of one of the organizations defined in the orderer system channel's
     # /Channel/Orderer configuration. The sample organization defined in the
-    # sample configuration provided has an MSP ID of "DEFAULT".
-    LocalMSPID: DEFAULT
+    # sample configuration provided has an MSP ID of "SampleOrg".
+    LocalMSPID: SampleOrg
 
     # Enable an HTTP service for Go "pprof" profiling as documented at:
     # https://golang.org/pkg/net/http/pprof
@@ -246,7 +246,7 @@ Kafka:
 
     # Kafka protocol version used to communicate with the Kafka cluster brokers
     # (defaults to 0.10.2.0 if not specified)
-    Version: 0.10.2.0
+    Version:
 
 ################################################################################
 #

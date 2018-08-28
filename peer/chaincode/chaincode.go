@@ -1,5 +1,5 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
@@ -8,6 +8,7 @@ package chaincode
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/peer/common"
@@ -17,8 +18,7 @@ import (
 
 const (
 	chainFuncName = "chaincode"
-	shortDes      = "Operate a chaincode: install|instantiate|invoke|package|query|signpackage|upgrade|list."
-	longDes       = "Operate a chaincode: install|instantiate|invoke|package|query|signpackage|upgrade|list."
+	chainCmdDes   = "Operate a chaincode: install|instantiate|invoke|package|query|signpackage|upgrade|list."
 )
 
 var logger = flogging.MustGetLogger("chaincodeCmd")
@@ -54,7 +54,6 @@ var (
 	chaincodeUsr          string // Not used
 	chaincodeQueryRaw     bool
 	chaincodeQueryHex     bool
-	customIDGenAlg        string
 	channelID             string
 	chaincodeVersion      string
 	policy                string
@@ -64,12 +63,17 @@ var (
 	transient             string
 	collectionsConfigFile string
 	collectionConfigBytes []byte
+	peerAddresses         []string
+	tlsRootCertFiles      []string
+	connectionProfile     string
+	waitForEvent          bool
+	waitForEventTimeout   time.Duration
 )
 
 var chaincodeCmd = &cobra.Command{
 	Use:              chainFuncName,
-	Short:            fmt.Sprint(shortDes),
-	Long:             fmt.Sprint(longDes),
+	Short:            fmt.Sprint(chainCmdDes),
+	Long:             fmt.Sprint(chainCmdDes),
 	PersistentPreRun: common.SetOrdererEnv,
 }
 
@@ -95,8 +99,6 @@ func resetFlags() {
 		fmt.Sprint("Version of the chaincode specified in install/instantiate/upgrade commands"))
 	flags.StringVarP(&chaincodeUsr, "username", "u", common.UndefinedParamValue,
 		fmt.Sprint("Username for chaincode operations when security is enabled"))
-	flags.StringVarP(&customIDGenAlg, "tid", "t", common.UndefinedParamValue,
-		fmt.Sprint("Name of a custom ID generation algorithm (hashing and decoding) e.g. sha256base64"))
 	flags.StringVarP(&channelID, "channelID", "C", "",
 		fmt.Sprint("The channel on which this command should be executed"))
 	flags.StringVarP(&policy, "policy", "P", common.UndefinedParamValue,
@@ -110,7 +112,17 @@ func resetFlags() {
 	flags.BoolVarP(&getInstantiatedChaincodes, "instantiated", "", false,
 		"Get the instantiated chaincodes on a channel")
 	flags.StringVar(&collectionsConfigFile, "collections-config", common.UndefinedParamValue,
-		fmt.Sprint("The file containing the configuration for the chaincode's collection"))
+		fmt.Sprint("The fully qualified path to the collection JSON file including the file name"))
+	flags.StringArrayVarP(&peerAddresses, "peerAddresses", "", []string{common.UndefinedParamValue},
+		fmt.Sprint("The addresses of the peers to connect to"))
+	flags.StringArrayVarP(&tlsRootCertFiles, "tlsRootCertFiles", "", []string{common.UndefinedParamValue},
+		fmt.Sprint("If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag"))
+	flags.StringVarP(&connectionProfile, "connectionProfile", "", common.UndefinedParamValue,
+		fmt.Sprint("Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information"))
+	flags.BoolVar(&waitForEvent, "waitForEvent", false,
+		fmt.Sprint("Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully"))
+	flags.DurationVar(&waitForEventTimeout, "waitForEventTimeout", 30*time.Second,
+		fmt.Sprint("Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully"))
 }
 
 func attachFlags(cmd *cobra.Command, names []string) {
@@ -119,7 +131,7 @@ func attachFlags(cmd *cobra.Command, names []string) {
 		if flag := flags.Lookup(name); flag != nil {
 			cmdFlags.AddFlag(flag)
 		} else {
-			logger.Fatalf("Could not find flag '%s' to attach to commond '%s'", name, cmd.Name())
+			logger.Fatalf("Could not find flag '%s' to attach to command '%s'", name, cmd.Name())
 		}
 	}
 }

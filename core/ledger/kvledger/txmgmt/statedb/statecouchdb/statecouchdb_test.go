@@ -1,49 +1,47 @@
 /*
-Copyright IBM Corp. 2016, 2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package statecouchdb
 
 import (
-	"archive/tar"
-	"bytes"
-	"log"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
-	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
+	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/commontests"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	ledgertestutil "github.com/hyperledger/fabric/core/ledger/testutil"
+	"github.com/hyperledger/fabric/integration/runner"
 	"github.com/spf13/viper"
 )
 
 func TestMain(m *testing.M) {
+	flogging.SetModuleLevel("statecouchdb", "debug")
+	flogging.SetModuleLevel("couchdb", "debug")
+	os.Exit(testMain(m))
+}
 
+func testMain(m *testing.M) int {
 	// Read the core.yaml file for default config.
 	ledgertestutil.SetupCoreYAMLConfig()
 	viper.Set("peer.fileSystemPath", "/tmp/fabric/ledgertests/kvledger/txmgmt/statedb/statecouchdb")
 
 	// Switch to CouchDB
+	couchAddress, cleanup := couchDBSetup()
+	defer cleanup()
 	viper.Set("ledger.state.stateDatabase", "CouchDB")
+	defer viper.Set("ledger.state.stateDatabase", "goleveldb")
 
-	// both vagrant and CI have couchdb configured at host "couchdb"
-	viper.Set("ledger.state.couchDBConfig.couchDBAddress", "couchdb:5984")
+	viper.Set("ledger.state.couchDBConfig.couchDBAddress", couchAddress)
 	// Replace with correct username/password such as
 	// admin/admin if user security is enabled on couchdb.
 	viper.Set("ledger.state.couchDBConfig.username", "")
@@ -51,13 +49,23 @@ func TestMain(m *testing.M) {
 	viper.Set("ledger.state.couchDBConfig.maxRetries", 3)
 	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 10)
 	viper.Set("ledger.state.couchDBConfig.requestTimeout", time.Second*35)
-
+	flogging.SetModuleLevel("statecouchdb", "debug")
 	//run the actual test
-	result := m.Run()
+	return m.Run()
+}
 
-	//revert to default goleveldb
-	viper.Set("ledger.state.stateDatabase", "goleveldb")
-	os.Exit(result)
+func couchDBSetup() (addr string, cleanup func()) {
+	externalCouch, set := os.LookupEnv("COUCHDB_ADDR")
+	if set {
+		return externalCouch, func() {}
+	}
+
+	couchDB := &runner.CouchDB{}
+	if err := couchDB.Start(); err != nil {
+		err := fmt.Errorf("failed to start couchDB: %s", err)
+		panic(err)
+	}
+	return couchDB.Address(), func() { couchDB.Stop() }
 }
 
 func TestBasicRW(t *testing.T) {
@@ -108,18 +116,6 @@ func TestIterator(t *testing.T) {
 	defer env.Cleanup("testiterator_ns2")
 	defer env.Cleanup("testiterator_ns3")
 	commontests.TestIterator(t, env.DBProvider)
-}
-
-func TestEncodeDecodeValueAndVersion(t *testing.T) {
-	testValueAndVersionEncoding(t, []byte("value1"), version.NewHeight(1, 2))
-	testValueAndVersionEncoding(t, []byte{}, version.NewHeight(50, 50))
-}
-
-func testValueAndVersionEncoding(t *testing.T, value []byte, version *version.Height) {
-	encodedValue := statedb.EncodeValue(value, version)
-	val, ver := statedb.DecodeValue(encodedValue)
-	testutil.AssertEquals(t, val, value)
-	testutil.AssertEquals(t, ver, version)
 }
 
 // The following tests are unique to couchdb, they are not used in leveldb
@@ -196,14 +192,84 @@ func TestUtilityFunctions(t *testing.T) {
 	byteKeySupported := db.BytesKeySuppoted()
 	testutil.AssertEquals(t, byteKeySupported, false)
 
-	// ValidateKey should return nil for a valid key
-	err = db.ValidateKey("testKey")
+	// ValidateKeyValue should return nil for a valid key and value
+	err = db.ValidateKeyValue("testKey", []byte("Some random bytes"))
 	testutil.AssertNil(t, err)
 
 	// ValidateKey should return an error for an invalid key
-	err = db.ValidateKey(string([]byte{0xff, 0xfe, 0xfd}))
+	err = db.ValidateKeyValue(string([]byte{0xff, 0xfe, 0xfd}), []byte("Some random bytes"))
 	testutil.AssertError(t, err, "ValidateKey should have thrown an error for an invalid utf-8 string")
 
+	reservedFields := []string{"~version", "_id", "_test"}
+
+	// ValidateKeyValue should return an error for a json value that contains one of the reserved fields
+	// at the top level
+	for _, reservedField := range reservedFields {
+		testVal := fmt.Sprintf(`{"%s":"dummyVal"}`, reservedField)
+		err = db.ValidateKeyValue("testKey", []byte(testVal))
+		testutil.AssertError(t, err, fmt.Sprintf(
+			"ValidateKey should have thrown an error for a json value %s, as contains one of the reserved fields", testVal))
+	}
+
+	// ValidateKeyValue should not return an error for a json value that contains one of the reserved fields
+	// if not at the top level
+	for _, reservedField := range reservedFields {
+		testVal := fmt.Sprintf(`{"data.%s":"dummyVal"}`, reservedField)
+		err = db.ValidateKeyValue("testKey", []byte(testVal))
+		testutil.AssertNoError(t, err, fmt.Sprintf(
+			"ValidateKey should not have thrown an error the json value %s since the reserved field was not at the top level", testVal))
+	}
+
+	// ValidateKeyValue should return an error for a key that begins with an underscore
+	err = db.ValidateKeyValue("_testKey", []byte("testValue"))
+	testutil.AssertError(t, err, "ValidateKey should have thrown an error for a key that begins with an underscore")
+
+}
+
+// TestInvalidJSONFields tests for invalid JSON fields
+func TestInvalidJSONFields(t *testing.T) {
+
+	env := NewTestVDBEnv(t)
+	env.Cleanup("testinvalidfields_")
+	defer env.Cleanup("testinvalidfields_")
+
+	db, err := env.DBProvider.GetDBHandle("testinvalidfields")
+	testutil.AssertNoError(t, err, "")
+
+	db.Open()
+	defer db.Close()
+
+	batch := statedb.NewUpdateBatch()
+	jsonValue1 := `{"_id":"key1","asset_name":"marble1","color":"blue","size":1,"owner":"tom"}`
+	batch.Put("ns1", "key1", []byte(jsonValue1), version.NewHeight(1, 1))
+
+	savePoint := version.NewHeight(1, 2)
+	err = db.ApplyUpdates(batch, savePoint)
+	testutil.AssertError(t, err, "Invalid field _id should have thrown an error")
+
+	batch = statedb.NewUpdateBatch()
+	jsonValue1 = `{"_rev":"rev1","asset_name":"marble1","color":"blue","size":1,"owner":"tom"}`
+	batch.Put("ns1", "key1", []byte(jsonValue1), version.NewHeight(1, 1))
+
+	savePoint = version.NewHeight(1, 2)
+	err = db.ApplyUpdates(batch, savePoint)
+	testutil.AssertError(t, err, "Invalid field _rev should have thrown an error")
+
+	batch = statedb.NewUpdateBatch()
+	jsonValue1 = `{"_deleted":"true","asset_name":"marble1","color":"blue","size":1,"owner":"tom"}`
+	batch.Put("ns1", "key1", []byte(jsonValue1), version.NewHeight(1, 1))
+
+	savePoint = version.NewHeight(1, 2)
+	err = db.ApplyUpdates(batch, savePoint)
+	testutil.AssertError(t, err, "Invalid field _deleted should have thrown an error")
+
+	batch = statedb.NewUpdateBatch()
+	jsonValue1 = `{"~version":"v1","asset_name":"marble1","color":"blue","size":1,"owner":"tom"}`
+	batch.Put("ns1", "key1", []byte(jsonValue1), version.NewHeight(1, 1))
+
+	savePoint = version.NewHeight(1, 2)
+	err = db.ApplyUpdates(batch, savePoint)
+	testutil.AssertError(t, err, "Invalid field ~version should have thrown an error")
 }
 
 func TestDebugFunctions(t *testing.T) {
@@ -274,34 +340,15 @@ func TestHandleChaincodeDeploy(t *testing.T) {
 	savePoint := version.NewHeight(2, 22)
 	db.ApplyUpdates(batch, savePoint)
 
-	//Create a buffer for the tar file
-	buffer := new(bytes.Buffer)
-	tarWriter := tar.NewWriter(buffer)
-
-	//Add 2 index definitions
-	var files = []struct {
-		Name, Body string
-	}{
-		{"META-INF/statedb/couchdb/indexes/indexColorSortName.json", "{\"index\":{\"fields\":[{\"data.color\":\"desc\"}]},\"ddoc\":\"indexColorSortName\",\"name\":\"indexColorSortName\",\"type\":\"json\"}"},
-		{"META-INF/statedb/couchdb/indexes/indexSizeSortName.json", "{\"index\":{\"fields\":[{\"data.size\":\"desc\"}]},\"ddoc\":\"indexSizeSortName\",\"name\":\"indexSizeSortName\",\"type\":\"json\"}"},
-	}
-	for _, file := range files {
-		tarHeader := &tar.Header{
-			Name: file.Name,
-			Mode: 0600,
-			Size: int64(len(file.Body)),
-		}
-		err := tarWriter.WriteHeader(tarHeader)
-		testutil.AssertNoError(t, err, "")
-
-		_, err = tarWriter.Write([]byte(file.Body))
-		testutil.AssertNoError(t, err, "")
-
-	}
-	// Make sure to check the error on Close.
-	if err := tarWriter.Close(); err != nil {
-		log.Fatalln(err)
-	}
+	//Create a tar file for test with 4 index definitions and 2 side dbs
+	dbArtifactsTarBytes := testutil.CreateTarBytesForTest(
+		[]*testutil.TarFileEntry{
+			{"META-INF/statedb/couchdb/indexes/indexColorSortName.json", `{"index":{"fields":[{"color":"desc"}]},"ddoc":"indexColorSortName","name":"indexColorSortName","type":"json"}`},
+			{"META-INF/statedb/couchdb/indexes/indexSizeSortName.json", `{"index":{"fields":[{"size":"desc"}]},"ddoc":"indexSizeSortName","name":"indexSizeSortName","type":"json"}`},
+			{"META-INF/statedb/couchdb/collections/collectionMarbles/indexes/indexCollMarbles.json", `{"index":{"fields":["docType","owner"]},"ddoc":"indexCollectionMarbles", "name":"indexCollectionMarbles","type":"json"}`},
+			{"META-INF/statedb/couchdb/collections/collectionMarblesPrivateDetails/indexes/indexCollPrivDetails.json", `{"index":{"fields":["docType","price"]},"ddoc":"indexPrivateDetails", "name":"indexPrivateDetails","type":"json"}`},
+		},
+	)
 
 	//Create a query
 	queryString := `{"selector":{"owner":"fred"}}`
@@ -315,38 +362,96 @@ func TestHandleChaincodeDeploy(t *testing.T) {
 	_, err = db.ExecuteQuery("ns1", queryString)
 	testutil.AssertError(t, err, "Error should have been thrown for a missing index")
 
-	if handleDefinition, ok := db.(cceventmgmt.ChaincodeLifecycleEventListener); ok {
+	indexCapable, ok := db.(statedb.IndexCapable)
 
-		chaincodeDef := &cceventmgmt.ChaincodeDefinition{Name: "ns1", Hash: nil, Version: ""}
-
-		//Test HandleChaincodeDefinition with a valid tar file
-		err := handleDefinition.HandleChaincodeDeploy(chaincodeDef, buffer.Bytes())
-		testutil.AssertNoError(t, err, "")
-
-		//Test HandleChaincodeDefinition with a nil tar file
-		err = handleDefinition.HandleChaincodeDeploy(chaincodeDef, nil)
-		testutil.AssertNoError(t, err, "")
-
-		//Test HandleChaincodeDefinition with a bad tar file
-		err = handleDefinition.HandleChaincodeDeploy(chaincodeDef, []byte(`This is a really bad tar file`))
-		testutil.AssertError(t, err, "Error should have been thrown for a bad tar file")
-
-		//Test HandleChaincodeDefinition with a nil chaincodeDef
-		err = handleDefinition.HandleChaincodeDeploy(nil, []byte(`This is a really bad tar file`))
-		testutil.AssertError(t, err, "Error should have been thrown for a nil chaincodeDefinition")
-
-		//Sleep to allow time for index creation
-		time.Sleep(100 * time.Millisecond)
-		//Create a query with a sort
-		queryString = `{"selector":{"owner":"fred"}, "sort": [{"size": "desc"}]}`
-
-		//Query should complete without error
-		_, err = db.ExecuteQuery("ns1", queryString)
-		testutil.AssertNoError(t, err, "")
-
-		//Query namespace "ns2", index is only created in "ns1".  This should return an error.
-		_, err = db.ExecuteQuery("ns2", queryString)
-		testutil.AssertError(t, err, "Error should have been thrown for a missing index")
-
+	if !ok {
+		t.Fatalf("Couchdb state impl is expected to implement interface `statedb.IndexCapable`")
 	}
+
+	fileEntries, errExtract := ccprovider.ExtractFileEntries(dbArtifactsTarBytes, "couchdb")
+	testutil.AssertNoError(t, errExtract, "")
+
+	indexCapable.ProcessIndexesForChaincodeDeploy("ns1", fileEntries["META-INF/statedb/couchdb/indexes"])
+	//Sleep to allow time for index creation
+	time.Sleep(100 * time.Millisecond)
+	//Create a query with a sort
+	queryString = `{"selector":{"owner":"fred"}, "sort": [{"size": "desc"}]}`
+
+	//Query should complete without error
+	_, err = db.ExecuteQuery("ns1", queryString)
+	testutil.AssertNoError(t, err, "")
+
+	//Query namespace "ns2", index is only created in "ns1".  This should return an error.
+	_, err = db.ExecuteQuery("ns2", queryString)
+	testutil.AssertError(t, err, "Error should have been thrown for a missing index")
+
+}
+
+func TestTryCastingToJSON(t *testing.T) {
+	sampleJSON := []byte(`{"a":"A", "b":"B"}`)
+	isJSON, jsonVal := tryCastingToJSON(sampleJSON)
+	testutil.AssertEquals(t, isJSON, true)
+	testutil.AssertEquals(t, jsonVal["a"], "A")
+	testutil.AssertEquals(t, jsonVal["b"], "B")
+
+	sampleNonJSON := []byte(`This is not a json`)
+	isJSON, jsonVal = tryCastingToJSON(sampleNonJSON)
+	testutil.AssertEquals(t, isJSON, false)
+}
+
+func TestHandleChaincodeDeployErroneousIndexFile(t *testing.T) {
+	channelName := "ch1"
+	env := NewTestVDBEnv(t)
+	env.Cleanup(channelName)
+	defer env.Cleanup(channelName)
+	db, err := env.DBProvider.GetDBHandle(channelName)
+	testutil.AssertNoError(t, err, "")
+	db.Open()
+	defer db.Close()
+
+	batch := statedb.NewUpdateBatch()
+	batch.Put("ns1", "key1", []byte(`{"asset_name": "marble1","color": "blue","size": 1,"owner": "tom"}`), version.NewHeight(1, 1))
+	batch.Put("ns1", "key2", []byte(`{"asset_name": "marble2","color": "blue","size": 2,"owner": "jerry"}`), version.NewHeight(1, 2))
+
+	// Create a tar file for test with 2 index definitions - one of them being errorneous
+	badSyntaxFileContent := `{"index":{"fields": This is a bad json}`
+	dbArtifactsTarBytes := testutil.CreateTarBytesForTest(
+		[]*testutil.TarFileEntry{
+			{"META-INF/statedb/couchdb/indexes/indexSizeSortName.json", `{"index":{"fields":[{"size":"desc"}]},"ddoc":"indexSizeSortName","name":"indexSizeSortName","type":"json"}`},
+			{"META-INF/statedb/couchdb/indexes/badSyntax.json", badSyntaxFileContent},
+		},
+	)
+
+	indexCapable, ok := db.(statedb.IndexCapable)
+	if !ok {
+		t.Fatalf("Couchdb state impl is expected to implement interface `statedb.IndexCapable`")
+	}
+
+	fileEntries, errExtract := ccprovider.ExtractFileEntries(dbArtifactsTarBytes, "couchdb")
+	testutil.AssertNoError(t, errExtract, "")
+
+	indexCapable.ProcessIndexesForChaincodeDeploy("ns1", fileEntries["META-INF/statedb/couchdb/indexes"])
+
+	//Sleep to allow time for index creation
+	time.Sleep(100 * time.Millisecond)
+	//Query should complete without error
+	_, err = db.ExecuteQuery("ns1", `{"selector":{"owner":"fred"}, "sort": [{"size": "desc"}]}`)
+	testutil.AssertNoError(t, err, "")
+}
+
+func TestIsBulkOptimizable(t *testing.T) {
+	var db statedb.VersionedDB = &VersionedDB{}
+	_, ok := db.(statedb.BulkOptimizable)
+	if !ok {
+		t.Fatal("state couch db is expected to implement interface statedb.BulkOptimizable")
+	}
+}
+
+func printCompositeKeys(keys []*statedb.CompositeKey) string {
+
+	compositeKeyString := []string{}
+	for _, key := range keys {
+		compositeKeyString = append(compositeKeyString, "["+key.Namespace+","+key.Key+"]")
+	}
+	return strings.Join(compositeKeyString, ",")
 }

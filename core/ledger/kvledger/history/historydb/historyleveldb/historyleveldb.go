@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package historyleveldb
@@ -20,6 +10,7 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -28,9 +19,16 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	putils "github.com/hyperledger/fabric/protos/utils"
+	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("historyleveldb")
+
+var commitTimer tally.Timer
+
+func init() {
+	commitTimer = metrics.RootScope.Timer("historyleveldb_Commit_time_seconds")
+}
 
 var savePointKey = []byte{0x00}
 var emptyValue = []byte{}
@@ -83,6 +81,10 @@ func (historyDB *historyDB) Close() {
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
 
+	// Measure the whole
+	stopWatch := commitTimer.Start()
+	defer stopWatch.Stop()
+
 	blockNo := block.Header.Number
 	//Set the starting tranNo to 0
 	var tranNo uint64
@@ -94,11 +96,6 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 
 	// Get the invalidation byte array for the block
 	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	// Initialize txsFilter if it does not yet exist (e.g. during testing, for genesis block, etc)
-	if len(txsFilter) == 0 {
-		txsFilter = util.NewTxValidationFlags(len(block.Data.Data))
-		block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
-	}
 
 	// write each tran's write set to history db
 	for _, envBytes := range block.Data.Data {

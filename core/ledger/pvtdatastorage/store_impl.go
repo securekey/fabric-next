@@ -75,6 +75,8 @@ func (p *provider) OpenStore(ledgerid string) (Store, error) {
 	if err := s.initState(); err != nil {
 		return nil, err
 	}
+	logger.Debugf("Pvtdata store opened. Initial state: isEmpty [%t], lastCommittedBlock [%d], batchPending [%t]",
+		s.isEmpty, s.lastCommittedBlock, s.batchPending)
 	return s, nil
 }
 
@@ -115,7 +117,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	batch := leveldbhelper.NewUpdateBatch()
 	var err error
 	var keyBytes, valBytes []byte
-	dataEntries, expiryEnteries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
+	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
 		return err
 	}
@@ -126,7 +128,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		}
 		batch.Put(keyBytes, valBytes)
 	}
-	for _, expiryEntry := range expiryEnteries {
+	for _, expiryEntry := range expiryEntries {
 		keyBytes = encodeExpiryKey(expiryEntry.key)
 		if valBytes, err = encodeExpiryValue(expiryEntry.value); err != nil {
 			return err
@@ -197,6 +199,9 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 
 	for itr.Next() {
 		dataKeyBytes := itr.Key()
+		if v11Format(dataKeyBytes) {
+			return v11RetrievePvtdata(itr, filter)
+		}
 		dataValueBytes := itr.Value()
 		dataKey := decodeDatakey(dataKeyBytes)
 		expired, err := isExpired(dataKey, s.btlPolicy, s.lastCommittedBlock)
@@ -252,7 +257,7 @@ func (s *store) performPurgeIfScheduled(latestCommittedBlk uint64) {
 	}
 	go func() {
 		s.purgerLock.Lock()
-		logger.Info("Purger started")
+		logger.Infof("Purger started: Purging expired private data till block number [%d]", latestCommittedBlk)
 		defer s.purgerLock.Unlock()
 		err := s.purgeExpiredData(0, latestCommittedBlk)
 		if err != nil {
@@ -277,12 +282,13 @@ func (s *store) purgeExpiredData(minBlkNum, maxBlkNum uint64) error {
 		}
 		s.db.WriteBatch(batch, false)
 	}
+	logger.Debugf("[%d] Entries purged from private data storage", len(expiryEntries))
 	return nil
 }
 
 func (s *store) retrieveExpiryEntries(minBlkNum, maxBlkNum uint64) ([]*expiryEntry, error) {
 	startKey, endKey := getExpiryKeysForRangeScan(minBlkNum, maxBlkNum)
-	logger.Debugf("GetPvtDataByBlockNum(): startKey=%#v, endKey=%#v", startKey, endKey)
+	logger.Debugf("retrieveExpiryEntries(): startKey=%#v, endKey=%#v", startKey, endKey)
 	itr := s.db.GetIterator(startKey, endKey)
 	defer itr.Release()
 

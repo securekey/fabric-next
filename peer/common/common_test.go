@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/fabric/common/util"
-	"github.com/hyperledger/fabric/core/config"
+	"github.com/hyperledger/fabric/core/config/configtest"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/peer/common"
 	"github.com/spf13/viper"
@@ -21,6 +21,9 @@ import (
 )
 
 func TestInitConfig(t *testing.T) {
+	cleanup := configtest.SetDevFabricConfigPath(t)
+	defer cleanup()
+
 	type args struct {
 		cmdRoot string
 	}
@@ -56,15 +59,14 @@ func TestInitConfig(t *testing.T) {
 
 func TestInitCryptoMissingDir(t *testing.T) {
 	dir := os.TempDir() + "/" + util.GenerateUUID()
-	err := common.InitCrypto(dir, "DEFAULT", msp.ProviderTypeToString(msp.FABRIC))
+	err := common.InitCrypto(dir, "SampleOrg", msp.ProviderTypeToString(msp.FABRIC))
 	assert.Error(t, err, "Should be able to initialize crypto with non-existing directory")
 	assert.Contains(t, err.Error(), fmt.Sprintf("missing %s folder", dir))
 }
 
 func TestInitCrypto(t *testing.T) {
-
-	mspConfigPath, err := config.GetDevMspDir()
-	localMspId := "DEFAULT"
+	mspConfigPath, err := configtest.GetDevMspDir()
+	localMspId := "SampleOrg"
 	err = common.InitCrypto(mspConfigPath, localMspId, msp.ProviderTypeToString(msp.FABRIC))
 	assert.NoError(t, err, "Unexpected error [%s] calling InitCrypto()", err)
 	err = common.InitCrypto("/etc/foobaz", localMspId, msp.ProviderTypeToString(msp.FABRIC))
@@ -106,6 +108,9 @@ func TestSetBCCSPKeystorePath(t *testing.T) {
 
 func TestSetLogLevelFromViper(t *testing.T) {
 	viper.Reset()
+	cleanup := configtest.SetDevFabricConfigPath(t)
+	defer cleanup()
+
 	common.InitConfig("core")
 	type args struct {
 		module string
@@ -190,22 +195,22 @@ func TestCheckLogLevel(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "Valie module name",
+			name:    "Valid module name",
 			args:    args{level: "warning"},
 			wantErr: false,
 		},
 		{
-			name:    "Valie module name",
+			name:    "Valid module name",
 			args:    args{level: "foobaz"},
 			wantErr: true,
 		},
 		{
-			name:    "Valie module name",
+			name:    "Valid module name",
 			args:    args{level: "error"},
 			wantErr: false,
 		},
 		{
-			name:    "Valie module name",
+			name:    "Valid module name",
 			args:    args{level: "info"},
 			wantErr: false,
 		},

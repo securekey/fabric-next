@@ -1,23 +1,51 @@
-*Needs Review*
 
 Glossary
 ===========================
 
 Terminology is important, so that all Hyperledger Fabric users and developers
-agree on what we mean by each specific term. What is chaincode, for example.
-The documentation will reference the glossary as needed, but feel free to
-read the entire thing in one sitting if you like; it's pretty enlightening!
+agree on what we mean by each specific term. What is a smart contract for
+example. The documentation will reference the glossary as needed, but feel free
+to read the entire thing in one sitting if you like; it's pretty enlightening!
 
 .. _Anchor-Peer:
 
 Anchor Peer
 -----------
 
-A peer node on a channel that all other peers can discover and communicate with.
-Each Member_ on a channel has an anchor peer (or multiple anchor peers to prevent
-single point of failure), allowing for peers belonging to different Members to
-discover all existing peers on a channel.
+Used to initiate gossip communication between peers from different
+organizations. The anchor peer serves as the entry point for another
+organization's peer on the same channel to communicate with each of the peers
+in the anchor peer's organization. Cross-organization gossip is scoped to
+channels. In order for cross-org gossip to work, peers from one organization
+need to know the address of at least one peer from another organization in the
+channel. Each organization added to a channel should identify at least one of
+its peers as an anchor peer (there can be more than one). The anchor peer
+address is stored in the configuration block of the channel.
 
+.. _glossary_ACL:
+
+ACL
+---
+
+An ACL, or Access Control List, associates access to specific peer
+resources (such as system chaincode APIs or event services) to a Policy_
+(which specifies how many and what types of organizations or roles are
+required). The ACL is part of a channel's configuration. It is therefore
+persisted in the channel's configuration blocks, and can be updated using the
+standard configuration update mechanism.
+
+An ACL is formatted as a list of key-value pairs, where the key identifies
+the resource whose access we wish to control, and the value identifies the
+channel policy (group) that is allowed to access it. For example
+``lscc/GetDeploymentSpec: /Channel/Application/Readers``
+defines that the access to the life cycle chaincode ``GetDeploymentSpec`` API
+(the resource) is accessible by identities which satisfy the
+``/Channel/Application/Readers`` policy.
+
+A set of default ACLs is provided in the ``configtx.yaml`` file which is
+used by configtxgen to build channel configurations. The defaults can be set
+in the top level "Application" section of ``configtx.yaml`` or overridden
+on a per profile basis in the "Profiles" section.
 
 .. _Block:
 
@@ -43,8 +71,7 @@ file system.
 Chaincode
 ---------
 
-Chaincode is software, running on a ledger, to encode assets and the transaction
-instructions (business logic) for modifying the assets.
+See Smart-Contract_.
 
 .. _Channel:
 
@@ -56,6 +83,7 @@ isolation and confidentiality. A channel-specific ledger is shared across the
 peers in the channel, and transacting parties must be properly authenticated to
 a channel in order to interact with it.  Channels are defined by a
 Configuration-Block_.
+
 
 .. _Commitment:
 
@@ -100,17 +128,24 @@ A broader term overarching the entire transactional flow, which serves to genera
 an agreement on the order and to confirm the correctness of the set of transactions
 constituting a block.
 
+.. Consortium
+
+Consortium
+----------
+
+A consortium is a collection of non-orderer organizations on the blockchain
+network. These are the organizations that form and join channels and that own
+peers. While a blockchain network can have multiple consortia, most blockchain
+networks have a single consortium. At channel creation time, all organizations
+added to the channel must be part of a consortium. However, an organization
+that is not defined in a consortium may be added to an existing channel.
+
 .. _Current-State:
 
 Current State
 -------------
 
-The current state of the ledger represents the latest values for all keys ever
-included in its chain transaction log. Peers commit the latest values to ledger
-current state for each valid transaction included in a processed block. Since
-current state represents all latest key values known to the channel, it is
-sometimes referred to as World State. Chaincode executes transaction proposals
-against current state data.
+See World-State_.
 
 .. _Dynamic-Membership:
 
@@ -164,8 +199,8 @@ certificate (ECert) to each authorized user.
 Genesis Block
 -------------
 
-The configuration block that initializes a blockchain network or channel, and
-also serves as the first block on a chain.
+The configuration block that initializes the ordering service, or serves as the
+first block on a chain.
 
 .. _Gossip-Protocol:
 
@@ -218,27 +253,41 @@ invoke, and an array of arguments.
 Leading Peer
 ------------
 
-Each Member_ can own multiple peers on each channel that
-it subscribes to. One of these peers is serves as the leading peer for the channel,
-in order to communicate with the network ordering service on behalf of the
-member. The ordering service "delivers" blocks to the leading peer(s) on a
-channel, who then distribute them to other peers within the same member cluster.
+Each Organization_ can own multiple peers on each channel that
+they subscribe to. One or more of these peers should serve as the leading peer
+for the channel, in order to communicate with the network ordering service on
+behalf of the organization. The ordering service delivers blocks to the
+leading peer(s) on a channel, who then distribute them to other peers within
+the same organization.
 
 .. _Ledger:
 
 Ledger
 ------
+THIS REQUIRES UPDATING
 
-A ledger is a channel's chain and current state data which is maintained by each
-peer on the channel.
+A ledger consists of two distinct, though related, parts -- a "blockchain" and
+the "state database", also known as "world state". Unlike other ledgers,
+blockchains are **immutable** -- that is, once a block has been added to the
+chain, it cannot be changed. In contrast, the "world state" is a database
+containing the current value of the set of key-value pairs that have been added,
+modified or deleted by the set of validated and committed transactions in the
+blockchain.
+
+It's helpful to think of there being one **logical** ledger for each channel in
+the network. In reality, each peer in a channel maintains its own copy of the
+ledger -- which is kept consistent with every other peer's copy through a
+process called **consensus**. The term **Distributed Ledger Technology**
+(**DLT**) is often associated with this kind of ledger -- one that is logically
+singular, but has many identical copies distributed across a set of network
+nodes (peers and the ordering service).
 
 .. _Member:
 
 Member
 ------
 
-A legally separate entity that owns a unique root certificate for the network.
-Network components such as peer nodes and application clients will be linked to a member.
+See Organization_.
 
 .. _MSP:
 
@@ -277,6 +326,21 @@ designed to support pluggable implementations beyond the out-of-the-box SOLO and
 The ordering service is a common binding for the overall network; it contains the cryptographic
 identity material tied to each Member_.
 
+.. _Organization:
+
+Organization
+-----------------
+Also known as "members", organizations are invited to join the blockchain network
+by a blockchain service provider. An organization is joined to a network by adding its
+Membership Service Provider (MSP_) to the network. The MSP defines how other members of the
+network may verify that signatures (such as those over transactions) were generated by a valid
+identity, issued by that organization. The particular access rights of identities within an MSP
+are governed by policies which are are also agreed upon when the organization is joined to the
+network. An organization can be as large as a multi-national corporation or as small as an
+individual. The transaction endpoint of an organization is a Peer_. A collection of organizations
+form a Consortium_. While all of the organizations on a network are members, not every organization
+will be part of a consortium.
+
 .. _Peer:
 
 Peer
@@ -290,8 +354,39 @@ read/write operations to the ledger.  Peers are owned and maintained by members.
 Policy
 ------
 
-There are policies for endorsement, validation, chaincode
-management and network/channel management.
+Policies are expressions composed of properties of digital identities, for
+example: ``Org1.Peer OR Org2.Peer``. They are used to restrict access to
+resources on a blockchain network. For instance, they dictate who can read from
+or write to a channel, or who can use a specific chaincode API via an ACL_.
+Policies may be defined in ``configtx.yaml`` prior to bootstrapping an ordering
+service or creating a channel, or they can be specified when instantiating
+chaincode on a channel. A default set of policies ship in the sample
+``configtx.yaml`` which will be appropriate for most networks.
+
+.. _glossary-Private-Data:
+
+Private Data
+------------
+
+Confidential data that is stored in a private database on each authorized peer,
+logically separate from the channel ledger data. Access to this data is
+restricted to one or more organizations on a channel via a private data
+collection definition. Unauthorized organizations will have a hash of the
+private data on the channel ledger as evidence of the transaction data. Also,
+for further privacy, hashes of the private data go through the
+Ordering-Service_, not the private data itself, so this keeps private data
+confidential from Orderer.
+
+.. _glossary-Private-Data-Collection:
+
+Private Data Collection (Collection)
+------------------------------------
+
+Used to manage confidential data that two or more organizations on a channel
+want to keep private from other organizations on that channel. The collection
+definition describes a subset of organizations on a channel entitled to store
+a set of private data, which by extension implies that only these organizations
+can transact with the private data.
 
 .. _Proposal:
 
@@ -325,8 +420,22 @@ for developers to write and test chaincode applications. The SDK is fully
 configurable and extensible through a standard interface. Components, including
 cryptographic algorithms for signatures, logging frameworks and state stores,
 are easily swapped in and out of the SDK. The SDK provides APIs for transaction
-processing, membership services, node traversal and event handling. The SDK
-comes in multiple flavors: Node.js, Java. and Python.
+processing, membership services, node traversal and event handling.
+
+Currently, the two officially supported SDKs are for Node.js and Java, while three
+more -- Python, Go and REST -- are not yet official but can still be downloaded
+and tested.
+
+.. _Smart-Contract:
+
+Smart Contract
+--------------
+
+A smart contract is code -- invoked by a client application external to the
+blockchain network -- that manages access and modifications to a set of
+key-value pairs in the :ref:`World-State`. In Hyperledger Fabric, smart
+contracts are referred to as chaincode. Smart contract chaincode is installed
+onto peer nodes and instantiated to one or more channels.
 
 .. _State-DB:
 
@@ -363,6 +472,25 @@ Invokes are requests to read/write data from the ledger. Instantiate is a reques
 start and initialize a chaincode on a channel. Application clients gather invoke or
 instantiate responses from endorsing peers and package the results and endorsements
 into a transaction that is submitted for ordering, validation, and commit.
+
+.. _World-State:
+
+World State
+-----------
+
+Also known as the “current state”, the world state is a component of the
+HyperLedger Fabric :ref:`Ledger`. The world state represents the latest values
+for all keys included in the chain transaction log. Chaincode executes
+transaction proposals against world state data because the world state provides
+direct access to the latest value of these keys rather than having to calculate
+them by traversing the entire transaction log. The world state will change
+every time the value of a key changes (for example, when the ownership of a
+car -- the "key" -- is transferred from one owner to another -- the
+"value") or when a new key is added (a car is created). As a result, the world
+state is critical to a transaction flow, since the current state of a key-value
+pair must be known before it can be changed. Peers commit the latest values to
+the ledger world state for each valid transaction included in a processed block.
+
 
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/

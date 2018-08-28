@@ -177,6 +177,10 @@ type gossipAdapterMock struct {
 	mock.Mock
 }
 
+func (ga *gossipAdapterMock) Sign(msg *proto.GossipMessage) (*proto.SignedGossipMessage, error) {
+	return msg.NoopSign()
+}
+
 func (ga *gossipAdapterMock) GetConf() Config {
 	args := ga.Called()
 	return args.Get(0).(Config)
@@ -276,13 +280,29 @@ func TestBadInput(t *testing.T) {
 	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{}).(*gossipChannel)
 	assert.False(t, gc.verifyMsg(nil))
 	assert.False(t, gc.verifyMsg(&receivedMsg{msg: nil, PKIID: nil}))
+}
 
-	s, _ := createDataMsg(0, channelA).NoopSign()
-	gc.UpdateStateInfo(s)
-	gc.IsMemberInChan(discovery.NetworkMember{PKIid: pkiIDnilOrg})
-	s, _ = (&proto.GossipMessage{}).NoopSign()
-	gc.HandleMessage(&receivedMsg{msg: s})
-	gc.HandleMessage(&receivedMsg{msg: createDataUpdateMsg(0), PKIID: pkiIDnilOrg})
+func TestSelf(t *testing.T) {
+	t.Parallel()
+
+	cs := &cryptoService{}
+	pkiID1 := common.PKIidType("1")
+	jcm := &joinChanMsg{
+		members2AnchorPeers: map[string][]api.AnchorPeer{
+			string(orgInChannelA): {},
+		},
+	}
+	adapter := new(gossipAdapterMock)
+	configureAdapter(adapter)
+	adapter.On("Gossip", mock.Anything)
+	gc := NewGossipChannel(pkiID1, orgInChannelA, cs, channelA, adapter, jcm)
+	gc.UpdateLedgerHeight(1)
+	gMsg := gc.Self().GossipMessage
+	env := gc.Self().Envelope
+	sMsg, _ := env.ToGossipMessage()
+	assert.Equal(t, gMsg, sMsg.GossipMessage)
+	assert.Equal(t, gMsg.GetStateInfo().Properties.LedgerHeight, uint64(1))
+	assert.Equal(t, gMsg.GetStateInfo().PkiId, []byte("1"))
 }
 
 func TestMsgStoreNotExpire(t *testing.T) {
@@ -317,7 +337,7 @@ func TestMsgStoreNotExpire(t *testing.T) {
 	adapter.On("GetConf").Return(conf)
 
 	gc := NewGossipChannel(pkiID1, orgInChannelA, cs, channelA, adapter, jcm)
-	gc.UpdateStateInfo(createStateInfoMsg(1, pkiID1, channelA))
+	gc.UpdateLedgerHeight(1)
 	// Receive StateInfo messages from other peers
 	gc.HandleMessage(&receivedMsg{PKIID: pkiID2, msg: createStateInfoMsg(1, pkiID2, channelA)})
 	gc.HandleMessage(&receivedMsg{PKIID: pkiID3, msg: createStateInfoMsg(1, pkiID3, channelA)})
@@ -478,8 +498,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
 	})
 
 	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{})
-	stateInfoMsg := createStateInfoMsg(ledgerHeight, pkiIDInOrg1, channelA)
-	gc.UpdateStateInfo(stateInfoMsg)
+	gc.UpdateLedgerHeight(uint64(ledgerHeight))
 	defer gc.Stop()
 
 	var msg *proto.SignedGossipMessage
@@ -490,9 +509,6 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
 		msg = m
 	}
 
-	nodeMeta, err := common.FromBytes(msg.GetStateInfo().Metadata)
-	assert.NoError(t, err, "ReceivedMetadata is invalid")
-	assert.Equal(t, ledgerHeight, int(nodeMeta.LedgerHeight), "Received different ledger height than expected")
 	assert.Equal(t, ledgerHeight, int(msg.GetStateInfo().Properties.LedgerHeight))
 }
 
@@ -1200,9 +1216,7 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
 	stateInfoMsg := &receivedMsg{PKIID: pkiIDInOrg1, msg: stateInfoSnapshotForChannel(channelA, createStateInfoMsg(4, pkiIDInOrg1, channelA))}
 	gc.HandleMessage(stateInfoMsg)
 	assert.NotEmpty(t, gc.GetPeers())
-	nodeMeta, err := common.FromBytes(gc.GetPeers()[0].Metadata)
-	assert.NoError(t, err)
-	assert.Equal(t, 4, int(nodeMeta.LedgerHeight))
+	assert.Equal(t, 4, int(gc.GetPeers()[0].Properties.LedgerHeight))
 
 	// Check we don't respond to stateInfoSnapshot requests with wrong MAC
 	sMsg, _ := (&proto.GossipMessage{
@@ -1254,9 +1268,7 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
 		assert.Len(t, elements, 1)
 		sMsg, err := elements[0].ToGossipMessage()
 		assert.NoError(t, err)
-		nodeMeta, err := common.FromBytes(sMsg.GetStateInfo().Metadata)
-		assert.NoError(t, err)
-		assert.Equal(t, 4, int(nodeMeta.LedgerHeight))
+		assert.Equal(t, 4, int(sMsg.GetStateInfo().Properties.LedgerHeight))
 	}
 
 	// Ensure we don't crash if we got an invalid state info message
@@ -1671,6 +1683,10 @@ func TestChannelGetPeers(t *testing.T) {
 	assert.Len(t, gc.GetPeers(), 1)
 	assert.Equal(t, pkiIDInOrg1, gc.GetPeers()[0].PKIid)
 
+	// Ensure envelope from GetPeers is valid
+	gMsg, _ := gc.GetPeers()[0].Envelope.ToGossipMessage()
+	assert.Equal(t, []byte(pkiIDInOrg1), gMsg.GetStateInfo().PkiId)
+
 	gc.HandleMessage(&receivedMsg{msg: createStateInfoMsg(10, pkiIDInOrg1ButNotEligible, channelA), PKIID: pkiIDInOrg1ButNotEligible})
 	cs.On("VerifyByChannel", mock.Anything).Return(errors.New("Not eligible"))
 	cs.mocked = true
@@ -1714,7 +1730,7 @@ func TestOnDemandGossip(t *testing.T) {
 		assert.Fail(t, "Should not have gossiped because metadata has not been updated yet")
 	case <-time.After(time.Millisecond * 500):
 	}
-	gc.UpdateStateInfo(createStateInfoMsg(0, pkiIDInOrg1, channelA))
+	gc.UpdateLedgerHeight(0)
 	select {
 	case <-gossipedEvents:
 	case <-time.After(time.Second):
@@ -1742,7 +1758,7 @@ func TestOnDemandGossip(t *testing.T) {
 		assert.Fail(t, "Should not have gossiped a fourth time, because dirty flag should have been turned off")
 	case <-time.After(time.Millisecond * 500):
 	}
-	gc.UpdateStateInfo(createStateInfoMsg(1, pkiIDInOrg1, channelA))
+	gc.UpdateLedgerHeight(1)
 	select {
 	case <-gossipedEvents:
 	case <-time.After(time.Second):
@@ -1771,7 +1787,7 @@ func TestChannelPullWithDigestsFilter(t *testing.T) {
 	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{})
 	go gc.HandleMessage(&receivedMsg{PKIID: pkiIDInOrg1, msg: createStateInfoMsg(100, pkiIDInOrg1, channelA)})
 
-	gc.UpdateStateInfo(createStateInfoMsg(11, pkiIDInOrg1, channelA))
+	gc.UpdateLedgerHeight(11)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1843,15 +1859,12 @@ func dataMsgOfChannel(seqnum uint64, channel common.ChainID) *proto.SignedGossip
 }
 
 func createStateInfoMsg(ledgerHeight int, pkiID common.PKIidType, channel common.ChainID) *proto.SignedGossipMessage {
-	nodeMeta := common.NewNodeMetastate(uint64(ledgerHeight))
-	metaBytes, _ := nodeMeta.Bytes()
 	sMsg, _ := (&proto.GossipMessage{
 		Tag: proto.GossipMessage_CHAN_OR_ORG,
 		Content: &proto.GossipMessage_StateInfo{
 			StateInfo: &proto.StateInfo{
 				Channel_MAC: GenerateMAC(pkiID, channel),
 				Timestamp:   &proto.PeerTime{IncNum: uint64(time.Now().UnixNano()), SeqNum: 1},
-				Metadata:    metaBytes,
 				PkiId:       []byte(pkiID),
 				Properties: &proto.Properties{
 					LedgerHeight: uint64(ledgerHeight),

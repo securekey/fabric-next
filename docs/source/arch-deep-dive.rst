@@ -81,7 +81,7 @@ support for cross-chaincode transactions (post-v1 feature).*
 ^^^^^^^^^^^^
 
 The latest state of the blockchain (or, simply, *state*) is modeled as a
-versioned key/value store (KVS), where keys are names and values are
+versioned key-value store (KVS), where keys are names and values are
 arbitrary blobs. These entries are manipulated by the chaincodes
 (applications) running on the blockchain through ``put`` and ``get``
 KVS-operations. The state is stored persistently and updates to the
@@ -98,14 +98,17 @@ More formally, state ``s`` is modeled as an element of a mapping
    function ``next: N -> N`` takes an element of ``N`` and returns the
    next version number.
 
-Both ``V`` and ``N`` contain a special element ``\bot``, which is in
-case of ``N`` the lowest element. Initially all keys are mapped to
-``(\bot,\bot)``. For ``s(k)=(v,ver)`` we denote ``v`` by ``s(k).value``,
+Both ``V`` and ``N`` contain a special element |falsum| (empty type), which is
+in case of ``N`` the lowest element. Initially all keys are mapped to
+(|falsum|, |falsum|). For ``s(k)=(v,ver)`` we denote ``v`` by ``s(k).value``,
 and ``ver`` by ``s(k).version``.
+
+.. |falsum| unicode:: U+22A5
+.. |in| unicode:: U+2208
 
 KVS operations are modeled as follows:
 
--  ``put(k,v)``, for ``k\in K`` and ``v\in V``, takes the blockchain
+-  ``put(k,v)`` for ``k`` |in| ``K`` and ``v`` |in| ``V``, takes the blockchain
    state ``s`` and changes it to ``s'`` such that
    ``s'(k)=(v,next(s(k).version))`` with ``s'(k')=s(k')`` for all
    ``k'!=k``.
@@ -277,7 +280,7 @@ transaction endorsement (Section 2) assuming one blob per ``deliver``
 event. These are easily extended to blocks, assuming that a ``deliver``
 event for a block corresponds to a sequence of individual ``deliver``
 events for each blob within a block, according to the above mentioned
-deterministic ordering of blobs within a blocs.
+deterministic ordering of blobs within a block.
 
 **Ordering service properties**
 
@@ -464,11 +467,11 @@ As a result of the execution, the endorsing peer computes *read version
 dependencies* (``readset``) and *state updates* (``writeset``), also
 called *MVCC+postimage info* in DB language.
 
-Recall that the state consists of key/value (k/v) pairs. All k/v entries
-are versioned, that is, every entry contains ordered version
-information, which is incremented every time when the value stored under
+Recall that the state consists of key-value pairs. All key-value entries
+are versioned; that is, every entry contains ordered version
+information, which is incremented each time the value stored under
 a key is updated. The peer that interprets the transaction records all
-k/v pairs accessed by the chaincode, either for reading or for writing,
+key-value pairs accessed by the chaincode, either for reading or for writing,
 but the peer does not yet update its state. More specifically:
 
 -  Given state ``s`` before an endorsing peer executes a transaction,

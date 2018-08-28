@@ -18,22 +18,24 @@ package node
 
 import (
 	"bytes"
-	"io/ioutil"
 	"os"
-	"strconv"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/hyperledger/fabric/common/viperutil"
 	"github.com/hyperledger/fabric/core/handlers/library"
 	"github.com/hyperledger/fabric/msp/mgmt/testtools"
+	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 )
 
 func TestStartCmd(t *testing.T) {
-	viper.Set("peer.address", "0.0.0.0:6051")
+	defer viper.Reset()
+
+	g := NewGomegaWithT(t)
+
+	viper.Set("peer.address", "localhost:6051")
 	viper.Set("peer.listenAddress", "0.0.0.0:6051")
 	viper.Set("peer.chaincodeListenAddress", "0.0.0.0:6052")
 	viper.Set("peer.fileSystemPath", "/tmp/hyperledger/test")
@@ -44,6 +46,8 @@ func TestStartCmd(t *testing.T) {
 		viper.Set("logging."+module, "INFO")
 	}
 
+	defer os.RemoveAll("/tmp/hyperledger/test")
+
 	msptesttools.LoadMSPSetupForTesting()
 
 	go func() {
@@ -51,74 +55,23 @@ func TestStartCmd(t *testing.T) {
 		assert.NoError(t, cmd.Execute(), "expected to successfully start command")
 	}()
 
-	timer := time.NewTimer(time.Second * 3)
-	defer timer.Stop()
-
-	// waiting for pid file will be created
-loop:
-	for {
-		select {
-		case <-timer.C:
-			t.Errorf("timeout waiting for start command")
-		default:
-			_, err := os.Stat("/tmp/hyperledger/test/peer.pid")
-			if err != nil {
-				time.Sleep(200 * time.Millisecond)
-			} else {
-				break loop
-			}
-		}
-	}
-
-	pidFile, err := ioutil.ReadFile("/tmp/hyperledger/test/peer.pid")
-	if err != nil {
-		t.Fail()
-		t.Errorf("can't delete pid file")
-	}
-	pid, err := strconv.Atoi(string(pidFile))
-	killerr := syscall.Kill(pid, syscall.SIGTERM)
-	if killerr != nil {
-		t.Errorf("Error trying to kill -15 pid %d: %s", pid, killerr)
-	}
-
-	os.RemoveAll("/tmp/hyperledger/test")
+	g.Eventually(grpcProbe("localhost:6051")).Should(BeTrue())
 }
 
-func TestWritePid(t *testing.T) {
-	var tests = []struct {
-		name     string
-		fileName string
-		pid      int
-		expected bool
-	}{
-		{
-			name:     "readPid success",
-			fileName: "/tmp/hyperledger/test/peer.pid",
-			pid:      os.Getpid(),
-			expected: true,
-		},
-		{
-			name:     "readPid error",
-			fileName: "",
-			pid:      os.Getpid(),
-			expected: false,
-		},
-	}
+func TestAdminHasSeparateListener(t *testing.T) {
+	assert.False(t, adminHasSeparateListener("0.0.0.0:7051", ""))
 
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Logf("Running test %s", test.name)
-			if test.expected {
-				err := writePid(test.fileName, test.pid)
-				os.Remove(test.fileName)
-				assert.NoError(t, err, "expected to successfully write pid file")
-			} else {
-				err := writePid(test.fileName, test.pid)
-				assert.Error(t, err, "addition of empty pid filename should fail")
-			}
-		})
-	}
+	assert.Panics(t, func() {
+		adminHasSeparateListener("foo", "blabla")
+	})
+
+	assert.Panics(t, func() {
+		adminHasSeparateListener("0.0.0.0:7051", "blabla")
+	})
+
+	assert.False(t, adminHasSeparateListener("0.0.0.0:7051", "0.0.0.0:7051"))
+	assert.False(t, adminHasSeparateListener("0.0.0.0:7051", "127.0.0.1:7051"))
+	assert.True(t, adminHasSeparateListener("0.0.0.0:7051", "0.0.0.0:7055"))
 }
 
 func TestHandlerMap(t *testing.T) {
@@ -223,4 +176,13 @@ func TestComputeChaincodeEndpoint(t *testing.T) {
 
 	/*** Scenario 4: set up both chaincodeAddress and chaincodeListenAddress ***/
 	// This scenario will be the same to scenarios 3: set up chaincodeAddress only.
+}
+
+func grpcProbe(addr string) bool {
+	c, err := grpc.Dial(addr, grpc.WithBlock(), grpc.WithInsecure())
+	if err == nil {
+		c.Close()
+		return true
+	}
+	return false
 }

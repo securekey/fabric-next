@@ -15,9 +15,11 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
+	"github.com/hyperledger/fabric/core/ledger/confighistory"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -27,25 +29,50 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("kvledger")
 
+var commitWithPvtDataTimer tally.Timer
+var commitWithPvtDataLockTimer tally.Timer
+var pvtDataAndBlockByNumTimer tally.Timer
+var pvtDataAndBlockByNumLockTimer tally.Timer
+var pvtDataByNumTimer tally.Timer
+var pvtDataByNumLockTimer tally.Timer
+
+func init() {
+	commitWithPvtDataTimer = metrics.RootScope.Timer("kvledger_CommitWithPvtData_time_seconds")
+	commitWithPvtDataLockTimer = metrics.RootScope.Timer("kvledger_CommitWithPvtData_Lock_time_seconds")
+	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_time_seconds")
+	pvtDataAndBlockByNumLockTimer = metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_Lock_time_seconds")
+	pvtDataByNumTimer = metrics.RootScope.Timer("kvledger_GetPvtDataByNum_time_seconds")
+	pvtDataByNumLockTimer = metrics.RootScope.Timer("kvledger_GetPvtDataByNum_Lock_time_seconds")
+}
+
 // KVLedger provides an implementation of `ledger.PeerLedger`.
 // This implementation provides a key-value based data model
 type kvLedger struct {
-	ledgerID        string
-	blockStore      *ledgerstorage.Store
-	txtmgmt         txmgr.TxMgr
-	historyDB       historydb.HistoryDB
-	blockAPIsRWLock *sync.RWMutex
+	ledgerID               string
+	blockStore             *ledgerstorage.Store
+	txtmgmt                txmgr.TxMgr
+	historyDB              historydb.HistoryDB
+	configHistoryRetriever ledger.ConfigHistoryRetriever
+	blockAPIsRWLock        *sync.RWMutex
 }
 
 // NewKVLedger constructs new `KVLedger`
-func newKVLedger(ledgerID string, blockStore *ledgerstorage.Store,
-	versionedDB privacyenabledstate.DB, historyDB historydb.HistoryDB,
-	stateListeners ledger.StateListeners, bookkeeperProvider bookkeeping.Provider) (*kvLedger, error) {
+func newKVLedger(
+	ledgerID string,
+	blockStore *ledgerstorage.Store,
+	versionedDB privacyenabledstate.DB,
+	historyDB historydb.HistoryDB,
+	configHistoryMgr confighistory.Mgr,
+	stateListeners []ledger.StateListener,
+	bookkeeperProvider bookkeeping.Provider) (*kvLedger, error) {
+
 	logger.Debugf("Creating KVLedger ledgerID=%s: ", ledgerID)
+	stateListeners = append(stateListeners, configHistoryMgr)
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
 	l := &kvLedger{ledgerID: ledgerID, blockStore: blockStore, historyDB: historyDB, blockAPIsRWLock: &sync.RWMutex{}}
@@ -67,10 +94,11 @@ func newKVLedger(ledgerID string, blockStore *ledgerstorage.Store,
 	if err := l.recoverDBs(); err != nil {
 		panic(fmt.Errorf(`Error during state DB recovery:%s`, err))
 	}
+	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
 	return l, nil
 }
 
-func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners ledger.StateListeners,
+func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
 	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider)
@@ -239,6 +267,11 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
+	// Measure the whole
+	stopWatch := commitWithPvtDataTimer.Start()
+	defer stopWatch.Stop()
+
 	var err error
 	block := pvtdataAndBlock.Block
 	blockNo := pvtdataAndBlock.Block.Header.Number
@@ -251,8 +284,12 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 	logger.Debugf("Channel [%s]: Committing block [%d] to storage", l.ledgerID, blockNo)
 
+	// Measure acquiring the lock
+	lockStopWatch := commitWithPvtDataLockTimer.Start()
 	l.blockAPIsRWLock.Lock()
 	defer l.blockAPIsRWLock.Unlock()
+	lockStopWatch.Stop()
+
 	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
 		return err
 	}
@@ -276,8 +313,18 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
+
+	// Measure the whole
+	stopWatch := pvtDataAndBlockByNumTimer.Start()
+	defer stopWatch.Stop()
+
 	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
+
+	// Measure acquiring the lock
+	lockStopWatch := pvtDataAndBlockByNumLockTimer.Start()
 	l.blockAPIsRWLock.RLock()
+	lockStopWatch.Stop()
+
 	l.blockAPIsRWLock.RUnlock()
 	return blockAndPvtdata, err
 }
@@ -285,8 +332,18 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
 // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
 // The pvt data is filtered by the list of 'collections' supplied
 func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+
+	// Measure the whole
+	stopWatch := pvtDataByNumTimer.Start()
+	defer stopWatch.Stop()
+
 	pvtdata, err := l.blockStore.GetPvtDataByNum(blockNum, filter)
+
+	// Measure acquiring the lock
+	lockStopWatch := pvtDataByNumLockTimer.Start()
 	l.blockAPIsRWLock.RLock()
+	lockStopWatch.Stop()
+
 	l.blockAPIsRWLock.RUnlock()
 	return pvtdata, err
 }
@@ -301,6 +358,10 @@ func (l *kvLedger) PurgePrivateData(maxBlockNumToRetain uint64) error {
 // PrivateDataMinBlockNum returns the lowest retained endorsement block height
 func (l *kvLedger) PrivateDataMinBlockNum() (uint64, error) {
 	return 0, fmt.Errorf("not yet implemented")
+}
+
+func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error) {
+	return l.configHistoryRetriever, nil
 }
 
 // Close closes `KVLedger`

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -24,6 +25,8 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 )
+
+var validatePvtdataFailedCounter = metrics.RootScope.Counter("valimpl_Validate_Pvtdata_Failed_Count")
 
 // validateAndPreparePvtBatch pulls out the private write-set for the transactions that are marked as valid
 // by the internal public data validator. Finally, it validates (if not already self-endorsed) the pvt rwset against the
@@ -43,6 +46,7 @@ func validateAndPreparePvtBatch(block *valinternal.Block, pvtdata map[uint64]*le
 		}
 		if requiresPvtdataValidation(txPvtdata) {
 			if err := validatePvtdata(tx, txPvtdata); err != nil {
+				validatePvtdataFailedCounter.Inc(1)
 				return nil, err
 			}
 		}
@@ -88,15 +92,11 @@ func validatePvtdata(tx *valinternal.Transaction, pvtdata *ledger.TxPvtData) err
 
 // preprocessProtoBlock parses the proto instance of block into 'Block' structure.
 // The retuned 'Block' structure contains only transactions that are endorser transactions and are not alredy marked as invalid
-func preprocessProtoBlock(txmgr txmgr.TxMgr, block *common.Block, doMVCCValidation bool) (*valinternal.Block, error) {
+func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, value []byte) error,
+	block *common.Block, doMVCCValidation bool) (*valinternal.Block, error) {
 	b := &valinternal.Block{Num: block.Header.Number}
 	// Committer validator has already set validation flags based on well formed tran checks
 	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	// Precaution in case committer validator has not added validation flags yet
-	if len(txsFilter) == 0 {
-		txsFilter = util.NewTxValidationFlags(len(block.Data.Data))
-		block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
-	}
 	for txIndex, envBytes := range block.Data.Data {
 		var env *common.Envelope
 		var chdr *common.ChannelHeader
@@ -150,6 +150,14 @@ func preprocessProtoBlock(txmgr txmgr.TxMgr, block *common.Block, doMVCCValidati
 			}
 		}
 		if txRWSet != nil {
+			if err := validateWriteset(txRWSet, validateKVFunc); err != nil {
+				logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
+					" marked as invalid. Reason code [%s]. Message: [%s]",
+					chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
+					peer.TxValidationCode_INVALID_WRITESET, err.Error())
+				txsFilter.SetFlag(txIndex, peer.TxValidationCode_INVALID_WRITESET)
+				continue
+			}
 			b.Txs = append(b.Txs, &valinternal.Transaction{IndexInBlock: txIndex, ID: chdr.TxId, RWSet: txRWSet})
 		}
 	}
@@ -178,6 +186,24 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 		return nil, err
 	}
 	return simRes.PubSimulationResults, nil
+}
+
+func validateWriteset(txRWSet *rwsetutil.TxRwSet, validateKVFunc func(key string, value []byte) error) error {
+	for _, nsRwSet := range txRWSet.NsRwSets {
+		if nsRwSet == nil {
+			continue
+		}
+		pubWriteset := nsRwSet.KvRwSet
+		if pubWriteset == nil {
+			continue
+		}
+		for _, kvwrite := range pubWriteset.Writes {
+			if err := validateKVFunc(kvwrite.Key, kvwrite.Value); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // postprocessProtoBlock updates the proto block's validation flags (in metadata) by the results of validation process

@@ -43,8 +43,11 @@ func (m *MockQueryExecutor) GetState(namespace string, key string) ([]byte, erro
 }
 
 func (m *MockQueryExecutor) GetStateMultipleKeys(namespace string, keys []string) ([][]byte, error) {
-	return nil, nil
-
+	res, err := m.GetState(namespace, keys[0])
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{res}, nil
 }
 
 func (m *MockQueryExecutor) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ledger.ResultsIterator, error) {
@@ -73,4 +76,12 @@ func (m *MockQueryExecutor) ExecuteQueryOnPrivateData(namespace, collection, que
 }
 
 func (m *MockQueryExecutor) Done() {
+}
+
+func (m *MockQueryExecutor) GetStateMetadata(namespace, key string) (map[string][]byte, error) {
+	return nil, nil
+}
+
+func (m *MockQueryExecutor) GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error) {
+	return nil, nil
 }

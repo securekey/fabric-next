@@ -17,14 +17,13 @@ limitations under the License.
 package committer
 
 import (
-	"fmt"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/events/producer"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/op/go-logging"
+	"github.com/pkg/errors"
 )
 
 //--------!!!IMPORTANT!!-!!IMPORTANT!!-!!IMPORTANT!!---------
@@ -38,11 +37,29 @@ func init() {
 	logger = flogging.MustGetLogger("committer")
 }
 
+// PeerLedgerSupport abstract out the API's of ledger.PeerLedger interface
+// required to implement LedgerCommitter
+type PeerLedgerSupport interface {
+	GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error)
+
+	GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error)
+
+	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+
+	GetBlockchainInfo() (*common.BlockchainInfo, error)
+
+	GetBlockByNumber(blockNumber uint64) (*common.Block, error)
+
+	GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error)
+
+	Close()
+}
+
 // LedgerCommitter is the implementation of  Committer interface
 // it keeps the reference to the ledger to commit blocks and retrieve
 // chain information
 type LedgerCommitter struct {
-	ledger.PeerLedger
+	PeerLedgerSupport
 	eventer ConfigBlockEventer
 }
 
@@ -52,15 +69,15 @@ type ConfigBlockEventer func(block *common.Block) error
 
 // NewLedgerCommitter is a factory function to create an instance of the committer
 // which passes incoming blocks via validation and commits them into the ledger.
-func NewLedgerCommitter(ledger ledger.PeerLedger) *LedgerCommitter {
+func NewLedgerCommitter(ledger PeerLedgerSupport) *LedgerCommitter {
 	return NewLedgerCommitterReactive(ledger, func(_ *common.Block) error { return nil })
 }
 
 // NewLedgerCommitterReactive is a factory function to create an instance of the committer
 // same as way as NewLedgerCommitter, while also provides an option to specify callback to
 // be called upon new configuration block arrival and commit event
-func NewLedgerCommitterReactive(ledger ledger.PeerLedger, eventer ConfigBlockEventer) *LedgerCommitter {
-	return &LedgerCommitter{PeerLedger: ledger, eventer: eventer}
+func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEventer) *LedgerCommitter {
+	return &LedgerCommitter{PeerLedgerSupport: ledger, eventer: eventer}
 }
 
 // preCommit takes care to validate the block and update based on its
@@ -70,7 +87,7 @@ func (lc *LedgerCommitter) preCommit(block *common.Block) error {
 	if utils.IsConfigBlock(block) {
 		logger.Debug("Received configuration update, calling CSCC ConfigUpdate")
 		if err := lc.eventer(block); err != nil {
-			return fmt.Errorf("Could not update CSCC with new configuration update due to %s", err)
+			return errors.WithMessage(err, "could not update CSCC with new configuration update")
 		}
 	}
 	return nil
@@ -85,7 +102,7 @@ func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvt
 	}
 
 	// Committing new block
-	if err := lc.PeerLedger.CommitWithPvtData(blockAndPvtData); err != nil {
+	if err := lc.PeerLedgerSupport.CommitWithPvtData(blockAndPvtData); err != nil {
 		return err
 	}
 
@@ -97,7 +114,7 @@ func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvt
 
 // GetPvtDataAndBlockByNum retrieves private data and block for given sequence number
 func (lc *LedgerCommitter) GetPvtDataAndBlockByNum(seqNum uint64) (*ledger.BlockAndPvtData, error) {
-	return lc.PeerLedger.GetPvtDataAndBlockByNum(seqNum, nil)
+	return lc.PeerLedgerSupport.GetPvtDataAndBlockByNum(seqNum, nil)
 }
 
 // postCommit publish event or handle other tasks once block committed to the ledger
@@ -105,13 +122,13 @@ func (lc *LedgerCommitter) postCommit(block *common.Block) {
 	// create/send block events *after* the block has been committed
 	bevent, fbevent, channelID, err := producer.CreateBlockEvents(block)
 	if err != nil {
-		logger.Errorf("Channel [%s] Error processing block events for block number [%d]: %s", channelID, block.Header.Number, err)
+		logger.Errorf("Channel [%s] Error processing block events for block number [%d]: %+v", channelID, block.Header.Number, err)
 	} else {
 		if err := producer.Send(bevent); err != nil {
-			logger.Errorf("Channel [%s] Error sending block event for block number [%d]: %s", channelID, block.Header.Number, err)
+			logger.Errorf("Channel [%s] Error sending block event for block number [%d]: %+v", channelID, block.Header.Number, err)
 		}
 		if err := producer.Send(fbevent); err != nil {
-			logger.Errorf("Channel [%s] Error sending filtered block event for block number [%d]: %s", channelID, block.Header.Number, err)
+			logger.Errorf("Channel [%s] Error sending filtered block event for block number [%d]: %+v", channelID, block.Header.Number, err)
 		}
 	}
 }

@@ -229,6 +229,11 @@ func (ks *fileBasedKeyStore) searchKeystoreForSKI(ski []byte) (k bccsp.Key, err 
 		if f.IsDir() {
 			continue
 		}
+
+		if f.Size() > (1 << 16) { //64k, somewhat arbitrary limit, considering even large RSA keys
+			continue
+		}
+
 		raw, err := ioutil.ReadFile(filepath.Join(ks.path, f.Name()))
 		if err != nil {
 			continue
@@ -254,7 +259,7 @@ func (ks *fileBasedKeyStore) searchKeystoreForSKI(ski []byte) (k bccsp.Key, err 
 
 		return k, nil
 	}
-	return nil, errors.New("Key type not recognized")
+	return nil, fmt.Errorf("Key with SKI %s not found in %s", hex.EncodeToString(ski), ks.path)
 }
 
 func (ks *fileBasedKeyStore) getSuffix(alias string) string {
@@ -283,7 +288,7 @@ func (ks *fileBasedKeyStore) storePrivateKey(alias string, privateKey interface{
 		return err
 	}
 
-	err = ioutil.WriteFile(ks.getPathForAlias(alias, "sk"), rawKey, 0700)
+	err = ioutil.WriteFile(ks.getPathForAlias(alias, "sk"), rawKey, 0600)
 	if err != nil {
 		logger.Errorf("Failed storing private key [%s]: [%s]", alias, err)
 		return err
@@ -299,7 +304,7 @@ func (ks *fileBasedKeyStore) storePublicKey(alias string, publicKey interface{})
 		return err
 	}
 
-	err = ioutil.WriteFile(ks.getPathForAlias(alias, "pk"), rawKey, 0700)
+	err = ioutil.WriteFile(ks.getPathForAlias(alias, "pk"), rawKey, 0600)
 	if err != nil {
 		logger.Errorf("Failed storing private key [%s]: [%s]", alias, err)
 		return err
@@ -315,7 +320,7 @@ func (ks *fileBasedKeyStore) storeKey(alias string, key []byte) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(ks.getPathForAlias(alias, "key"), pem, 0700)
+	err = ioutil.WriteFile(ks.getPathForAlias(alias, "key"), pem, 0600)
 	if err != nil {
 		logger.Errorf("Failed storing key [%s]: [%s]", alias, err)
 		return err

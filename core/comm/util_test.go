@@ -28,6 +28,7 @@ import (
 )
 
 func TestExtractCertificateHashFromContext(t *testing.T) {
+	t.Parallel()
 	assert.Nil(t, comm.ExtractCertificateHashFromContext(context.Background()))
 
 	p := &peer.Peer{}
@@ -61,12 +62,14 @@ func (*nonTLSConnection) AuthType() string {
 }
 
 func TestBindingInspectorBadInit(t *testing.T) {
+	t.Parallel()
 	assert.Panics(t, func() {
 		comm.NewBindingInspector(false, nil)
 	})
 }
 
 func TestNoopBindingInspector(t *testing.T) {
+	t.Parallel()
 	extract := func(msg proto.Message) []byte {
 		return nil
 	}
@@ -77,6 +80,7 @@ func TestNoopBindingInspector(t *testing.T) {
 }
 
 func TestBindingInspector(t *testing.T) {
+	t.Parallel()
 	testAddress := "localhost:25000"
 	extract := func(msg proto.Message) []byte {
 		env, isEnvelope := msg.(*common.Envelope)
@@ -136,7 +140,7 @@ func TestBindingInspector(t *testing.T) {
 
 type inspectingServer struct {
 	addr string
-	comm.GRPCServer
+	*comm.GRPCServer
 	lastContext atomic.Value
 	inspector   comm.BindingInspector
 }
@@ -152,6 +156,7 @@ func (is *inspectingServer) inspect(envelope *common.Envelope) error {
 
 func newInspectingServer(addr string, inspector comm.BindingInspector) *inspectingServer {
 	srv, err := comm.NewGRPCServer(addr, comm.ServerConfig{
+		ConnectionTimeout: 250 * time.Millisecond,
 		SecOpts: &comm.SecureOptions{
 			UseTLS:      true,
 			Certificate: []byte(selfSignedCertPEM),

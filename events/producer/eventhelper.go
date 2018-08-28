@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package producer
@@ -29,9 +19,6 @@ import (
 // and creates a block event and a filtered block event. Sending the events
 // is the responsibility of the code that calls this function.
 func CreateBlockEvents(block *common.Block) (bevent *pb.Event, fbevent *pb.Event, channelID string, err error) {
-	logger.Debugf("Entry")
-	defer logger.Debugf("Exit")
-
 	blockForEvent := &common.Block{}
 	filteredBlockForEvent := &pb.FilteredBlock{}
 	filteredTxArray := []*pb.FilteredTransaction{}
@@ -105,7 +92,7 @@ func CreateBlockEvents(block *common.Block) (bevent *pb.Event, fbevent *pb.Event
 							filteredCcEvent := ccEvent
 							// nil out ccevent payload
 							filteredCcEvent.Payload = nil
-							chaincodeAction.CcEvent = filteredCcEvent
+							chaincodeAction.ChaincodeEvent = filteredCcEvent
 						}
 						transactionActions.ChaincodeActions = append(transactionActions.ChaincodeActions, chaincodeAction)
 
@@ -137,7 +124,7 @@ func CreateBlockEvents(block *common.Block) (bevent *pb.Event, fbevent *pb.Event
 					}
 					ebytes, err = utils.GetBytesEnvelope(env)
 					if err != nil {
-						return nil, nil, "", fmt.Errorf("cannot marshal transaction %s", err)
+						return nil, nil, "", fmt.Errorf("cannot marshal transaction: %s", err)
 					}
 				}
 			}
@@ -146,27 +133,17 @@ func CreateBlockEvents(block *common.Block) (bevent *pb.Event, fbevent *pb.Event
 	}
 	filteredBlockForEvent.ChannelId = channelID
 	filteredBlockForEvent.Number = block.Header.Number
-	filteredBlockForEvent.FilteredTx = filteredTxArray
+	filteredBlockForEvent.FilteredTransactions = filteredTxArray
 
 	return CreateBlockEvent(blockForEvent), CreateFilteredBlockEvent(filteredBlockForEvent), channelID, nil
 }
 
-//CreateBlockEvent creates a Event from a Block
+// CreateBlockEvent creates a Event from a Block
 func CreateBlockEvent(te *common.Block) *pb.Event {
 	return &pb.Event{Event: &pb.Event_Block{Block: te}}
 }
 
-//CreateFilteredBlockEvent creates a Event from a FilteredBlock
+// CreateFilteredBlockEvent creates a Event from a FilteredBlock
 func CreateFilteredBlockEvent(te *pb.FilteredBlock) *pb.Event {
 	return &pb.Event{Event: &pb.Event_FilteredBlock{FilteredBlock: te}}
-}
-
-//CreateChaincodeEvent creates a Event from a ChaincodeEvent
-func CreateChaincodeEvent(te *pb.ChaincodeEvent) *pb.Event {
-	return &pb.Event{Event: &pb.Event_ChaincodeEvent{ChaincodeEvent: te}}
-}
-
-//CreateRejectionEvent creates an Event from TxResults
-func CreateRejectionEvent(tx *pb.Transaction, errorMsg string) *pb.Event {
-	return &pb.Event{Event: &pb.Event_Rejection{Rejection: &pb.Rejection{Tx: tx, ErrorMsg: errorMsg}}}
 }

@@ -55,7 +55,7 @@ func (mbs *mockBroadcastSrv) Recv() (*cb.Envelope, error) {
 	return mbs.msg, mbs.err
 }
 
-func (mb *mockBroadcastSrv) Send(br *ab.BroadcastResponse) error {
+func (mbs *mockBroadcastSrv) Send(br *ab.BroadcastResponse) error {
 	panic("Unimplimented")
 }
 
@@ -137,7 +137,7 @@ func TestBroadcastMsgTrace(t *testing.T) {
 func TestDeliverMsgTrace(t *testing.T) {
 	testMsgTrace(func(dir string, msg *cb.Envelope) recvr {
 		return &deliverMsgTracer{
-			DeliverSupport: &mockDeliverSrv{
+			Receiver: &mockDeliverSrv{
 				msg: msg,
 			},
 			msgTracer: msgTracer{

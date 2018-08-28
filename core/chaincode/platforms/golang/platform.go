@@ -20,21 +20,21 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
-	"sort"
-
 	"github.com/hyperledger/fabric/common/metadata"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/ccmetadata"
 	"github.com/hyperledger/fabric/core/chaincode/platforms/util"
-	ccmetadata "github.com/hyperledger/fabric/core/common/ccprovider/metadata"
 	cutil "github.com/hyperledger/fabric/core/container/util"
 	pb "github.com/hyperledger/fabric/protos/peer"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
@@ -83,7 +83,7 @@ func getGopath() (string, error) {
 	// Only take the first element of GOPATH
 	splitGoPath := filepath.SplitList(env["GOPATH"])
 	if len(splitGoPath) == 0 {
-		return "", fmt.Errorf("invalid GOPATH environment variable value:[%s]", env["GOPATH"])
+		return "", fmt.Errorf("invalid GOPATH environment variable value: %s", env["GOPATH"])
 	}
 	return splitGoPath[0], nil
 }
@@ -428,21 +428,20 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 
 	for _, file := range files {
 
+		// file.Path represents os localpath
+		// file.Name represents tar packagepath
+
 		// If the file is metadata rather than golang code, remove the leading go code path, for example:
 		// original file.Name:  src/github.com/hyperledger/fabric/examples/chaincode/go/marbles02/META-INF/statedb/couchdb/indexes/indexOwner.json
 		// updated file.Name:   META-INF/statedb/couchdb/indexes/indexOwner.json
 		if file.IsMetadata {
 
-			// Ensure META-INF directory can be found, then grab the META-INF relative path to use for packaging
-			if !strings.HasPrefix(file.Name, filepath.Join("src", code.Pkg, "META-INF")) {
-				return nil, fmt.Errorf("Could not find META-INF directory in metadata file %s.", file.Name)
-			}
 			file.Name, err = filepath.Rel(filepath.Join("src", code.Pkg), file.Name)
 			if err != nil {
-				return nil, fmt.Errorf("Could not get relative path for META-INF directory %s. Error:%s", file.Name, err)
+				return nil, fmt.Errorf("This error was caused by bad packaging of the metadata.  The file [%s] is marked as MetaFile, however not located under META-INF   Error:[%s]", file.Name, err)
 			}
 
-			// Split the filename itself from its path
+			// Split the tar location (file.Name) into a tar package directory and filename
 			_, filename := filepath.Split(file.Name)
 
 			// Hidden files are not supported as metadata, therefore ignore them.
@@ -452,9 +451,14 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 				continue
 			}
 
+			fileBytes, err := ioutil.ReadFile(file.Path)
+			if err != nil {
+				return nil, err
+			}
+
 			// Validate metadata file for inclusion in tar
-			// Validation is based on the passed metadata directory, e.g. META-INF/statedb/couchdb/indexes
-			err = ccmetadata.ValidateMetadataFile(file.Path, filepath.Dir(file.Name))
+			// Validation is based on the passed filename with path
+			err = ccmetadata.ValidateMetadataFile(file.Name, fileBytes)
 			if err != nil {
 				return nil, err
 			}
@@ -466,8 +470,16 @@ func (goPlatform *Platform) GetDeploymentPayload(spec *pb.ChaincodeSpec) ([]byte
 		}
 	}
 
-	tw.Close()
-	gw.Close()
+	err = tw.Close()
+	if err == nil {
+		err = gw.Close()
+	}
+	if err != nil {
+		return nil, errors.Wrapf(
+			err,
+			"failed to create tar for chaincode: %s",
+			spec.GetChaincodeId().GetName())
+	}
 
 	return payload.Bytes(), nil
 }
@@ -524,4 +536,9 @@ func (goPlatform *Platform) GenerateDockerBuild(cds *pb.ChaincodeDeploymentSpec,
 	}
 
 	return cutil.WriteBytesToPackage("binpackage.tar", binpackage.Bytes(), tw)
+}
+
+//GetMetadataProvider fetches metadata provider given deployment spec
+func (goPlatform *Platform) GetMetadataProvider(cds *pb.ChaincodeDeploymentSpec) ccmetadata.MetadataProvider {
+	return &ccmetadata.TargzMetadataProvider{cds}
 }

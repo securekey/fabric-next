@@ -1,17 +1,6 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Copyright IBM Corp. All Rights Reserved.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package lockbasedtxmgr
@@ -33,11 +22,19 @@ import (
 )
 
 type queryHelper struct {
-	txmgr        *LockBasedTxMgr
-	rwsetBuilder *rwsetutil.RWSetBuilder
-	itrs         []*resultsItr
-	err          error
-	doneInvoked  bool
+	txmgr             *LockBasedTxMgr
+	collNameValidator *collNameValidator
+	rwsetBuilder      *rwsetutil.RWSetBuilder
+	itrs              []*resultsItr
+	err               error
+	doneInvoked       bool
+}
+
+func newQueryHelper(txmgr *LockBasedTxMgr, rwsetBuilder *rwsetutil.RWSetBuilder) *queryHelper {
+	helper := &queryHelper{txmgr: txmgr, rwsetBuilder: rwsetBuilder}
+	validator := newCollNameValidator(helper)
+	helper.collNameValidator = validator
+	return helper
 }
 
 func (h *queryHelper) getState(ns string, key string) ([]byte, error) {
@@ -99,6 +96,9 @@ func (h *queryHelper) executeQuery(namespace, query string) (commonledger.Result
 }
 
 func (h *queryHelper) getPrivateData(ns, coll, key string) ([]byte, error) {
+	if err := h.validateCollName(ns, coll); err != nil {
+		return nil, err
+	}
 	if err := h.checkDone(); err != nil {
 		return nil, err
 	}
@@ -129,6 +129,9 @@ func (h *queryHelper) getPrivateData(ns, coll, key string) ([]byte, error) {
 }
 
 func (h *queryHelper) getPrivateDataMultipleKeys(ns, coll string, keys []string) ([][]byte, error) {
+	if err := h.validateCollName(ns, coll); err != nil {
+		return nil, err
+	}
 	if err := h.checkDone(); err != nil {
 		return nil, err
 	}
@@ -148,6 +151,9 @@ func (h *queryHelper) getPrivateDataMultipleKeys(ns, coll string, keys []string)
 }
 
 func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (commonledger.ResultsIterator, error) {
+	if err := h.validateCollName(namespace, collection); err != nil {
+		return nil, err
+	}
 	if err := h.checkDone(); err != nil {
 		return nil, err
 	}
@@ -159,6 +165,9 @@ func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, sta
 }
 
 func (h *queryHelper) executeQueryOnPrivateData(namespace, collection, query string) (commonledger.ResultsIterator, error) {
+	if err := h.validateCollName(namespace, collection); err != nil {
+		return nil, err
+	}
 	if err := h.checkDone(); err != nil {
 		return nil, err
 	}
@@ -176,12 +185,15 @@ func (h *queryHelper) done() {
 
 	defer func() {
 		h.txmgr.commitRWLock.RUnlock()
+		h.txmgr.commitRWLockRLockStopwatch.Stop()
 		h.doneInvoked = true
 		for _, itr := range h.itrs {
 			itr.Close()
 		}
 	}()
+}
 
+func (h *queryHelper) addRangeQueryInfo() {
 	for _, itr := range h.itrs {
 		if h.rwsetBuilder != nil {
 			results, hash, err := itr.rangeQueryResultsHelper.Done()
@@ -205,6 +217,10 @@ func (h *queryHelper) checkDone() error {
 		return errors.New("This instance should not be used after calling Done()")
 	}
 	return nil
+}
+
+func (h *queryHelper) validateCollName(ns, coll string) error {
+	return h.collNameValidator.validateCollName(ns, coll)
 }
 
 // resultsItr implements interface ledger.ResultsIterator

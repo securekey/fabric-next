@@ -137,7 +137,6 @@ func TestClientConnections(t *testing.T) {
 
 // utility function to load up our test root certificates from testdata/certs
 func loadRootCAs() [][]byte {
-
 	rootCAs := [][]byte{}
 	for i := 1; i <= numOrgs; i++ {
 		root, err := ioutil.ReadFile(fmt.Sprintf(orgCACert, i))
@@ -157,7 +156,7 @@ func loadRootCAs() [][]byte {
 }
 
 func TestCASupport(t *testing.T) {
-
+	t.Parallel()
 	rootCAs := loadRootCAs()
 	t.Logf("loaded %d root certificates", len(rootCAs))
 	if len(rootCAs) != 6 {
@@ -190,14 +189,19 @@ func TestCASupport(t *testing.T) {
 }
 
 func TestCredentialSupport(t *testing.T) {
-
+	t.Parallel()
 	rootCAs := loadRootCAs()
 	t.Logf("loaded %d root certificates", len(rootCAs))
 	if len(rootCAs) != 6 {
 		t.Fatalf("failed to load root certificates")
 	}
 
-	cs := GetCredentialSupport()
+	cs := &CredentialSupport{
+		CASupport: &CASupport{
+			AppRootCAsByChain:     make(map[string][][]byte),
+			OrdererRootCAsByChain: make(map[string][][]byte),
+		},
+	}
 	cert := tls.Certificate{Certificate: [][]byte{}}
 	cs.SetClientCertificate(cert)
 	assert.Equal(t, cert, cs.clientCert)
@@ -223,10 +227,6 @@ func TestCredentialSupport(t *testing.T) {
 	assert.Equal(t, 4, len(appClientRoots), "Expected 4 app client root CAs")
 	assert.Equal(t, 2, len(ordererClientRoots), "Expected 4 orderer client root CAs")
 
-	// make sure we really have a singleton
-	csClone := GetCredentialSupport()
-	assert.Exactly(t, csClone, cs, "Expected GetCredentialSupport to be a singleton")
-
 	creds, _ := cs.GetDeliverServiceCredentials("channel1")
 	assert.Equal(t, "1.2", creds.Info().SecurityVersion,
 		"Expected Security version to be 1.2")
@@ -244,11 +244,15 @@ func TestCredentialSupport(t *testing.T) {
 	assert.Equal(t, "1.2", creds.Info().SecurityVersion,
 		"Expected Security version to be 1.2")
 
+	// test singleton
+	singleton := GetCredentialSupport()
+	clone := GetCredentialSupport()
+	assert.Exactly(t, clone, singleton, "Expected GetCredentialSupport to be a singleton")
 }
 
 type srv struct {
 	port int
-	GRPCServer
+	*GRPCServer
 	caCert   []byte
 	serviced uint32
 }
@@ -282,6 +286,7 @@ func newServer(org string, port int) *srv {
 		panic(fmt.Errorf("Failed listening on port %d: %v", port, err))
 	}
 	gSrv, err := NewGRPCServerFromListener(l, ServerConfig{
+		ConnectionTimeout: 250 * time.Millisecond,
 		SecOpts: &SecureOptions{
 			Certificate: certs["server.crt"],
 			Key:         certs["server.key"],
@@ -302,6 +307,7 @@ func newServer(org string, port int) *srv {
 }
 
 func TestImpersonation(t *testing.T) {
+	t.Parallel()
 	// Scenario: We have 2 organizations: orgA, orgB
 	// and each of them are in their respected channels- A, B.
 	// The test would obtain credentials.TransportCredentials by calling GetDeliverServiceCredentials.
@@ -319,33 +325,44 @@ func TestImpersonation(t *testing.T) {
 	defer osB.Stop()
 	time.Sleep(time.Second)
 
-	cs := GetCredentialSupport()
-	_, err := GetCredentialSupport().GetDeliverServiceCredentials("C")
+	cs := &CredentialSupport{
+		CASupport: &CASupport{
+			AppRootCAsByChain:     make(map[string][][]byte),
+			OrdererRootCAsByChain: make(map[string][][]byte),
+		},
+	}
+	_, err := cs.GetDeliverServiceCredentials("C")
 	assert.Error(t, err)
 
 	cs.OrdererRootCAsByChain["A"] = [][]byte{osA.caCert}
 	cs.OrdererRootCAsByChain["B"] = [][]byte{osB.caCert}
 
-	testInvoke(t, "A", osA, true)
-	testInvoke(t, "B", osB, true)
-	testInvoke(t, "A", osB, false)
-	testInvoke(t, "B", osA, false)
+	testInvoke(t, "A", osA, cs, true)
+	testInvoke(t, "B", osB, cs, true)
+	testInvoke(t, "A", osB, cs, false)
+	testInvoke(t, "B", osA, cs, false)
 
 }
 
-func testInvoke(t *testing.T, channelID string, s *srv, shouldSucceed bool) {
-	creds, err := GetCredentialSupport().GetDeliverServiceCredentials(channelID)
+func testInvoke(
+	t *testing.T,
+	channelID string,
+	s *srv,
+	cs *CredentialSupport,
+	shouldSucceed bool) {
+
+	creds, err := cs.GetDeliverServiceCredentials(channelID)
 	assert.NoError(t, err)
 	endpoint := fmt.Sprintf("localhost:%d", s.port)
 	ctx := context.Background()
-	ctx, _ = context.WithTimeout(ctx, time.Second*3)
+	ctx, _ = context.WithTimeout(ctx, 1*time.Second)
 	conn, err := grpc.DialContext(ctx, endpoint, grpc.WithTransportCredentials(creds), grpc.WithBlock())
 	if shouldSucceed {
 		assert.NoError(t, err)
 		defer conn.Close()
 	} else {
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "certificate signed by unknown authority")
+		assert.Contains(t, err.Error(), "context deadline exceeded")
 		return
 	}
 	client := testpb.NewTestServiceClient(conn)

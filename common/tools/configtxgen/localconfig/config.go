@@ -46,44 +46,45 @@ func init() {
 }
 
 const (
-	// TestChainID is the channel name used for testing purposes when one is not given
+	// TestChainID is the channel name used for testing purposes when one is
+	// not given
 	TestChainID = "testchainid"
 
-	// SampleInsecureSoloProfile references the sample profile which does not include any MSPs and uses solo for ordering.
+	// SampleInsecureSoloProfile references the sample profile which does not
+	// include any MSPs and uses solo for ordering.
 	SampleInsecureSoloProfile = "SampleInsecureSolo"
-	// SampleDevModeSoloProfile references the sample profile which requires only basic membership for admin privileges and uses solo for ordering.
+	// SampleDevModeSoloProfile references the sample profile which requires
+	// only basic membership for admin privileges and uses solo for ordering.
 	SampleDevModeSoloProfile = "SampleDevModeSolo"
-	// SampleDevModeSoloProfileV11 references the sample profile which requires only basic membership for admin privileges and uses solo for ordering, but has v1.1 capabilities enabled
-	SampleDevModeSoloV11Profile = "SampleDevModeSoloV1_1"
-	// SampleSingleMSPSoloProfile references the sample profile which includes only the sample MSP and uses solo for ordering.
+	// SampleSingleMSPSoloProfile references the sample profile which includes
+	// only the sample MSP and uses solo for ordering.
 	SampleSingleMSPSoloProfile = "SampleSingleMSPSolo"
-	// SampleSingleMSPSoloV11Profile references the sample profile which includes only the sample MSP with v1.1 capabilities defined and uses solo for ordering.
-	SampleSingleMSPSoloV11Profile = "SampleSingleMSPSoloV1_1"
 
-	// SampleInsecureKafkaProfile references the sample profile which does not include any MSPs and uses Kafka for ordering.
+	// SampleInsecureKafkaProfile references the sample profile which does not
+	// include any MSPs and uses Kafka for ordering.
 	SampleInsecureKafkaProfile = "SampleInsecureKafka"
-	// SampleDevModeKafkaProfile references the sample profile which requires only basic membership for admin privileges and uses Kafka for ordering.
+	// SampleDevModeKafkaProfile references the sample profile which requires only
+	// basic membership for admin privileges and uses Kafka for ordering.
 	SampleDevModeKafkaProfile = "SampleDevModeKafka"
-	// SampleDevModeKafkaProfileV11 references the sample profile which requires only basic membership for admin privileges and uses Kafka for ordering, but has v1.1 capabilities enabled.
-	SampleDevModeKafkaV11Profile = "SampleDevModeKafkaV1_1"
-	// SampleSingleMSPKafkaProfile references the sample profile which includes only the sample MSP and uses Kafka for ordering.
+	// SampleSingleMSPKafkaProfile references the sample profile which includes
+	// only the sample MSP and uses Kafka for ordering.
 	SampleSingleMSPKafkaProfile = "SampleSingleMSPKafka"
-	// SampleSingleMSPKafkaV11Profile references the sample profile which includes only the sample MSP with v1.1 capabilities defined and uses Kafka for ordering.
-	SampleSingleMSPKafkaV11Profile = "SampleSingleMSPKafkaV1_1"
 
-	// SampleSingleMSPChannelProfile references the sample profile which includes only the sample MSP and is used to create a channel
+	// SampleSingleMSPChannelProfile references the sample profile which
+	// includes only the sample MSP and is used to create a channel
 	SampleSingleMSPChannelProfile = "SampleSingleMSPChannel"
-	// SampleSingleMSPChannelV11Profile references the sample profile which includes only the sample MSP with v1.1 capabilities and is used to create a channel
-	SampleSingleMSPChannelV11Profile = "SampleSingleMSPChannelV1_1"
 
-	// SampleConsortiumName is the sample consortium from the sample configtx.yaml
+	// SampleConsortiumName is the sample consortium from the
+	// sample configtx.yaml
 	SampleConsortiumName = "SampleConsortium"
 	// SampleOrgName is the name of the sample org in the sample profiles
 	SampleOrgName = "SampleOrg"
 
-	// AdminRoleAdminPrincipal is set as AdminRole to cause the MSP role of type Admin to be used as the admin principal default
+	// AdminRoleAdminPrincipal is set as AdminRole to cause the MSP role of
+	// type Admin to be used as the admin principal default
 	AdminRoleAdminPrincipal = "Role.ADMIN"
-	// MemberRoleAdminPrincipal is set as AdminRole to cause the MSP role of type Member to be used as the admin principal default
+	// MemberRoleAdminPrincipal is set as AdminRole to cause the MSP role of
+	// type Member to be used as the admin principal default
 	MemberRoleAdminPrincipal = "Role.MEMBER"
 )
 
@@ -91,50 +92,70 @@ const (
 type TopLevel struct {
 	Profiles      map[string]*Profile        `yaml:"Profiles"`
 	Organizations []*Organization            `yaml:"Organizations"`
+	Channel       *Profile                   `yaml:"Channel"`
 	Application   *Application               `yaml:"Application"`
 	Orderer       *Orderer                   `yaml:"Orderer"`
 	Capabilities  map[string]map[string]bool `yaml:"Capabilities"`
 	Resources     *Resources                 `yaml:"Resources"`
 }
 
-// Profile encodes orderer/application configuration combinations for the configtxgen tool.
+// Profile encodes orderer/application configuration combinations for the
+// configtxgen tool.
 type Profile struct {
 	Consortium   string                 `yaml:"Consortium"`
 	Application  *Application           `yaml:"Application"`
 	Orderer      *Orderer               `yaml:"Orderer"`
 	Consortiums  map[string]*Consortium `yaml:"Consortiums"`
 	Capabilities map[string]bool        `yaml:"Capabilities"`
+	Policies     map[string]*Policy     `yaml:"Policies"`
 }
 
-// Consortium represents a group of organizations which may create channels with eachother
+// Policy encodes a channel config policy
+type Policy struct {
+	Type string `yaml:"Type"`
+	Rule string `yaml:"Rule"`
+}
+
+// Consortium represents a group of organizations which may create channels
+// with each other
 type Consortium struct {
 	Organizations []*Organization `yaml:"Organizations"`
 }
 
-// Application encodes the application-level configuration needed in config transactions.
+// Application encodes the application-level configuration needed in config
+// transactions.
 type Application struct {
-	Organizations []*Organization `yaml:"Organizations"`
-	Capabilities  map[string]bool `yaml:"Capabilities"`
-	Resources     *Resources      `yaml:"Resources"`
+	Organizations []*Organization    `yaml:"Organizations"`
+	Capabilities  map[string]bool    `yaml:"Capabilities"`
+	Resources     *Resources         `yaml:"Resources"`
+	Policies      map[string]*Policy `yaml:"Policies"`
+	ACLs          map[string]string  `yaml:"ACLs"`
 }
 
-// Resouces encodes the application-level resources configuration needed to seed the resource tree
+// Resources encodes the application-level resources configuration needed to
+// seed the resource tree
 type Resources struct {
 	DefaultModPolicy string
 }
 
-// Organization encodes the organization-level configuration needed in config transactions.
+// Organization encodes the organization-level configuration needed in
+// config transactions.
 type Organization struct {
-	Name           string `yaml:"Name"`
-	ID             string `yaml:"ID"`
-	MSPDir         string `yaml:"MSPDir"`
-	MSPType        string `yaml:"MSPType"`
-	AdminPrincipal string `yaml:"AdminPrincipal"`
+	Name     string             `yaml:"Name"`
+	ID       string             `yaml:"ID"`
+	MSPDir   string             `yaml:"MSPDir"`
+	MSPType  string             `yaml:"MSPType"`
+	Policies map[string]*Policy `yaml:"Policies"`
 
 	// Note: Viper deserialization does not seem to care for
 	// embedding of types, so we use one organization struct
 	// for both orderers and applications.
 	AnchorPeers []*AnchorPeer `yaml:"AnchorPeers"`
+
+	// AdminPrincipal is deprecated and may be removed in a future release
+	// it was used for modifying the default policy generation, but policies
+	// may now be specified explicitly so it is redundant and unnecessary
+	AdminPrincipal string `yaml:"AdminPrincipal"`
 }
 
 // AnchorPeer encodes the necessary fields to identify an anchor peer.
@@ -146,19 +167,20 @@ type AnchorPeer struct {
 // Orderer contains configuration which is used for the
 // bootstrapping of an orderer by the provisional bootstrapper.
 type Orderer struct {
-	OrdererType   string          `yaml:"OrdererType"`
-	Addresses     []string        `yaml:"Addresses"`
-	BatchTimeout  time.Duration   `yaml:"BatchTimeout"`
-	BatchSize     BatchSize       `yaml:"BatchSize"`
-	Kafka         Kafka           `yaml:"Kafka"`
-	Organizations []*Organization `yaml:"Organizations"`
-	MaxChannels   uint64          `yaml:"MaxChannels"`
-	Capabilities  map[string]bool `yaml:"Capabilities"`
+	OrdererType   string             `yaml:"OrdererType"`
+	Addresses     []string           `yaml:"Addresses"`
+	BatchTimeout  time.Duration      `yaml:"BatchTimeout"`
+	BatchSize     BatchSize          `yaml:"BatchSize"`
+	Kafka         Kafka              `yaml:"Kafka"`
+	Organizations []*Organization    `yaml:"Organizations"`
+	MaxChannels   uint64             `yaml:"MaxChannels"`
+	Capabilities  map[string]bool    `yaml:"Capabilities"`
+	Policies      map[string]*Policy `yaml:"Policies"`
 }
 
 // BatchSize contains configuration affecting the size of batches.
 type BatchSize struct {
-	MaxMessageCount   uint32 `yaml:"MaxMessageSize"`
+	MaxMessageCount   uint32 `yaml:"MaxMessageCount"`
 	AbsoluteMaxBytes  uint32 `yaml:"AbsoluteMaxBytes"`
 	PreferredMaxBytes uint32 `yaml:"PreferredMaxBytes"`
 }
@@ -184,13 +206,22 @@ var genesisDefaults = TopLevel{
 	},
 }
 
-// LoadTopLevel simply loads the configtx.yaml file into the structs above
-// and completes their initialization.  Note, for environment overrides to work properly
-// within a profile, Load(profile string) should be called when attempting to work within
-// a particular profile.
-func LoadTopLevel() *TopLevel {
+// LoadTopLevel simply loads the configtx.yaml file into the structs above and
+// completes their initialization. Config paths may optionally be provided and
+// will be used in place of the FABRIC_CFG_PATH env variable.
+//
+// Note, for environment overrides to work properly within a profile, Load
+// should be used instead.
+func LoadTopLevel(configPaths ...string) *TopLevel {
 	config := viper.New()
-	cf.InitViper(config, configName)
+	if len(configPaths) > 0 {
+		for _, p := range configPaths {
+			config.AddConfigPath(p)
+		}
+		config.SetConfigName(configName)
+	} else {
+		cf.InitViper(config, configName)
+	}
 
 	// For environment variables
 	config.SetEnvPrefix(Prefix)
@@ -218,16 +249,26 @@ func LoadTopLevel() *TopLevel {
 	return &uconf
 }
 
-// Load returns the orderer/application config combination that corresponds to a given profile.
-func Load(profile string) *Profile {
+// Load returns the orderer/application config combination that corresponds to
+// a given profile. Config paths may optionally be provided and will be used
+// in place of the FABRIC_CFG_PATH env variable.
+func Load(profile string, configPaths ...string) *Profile {
 	config := viper.New()
-	cf.InitViper(config, configName)
+	if len(configPaths) > 0 {
+		for _, p := range configPaths {
+			config.AddConfigPath(p)
+		}
+		config.SetConfigName(configName)
+	} else {
+		cf.InitViper(config, configName)
+	}
 
 	// For environment variables
 	config.SetEnvPrefix(Prefix)
 	config.AutomaticEnv()
 
-	// This replacer allows substitution within the particular profile without having to fully qualify the name
+	// This replacer allows substitution within the particular profile without
+	// having to fully qualify the name
 	replacer := strings.NewReplacer(strings.ToUpper(fmt.Sprintf("profiles.%s.", profile)), "", ".", "_")
 	config.SetEnvKeyReplacer(replacer)
 

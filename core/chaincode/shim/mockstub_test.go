@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func TestGetStateByRange(t *testing.T) {
+func TestMockStateRangeQueryIterator(t *testing.T) {
 	stub := NewMockStub("rangeTest", nil)
 	stub.MockTransactionStart("init")
 	stub.PutState("1", []byte{61})
@@ -40,10 +40,7 @@ func TestGetStateByRange(t *testing.T) {
 	expectKeys := []string{"3", "4"}
 	expectValues := [][]byte{{63}, {64}}
 
-	rqi, err := stub.GetStateByRange("2", "4")
-	if err != nil {
-		t.Fatalf("error getting state by range: %s", err)
-	}
+	rqi := NewMockStateRangeQueryIterator(stub, "2", "4")
 
 	fmt.Println("Running loop")
 	for i := 0; i < 2; i++ {
@@ -59,44 +56,9 @@ func TestGetStateByRange(t *testing.T) {
 	}
 }
 
-func TestGetPrivateDataByRange(t *testing.T) {
-	collection := "col1"
-
-	stub := NewMockStub("rangeTest", nil)
-	stub.MockTransactionStart("init")
-	stub.PutPrivateData(collection, "1", []byte{61})
-	stub.PutPrivateData(collection, "0", []byte{62})
-	stub.PutPrivateData(collection, "5", []byte{65})
-	stub.PutPrivateData(collection, "3", []byte{63})
-	stub.PutPrivateData(collection, "4", []byte{64})
-	stub.PutPrivateData(collection, "6", []byte{66})
-	stub.MockTransactionEnd("init")
-
-	expectKeys := []string{"3", "4"}
-	expectValues := [][]byte{{63}, {64}}
-
-	rqi, err := stub.GetPrivateDataByRange(collection, "2", "4")
-	if err != nil {
-		t.Fatalf("error getting private data by range: %s", err)
-	}
-
-	fmt.Println("Running loop")
-	for i := 0; i < 2; i++ {
-		response, err := rqi.Next()
-		fmt.Println("Loop", i, "got", response.Key, response.Value, err)
-		if expectKeys[i] != response.Key {
-			fmt.Println("Expected key", expectKeys[i], "got", response.Key)
-			t.FailNow()
-		}
-		if expectValues[i][0] != response.Value[0] {
-			fmt.Println("Expected value", expectValues[i], "got", response.Value)
-		}
-	}
-}
-
-// TestGetStateByRange_openEnded tests running an open-ended query
+// TestMockStateRangeQueryIterator_openEnded tests running an open-ended query
 // for all keys on the MockStateRangeQueryIterator
-func TestGetStateByRange_openEnded(t *testing.T) {
+func TestMockStateRangeQueryIterator_openEnded(t *testing.T) {
 	stub := NewMockStub("rangeTest", nil)
 	stub.MockTransactionStart("init")
 	stub.PutState("1", []byte{61})
@@ -107,10 +69,7 @@ func TestGetStateByRange_openEnded(t *testing.T) {
 	stub.PutState("6", []byte{66})
 	stub.MockTransactionEnd("init")
 
-	rqi, err := stub.GetStateByRange("", "")
-	if err != nil {
-		t.Fatalf("error getting state by range: %s", err)
-	}
+	rqi := NewMockStateRangeQueryIterator(stub, "", "")
 
 	count := 0
 	for rqi.HasNext() {
@@ -118,38 +77,7 @@ func TestGetStateByRange_openEnded(t *testing.T) {
 		count++
 	}
 
-	if count != rqi.(*MockStateRangeQueryIterator).Keys.Len() {
-		t.FailNow()
-	}
-}
-
-// TestGetPrivateDataByRange_openEnded tests running an open-ended query
-// for all private keys on the MockStateRangeQueryIterator
-func TestGetPrivateDataByRange_openEnded(t *testing.T) {
-	collection := "col1"
-
-	stub := NewMockStub("rangeTest", nil)
-	stub.MockTransactionStart("init")
-	stub.PutPrivateData(collection, "1", []byte{61})
-	stub.PutPrivateData(collection, "0", []byte{62})
-	stub.PutPrivateData(collection, "5", []byte{65})
-	stub.PutPrivateData(collection, "3", []byte{63})
-	stub.PutPrivateData(collection, "4", []byte{64})
-	stub.PutPrivateData(collection, "6", []byte{66})
-	stub.MockTransactionEnd("init")
-
-	rqi, err := stub.GetPrivateDataByRange(collection, "", "")
-	if err != nil {
-		t.Fatalf("error getting private data by range: %s", err)
-	}
-
-	count := 0
-	for rqi.HasNext() {
-		rqi.Next()
-		count++
-	}
-
-	if count != rqi.(*MockStateRangeQueryIterator).Keys.Len() {
+	if count != rqi.Stub.Keys.Len() {
 		t.FailNow()
 	}
 }
@@ -265,63 +193,6 @@ func TestGetStateByPartialCompositeKey(t *testing.T) {
 	}
 }
 
-func TestGetPrivateDataByPartialCompositeKey(t *testing.T) {
-	collection := "col1"
-
-	stub := NewMockStub("GetPrivateDataByPartialCompositeKeyTest", nil)
-	stub.MockTransactionStart("init")
-
-	marble1 := &Marble{"marble", "set-1", "red", 5, "tom"}
-	// Convert marble1 to JSON with Color and Name as composite key
-	compositeKey1, _ := stub.CreateCompositeKey(marble1.ObjectType, []string{marble1.Name, marble1.Color})
-	marbleJSONBytes1, _ := json.Marshal(marble1)
-	// Add marble1 JSON to state
-	stub.PutPrivateData(collection, compositeKey1, marbleJSONBytes1)
-
-	marble2 := &Marble{"marble", "set-1", "blue", 5, "jerry"}
-	compositeKey2, _ := stub.CreateCompositeKey(marble2.ObjectType, []string{marble2.Name, marble2.Color})
-	marbleJSONBytes2, _ := json.Marshal(marble2)
-	stub.PutPrivateData(collection, compositeKey2, marbleJSONBytes2)
-
-	marble3 := &Marble{"marble", "set-2", "red", 5, "tom-jerry"}
-	compositeKey3, _ := stub.CreateCompositeKey(marble3.ObjectType, []string{marble3.Name, marble3.Color})
-	marbleJSONBytes3, _ := json.Marshal(marble3)
-	stub.PutPrivateData(collection, compositeKey3, marbleJSONBytes3)
-
-	stub.MockTransactionEnd("init")
-	// should return in sorted order of attributes
-	expectKeys := []string{compositeKey2, compositeKey1}
-	expectKeysAttributes := [][]string{{"set-1", "blue"}, {"set-1", "red"}}
-	expectValues := [][]byte{marbleJSONBytes2, marbleJSONBytes1}
-
-	rqi, _ := stub.GetPrivateDataByPartialCompositeKey(collection, "marble", []string{"set-1"})
-	fmt.Println("Running loop")
-	for i := 0; i < 2; i++ {
-		response, err := rqi.Next()
-		fmt.Println("Loop", i, "got", response.Key, response.Value, err)
-		if expectKeys[i] != response.Key {
-			fmt.Println("Expected key", expectKeys[i], "got", response.Key)
-			t.FailNow()
-		}
-		objectType, attributes, _ := stub.SplitCompositeKey(response.Key)
-		if objectType != "marble" {
-			fmt.Println("Expected objectType", "marble", "got", objectType)
-			t.FailNow()
-		}
-		fmt.Println(attributes)
-		for index, attr := range attributes {
-			if expectKeysAttributes[i][index] != attr {
-				fmt.Println("Expected keys attribute", expectKeysAttributes[index][i], "got", attr)
-				t.FailNow()
-			}
-		}
-		if jsonBytesEqual(expectValues[i], response.Value) != true {
-			fmt.Println("Expected value", expectValues[i], "got", response.Value)
-			t.FailNow()
-		}
-	}
-}
-
 func TestGetStateByPartialCompositeKeyCollision(t *testing.T) {
 	stub := NewMockStub("GetStateByPartialCompositeKeyCollisionTest", nil)
 	stub.MockTransactionStart("init")
@@ -338,38 +209,6 @@ func TestGetStateByPartialCompositeKeyCollision(t *testing.T) {
 
 	// Only the single "Vehicle" object should be returned, not the "VehicleListing" object
 	rqi, _ := stub.GetStateByPartialCompositeKey("Vehicle", []string{})
-	i := 0
-	fmt.Println("Running loop")
-	for rqi.HasNext() {
-		i++
-		response, err := rqi.Next()
-		fmt.Println("Loop", i, "got", response.Key, response.Value, err)
-	}
-	// Only the single "Vehicle" object should be returned, not the "VehicleListing" object
-	if i != 1 {
-		fmt.Println("Expected 1, got", i)
-		t.FailNow()
-	}
-}
-
-func TestGetPrivateDataByPartialCompositeKeyCollision(t *testing.T) {
-	collection := "col1"
-
-	stub := NewMockStub("GetPrivateDataByPartialCompositeKeyCollisionTest", nil)
-	stub.MockTransactionStart("init")
-
-	vehicle1Bytes := []byte("vehicle1")
-	compositeKeyVehicle1, _ := stub.CreateCompositeKey("Vehicle", []string{"VIN_1234"})
-	stub.PutPrivateData(collection, compositeKeyVehicle1, vehicle1Bytes)
-
-	vehicleListing1Bytes := []byte("vehicleListing1")
-	compositeKeyVehicleListing1, _ := stub.CreateCompositeKey("VehicleListing", []string{"LIST_1234"})
-	stub.PutPrivateData(collection, compositeKeyVehicleListing1, vehicleListing1Bytes)
-
-	stub.MockTransactionEnd("init")
-
-	// Only the single "Vehicle" object should be returned, not the "VehicleListing" object
-	rqi, _ := stub.GetPrivateDataByPartialCompositeKey(collection, "Vehicle", []string{})
 	i := 0
 	fmt.Println("Running loop")
 	for rqi.HasNext() {
@@ -431,37 +270,4 @@ func TestMockMock(t *testing.T) {
 	iter.Close()
 	getBytes("f", []string{"a", "b"})
 	getFuncArgs([][]byte{[]byte("a")})
-}
-
-func TestPrivateData(t *testing.T) {
-	collection1 := "col1"
-	collection2 := "col2"
-
-	stub := NewMockStub("getprivatedatatest", nil)
-	stub.MockTransactionStart("init")
-	stub.PutPrivateData(collection1, "1", []byte("A"))
-	stub.PutPrivateData(collection1, "2", []byte("B"))
-	stub.PutPrivateData(collection2, "1", []byte("C"))
-	stub.PutPrivateData(collection2, "2", []byte("D"))
-	stub.PutPrivateData(collection2, "3", []byte("E"))
-	stub.MockTransactionEnd("init")
-
-	keys := []string{"1", "2", "3"}
-	expectValues1 := [][]byte{[]byte("A"), []byte("B"), nil}
-	expectValues2 := [][]byte{[]byte("C"), []byte("D"), []byte("E")}
-
-	for i, key := range keys {
-		if value, _ := stub.GetPrivateData(collection1, key); string(value) != string(expectValues1[i]) {
-			t.Fatalf("expecting value [%v] for key [%s] in collection [%s] but got [%v]", expectValues1[i], key, collection1, value)
-		}
-		if value, _ := stub.GetPrivateData(collection2, key); string(value) != string(expectValues2[i]) {
-			t.Fatalf("expecting value [%v] for key [%s] in collection [%s] but got [%v]", expectValues2[i], key, collection2, value)
-		}
-	}
-
-	stub.DelPrivateData(collection1, "1")
-	if value, _ := stub.GetPrivateData(collection1, "1"); value != nil {
-		t.Fatalf("expecting value [%v] for key [%s] in collection [%s] but got [%v]", nil, "1", collection1, value)
-	}
-
 }

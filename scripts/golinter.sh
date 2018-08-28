@@ -1,17 +1,14 @@
-#!/bin/bash
-#
+#!/bin/bash -e
+
 # Copyright Greg Haskins All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
-#
-
-
-set -e
 
 declare -a arr=(
 "./bccsp"
 "./common"
 "./core"
+"./discovery"
 "./events"
 "./examples"
 "./gossip"
@@ -22,12 +19,17 @@ declare -a arr=(
 "./protos"
 )
 
+# place the Go build cache directory into the default build tree if it exists
+if [ -d "${GOPATH}/src/github.com/hyperledger/fabric/.build" ]; then
+    export GOCACHE="${GOPATH}/src/github.com/hyperledger/fabric/.build/go-cache"
+fi
+
 for i in "${arr[@]}"
 do
     echo ">>>Checking code under $i/"
 
     echo "Checking with gofmt"
-    OUTPUT="$(gofmt -l -s ./$i)"
+    OUTPUT="$(gofmt -l -s ./$i | grep -v testdata/ || true)"
     if [[ $OUTPUT ]]; then
         echo "The following files contain gofmt errors"
         echo "$OUTPUT"
@@ -36,7 +38,7 @@ do
     fi
 
     echo "Checking with goimports"
-    OUTPUT="$(goimports -srcdir $GOPATH/src/github.com/hyperledger/fabric -l $i)"
+    OUTPUT="$(goimports -srcdir $GOPATH/src/github.com/hyperledger/fabric -l $i | grep -v testdata/ || true )"
     if [[ $OUTPUT ]]; then
         echo "The following files contain goimports errors"
         echo $OUTPUT
@@ -45,7 +47,7 @@ do
     fi
 
     echo "Checking with go vet"
-    OUTPUT="$(go vet $i/...)"
+    OUTPUT="$(go vet -composites=false $i/...)"
     if [[ $OUTPUT ]]; then
         echo "The following files contain go vet errors"
         echo $OUTPUT

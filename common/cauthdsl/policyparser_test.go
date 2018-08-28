@@ -117,26 +117,6 @@ func TestAndClientPeerOrderer(t *testing.T) {
 
 	assert.True(t, reflect.DeepEqual(p1, p2))
 
-	p1, err = FromString("AND('A.peer', 'B.orderer')")
-	assert.NoError(t, err)
-
-	principals = make([]*msp.MSPPrincipal, 0)
-
-	principals = append(principals, &msp.MSPPrincipal{
-		PrincipalClassification: msp.MSPPrincipal_ROLE,
-		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_PEER, MspIdentifier: "A"})})
-
-	principals = append(principals, &msp.MSPPrincipal{
-		PrincipalClassification: msp.MSPPrincipal_ROLE,
-		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_ORDERER, MspIdentifier: "B"})})
-
-	p2 = &common.SignaturePolicyEnvelope{
-		Version:    0,
-		Rule:       And(SignedBy(0), SignedBy(1)),
-		Identities: principals,
-	}
-
-	assert.True(t, reflect.DeepEqual(p1, p2))
 }
 
 func TestOr(t *testing.T) {
@@ -214,6 +194,33 @@ func TestComplex2(t *testing.T) {
 	p2 := &common.SignaturePolicyEnvelope{
 		Version:    0,
 		Rule:       Or(And(SignedBy(0), SignedBy(1)), Or(SignedBy(2), SignedBy(3))),
+		Identities: principals,
+	}
+
+	assert.Equal(t, p1, p2)
+}
+
+func TestMSPIDWIthSpecialChars(t *testing.T) {
+	p1, err := FromString("OR('MSP.member', 'MSP.WITH.DOTS.member', 'MSP-WITH-DASHES.member')")
+	assert.NoError(t, err)
+
+	principals := make([]*msp.MSPPrincipal, 0)
+
+	principals = append(principals, &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: "MSP"})})
+
+	principals = append(principals, &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: "MSP.WITH.DOTS"})})
+
+	principals = append(principals, &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: "MSP-WITH-DASHES"})})
+
+	p2 := &common.SignaturePolicyEnvelope{
+		Version:    0,
+		Rule:       NOutOf(1, []*common.SignaturePolicy{SignedBy(0), SignedBy(1), SignedBy(2)}),
 		Identities: principals,
 	}
 

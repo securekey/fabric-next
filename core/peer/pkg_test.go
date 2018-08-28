@@ -10,8 +10,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,10 +26,12 @@ import (
 	configtxtest "github.com/hyperledger/fabric/common/configtx/test"
 	"github.com/hyperledger/fabric/core/comm"
 	testpb "github.com/hyperledger/fabric/core/comm/testdata/grpc"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/msp"
 	cb "github.com/hyperledger/fabric/protos/common"
 	mspproto "github.com/hyperledger/fabric/protos/msp"
+	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -46,7 +48,6 @@ func (tss *testServiceServer) EmptyCall(context.Context, *testpb.Empty) (*testpb
 
 // createCertPool creates an x509.CertPool from an array of PEM-encoded certificates
 func createCertPool(rootCAs [][]byte) (*x509.CertPool, error) {
-
 	certPool := x509.NewCertPool()
 	for _, rootCA := range rootCAs {
 		if !certPool.AppendCertsFromPEM(rootCA) {
@@ -58,7 +59,6 @@ func createCertPool(rootCAs [][]byte) (*x509.CertPool, error) {
 
 // helper function to invoke the EmptyCall againt the test service
 func invokeEmptyCall(address string, dialOptions []grpc.DialOption) (*testpb.Empty, error) {
-
 	//add DialOptions
 	dialOptions = append(dialOptions, grpc.WithBlock())
 	ctx := context.Background()
@@ -107,7 +107,14 @@ func createMSPConfig(rootCerts, tlsRootCerts, tlsIntermediateCerts [][]byte,
 func createConfigBlock(chainID string, appMSPConf, ordererMSPConf *mspproto.MSPConfig,
 	appOrgID, ordererOrgID string) (*cb.Block, error) {
 	block, err := configtxtest.MakeGenesisBlockFromMSPs(chainID, appMSPConf, ordererMSPConf, appOrgID, ordererOrgID)
-	return block, err
+	if block == nil || err != nil {
+		return block, err
+	}
+
+	txsFilter := util.NewTxValidationFlagsSetValue(len(block.Data.Data), pb.TxValidationCode_VALID)
+	block.Metadata.Metadata[cb.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
+
+	return block, nil
 }
 
 func TestUpdateRootsFromConfigBlock(t *testing.T) {
@@ -169,11 +176,11 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 			"Org1-cert.pem"))
 		viper.Set("peer.fileSystemPath", "/var/hyperledger/test/")
 		defer os.RemoveAll("/var/hyperledger/test/")
-		err := peer.CreateChainFromBlock(block)
+		err := peer.Default.CreateChainFromBlock(block, nil, nil)
 		if err != nil {
 			t.Fatalf("Failed to create config block (%s)", err)
 		}
-		t.Logf("Channel %s MSPIDs: (%s)", cid, peer.GetMSPIDs(cid))
+		t.Logf("Channel %s MSPIDs: (%s)", cid, peer.Default.GetMSPIDs(cid))
 	}
 
 	org1CertPool, err := createCertPool([][]byte{org1CA})
@@ -221,7 +228,6 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 	// basic function tests
 	var tests = []struct {
 		name          string
-		listenAddress string
 		serverConfig  comm.ServerConfig
 		createChannel func()
 		goodOptions   []grpc.DialOption
@@ -231,8 +237,7 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 	}{
 
 		{
-			name:          "MutualTLSOrg1Org1",
-			listenAddress: fmt.Sprintf("localhost:%d", 4051),
+			name: "MutualTLSOrg1Org1",
 			serverConfig: comm.ServerConfig{
 				SecOpts: &comm.SecureOptions{
 					UseTLS:            true,
@@ -249,8 +254,7 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 			numOrdererCAs: 1,
 		},
 		{
-			name:          "MutualTLSOrg1Org2",
-			listenAddress: fmt.Sprintf("localhost:%d", 4052),
+			name: "MutualTLSOrg1Org2",
 			serverConfig: comm.ServerConfig{
 				SecOpts: &comm.SecureOptions{
 					UseTLS:            true,
@@ -269,8 +273,7 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 			numOrdererCAs: 2,
 		},
 		{
-			name:          "MutualTLSOrg1Org2Intermediate",
-			listenAddress: fmt.Sprintf("localhost:%d", 4053),
+			name: "MutualTLSOrg1Org2Intermediate",
 			serverConfig: comm.ServerConfig{
 				SecOpts: &comm.SecureOptions{
 					UseTLS:            true,
@@ -294,22 +297,29 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Logf("Running test %s ...", test.name)
-			_, err := peer.CreatePeerServer(test.listenAddress, test.serverConfig)
+			server, err := peer.NewPeerServer("localhost:0", test.serverConfig)
 			if err != nil {
-				t.Fatalf("CreatePeerServer failed with error [%s]", err)
+				t.Fatalf("NewPeerServer failed with error [%s]", err)
 			} else {
-				assert.NoError(t, err, "CreatePeerServer should not have returned an error")
-				// get the server from peer
-				server := peer.GetPeerServer()
-				assert.NotNil(t, server, "GetPeerServer should not return a nil value")
+				assert.NoError(t, err, "NewPeerServer should not have returned an error")
+				assert.NotNil(t, server, "NewPeerServer should have created a server")
 				// register a GRPC test service
 				testpb.RegisterTestServiceServer(server.Server(), &testServiceServer{})
 				go server.Start()
 				defer server.Stop()
 
+				// extract dynamic listen port
+				_, port, err := net.SplitHostPort(server.Listener().Addr().String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("listenAddress: %s", server.Listener().Addr())
+				testAddress := "localhost:" + port
+				t.Logf("testAddress: %s", testAddress)
+
 				// invoke the EmptyCall service with good options but should fail
 				// until channel is created and root CAs are updated
-				_, err = invokeEmptyCall(test.listenAddress, test.goodOptions)
+				_, err = invokeEmptyCall(testAddress, test.goodOptions)
 				assert.Error(t, err, "Expected error invoking the EmptyCall service ")
 
 				// creating channel should update the trusted client roots
@@ -323,11 +333,11 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 					"Did not find expected number of orderer CAs for channel")
 
 				// invoke the EmptyCall service with good options
-				_, err = invokeEmptyCall(test.listenAddress, test.goodOptions)
+				_, err = invokeEmptyCall(testAddress, test.goodOptions)
 				assert.NoError(t, err, "Failed to invoke the EmptyCall service")
 
 				// invoke the EmptyCall service with bad options
-				_, err = invokeEmptyCall(test.listenAddress, test.badOptions)
+				_, err = invokeEmptyCall(testAddress, test.badOptions)
 				assert.Error(t, err, "Expected error using bad dial options")
 			}
 		})

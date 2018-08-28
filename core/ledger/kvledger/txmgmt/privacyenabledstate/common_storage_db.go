@@ -9,7 +9,11 @@ package privacyenabledstate
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 
+	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
+	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -17,7 +21,18 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/uber-go/tally"
 )
+
+var logger = flogging.MustGetLogger("privacyenabledstate")
+
+var addPvtUpdatesTimer tally.Timer
+var addHashedUpdatesTimer tally.Timer
+
+func init() {
+	addPvtUpdatesTimer = metrics.RootScope.Timer("privacyenabledstate_addPvtUpdates_time_seconds")
+	addHashedUpdatesTimer = metrics.RootScope.Timer("privacyenabledstate_addHashedUpdatesTimer_time_seconds")
+}
 
 const (
 	nsJoiner       = "$$"
@@ -118,9 +133,9 @@ func (s *CommonStorageDB) ClearCachedVersions() {
 
 // GetChaincodeEventListener implements corresponding function in interface DB
 func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifecycleEventListener {
-	ccListener, ok := s.VersionedDB.(cceventmgmt.ChaincodeLifecycleEventListener)
+	_, ok := s.VersionedDB.(statedb.IndexCapable)
 	if ok {
-		return ccListener
+		return s
 	}
 	return nil
 }
@@ -190,6 +205,59 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 	return s.VersionedDB.ApplyUpdates(updates.PubUpdates.UpdateBatch, height)
 }
 
+// HandleChaincodeDeploy initializes database artifacts for the database associated with the namespace
+// This function delibrately suppresses the errors that occur during the creation of the indexes on couchdb.
+// This is because, in the present code, we do not differentiate between the errors because of couchdb interaction
+// and the errors because of bad index files - the later being unfixable by the admin. Note that the error suppression
+// is acceptable since peer can continue in the committing role without the indexes. However, executing chaincode queries
+// may be affected, until a new chaincode with fixed indexes is installed and instantiated
+func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt.ChaincodeDefinition, dbArtifactsTar []byte) error {
+
+	//Check to see if the interface for IndexCapable is implemented
+	indexCapable, ok := s.VersionedDB.(statedb.IndexCapable)
+	if !ok {
+		return nil
+	}
+
+	if chaincodeDefinition == nil {
+		return fmt.Errorf("chaincode definition not found while creating couchdb index on chain")
+	}
+
+	dbArtifacts, err := ccprovider.ExtractFileEntries(dbArtifactsTar, indexCapable.GetDBType())
+	if err != nil {
+		logger.Errorf("error during extracting db artifacts from tar for chaincode=[%s] on chain=[%s]. error=%s",
+			chaincodeDefinition, chaincodeDefinition.Name, err)
+		return nil
+	}
+	for directoryPath, archiveDirectoryEntries := range dbArtifacts {
+		// split the directory name
+		directoryPathArray := strings.Split(directoryPath, "/")
+		// process the indexes for the chain
+		if directoryPathArray[3] == "indexes" {
+			err := indexCapable.ProcessIndexesForChaincodeDeploy(chaincodeDefinition.Name, archiveDirectoryEntries)
+			if err != nil {
+				logger.Errorf(err.Error())
+			}
+			continue
+		}
+		// check for the indexes directory for the collection
+		if directoryPathArray[3] == "collections" && directoryPathArray[5] == "indexes" {
+			collectionName := directoryPathArray[4]
+			err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
+				archiveDirectoryEntries)
+			if err != nil {
+				logger.Errorf(err.Error())
+			}
+		}
+	}
+	return nil
+}
+
+// ChaincodeDeployDone is a noop for couchdb state impl
+func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
+	// NOOP
+}
+
 func derivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
@@ -199,6 +267,8 @@ func deriveHashedDataNs(namespace, collection string) string {
 }
 
 func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
+	stopWatch := addPvtUpdatesTimer.Start()
+	defer stopWatch.Stop()
 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {
@@ -209,6 +279,8 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
 }
 
 func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
+	stopWatch := addHashedUpdatesTimer.Start()
+	defer stopWatch.Stop()
 	for ns, nsBatch := range hashedUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {

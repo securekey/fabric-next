@@ -19,6 +19,7 @@ import (
 	mockchannelconfig "github.com/hyperledger/fabric/common/mocks/config"
 	mockcrypto "github.com/hyperledger/fabric/common/mocks/crypto"
 	mockpolicies "github.com/hyperledger/fabric/common/mocks/policies"
+	"github.com/hyperledger/fabric/common/tools/configtxgen/configtxgentest"
 	"github.com/hyperledger/fabric/common/tools/configtxgen/encoder"
 	genesisconfig "github.com/hyperledger/fabric/common/tools/configtxgen/localconfig"
 	"github.com/hyperledger/fabric/msp"
@@ -42,7 +43,7 @@ func init() {
 	flogging.SetModuleLevel(pkgLogID, "DEBUG")
 	mockSigningIdentity, _ = mmsp.NewNoopMsp().GetDefaultSigningIdentity()
 
-	conf = genesisconfig.Load(genesisconfig.SampleInsecureSoloProfile)
+	conf = configtxgentest.Load(genesisconfig.SampleInsecureSoloProfile)
 	genesisBlock = encoder.New(conf).GenesisBlock()
 }
 
@@ -51,7 +52,7 @@ func mockCrypto() crypto.LocalSigner {
 }
 
 func NewRAMLedgerAndFactory(maxSize int) (blockledger.Factory, blockledger.ReadWriter) {
-	rlf := ramledger.New(10)
+	rlf := ramledger.New(maxSize)
 	rl, err := rlf.GetOrCreate(genesisconfig.TestChainID)
 	if err != nil {
 		panic(err)
@@ -181,7 +182,7 @@ func TestNewChain(t *testing.T) {
 	consenters[conf.Orderer.OrdererType] = &mockConsenter{}
 
 	manager := NewRegistrar(lf, consenters, mockCrypto())
-	orglessChannelConf := genesisconfig.Load(genesisconfig.SampleSingleMSPChannelProfile)
+	orglessChannelConf := configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile)
 	orglessChannelConf.Application.Organizations = nil
 	envConfigUpdate, err := encoder.MakeChannelCreationTransaction(newChainID, mockCrypto(), nil, orglessChannelConf)
 	assert.NoError(t, err, "Constructing chain creation tx")
@@ -346,4 +347,15 @@ func TestResourcesCheck(t *testing.T) {
 			})
 		})
 	})
+}
+
+// The registrar's BroadcastChannelSupport implementation should reject message types which should not be processed directly.
+func TestBroadcastChannelSupportRejection(t *testing.T) {
+	ledgerFactory, _ := NewRAMLedgerAndFactory(10)
+	mockConsenters := map[string]consensus.Consenter{conf.Orderer.OrdererType: &mockConsenter{}}
+	registrar := NewRegistrar(ledgerFactory, mockConsenters, mockCrypto())
+	randomValue := 1
+	configTx := makeConfigTx(genesisconfig.TestChainID, randomValue)
+	_, _, _, err := registrar.BroadcastChannelSupport(configTx)
+	assert.Error(t, err, "Messages of type HeaderType_CONFIG should return an error.")
 }

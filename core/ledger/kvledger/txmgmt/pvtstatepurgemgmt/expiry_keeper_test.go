@@ -38,9 +38,9 @@ func TestExpiryKeeper(t *testing.T) {
 	expinfo3 := &expiryInfo{&expiryInfoKey{committingBlk: 4, expiryBlk: 13}, buildPvtdataKeysForTest(3, 3)}
 	expinfo4 := &expiryInfo{&expiryInfoKey{committingBlk: 5, expiryBlk: 17}, buildPvtdataKeysForTest(4, 4)}
 
-	// Insert entires for keys at committingBlk 3
+	// Insert entries for keys at committingBlk 3
 	expiryKeeper.updateBookkeeping([]*expiryInfo{expinfo1, expinfo2}, nil)
-	// Insert entires for keys at committingBlk 4 and 5
+	// Insert entries for keys at committingBlk 4 and 5
 	expiryKeeper.updateBookkeeping([]*expiryInfo{expinfo3, expinfo4}, nil)
 
 	// Retrieve entries by expiring block 13, 15, and 17

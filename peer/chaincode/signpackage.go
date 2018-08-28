@@ -45,9 +45,12 @@ func signpackageCmd(cf *ChaincodeCmdFactory) *cobra.Command {
 }
 
 func signpackage(cmd *cobra.Command, ipackageFile string, opackageFile string, cf *ChaincodeCmdFactory) error {
+	// Parsing of the command line is done so silence cmd usage
+	cmd.SilenceUsage = true
+
 	var err error
 	if cf == nil {
-		cf, err = InitCmdFactory(false, false)
+		cf, err = InitCmdFactory(cmd.Name(), false, false)
 		if err != nil {
 			return err
 		}

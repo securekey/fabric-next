@@ -1,8 +1,5 @@
-/*
-Copyright IBM Corp. 2017 All Rights Reserved.
-
-SPDX-License-Identifier: Apache-2.0
-*/
+// Copyright IBM Corp. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 package server
 
@@ -13,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof" // This is essentially the main package for the orderer
+
 	"os"
 	"time"
 
@@ -70,7 +68,11 @@ func Main() {
 		return
 	}
 
-	conf := config.Load()
+	conf, err := localconfig.Load()
+	if err != nil {
+		logger.Error("failed to parse config: ", err)
+		os.Exit(1)
+	}
 	initializeLoggingLevel(conf)
 	initializeLocalMsp(conf)
 
@@ -79,7 +81,7 @@ func Main() {
 }
 
 // Start provides a layer of abstraction for benchmark test
-func Start(cmd string, conf *config.TopLevel) {
+func Start(cmd string, conf *localconfig.TopLevel) {
 	signer := localmsp.NewSigner()
 	serverConfig := initializeServerConfig(conf)
 	grpcServer := initializeGrpcServer(conf, serverConfig)
@@ -116,13 +118,13 @@ func Start(cmd string, conf *config.TopLevel) {
 }
 
 // Set the logging level
-func initializeLoggingLevel(conf *config.TopLevel) {
+func initializeLoggingLevel(conf *localconfig.TopLevel) {
 	flogging.InitBackend(flogging.SetFormat(conf.General.LogFormat), os.Stderr)
 	flogging.InitFromSpec(conf.General.LogLevel)
 }
 
 // Start the profiling service if enabled.
-func initializeProfilingService(conf *config.TopLevel) {
+func initializeProfilingService(conf *localconfig.TopLevel) {
 	if conf.General.Profile.Enabled {
 		go func() {
 			logger.Info("Starting Go pprof profiling service on:", conf.General.Profile.Address)
@@ -132,11 +134,11 @@ func initializeProfilingService(conf *config.TopLevel) {
 	}
 }
 
-func initializeServerConfig(conf *config.TopLevel) comm.ServerConfig {
+func initializeServerConfig(conf *localconfig.TopLevel) comm.ServerConfig {
 	// secure server config
 	secureOpts := &comm.SecureOptions{
 		UseTLS:            conf.General.TLS.Enabled,
-		RequireClientCert: conf.General.TLS.ClientAuthEnabled,
+		RequireClientCert: conf.General.TLS.ClientAuthRequired,
 	}
 	// check to see if TLS is enabled
 	if secureOpts.UseTLS {
@@ -178,7 +180,7 @@ func initializeServerConfig(conf *config.TopLevel) comm.ServerConfig {
 		secureOpts.ClientRootCAs = clientRootCAs
 		logger.Infof("Starting orderer with %s enabled", msg)
 	}
-	kaOpts := comm.DefaultKeepaliveOptions()
+	kaOpts := comm.DefaultKeepaliveOptions
 	// keepalive settings
 	// ServerMinInterval must be greater than 0
 	if conf.General.Keepalive.ServerMinInterval > time.Duration(0) {
@@ -190,7 +192,7 @@ func initializeServerConfig(conf *config.TopLevel) comm.ServerConfig {
 	return comm.ServerConfig{SecOpts: secureOpts, KaOpts: kaOpts}
 }
 
-func initializeBootstrapChannel(conf *config.TopLevel, lf blockledger.Factory) {
+func initializeBootstrapChannel(conf *localconfig.TopLevel, lf blockledger.Factory) {
 	var genesisBlock *cb.Block
 
 	// Select the bootstrapping mechanism
@@ -218,7 +220,7 @@ func initializeBootstrapChannel(conf *config.TopLevel, lf blockledger.Factory) {
 	}
 }
 
-func initializeGrpcServer(conf *config.TopLevel, serverConfig comm.ServerConfig) comm.GRPCServer {
+func initializeGrpcServer(conf *localconfig.TopLevel, serverConfig comm.ServerConfig) *comm.GRPCServer {
 	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.General.ListenAddress, conf.General.ListenPort))
 	if err != nil {
 		logger.Fatal("Failed to listen:", err)
@@ -233,7 +235,7 @@ func initializeGrpcServer(conf *config.TopLevel, serverConfig comm.ServerConfig)
 	return grpcServer
 }
 
-func initializeLocalMsp(conf *config.TopLevel) {
+func initializeLocalMsp(conf *localconfig.TopLevel) {
 	// Load local MSP
 	err := mspmgmt.LoadLocalMsp(conf.General.LocalMSPDir, conf.General.BCCSP, conf.General.LocalMSPID)
 	if err != nil { // Handle errors reading the config file
@@ -241,7 +243,7 @@ func initializeLocalMsp(conf *config.TopLevel) {
 	}
 }
 
-func initializeMultichannelRegistrar(conf *config.TopLevel, signer crypto.LocalSigner,
+func initializeMultichannelRegistrar(conf *localconfig.TopLevel, signer crypto.LocalSigner,
 	callbacks ...func(bundle *channelconfig.Bundle)) *multichannel.Registrar {
 	lf, _ := createLedgerFactory(conf)
 	// Are we bootstrapping?
@@ -258,7 +260,7 @@ func initializeMultichannelRegistrar(conf *config.TopLevel, signer crypto.LocalS
 	return multichannel.NewRegistrar(lf, consenters, signer, callbacks...)
 }
 
-func updateTrustedRoots(srv comm.GRPCServer, rootCASupport *comm.CASupport,
+func updateTrustedRoots(srv *comm.GRPCServer, rootCASupport *comm.CASupport,
 	cm channelconfig.Resources) {
 	rootCASupport.Lock()
 	defer rootCASupport.Unlock()
@@ -279,6 +281,15 @@ func updateTrustedRoots(srv comm.GRPCServer, rootCASupport *comm.CASupport,
 		//loop through orderer orgs and build map of MSPIDs
 		for _, ordOrg := range ac.Organizations() {
 			ordOrgMSPs[ordOrg.MSPID()] = struct{}{}
+		}
+	}
+
+	if cc, ok := cm.ConsortiumsConfig(); ok {
+		for _, consortium := range cc.Consortiums() {
+			//loop through consortium orgs and build map of MSPIDs
+			for _, consortiumOrg := range consortium.Organizations() {
+				appOrgMSPs[consortiumOrg.MSPID()] = struct{}{}
+			}
 		}
 	}
 

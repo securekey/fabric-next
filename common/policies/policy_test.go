@@ -11,7 +11,13 @@ import (
 
 	cb "github.com/hyperledger/fabric/protos/common"
 
+	"fmt"
+	"reflect"
+
+	"strconv"
+
 	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric/protos/msp"
 	logging "github.com/op/go-logging"
 	"github.com/stretchr/testify/assert"
 )
@@ -180,4 +186,56 @@ func TestNestedManager(t *testing.T) {
 			assert.True(t, ok, "Should have found absolutely policy for manager %d", i)
 		}
 	}
+}
+
+func TestPrincipalUniqueSet(t *testing.T) {
+	var principalSet PrincipalSet
+	addPrincipal := func(i int) {
+		principalSet = append(principalSet, &msp.MSPPrincipal{
+			PrincipalClassification: msp.MSPPrincipal_Classification(i),
+			Principal:               []byte(fmt.Sprintf("%d", i)),
+		})
+	}
+
+	addPrincipal(1)
+	addPrincipal(2)
+	addPrincipal(2)
+	addPrincipal(3)
+	addPrincipal(3)
+	addPrincipal(3)
+
+	for principal, plurality := range principalSet.UniqueSet() {
+		assert.Equal(t, int(principal.PrincipalClassification), plurality)
+		assert.Equal(t, fmt.Sprintf("%d", plurality), string(principal.Principal))
+	}
+
+	v := reflect.Indirect(reflect.ValueOf(msp.MSPPrincipal{}))
+	// Ensure msp.MSPPrincipal has only 2 fields.
+	// This is essential for 'UniqueSet' to work properly
+	assert.Equal(t, 2, v.NumField())
+}
+
+func TestPrincipalSetContainingOnly(t *testing.T) {
+	var principalSets PrincipalSets
+	var principalSet PrincipalSet
+	for j := 0; j < 3; j++ {
+		for i := 0; i < 10; i++ {
+			principalSet = append(principalSet, &msp.MSPPrincipal{
+				PrincipalClassification: msp.MSPPrincipal_IDENTITY,
+				Principal:               []byte(fmt.Sprintf("%d", j*10+i)),
+			})
+		}
+		principalSets = append(principalSets, principalSet)
+		principalSet = nil
+	}
+
+	between20And30 := func(principal *msp.MSPPrincipal) bool {
+		n, _ := strconv.ParseInt(string(principal.Principal), 10, 32)
+		return n >= 20 && n <= 29
+	}
+
+	principalSets = principalSets.ContainingOnly(between20And30)
+
+	assert.Len(t, principalSets, 1)
+	assert.True(t, principalSets[0].ContainingOnly(between20And30))
 }

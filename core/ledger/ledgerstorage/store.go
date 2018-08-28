@@ -20,15 +20,39 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-
+	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/protos/common"
+	"github.com/uber-go/tally"
 )
+
+var commitWithPvtDataTimer tally.Timer
+var commitWithPvtDataLockTimer tally.Timer
+var pvtDataAndBlockByNumTimer tally.Timer
+var pvtDataAndBlockByNumLockTimer tally.Timer
+var pvtDataByNumTimer tally.Timer
+var pvtDataByNumLockTimer tally.Timer
+var commitWithPvtDataSkipCounter tally.Counter
+var commitWithPvtDataBlockDiff tally.Gauge
+
+func init() {
+	commitWithPvtDataTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds")
+	commitWithPvtDataLockTimer = metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_Lock_time_seconds")
+	commitWithPvtDataSkipCounter = metrics.RootScope.Counter("ledgerstorage_CommitWithPvtData_SkipCount")
+	commitWithPvtDataBlockDiff = metrics.RootScope.Gauge("ledgerstorage_CommitWithPvtData_BlockDiff")
+	pvtDataAndBlockByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds")
+	pvtDataAndBlockByNumLockTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_Lock_time_seconds")
+	pvtDataByNumTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds")
+	pvtDataByNumLockTimer = metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_Lock_time_seconds")
+}
+
+var logger = flogging.MustGetLogger("ledgerstorage")
 
 // Provider encapusaltes two providers 1) block store provider and 2) and pvt data store provider
 type Provider struct {
@@ -95,27 +119,67 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
+
+	// Measure the whole
+	stopWatch := commitWithPvtDataTimer.Start()
+	defer stopWatch.Stop()
+
+	blockNum := blockAndPvtdata.Block.Header.Number
+
+	// Measure acquiring the lock
+	lockStopWatch := commitWithPvtDataLockTimer.Start()
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
-	var pvtdata []*ledger.TxPvtData
-	for _, v := range blockAndPvtdata.BlockPvtData {
-		pvtdata = append(pvtdata, v)
-	}
-	if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
+	lockStopWatch.Stop()
+
+	pvtBlkStoreHt, err := s.pvtdataStore.LastCommittedBlockHeight()
+	if err != nil {
 		return err
 	}
+	commitWithPvtDataBlockDiff.Update(float64(blockNum - pvtBlkStoreHt))
+
+	writtenToPvtStore := false
+	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
+		// when re-processing blocks (rejoin the channel or re-fetching last few block),
+		// skip the pvt data commit to the pvtdata blockstore
+		logger.Debugf("Writing block [%d] to pvt block store", blockNum)
+		var pvtdata []*ledger.TxPvtData
+		for _, v := range blockAndPvtdata.BlockPvtData {
+			pvtdata = append(pvtdata, v)
+		}
+		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
+			return err
+		}
+		writtenToPvtStore = true
+	} else {
+		commitWithPvtDataSkipCounter.Inc(1)
+		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
+	}
+
 	if err := s.AddBlock(blockAndPvtdata.Block); err != nil {
 		s.pvtdataStore.Rollback()
 		return err
 	}
-	return s.pvtdataStore.Commit()
+
+	if writtenToPvtStore {
+		return s.pvtdataStore.Commit()
+	}
+	return nil
 }
 
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
+
+	// Measure the whole
+	stopWatch := pvtDataAndBlockByNumTimer.Start()
+	defer stopWatch.Stop()
+
+	// Measure acquiring the lock
+	lockStopWatch := pvtDataAndBlockByNumLockTimer.Start()
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
+	lockStopWatch.Stop()
 
 	var block *common.Block
 	var pvtdata []*ledger.TxPvtData
@@ -133,8 +197,17 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
 // A nil filter does not filter any results
 func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+
+	// Measure the whole
+	stopWatch := pvtDataByNumTimer.Start()
+	defer stopWatch.Stop()
+
+	// Measure acquiring the lock
+	lockStopWatch := pvtDataByNumLockTimer.Start()
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
+	lockStopWatch.Stop()
+
 	return s.getPvtDataByNumWithoutLock(blockNum, filter)
 }
 

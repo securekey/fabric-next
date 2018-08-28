@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger/fabric/core/config"
+	"github.com/hyperledger/fabric/core/config/configtest"
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -378,6 +378,14 @@ func bootPeer(port int) string {
 	return fmt.Sprintf("localhost:%d", port)
 }
 
+func TestHasExternalEndpoints(t *testing.T) {
+	memberWithEndpoint := NetworkMember{Endpoint: "foo"}
+	memberWithoutEndpoint := NetworkMember{}
+
+	assert.True(t, HasExternalEndpoint(memberWithEndpoint))
+	assert.False(t, HasExternalEndpoint(memberWithoutEndpoint))
+}
+
 func TestToString(t *testing.T) {
 	nm := NetworkMember{
 		Endpoint:         "a",
@@ -543,6 +551,21 @@ func TestInitiateSync(t *testing.T) {
 	assertMembership(t, instances, nodeNum-1)
 	atomic.StoreInt32(&toDie, int32(1))
 	stopInstances(t, instances)
+}
+
+func TestSelf(t *testing.T) {
+	t.Parallel()
+	inst := createDiscoveryInstance(13463, "d1", []string{})
+	defer inst.Stop()
+	env := inst.Self().Envelope
+	sMsg, err := env.ToGossipMessage()
+	assert.NoError(t, err)
+	member := sMsg.GetAliveMsg().Membership
+	assert.Equal(t, "localhost:13463", member.Endpoint)
+	assert.Equal(t, []byte("localhost:13463"), member.PkiId)
+
+	assert.Equal(t, "localhost:13463", inst.Self().Endpoint)
+	assert.Equal(t, common.PKIidType("localhost:13463"), inst.Self().PKIid)
 }
 
 func TestExpiration(t *testing.T) {
@@ -854,7 +877,7 @@ func TestConfigFromFile(t *testing.T) {
 	aliveExpirationCheckInterval = 0 * time.Second
 	viper.SetConfigName("core")
 	viper.SetEnvPrefix("CORE")
-	config.AddDevConfigPath(nil)
+	configtest.AddDevConfigPath(nil)
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	err := viper.ReadInConfig()
@@ -974,7 +997,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
 	}
 	// Creating Alive messages
 	for i := 0; i < peersNum; i++ {
-		aliveMsg, _ := instances[i].discoveryImpl().createAliveMessage(true)
+		aliveMsg, _ := instances[i].discoveryImpl().createSignedAliveMessage(true)
 		aliveMsgs = append(aliveMsgs, aliveMsg)
 	}
 
@@ -1042,7 +1065,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
 				return k == i
 			},
 			func(k int) {
-				aliveMsg, _ := instances[k].discoveryImpl().createAliveMessage(true)
+				aliveMsg, _ := instances[k].discoveryImpl().createSignedAliveMessage(true)
 				memResp := instances[k].discoveryImpl().createMembershipResponse(aliveMsg, peerToResponse)
 				memRespMsgs[i] = append(memRespMsgs[i], memResp)
 			})
@@ -1050,7 +1073,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
 
 	// Re-creating Alive msgs with highest seq_num, to make sure Alive msgs in memReq and memResp are older
 	for i := 0; i < peersNum; i++ {
-		aliveMsg, _ := instances[i].discoveryImpl().createAliveMessage(true)
+		aliveMsg, _ := instances[i].discoveryImpl().createSignedAliveMessage(true)
 		newAliveMsgs = append(newAliveMsgs, aliveMsg)
 	}
 
@@ -1183,7 +1206,7 @@ func TestAliveMsgStore(t *testing.T) {
 	}
 	// Creating Alive messages
 	for i := 0; i < peersNum; i++ {
-		aliveMsg, _ := instances[i].discoveryImpl().createAliveMessage(true)
+		aliveMsg, _ := instances[i].discoveryImpl().createSignedAliveMessage(true)
 		aliveMsgs = append(aliveMsgs, aliveMsg)
 	}
 
@@ -1230,6 +1253,45 @@ func TestMemRespDisclosurePol(t *testing.T) {
 	assertMembership(t, []*gossipInstance{d2}, 0)
 	assert.Zero(t, d2.receivedMsgCount())
 	assert.NotZero(t, d2.sentMsgCount())
+}
+
+func TestMembersByID(t *testing.T) {
+	members := Members{
+		{PKIid: common.PKIidType("p0"), Endpoint: "p0"},
+		{PKIid: common.PKIidType("p1"), Endpoint: "p1"},
+	}
+	byID := members.ByID()
+	assert.Len(t, byID, 2)
+	assert.Equal(t, "p0", byID["p0"].Endpoint)
+	assert.Equal(t, "p1", byID["p1"].Endpoint)
+}
+
+func TestFilter(t *testing.T) {
+	members := Members{
+		{PKIid: common.PKIidType("p0"), Endpoint: "p0", Properties: &proto.Properties{
+			Chaincodes: []*proto.Chaincode{{Name: "cc", Version: "1.0"}},
+		}},
+		{PKIid: common.PKIidType("p1"), Endpoint: "p1", Properties: &proto.Properties{
+			Chaincodes: []*proto.Chaincode{{Name: "cc", Version: "2.0"}},
+		}},
+	}
+	res := members.Filter(func(member NetworkMember) bool {
+		cc := member.Properties.Chaincodes[0]
+		return cc.Version == "2.0" && cc.Name == "cc"
+	})
+	assert.Equal(t, Members{members[1]}, res)
+}
+
+func TestMembersIntersect(t *testing.T) {
+	members1 := Members{
+		{PKIid: common.PKIidType("p0"), Endpoint: "p0"},
+		{PKIid: common.PKIidType("p1"), Endpoint: "p1"},
+	}
+	members2 := Members{
+		{PKIid: common.PKIidType("p1"), Endpoint: "p1"},
+		{PKIid: common.PKIidType("p2"), Endpoint: "p2"},
+	}
+	assert.Equal(t, Members{{PKIid: common.PKIidType("p1"), Endpoint: "p1"}}, members1.Intersect(members2))
 }
 
 func waitUntilOrFail(t *testing.T, pred func() bool) {

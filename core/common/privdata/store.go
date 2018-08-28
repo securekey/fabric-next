@@ -21,13 +21,15 @@ type Support interface {
 	// GetQueryExecutorForLedger returns a query executor for the specified channel
 	GetQueryExecutorForLedger(cid string) (ledger.QueryExecutor, error)
 
-	// GetCollectionKVSKey returns the name of the collection
-	// given the collection criteria
-	GetCollectionKVSKey(cc common.CollectionCriteria) string
-
 	// GetIdentityDeserializer returns an IdentityDeserializer
 	// instance for the specified chain
 	GetIdentityDeserializer(chainID string) msp.IdentityDeserializer
+}
+
+// StateGetter retrieves data from the state
+type State interface {
+	// GetState retrieves the value for the given key in the given namespace
+	GetState(namespace string, key string) ([]byte, error)
 }
 
 type NoSuchCollectionError common.CollectionCriteria
@@ -54,19 +56,31 @@ func (c *simpleCollectionStore) retrieveCollectionConfigPackage(cc common.Collec
 		return nil, errors.WithMessage(err, fmt.Sprintf("could not retrieve query executor for collection criteria %#v", cc))
 	}
 	defer qe.Done()
+	return RetrieveCollectionConfigPackageFromState(cc, qe)
+}
 
-	cb, err := qe.GetState("lscc", c.s.GetCollectionKVSKey(cc))
+// RetrieveCollectionConfigPackageFromState retrieves the collection config package from the given key from the given state
+func RetrieveCollectionConfigPackageFromState(cc common.CollectionCriteria, state State) (*common.CollectionConfigPackage, error) {
+	cb, err := state.GetState("lscc", BuildCollectionKVSKey(cc.Namespace))
 	if err != nil {
 		return nil, errors.WithMessage(err, fmt.Sprintf("error while retrieving collection for collection criteria %#v", cc))
 	}
 	if cb == nil {
 		return nil, NoSuchCollectionError(cc)
 	}
-
-	collections := &common.CollectionConfigPackage{}
-	err = proto.Unmarshal(cb, collections)
+	conf, err := ParseCollectionConfig(cb)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid configuration for collection criteria %#v", cc)
+	}
+	return conf, nil
+}
+
+// ParseCollectionConfig parses the collection configuration from the given serialized representation
+func ParseCollectionConfig(colBytes []byte) (*common.CollectionConfigPackage, error) {
+	collections := &common.CollectionConfigPackage{}
+	err := proto.Unmarshal(colBytes, collections)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	return collections, nil

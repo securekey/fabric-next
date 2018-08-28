@@ -20,13 +20,23 @@ import (
 	"fmt"
 	"sync"
 
+	"strings"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/uber-go/tally"
 )
+
+var writeBatch1Timer tally.Timer
+
+func init() {
+	writeBatch1Timer = metrics.RootScope.Timer("leveldbhelper_WriteBatch1_time_seconds")
+}
 
 var logger = flogging.MustGetLogger("leveldbhelper")
 
@@ -105,6 +115,16 @@ func (dbInst *DB) Close() {
 
 // Get returns the value for the given key
 func (dbInst *DB) Get(key []byte) ([]byte, error) {
+	dbName := dbInst.conf.DBPath
+	if strings.Contains(dbName, "ledgersData/") {
+		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
+	} else {
+		dbName = strings.Replace(dbName, "/", "_", -1)
+	}
+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
+	ccStopWatch := ccTimer.Start()
+	defer ccStopWatch.Stop()
+
 	value, err := dbInst.db.Get(key, dbInst.readOpts)
 	if err == leveldb.ErrNotFound {
 		value = nil
@@ -119,6 +139,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
 
 // Put saves the key/value
 func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+	dbName := dbInst.conf.DBPath
+	if strings.Contains(dbName, "ledgersData/") {
+		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
+	} else {
+		dbName = strings.Replace(dbName, "/", "_", -1)
+	}
+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
+	ccStopWatch := ccTimer.Start()
+	defer ccStopWatch.Stop()
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -133,6 +162,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
 
 // Delete deletes the given key
 func (dbInst *DB) Delete(key []byte, sync bool) error {
+	dbName := dbInst.conf.DBPath
+	if strings.Contains(dbName, "ledgersData/") {
+		dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
+	} else {
+		dbName = strings.Replace(dbName, "/", "_", -1)
+	}
+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
+	ccStopWatch := ccTimer.Start()
+	defer ccStopWatch.Stop()
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -154,6 +192,8 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator 
 
 // WriteBatch writes a batch
 func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+	stopWatch := writeBatch1Timer.Start()
+	defer stopWatch.Stop()
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync

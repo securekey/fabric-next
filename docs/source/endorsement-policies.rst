@@ -25,12 +25,14 @@ boolean expressions over principals.
 
 A principal is described in terms of the MSP that is tasked to validate
 the identity of the signer and of the role that the signer has within
-that MSP. Currently, two roles are supported: **member** and **admin**.
+that MSP. Four roles are supported: **member**, **admin**, **client**, and **peer**.
 Principals are described as ``MSP``.\ ``ROLE``, where ``MSP`` is the MSP
-ID that is required, and ``ROLE`` is either one of the two strings
-``member`` and ``admin``. Examples of valid principals are
+ID that is required, and ``ROLE`` is one of the four strings
+``member``, ``admin``, ``client`` and ``peer``. Examples of valid principals are
 ``'Org0.admin'`` (any administrator of the ``Org0`` MSP) or
-``'Org1.member'`` (any member of the ``Org1`` MSP).
+``'Org1.member'`` (any member of the ``Org1`` MSP),
+``'Org1.client'`` (any client of the ``Org1`` MSP), and
+``'Org1.peer'`` (any peer of the ``Org1`` MSP).
 
 The syntax of the language is:
 
@@ -55,9 +57,11 @@ Specifying endorsement policies for a chaincode
 
 Using this language, a chaincode deployer can request that the
 endorsements for a chaincode be validated against the specified policy.
-NOTE - the default policy requires one signature from a member of the
-``DEFAULT`` MSP). This is used if a policy is not specified in the CLI
-when instantiating chaincode.
+
+.. note:: if not specified at instantiation time, the endorsement policy
+          defaults to "any member of the organizations in the channel".
+          For example, a channel with "Org1" and "Org2" would have a default
+          endorsement policy of "OR('Org1.member', 'Org2.member')".
 
 The policy can be specified at instantiate time using the ``-P`` switch,
 followed by the policy.
@@ -71,6 +75,22 @@ For example:
 This command deploys chaincode ``mycc`` with the policy ``AND('Org1.member',
 'Org2.member')`` which would require that a member of both Org1 and Org2 sign
 the transaction.
+
+Notice that, if the identity classification is enabled (see :doc:`msp`),
+one can use the PEER role to restrict endorsement to only peers.
+
+For example:
+
+::
+
+    peer chaincode instantiate -C <channelid> -n mycc -P "AND('Org1.peer', 'Org2.peer')"
+
+.. note:: A new organization added to the channel after instantiation can query a chaincode
+          (provided the query has appropriate authorization as defined by channel policies
+          and any application level checks enforced by the chaincode) but will not be able
+          to commit a transaction endorsed by it.  The endorsement policy needs to be modified
+          to allow transactions to be committed with endorsements from the new organization
+          (see :ref:`upgrade-and-invoke`).
 
 .. Licensed under Creative Commons Attribution 4.0 International License
    https://creativecommons.org/licenses/by/4.0/
