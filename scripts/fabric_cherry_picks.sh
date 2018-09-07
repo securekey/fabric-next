@@ -21,8 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Tip of release-1.2 (September 5, 2018)
-git checkout 4a29e364ed7579dfb83eecb3eac7b50b54088714
+# Tip of release-1.2 (September 6, 2018)
+git checkout b9322e1dbfeb17197b9610e639c9bb173c2bc538
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -30,7 +30,7 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 # Cherry pick [FAB-11777] Expose LevelDB configuration
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
+#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
 
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
