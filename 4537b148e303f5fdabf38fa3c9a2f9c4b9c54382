@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "514173d5_b46a476e",
+        "filename": "patches/0001-Ledger-metrics.patch",
+        "patchSetId": 1
+      },
+      "lineNbr": 1162,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-07T20:34:08Z",
+      "side": 1,
+      "message": "this should not be there. blank is a \"legal\" thing to do.",
+      "range": {
+        "startLine": 1160,
+        "startChar": 0,
+        "endLine": 1162,
+        "endChar": 3
+      },
+      "revId": "4537b148e303f5fdabf38fa3c9a2f9c4b9c54382",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
