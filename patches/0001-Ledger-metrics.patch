@@ -1,4 +1,4 @@
-From 271a4d759cc09ac8e14a712bb03e23c08698069a Mon Sep 17 00:00:00 2001
+From 19220753c61f941d00045ce80082f789f02eb4f5 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -11,7 +11,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  62 +++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  38 +-
- common/metrics/server.go                           | 248 +++++------
+ common/metrics/server.go                           | 251 +++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
@@ -32,7 +32,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/util/couchdb/couchdb.go                |  29 ++
  gossip/privdata/coordinator.go                     |  19 +
  peer/main.go                                       |   2 +
- 26 files changed, 704 insertions(+), 1209 deletions(-)
+ 26 files changed, 707 insertions(+), 1209 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -464,7 +464,7 @@ index db41651d7..4511c3b3b 100644
  	return append(append([]byte(dbName), dbNameKeySep...), key...)
  }
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..82ad2cd2f 100644
+index 677151e78..0ab3bf15c 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,19 @@ package metrics
@@ -590,7 +590,7 @@ index 677151e78..82ad2cd2f 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +131,14 @@ func NewOpts() Opts {
+@@ -50,13 +131,17 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
@@ -598,6 +598,9 @@ index 677151e78..82ad2cd2f 100644
 -		if flushInterval := viper.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
 +		statsdOpts.Address = peerConfig.GetString("metrics.statsdReporter.address")
 +		statsdOpts.Prefix = peerConfig.GetString("metrics.statsdReporter.prefix")
++		if statsdOpts.Prefix == "" {
++			statsdOpts.Prefix = peerConfig.GetString("peer.address")
++		}
 +		if flushInterval := peerConfig.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
  			statsdOpts.FlushInterval = flushInterval
  		} else {
@@ -608,7 +611,7 @@ index 677151e78..82ad2cd2f 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +148,47 @@ func NewOpts() Opts {
+@@ -66,45 +151,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
@@ -680,7 +683,7 @@ index 677151e78..82ad2cd2f 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +197,35 @@ func isRunning() bool {
+@@ -113,109 +200,35 @@ func isRunning() bool {
  	return running
  }
  
