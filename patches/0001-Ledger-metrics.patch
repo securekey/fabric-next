@@ -1,4 +1,4 @@
-From 584e1b8ef4651ee5b0e12cb65726791673338de8 Mon Sep 17 00:00:00 2001
+From 271a4d759cc09ac8e14a712bb03e23c08698069a Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -11,9 +11,9 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  62 +++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  38 +-
- common/metrics/server.go                           | 246 +++++------
+ common/metrics/server.go                           | 248 +++++------
  common/metrics/server_test.go                      | 242 -----------
- common/metrics/tally_provider.go                   | 372 ++---------------
+ common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
  core/endorser/endorser.go                          |  73 +++-
@@ -32,7 +32,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/util/couchdb/couchdb.go                |  29 ++
  gossip/privdata/coordinator.go                     |  19 +
  peer/main.go                                       |   2 +
- 26 files changed, 701 insertions(+), 1208 deletions(-)
+ 26 files changed, 704 insertions(+), 1209 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -464,7 +464,7 @@ index db41651d7..4511c3b3b 100644
  	return append(append([]byte(dbName), dbNameKeySep...), key...)
  }
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..eb9422f12 100644
+index 677151e78..82ad2cd2f 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,19 @@ package metrics
@@ -488,7 +488,7 @@ index 677151e78..eb9422f12 100644
  )
  
  const (
-@@ -28,21 +36,93 @@ const (
+@@ -28,21 +36,94 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
@@ -513,6 +513,7 @@ index 677151e78..eb9422f12 100644
 +// StatsdReporterOpts ...
 +type StatsdReporterOpts struct {
 +	Address       string
++	Prefix        string
 +	FlushInterval time.Duration
 +	FlushBytes    int
 +}
@@ -589,13 +590,14 @@ index 677151e78..eb9422f12 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +130,13 @@ func NewOpts() Opts {
+@@ -50,13 +131,14 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
 -		statsdOpts.Address = viper.GetString("metrics.statsdReporter.address")
 -		if flushInterval := viper.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
 +		statsdOpts.Address = peerConfig.GetString("metrics.statsdReporter.address")
++		statsdOpts.Prefix = peerConfig.GetString("metrics.statsdReporter.prefix")
 +		if flushInterval := peerConfig.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
  			statsdOpts.FlushInterval = flushInterval
  		} else {
@@ -606,7 +608,7 @@ index 677151e78..eb9422f12 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +146,47 @@ func NewOpts() Opts {
+@@ -66,45 +148,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
@@ -678,7 +680,7 @@ index 677151e78..eb9422f12 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +195,35 @@ func isRunning() bool {
+@@ -113,109 +197,35 @@ func isRunning() bool {
  	return running
  }
  
@@ -1047,7 +1049,7 @@ index 07d010ca8..000000000
 -	}
 -}
 diff --git a/common/metrics/tally_provider.go b/common/metrics/tally_provider.go
-index cf1e3deff..660078d52 100644
+index cf1e3deff..aca8d54ab 100644
 --- a/common/metrics/tally_provider.go
 +++ b/common/metrics/tally_provider.go
 @@ -7,17 +7,16 @@ SPDX-License-Identifier: Apache-2.0
@@ -1151,7 +1153,14 @@ index cf1e3deff..660078d52 100644
  }
  
  func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReporter, error) {
-@@ -115,7 +51,7 @@ func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReport
+@@ -109,13 +45,13 @@ func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReport
+ 	}
+ 
+ 	statter, err := statsd.NewBufferedClient(statsdReporterOpts.Address,
+-		"", statsdReporterOpts.FlushInterval, statsdReporterOpts.FlushBytes)
++		statsdReporterOpts.Prefix, statsdReporterOpts.FlushInterval, statsdReporterOpts.FlushBytes)
+ 	if err != nil {
+ 		return nil, err
  	}
  	opts := statsdreporter.Options{}
  	reporter := statsdreporter.NewReporter(statter, opts)
@@ -2953,5 +2962,5 @@ index aa7d3018a..df333e808 100644
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
-2.15.2 (Apple Git-101.1)
+2.14.3 (Apple Git-98)
 
