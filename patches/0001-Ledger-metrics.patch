@@ -1,4 +1,4 @@
-From 84f6f25879b02c16a6cce252129953c175c9d632 Mon Sep 17 00:00:00 2001
+From e89b0b9ebaba9e80240743feacdd9acf24e0fdd0 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -9,7 +9,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  45 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  12 +
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  62 +++
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  68 +++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  38 +-
  common/metrics/server.go                           | 251 +++++------
  common/metrics/server_test.go                      | 242 -----------
@@ -32,7 +32,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/util/couchdb/couchdb.go                |  29 ++
  gossip/privdata/coordinator.go                     |  19 +
  peer/main.go                                       |   2 +
- 26 files changed, 707 insertions(+), 1209 deletions(-)
+ 26 files changed, 713 insertions(+), 1209 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -230,24 +230,27 @@ index 7ebe52af9..88af3b0cc 100644
  		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
  			itr.mgr.cpInfo.lastBlockNumber, blockNum)
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..2aee4a66c 100644
+index 9e2ab17df..0c24b5b5a 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
-@@ -20,14 +20,25 @@ import (
+@@ -20,14 +20,28 @@ import (
  	"fmt"
  	"sync"
  
 +	"strings"
 +
++	"bytes"
++	"time"
++
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/util"
 +	"github.com/hyperledger/fabric/common/metrics"
++	"github.com/spf13/viper"
  	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
  	"github.com/syndtr/goleveldb/leveldb/opt"
  	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
 +	"github.com/uber-go/tally"
-+	"time"
  )
  
 +var writeBatch1Timer tally.Timer
@@ -259,7 +262,7 @@ index 9e2ab17df..2aee4a66c 100644
  var logger = flogging.MustGetLogger("leveldbhelper")
  
  type dbState int32
-@@ -88,6 +99,7 @@ func (dbInst *DB) Open() {
+@@ -88,6 +102,7 @@ func (dbInst *DB) Open() {
  		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
  	}
  	dbInst.dbState = opened
@@ -267,7 +270,7 @@ index 9e2ab17df..2aee4a66c 100644
  }
  
  // Close closes the underlying db
-@@ -105,6 +117,16 @@ func (dbInst *DB) Close() {
+@@ -105,6 +120,16 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
@@ -284,7 +287,7 @@ index 9e2ab17df..2aee4a66c 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +141,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -119,6 +144,15 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
@@ -300,7 +303,7 @@ index 9e2ab17df..2aee4a66c 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +164,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -133,6 +167,15 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
@@ -316,7 +319,7 @@ index 9e2ab17df..2aee4a66c 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -154,6 +194,8 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+@@ -154,6 +197,8 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
  
  // WriteBatch writes a batch
  func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
@@ -325,27 +328,30 @@ index 9e2ab17df..2aee4a66c 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -163,3 +205,23 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+@@ -163,3 +208,26 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
  	}
  	return nil
  }
 +
-+
-+func (dbInst *DB) getState(){
++func (dbInst *DB) getState() {
 +	for {
-+		time.Sleep(5*time.Second)
-+		if dbInst.dbState==closed{
++		time.Sleep(5 * time.Second)
++		if dbInst.dbState == closed {
 +			logger.Info("leveldb is closed exit the getState")
 +			break
 +		}
 +		levelDBStats := []string{"stats", "iostats", "writedelay", "sstables", "blockpool", "cachedblock", "openedtables", "alivesnaps", "aliveiters"}
++		var b bytes.Buffer
 +		for _, stats := range levelDBStats {
 +			res, err := dbInst.db.GetProperty(fmt.Sprintf("leveldb.%s", stats))
 +			if err != nil {
 +				logger.Errorf("leveldb getState %s return error %s", stats, err)
 +				continue
 +			}
-+			logger.Infof("leveldb getState %s\n %s", stats, res)
++			b.WriteString(res)
++		}
++		if viper.GetBool("logging.leveldbState") {
++			logger.Infof("******* leveldb getState %s", strings.Replace(b.String(), "\n", " ", -1))
 +		}
 +	}
 +}
@@ -2965,5 +2971,5 @@ index aa7d3018a..df333e808 100644
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
-2.14.3 (Apple Git-98)
+2.15.2 (Apple Git-101.1)
 
