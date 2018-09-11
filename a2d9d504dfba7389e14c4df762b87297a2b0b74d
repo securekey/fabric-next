@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d4f8baca_0f3b0c30",
+        "filename": "patches/0001-Ledger-metrics.patch",
+        "patchSetId": 1
+      },
+      "lineNbr": 2084,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-11T17:34:13Z",
+      "side": 1,
+      "message": "no caps",
+      "range": {
+        "startLine": 2084,
+        "startChar": 59,
+        "endLine": 2084,
+        "endChar": 60
+      },
+      "revId": "a2d9d504dfba7389e14c4df762b87297a2b0b74d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
