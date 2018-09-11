@@ -30,7 +30,7 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 # Cherry pick [FAB-11777] Expose LevelDB configuration
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
 
 # Cherry pick [FAB-11907] Data races in deliver client
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/70/26170/4 && git cherry-pick FETCH_HEAD
@@ -47,4 +47,4 @@ git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_ch
 #git am $MY_PATH/../patches/0001-FAB-11779-Move-goleveldb-version.patch
 
 # **Temporary** metrics collection
-#git am $MY_PATH/../patches/0001-Ledger-metrics.patch
+git am $MY_PATH/../patches/0001-Ledger-metrics.patch
