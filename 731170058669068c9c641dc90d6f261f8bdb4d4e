@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "15b98ca0_e0b7dc23",
+        "filename": "patches/0001-Ledger-metrics.patch",
+        "patchSetId": 2
+      },
+      "lineNbr": 3036,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-11T17:40:50Z",
+      "side": 1,
+      "message": "this isn\u0027t about receiving - it\u0027s the block number is exiting the buffer (ready to transfer payloads to the ledger)",
+      "range": {
+        "startLine": 3036,
+        "startChar": 41,
+        "endLine": 3036,
+        "endChar": 78
+      },
+      "revId": "731170058669068c9c641dc90d6f261f8bdb4d4e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
