@@ -1,4 +1,4 @@
-From e89b0b9ebaba9e80240743feacdd9acf24e0fdd0 Mon Sep 17 00:00:00 2001
+From 4ae87d31afe75437f1f2427c9c4c3446d42d8299 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -2971,5 +2971,5 @@ index aa7d3018a..df333e808 100644
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
-2.15.2 (Apple Git-101.1)
+2.14.3 (Apple Git-98)
 
