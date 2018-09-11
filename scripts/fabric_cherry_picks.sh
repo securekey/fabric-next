@@ -32,6 +32,9 @@ git config user.email jenkins@jenkins.com
 # Cherry pick [FAB-11777] Expose LevelDB configuration
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
 
+# Cherry pick [FAB-11907] Data races in deliver client
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/70/26170/4 && git cherry-pick FETCH_HEAD
+
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
