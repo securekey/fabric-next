@@ -47,4 +47,4 @@ git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_ch
 #git am $MY_PATH/../patches/0001-FAB-11779-Move-goleveldb-version.patch
 
 # **Temporary** metrics collection
-git am $MY_PATH/../patches/0001-Ledger-metrics.patch
+#git am $MY_PATH/../patches/0001-Ledger-metrics.patch
