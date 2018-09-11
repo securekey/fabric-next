@@ -632,6 +632,40 @@ ledger:
     # goleveldb - default state database stored in goleveldb.
     # CouchDB - store state database in CouchDB
     stateDatabase: goleveldb
+    levelDBConfig:
+       # compactionL0Trigger defines number of 'sorted table' at level-0 that will
+       # trigger compaction.
+       compactionL0Trigger: 4
+       # writeL0PauseTrigger defines number of 'sorted table' at level-0 that will
+       # pause write.
+       writeL0PauseTrigger: 12
+       # writeL0SlowdownTrigger defines number of 'sorted table' at level-0 that
+       # will trigger write slowdown.
+       writeL0SlowdownTrigger: 8
+       # writeBuffer defines maximum size of a 'memdb' before flushed to
+       # 'sorted table'. 'memdb' is an in-memory DB backed by an on-disk
+       # unsorted journal.(unit: MiB, e.g. 4)
+       writeBuffer: 4
+       # iteratorSamplingRate defines approximate gap (in bytes) between read
+       # sampling of an iterator. The samples will be used to determine when
+       # compaction should be triggered.(unit: MiB, e.g. 1)
+       iteratorSamplingRate: 1
+       # compactionTotalSize limits total size of 'sorted table' for each level.
+       # The limits for each level will be calculated as:
+       # compactionTotalSize * (compactionTotalSizeMultiplier ^ Level)
+       # The multiplier for each level can also fine-tuned using
+       # compactionTotalSizeMultiplierPerLevel.(unit: MiB, e.g. 10)
+       compactionTotalSize: 10
+       # compactionTotalSizeMultiplier defines multiplier for compactionTotalSize.
+       compactionTotalSizeMultiplier: 10
+       # compactionTableSize limits size of 'sorted table' that compaction generates.
+       # The limits for each level will be calculated as:
+       # CompactionTableSize * (compactionTableSizeMultiplier ^ Level)
+       # The multiplier for each level can also fine-tuned using compactionTableSizeMultiplierPerLevel.
+       # (unit: MiB, e.g. 2)
+       compactionTableSize: 2
+       # compactionTableSizeMultiplier defines multiplier for compactionTableSize.
+       compactionTableSizeMultiplier: 1
     couchDBConfig:
        # It is recommended to run CouchDB on the same server as the peer, and
        # not map the CouchDB container port to a server port in docker-compose.

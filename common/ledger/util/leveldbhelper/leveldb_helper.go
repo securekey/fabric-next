@@ -77,6 +77,16 @@ func (dbInst *DB) Open() {
 		return
 	}
 	dbOpts := &opt.Options{}
+	levelDBDef := GetLevelDBDefinition()
+	dbOpts.CompactionL0Trigger = levelDBDef.CompactionL0Trigger
+	dbOpts.WriteL0PauseTrigger = levelDBDef.WriteL0PauseTrigger
+	dbOpts.WriteL0SlowdownTrigger = levelDBDef.WriteL0SlowdownTrigger
+	dbOpts.WriteBuffer = levelDBDef.WriteBuffer
+	dbOpts.IteratorSamplingRate = levelDBDef.IteratorSamplingRate
+	dbOpts.CompactionTotalSize = levelDBDef.CompactionTotalSize
+	dbOpts.CompactionTotalSizeMultiplier = levelDBDef.CompactionTotalSizeMultiplier
+	dbOpts.CompactionTableSize = levelDBDef.CompactionTableSize
+	dbOpts.CompactionTableSizeMultiplier = levelDBDef.CompactionTableSizeMultiplier
 	dbPath := dbInst.conf.DBPath
 	var err error
 	var dirEmpty bool
@@ -84,6 +94,7 @@ func (dbInst *DB) Open() {
 		panic(fmt.Sprintf("Error while trying to create dir if missing: %s", err))
 	}
 	dbOpts.ErrorIfMissing = !dirEmpty
+	logger.Infof("Open leveldb %s with dbOpts %v", dbPath, dbOpts)
 	if dbInst.db, err = leveldb.OpenFile(dbPath, dbOpts); err != nil {
 		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
 	}
