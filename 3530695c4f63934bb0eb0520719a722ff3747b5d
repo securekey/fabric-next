@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c6820f18_1f571ba9",
+        "filename": "scripts/fabric_cherry_picks.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 33,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-11T13:32:50Z",
+      "side": 1,
+      "message": "this should not be exposed in releases",
+      "range": {
+        "startLine": 32,
+        "startChar": 0,
+        "endLine": 33,
+        "endChar": 103
+      },
+      "revId": "3530695c4f63934bb0eb0520719a722ff3747b5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
