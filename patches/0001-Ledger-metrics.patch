@@ -1,4 +1,4 @@
-From e89b0b9ebaba9e80240743feacdd9acf24e0fdd0 Mon Sep 17 00:00:00 2001
+From 47f9facdb755e46e5803019841b380b0049e396a Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -16,9 +16,10 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
+ .../blocksprovider/blocksprovider.go               |   7 +
  core/endorser/endorser.go                          |  73 +++-
  .../historydb/historyleveldb/historyleveldb.go     |  12 +
- core/ledger/kvledger/kv_ledger.go                  |  47 +++
+ core/ledger/kvledger/kv_ledger.go                  |  50 +++
  .../privacyenabledstate/common_storage_db.go       |  14 +
  .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |  10 +
  .../txmgmt/statedb/statecouchdb/batch_util.go      |  17 +-
@@ -31,8 +32,9 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/ledgerstorage/store.go                 |  50 +++
  core/ledger/util/couchdb/couchdb.go                |  29 ++
  gossip/privdata/coordinator.go                     |  19 +
+ gossip/state/state.go                              |  13 +
  peer/main.go                                       |   2 +
- 26 files changed, 713 insertions(+), 1209 deletions(-)
+ 28 files changed, 736 insertions(+), 1209 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2050,6 +2052,40 @@ index c70001ea1..000000000
 -	// Start starts the server
 -	Start() error
 -}
+diff --git a/core/deliverservice/blocksprovider/blocksprovider.go b/core/deliverservice/blocksprovider/blocksprovider.go
+index c385e3ca1..9313ad391 100644
+--- a/core/deliverservice/blocksprovider/blocksprovider.go
++++ b/core/deliverservice/blocksprovider/blocksprovider.go
+@@ -11,8 +11,11 @@ import (
+ 	"sync/atomic"
+ 	"time"
+ 
++	"fmt"
++
+ 	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/gossip/api"
+ 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
+ 	"github.com/hyperledger/fabric/gossip/discovery"
+@@ -167,6 +170,8 @@ func (b *blocksProviderImpl) DeliverBlocks() {
+ 			statusCounter = 0
+ 			seqNum := t.Block.Header.Number
+ 
++			metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", b.chainID)).Update(float64(seqNum))
++
+ 			marshaledBlock, err := proto.Marshal(t.Block)
+ 			if err != nil {
+ 				logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", b.chainID, seqNum, err)
+@@ -189,6 +194,8 @@ func (b *blocksProviderImpl) DeliverBlocks() {
+ 				logger.Warning("Failed adding payload of", seqNum, "because:", err)
+ 			}
+ 
++			metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_Gossiping_block_number", b.chainID)).Update(float64(payload.SeqNum))
++
+ 			// Gossip messages with other nodes
+ 			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, seqNum, numberOfPeers)
+ 			if !b.isDone() {
 diff --git a/core/endorser/endorser.go b/core/endorser/endorser.go
 index 2d29f43a4..050c1a06f 100644
 --- a/core/endorser/endorser.go
@@ -2209,7 +2245,7 @@ index 369787d44..6e9e0e288 100644
  	//Set the starting tranNo to 0
  	var tranNo uint64
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 385f90917..322d2c66d 100644
+index 385f90917..d9c87439b 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -15,6 +15,7 @@ import (
@@ -2260,7 +2296,7 @@ index 385f90917..322d2c66d 100644
  	var err error
  	block := pvtdataAndBlock.Block
  	blockNo := pvtdataAndBlock.Block.Header.Number
-@@ -261,8 +284,12 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -261,11 +284,18 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  
  	logger.Debugf("Channel [%s]: Committing block [%d] to storage", l.ledgerID, blockNo)
  
@@ -2273,7 +2309,13 @@ index 385f90917..322d2c66d 100644
  	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
  		return err
  	}
-@@ -286,8 +313,18 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
++
++	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", l.ledgerID)).Update(float64(block.Header.Number))
++
+ 	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", l.ledgerID, block.Header.Number, len(block.Data.Data))
+ 
+ 	logger.Debugf("Channel [%s]: Committing block [%d] transactions to state database", l.ledgerID, blockNo)
+@@ -286,8 +316,18 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2292,7 +2334,7 @@ index 385f90917..322d2c66d 100644
  	l.blockAPIsRWLock.RUnlock()
  	return blockAndPvtdata, err
  }
-@@ -295,8 +332,18 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+@@ -295,8 +335,18 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
  // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2950,6 +2992,60 @@ index 1d1152bac..0aa4124be 100644
  
  	// Only log results if we actually attempted to fetch
  	if bFetchFromPeers {
+diff --git a/gossip/state/state.go b/gossip/state/state.go
+index ad2703a69..f3e19f247 100644
+--- a/gossip/state/state.go
++++ b/gossip/state/state.go
+@@ -12,8 +12,11 @@ import (
+ 	"sync/atomic"
+ 	"time"
+ 
++	"fmt"
++
+ 	pb "github.com/golang/protobuf/proto"
+ 	vsccErrors "github.com/hyperledger/fabric/common/errors"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/gossip/api"
+ 	"github.com/hyperledger/fabric/gossip/comm"
+ 	common2 "github.com/hyperledger/fabric/gossip/common"
+@@ -470,6 +473,9 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
+ 		return uint64(0), errors.New("Received state transfer response without payload")
+ 	}
+ 	for _, payload := range response.GetPayloads() {
++
++		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_handleStateResponse_block_number", s.chainID)).Update(float64(payload.SeqNum))
++
+ 		logger.Debugf("Received payload with sequence number %d.", payload.SeqNum)
+ 		if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), payload.SeqNum, payload.Data); err != nil {
+ 			err = errors.WithStack(err)
+@@ -514,6 +520,9 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
+ 
+ 	dataMsg := msg.GetDataMsg()
+ 	if dataMsg != nil {
++
++		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_adding_payload_number", s.chainID)).Update(float64(dataMsg.Payload.SeqNum))
++
+ 		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
+ 			logger.Warning("Failed adding payload:", err)
+ 			return
+@@ -546,6 +555,8 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
+ 				}
+ 				logger.Debug("New block with claimed sequence number ", payload.SeqNum, " transactions num ", len(rawBlock.Data.Data))
+ 
++				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_received_block_number", s.chainID)).Update(float64(rawBlock.Header.Number))
++
+ 				// Read all private data into slice
+ 				var p util.PvtDataCollections
+ 				if payload.PrivateData != nil {
+@@ -767,6 +778,8 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+ 
+ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
+ 
++	metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_about_to_store_block_number", s.chainID)).Update(float64(block.Header.Number))
++
+ 	// Commit block with available private transactions
+ 	if err := s.ledger.StoreBlock(block, pvtData); err != nil {
+ 		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 diff --git a/peer/main.go b/peer/main.go
 index aa7d3018a..df333e808 100644
 --- a/peer/main.go
@@ -2971,5 +3067,5 @@ index aa7d3018a..df333e808 100644
  	// Init the MSP
  	var mspMgrConfigDir = config.GetPath("peer.mspConfigPath")
 -- 
-2.15.2 (Apple Git-101.1)
+2.14.3 (Apple Git-98)
 
