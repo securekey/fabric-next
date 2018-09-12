@@ -1,4 +1,4 @@
-From fe7a2dedd2a529995222b89d4ffc1f91036fc106 Mon Sep 17 00:00:00 2001
+qFrom 1aab943a024c2d16fe22f432f247ef70b5b7d074 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 9 Aug 2018 18:21:13 -0400
 Subject: [PATCH] Ledger metrics
@@ -17,7 +17,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  common/metrics/tally_provider_test.go              | 462 ---------------------
  common/metrics/types.go                            |  45 --
  .../blocksprovider/blocksprovider.go               |   7 +
- core/endorser/endorser.go                          |  73 +++-
+ core/endorser/endorser.go                          |   9 +-
  .../historydb/historyleveldb/historyleveldb.go     |  12 +
  core/ledger/kvledger/kv_ledger.go                  |  50 +++
  .../privacyenabledstate/common_storage_db.go       |  14 +
@@ -34,7 +34,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  gossip/privdata/coordinator.go                     |  19 +
  gossip/state/state.go                              |  14 +
  peer/main.go                                       |   2 +
- 28 files changed, 737 insertions(+), 1209 deletions(-)
+ 28 files changed, 673 insertions(+), 1209 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2087,118 +2087,29 @@ index c385e3ca1..c7cfe4478 100644
  			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, seqNum, numberOfPeers)
  			if !b.isDone() {
 diff --git a/core/endorser/endorser.go b/core/endorser/endorser.go
-index 2d29f43a4..050c1a06f 100644
+index 2d29f43a4..fa78c3265 100644
 --- a/core/endorser/endorser.go
 +++ b/core/endorser/endorser.go
-@@ -25,10 +25,19 @@ import (
- 	putils "github.com/hyperledger/fabric/protos/utils"
- 	"github.com/pkg/errors"
- 	"golang.org/x/net/context"
-+	"github.com/hyperledger/fabric/common/metrics"
-+
- )
- 
- var endorserLogger = flogging.MustGetLogger("endorser")
- 
-+
-+
-+
-+
-+
-+
-+
- // The Jira issue that documents Endorser flow along with its relationship to
- // the lifecycle chaincode - https://jira.hyperledger.org/browse/FAB-181
- 
-@@ -122,8 +131,18 @@ func NewEndorserServer(privDist privateDataDistributor, s Support) *Endorser {
+@@ -122,8 +122,9 @@ func NewEndorserServer(privDist privateDataDistributor, s Support) *Endorser {
  func (e *Endorser) callChaincode(ctxt context.Context, chainID string, version string, txid string, signedProp *pb.SignedProposal, prop *pb.Proposal, cis *pb.ChaincodeInvocationSpec, cid *pb.ChaincodeID, txsim ledger.TxSimulator) (*pb.Response, *pb.ChaincodeEvent, error) {
  	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s version: %s", chainID, txid, cid, version)
  	defer endorserLogger.Debugf("[%s][%s] Exit", chainID, txid)
 -	var err error
 +
-+	// Report on the CC processing time
-+	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-+	fName := "NIL"
-+	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-+		fName = string(cis.ChaincodeSpec.Input.Args[0])
-+	}
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_callChaincode_%s_%s_processing_time_seconds", ccName, fName))
-+	ccStopWatch := ccTimer.Start()
-+	defer ccStopWatch.Stop()
  	var res *pb.Response
 +	var err error
  	var ccevent *pb.ChaincodeEvent
  
  	if txsim != nil {
-@@ -256,6 +275,16 @@ func (e *Endorser) SimulateProposal(ctx context.Context, chainID string, txid st
- 		return nil, nil, nil, nil, err
- 	}
- 
-+	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-+	fName := "NIL"
-+	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-+		fName = string(cis.ChaincodeSpec.Input.Args[0])
-+	}
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_SimulateProposal_%s_%s_processing_time_seconds", ccName, fName))
-+	ccStopWatch := ccTimer.Start()
-+	defer ccStopWatch.Stop()
-+
-+
- 	// disable Java install,instantiate,upgrade for now
- 	if err = e.DisableJavaCCInst(cid, cis); err != nil {
- 		return nil, nil, nil, nil, err
-@@ -338,6 +367,28 @@ func (e *Endorser) endorseProposal(_ context.Context, chainID string, txid strin
- 	endorserLogger.Debugf("[%s][%s] Entry chaincode: %s", chainID, shorttxid(txid), ccid)
- 	defer endorserLogger.Debugf("[%s][%s] Exit", chainID, shorttxid(txid))
- 
-+	// extract the Proposal message from signedProp
-+	prop, err1 := putils.GetProposal(signedProp.ProposalBytes)
-+	if err1 != nil {
-+		return nil,err1
-+	}
-+
-+	cis, err1 := putils.GetChaincodeInvocationSpec(prop)
-+	if err1 != nil {
-+		return nil,err1
-+	}
-+	// Report on the CC processing time
-+	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-+	fName := "NIL"
-+	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-+		fName = string(cis.ChaincodeSpec.Input.Args[0])
-+	}
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_endorseProposal_%s_%s_processing_time_seconds", ccName, fName))
-+	ccStopWatch := ccTimer.Start()
-+	defer ccStopWatch.Stop()
-+
-+
-+
- 	isSysCC := cd == nil
- 	// 1) extract the name of the escc that is requested to endorse this chaincode
- 	var escc string
-@@ -461,6 +512,26 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
+@@ -461,6 +462,12 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
  		return resp, err
  	}
  
 +	// extract the Proposal message from signedProp
 +	prop, err := putils.GetProposal(signedProp.ProposalBytes)
 +	if err != nil {
-+		return nil,err
++		return nil, err
 +	}
-+
-+	cis, err := putils.GetChaincodeInvocationSpec(prop)
-+	if err != nil {
-+		return nil,err
-+	}
-+	// Report on the CC processing time
-+	ccName := cis.ChaincodeSpec.ChaincodeId.Name
-+	fName := "NIL"
-+	if len(cis.ChaincodeSpec.Input.Args) > 0 {
-+		fName = string(cis.ChaincodeSpec.Input.Args[0])
-+	}
-+	ccTimer := metrics.RootScope.Timer(fmt.Sprintf("endorser_ProcessProposal_%s_%s_processing_time_seconds", ccName, fName))
-+	ccStopWatch := ccTimer.Start()
-+	defer ccStopWatch.Stop()
 +
  	prop, hdrExt, chainID, txid := vr.prop, vr.hdrExt, vr.chainID, vr.txid
  
