@@ -1,4 +1,4 @@
-From ee87ac02abb58d2fd67db49649810a20155d42b0 Mon Sep 17 00:00:00 2001
+From 92aafc16e424354d6464aa7992e7acb714539f16 Mon Sep 17 00:00:00 2001
 From: Sudesh Shetty <sudesh.shetty@securekey.com>
 Date: Tue, 12 Jun 2018 11:40:15 -0400
 Subject: [PATCH] Remote EP11 BCCSP
@@ -1098,7 +1098,7 @@ index 000000000..19c503113
 +}
 diff --git a/bccsp/grep11/impl.go b/bccsp/grep11/impl.go
 new file mode 100644
-index 000000000..b345bd525
+index 000000000..418f6636c
 --- /dev/null
 +++ b/bccsp/grep11/impl.go
 @@ -0,0 +1,366 @@
@@ -1134,7 +1134,7 @@ index 000000000..b345bd525
 +	"github.com/hyperledger/fabric/bccsp/sw"
 +	"github.com/hyperledger/fabric/bccsp/utils"
 +	"github.com/hyperledger/fabric/common/flogging"
-+	"github.com/securekey/fabric-snaps/metrics/cmd/filter/metrics"
++	"github.com/hyperledger/fabric/common/metrics"
 +)
 +
 +var (
