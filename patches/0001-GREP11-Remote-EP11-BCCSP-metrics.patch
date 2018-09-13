@@ -1,7 +1,7 @@
-From 88e23db1586f0db5674d41a57b36da783e401fd7 Mon Sep 17 00:00:00 2001
+From 3eba892a19cc1f661bdb6891d16c678e5c1ee516 Mon Sep 17 00:00:00 2001
 From: Sudesh Shetty <sudesh.shetty@securekey.com>
 Date: Tue, 12 Jun 2018 11:40:15 -0400
-Subject: [PATCH] [DRAFT] Remote EP11 BCCSP
+Subject: [PATCH] Remote EP11 BCCSP
 
 This new provider connects directly to EP11 library. This library
 is much closer to the device driver for the IBM Crypto Cards.
@@ -16,10 +16,10 @@ Signed-off-by: Volodymyr Paprotski <vpaprots@ca.ibm.com>
  bccsp/grep11/ecdsa.go            | 121 ++++++++++
  bccsp/grep11/ecdsakey.go         |  99 ++++++++
  bccsp/grep11/hsmks.go            | 394 +++++++++++++++++++++++++++++++
- bccsp/grep11/impl.go             | 345 +++++++++++++++++++++++++++
+ bccsp/grep11/impl.go             | 366 +++++++++++++++++++++++++++++
  bccsp/grep11/protos/grep11.pb.go | 491 +++++++++++++++++++++++++++++++++++++++
  bccsp/grep11/protos/grep11.proto |  70 ++++++
- 10 files changed, 1884 insertions(+), 13 deletions(-)
+ 10 files changed, 1905 insertions(+), 13 deletions(-)
  create mode 100644 bccsp/factory/grep11factory.go
  create mode 100644 bccsp/grep11/client.go
  create mode 100644 bccsp/grep11/conf.go
@@ -32,7 +32,7 @@ Signed-off-by: Volodymyr Paprotski <vpaprots@ca.ibm.com>
 
 diff --git a/bccsp/factory/grep11factory.go b/bccsp/factory/grep11factory.go
 new file mode 100644
-index 0000000..83f27db
+index 000000000..83f27db5e
 --- /dev/null
 +++ b/bccsp/factory/grep11factory.go
 @@ -0,0 +1,53 @@
@@ -90,12 +90,12 @@ index 0000000..83f27db
 +	return grep11.New(*p11Opts, ks)
 +}
 diff --git a/bccsp/factory/pkcs11.go b/bccsp/factory/pkcs11.go
-index 4456d70..6ea7548 100644
+index 4456d70eb..6ea7548ed 100644
 --- a/bccsp/factory/pkcs11.go
 +++ b/bccsp/factory/pkcs11.go
 @@ -1,26 +1,17 @@
  // +build pkcs11
-
+ 
  /*
 -Copyright IBM Corp. 2017 All Rights Reserved.
 -
@@ -115,14 +115,14 @@ index 4456d70..6ea7548 100644
  */
 +
  package factory
-
+ 
  import (
  	"github.com/hyperledger/fabric/bccsp"
  	"github.com/hyperledger/fabric/bccsp/pkcs11"
  	"github.com/pkg/errors"
 +	"github.com/hyperledger/fabric/bccsp/grep11"
  )
-
+ 
  // FactoryOpts holds configuration information used to initialize factory implementations
 @@ -29,6 +20,7 @@ type FactoryOpts struct {
  	SwOpts       *SwOpts            `mapstructure:"SW,omitempty" json:"SW,omitempty" yaml:"SwOpts"`
@@ -130,12 +130,12 @@ index 4456d70..6ea7548 100644
  	Pkcs11Opts   *pkcs11.PKCS11Opts `mapstructure:"PKCS11,omitempty" json:"PKCS11,omitempty" yaml:"PKCS11"`
 +	Grep11Opts   *grep11.GREP11Opts `mapstructure:"GREP11,omitempty" json:"GREP11,omitempty" yaml:"GREP11"`
  }
-
+ 
  // InitFactories must be called before using factory interfaces
 @@ -87,6 +79,15 @@ func setFactories(config *FactoryOpts) error {
  		}
  	}
-
+ 
 +	// GREP11-Based BCCSP
 +	if config.Grep11Opts != nil {
 +		f := &GREP11Factory{}
@@ -159,7 +159,7 @@ index 4456d70..6ea7548 100644
  	}
 diff --git a/bccsp/grep11/client.go b/bccsp/grep11/client.go
 new file mode 100644
-index 0000000..ec9499d
+index 000000000..ec9499ded
 --- /dev/null
 +++ b/bccsp/grep11/client.go
 @@ -0,0 +1,185 @@
@@ -350,7 +350,7 @@ index 0000000..ec9499d
 +}
 diff --git a/bccsp/grep11/conf.go b/bccsp/grep11/conf.go
 new file mode 100644
-index 0000000..acb7403
+index 000000000..acb740378
 --- /dev/null
 +++ b/bccsp/grep11/conf.go
 @@ -0,0 +1,110 @@
@@ -466,7 +466,7 @@ index 0000000..acb7403
 +}
 diff --git a/bccsp/grep11/ecdsa.go b/bccsp/grep11/ecdsa.go
 new file mode 100644
-index 0000000..aaeb43d
+index 000000000..aaeb43d28
 --- /dev/null
 +++ b/bccsp/grep11/ecdsa.go
 @@ -0,0 +1,121 @@
@@ -593,7 +593,7 @@ index 0000000..aaeb43d
 +}
 diff --git a/bccsp/grep11/ecdsakey.go b/bccsp/grep11/ecdsakey.go
 new file mode 100644
-index 0000000..21cbcac
+index 000000000..21cbcac0a
 --- /dev/null
 +++ b/bccsp/grep11/ecdsakey.go
 @@ -0,0 +1,99 @@
@@ -698,7 +698,7 @@ index 0000000..21cbcac
 +}
 diff --git a/bccsp/grep11/hsmks.go b/bccsp/grep11/hsmks.go
 new file mode 100644
-index 0000000..19c5031
+index 000000000..19c503113
 --- /dev/null
 +++ b/bccsp/grep11/hsmks.go
 @@ -0,0 +1,394 @@
@@ -1098,10 +1098,10 @@ index 0000000..19c5031
 +}
 diff --git a/bccsp/grep11/impl.go b/bccsp/grep11/impl.go
 new file mode 100644
-index 0000000..bd3d24c
+index 000000000..474f897db
 --- /dev/null
 +++ b/bccsp/grep11/impl.go
-@@ -0,0 +1,345 @@
+@@ -0,0 +1,366 @@
 +/*
 +Copyright IBM Corp. 2016 All Rights Reserved.
 +
@@ -1130,10 +1130,11 @@ index 0000000..bd3d24c
 +	"time"
 +
 +	"github.com/hyperledger/fabric/bccsp"
++	pb "github.com/hyperledger/fabric/bccsp/grep11/protos"
 +	"github.com/hyperledger/fabric/bccsp/sw"
 +	"github.com/hyperledger/fabric/bccsp/utils"
 +	"github.com/hyperledger/fabric/common/flogging"
-+	pb "github.com/hyperledger/fabric/bccsp/grep11/protos"
++	"github.com/hyperledger/fabric/common/metrics"
 +)
 +
 +var (
@@ -1382,6 +1383,10 @@ index 0000000..bd3d24c
 +// GetKey returns the key this CSP associates to
 +// the Subject Key Identifier ski.
 +func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_getkey_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
 +	return csp.ks.GetKey(ski)
 +}
 +
@@ -1392,6 +1397,10 @@ index 0000000..bd3d24c
 +// the caller is responsible for hashing the larger message and passing
 +// the hash (as digest).
 +func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_sign_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
 +	// Validate arguments
 +	if k == nil {
 +		return nil, errors.New("Invalid Key. It must not be nil.")
@@ -1413,6 +1422,10 @@ index 0000000..bd3d24c
 +
 +// Verify verifies signature against key k and digest
 +func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_verify_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
 +	// Validate arguments
 +	if k == nil {
 +		return false, errors.New("Invalid Key. It must not be nil.")
@@ -1438,6 +1451,10 @@ index 0000000..bd3d24c
 +// Encrypt encrypts plaintext using key k.
 +// The opts argument should be appropriate for the primitive used.
 +func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) (ciphertext []byte, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_encrypt_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
 +	// TODO: Add PKCS11 support for encryption, when fabric starts requiring it
 +	return csp.BCCSP.Encrypt(k, plaintext, opts)
 +}
@@ -1445,11 +1462,15 @@ index 0000000..bd3d24c
 +// Decrypt decrypts ciphertext using key k.
 +// The opts argument should be appropriate for the primitive used.
 +func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) (plaintext []byte, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_decrypt_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
 +	return csp.BCCSP.Decrypt(k, ciphertext, opts)
 +}
 diff --git a/bccsp/grep11/protos/grep11.pb.go b/bccsp/grep11/protos/grep11.pb.go
 new file mode 100644
-index 0000000..158608f
+index 000000000..158608f8a
 --- /dev/null
 +++ b/bccsp/grep11/protos/grep11.pb.go
 @@ -0,0 +1,491 @@
@@ -1946,7 +1967,7 @@ index 0000000..158608f
 +}
 diff --git a/bccsp/grep11/protos/grep11.proto b/bccsp/grep11/protos/grep11.proto
 new file mode 100644
-index 0000000..5dde39c
+index 000000000..5dde39cb7
 --- /dev/null
 +++ b/bccsp/grep11/protos/grep11.proto
 @@ -0,0 +1,70 @@
@@ -2020,5 +2041,6 @@ index 0000000..5dde39c
 +	bool valid = 1;
 +	string error = 2;
 +}
---
-2.7.4
+-- 
+2.15.2 (Apple Git-101.1)
+
