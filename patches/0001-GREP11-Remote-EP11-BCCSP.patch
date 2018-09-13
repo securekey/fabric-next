@@ -1,4 +1,4 @@
-From ee87ac02abb58d2fd67db49649810a20155d42b0 Mon Sep 17 00:00:00 2001
+From 3eba892a19cc1f661bdb6891d16c678e5c1ee516 Mon Sep 17 00:00:00 2001
 From: Sudesh Shetty <sudesh.shetty@securekey.com>
 Date: Tue, 12 Jun 2018 11:40:15 -0400
 Subject: [PATCH] Remote EP11 BCCSP
@@ -1098,7 +1098,7 @@ index 000000000..19c503113
 +}
 diff --git a/bccsp/grep11/impl.go b/bccsp/grep11/impl.go
 new file mode 100644
-index 000000000..b345bd525
+index 000000000..474f897db
 --- /dev/null
 +++ b/bccsp/grep11/impl.go
 @@ -0,0 +1,366 @@
@@ -1134,7 +1134,7 @@ index 000000000..b345bd525
 +	"github.com/hyperledger/fabric/bccsp/sw"
 +	"github.com/hyperledger/fabric/bccsp/utils"
 +	"github.com/hyperledger/fabric/common/flogging"
-+	"github.com/securekey/fabric-snaps/metrics/cmd/filter/metrics"
++	"github.com/hyperledger/fabric/common/metrics"
 +)
 +
 +var (
@@ -1384,7 +1384,7 @@ index 000000000..b345bd525
 +// the Subject Key Identifier ski.
 +func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
 +	if metrics.IsDebug() {
-+		stopWatch := metrics.RootScope.Timer("crypto_grep11_getkey_time_seconds").Start()
++		stopWatch := metrics.RootScope.Timer("crypto_getkey_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
 +	return csp.ks.GetKey(ski)
@@ -1398,7 +1398,7 @@ index 000000000..b345bd525
 +// the hash (as digest).
 +func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
 +	if metrics.IsDebug() {
-+		stopWatch := metrics.RootScope.Timer("crypto_grep11_sign_time_seconds").Start()
++		stopWatch := metrics.RootScope.Timer("crypto_sign_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
 +	// Validate arguments
@@ -1423,7 +1423,7 @@ index 000000000..b345bd525
 +// Verify verifies signature against key k and digest
 +func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
 +	if metrics.IsDebug() {
-+		stopWatch := metrics.RootScope.Timer("crypto_grep11_verify_time_seconds").Start()
++		stopWatch := metrics.RootScope.Timer("crypto_verify_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
 +	// Validate arguments
@@ -1452,7 +1452,7 @@ index 000000000..b345bd525
 +// The opts argument should be appropriate for the primitive used.
 +func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) (ciphertext []byte, err error) {
 +	if metrics.IsDebug() {
-+		stopWatch := metrics.RootScope.Timer("crypto_grep11_encrypt_time_seconds").Start()
++		stopWatch := metrics.RootScope.Timer("crypto_encrypt_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
 +	// TODO: Add PKCS11 support for encryption, when fabric starts requiring it
@@ -1463,7 +1463,7 @@ index 000000000..b345bd525
 +// The opts argument should be appropriate for the primitive used.
 +func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) (plaintext []byte, err error) {
 +	if metrics.IsDebug() {
-+		stopWatch := metrics.RootScope.Timer("crypto_grep11_decrypt_time_seconds").Start()
++		stopWatch := metrics.RootScope.Timer("crypto_decrypt_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
 +	return csp.BCCSP.Decrypt(k, ciphertext, opts)
