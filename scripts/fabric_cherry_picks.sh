@@ -30,7 +30,7 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 # Cherry pick [FAB-11777] Expose LevelDB configuration
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
 
 # Cherry pick [FAB-11907] Data races in deliver client
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/70/26170/4 && git cherry-pick FETCH_HEAD
