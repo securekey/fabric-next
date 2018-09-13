@@ -1,4 +1,4 @@
-From ef15a058ed2e83173df9b34bb770c136598a0fbc Mon Sep 17 00:00:00 2001
+From 7bf666f110c036156c4e2d2869bcacce6d5c189e Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 13 Sep 2018 15:07:04 -0400
 Subject: [PATCH] Ledger metrics
@@ -10,7 +10,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  bccsp/sw/impl.go                                   |  25 ++
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  30 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  16 +
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  18 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  78 ++++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
  common/metrics/server.go                           | 258 ++++++------
@@ -32,7 +32,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/util/couchdb/couchdb.go                |  34 ++
  gossip/privdata/coordinator.go                     |  22 +-
  gossip/state/state.go                              |  22 +
- 26 files changed, 703 insertions(+), 1199 deletions(-)
+ 26 files changed, 698 insertions(+), 1199 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -289,10 +289,10 @@ index 3d21b7e45..101938332 100644
  	if len(index.indexItemsMap) == 0 {
  		logger.Debug("Not indexing block... as nothing to index")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 3e06887b6..b03eb0200 100644
+index 3e06887b6..cdef0ea8a 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-@@ -20,8 +20,20 @@ import (
+@@ -20,8 +20,18 @@ import (
  	"sync"
  
  	"github.com/hyperledger/fabric/common/ledger"
@@ -301,19 +301,17 @@ index 3e06887b6..b03eb0200 100644
  )
  
 +var waitForBlockTimer tally.Timer
-+var waitForBlockLockTimer tally.Timer
 +
 +func init() {
 +	if metrics.IsDebug() {
 +		waitForBlockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds")
-+		waitForBlockLockTimer = metrics.RootScope.Timer("fsblkstorage_waitForBlock_Lock_time_seconds")
 +	}
 +}
 +
  // blocksItr - an iterator for iterating over a sequence of blocks
  type blocksItr struct {
  	mgr                  *blockfileMgr
-@@ -37,8 +49,19 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
+@@ -37,8 +47,16 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
  }
  
  func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
@@ -324,11 +322,8 @@ index 3e06887b6..b03eb0200 100644
 +		defer stopWatch.Stop()
 +	}
 +
-+	// Measure acquiring the lock
-+	lockStopWatch := waitForBlockLockTimer.Start()
  	itr.mgr.cpInfoCond.L.Lock()
  	defer itr.mgr.cpInfoCond.L.Unlock()
-+	lockStopWatch.Stop()
 +
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
  		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
