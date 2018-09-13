@@ -1,17 +1,18 @@
-From 1aab943a024c2d16fe22f432f247ef70b5b7d074 Mon Sep 17 00:00:00 2001
+From 8e4d32d9fc632ec5eb997a2d105d75172f363ac0 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
-Date: Thu, 9 Aug 2018 18:21:13 -0400
+Date: Thu, 13 Sep 2018 11:51:22 -0400
 Subject: [PATCH] Ledger metrics
 
-Change-Id: I994680bb548eb9abd70c4aba33df024080bcdaae
+Change-Id: Ic8753e22d6c0a63d61705d03272c5a8aefe72cd7
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
+ bccsp/pkcs11/impl.go                               |  13 +
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  45 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  12 +
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  23 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  68 +++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  38 +-
- common/metrics/server.go                           | 251 +++++------
+ common/metrics/server.go                           | 258 ++++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
@@ -34,11 +35,56 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  gossip/privdata/coordinator.go                     |  19 +
  gossip/state/state.go                              |  14 +
  peer/main.go                                       |   2 +
- 28 files changed, 673 insertions(+), 1209 deletions(-)
+ 29 files changed, 693 insertions(+), 1209 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
 
+diff --git a/bccsp/pkcs11/impl.go b/bccsp/pkcs11/impl.go
+index 325fb26a9..46ec26271 100644
+--- a/bccsp/pkcs11/impl.go
++++ b/bccsp/pkcs11/impl.go
+@@ -28,6 +28,7 @@ import (
+ 	"github.com/hyperledger/fabric/bccsp/sw"
+ 	"github.com/hyperledger/fabric/bccsp/utils"
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/miekg/pkcs11"
+ 	"github.com/pkg/errors"
+ )
+@@ -432,6 +433,10 @@ func (csp *impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
+ // GetKey returns the key this CSP associates to
+ // the Subject Key Identifier ski.
+ func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_snaps_getkey_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	pubKey, isPriv, err := csp.getECKey(ski)
+ 	if err == nil {
+ 		if isPriv {
+@@ -450,6 +455,10 @@ func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
+ // the caller is responsible for hashing the larger message and passing
+ // the hash (as digest).
+ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_snaps_sign_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	// Validate arguments
+ 	if k == nil {
+ 		return nil, errors.New("Invalid Key. It must not be nil.")
+@@ -469,6 +478,10 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
+ 
+ // Verify verifies signature against key k and digest
+ func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
++	if metrics.IsDebug() {
++		stopWatch := metrics.RootScope.Timer("crypto_snaps_verify_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	// Validate arguments
+ 	if k == nil {
+ 		return false, errors.New("Invalid Key. It must not be nil.")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 index ab6caa8c4..ed84004c5 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
@@ -472,7 +518,7 @@ index db41651d7..4511c3b3b 100644
  	return append(append([]byte(dbName), dbNameKeySep...), key...)
  }
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..efcefa278 100644
+index 677151e78..9d02628df 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,19 @@ package metrics
@@ -496,7 +542,7 @@ index 677151e78..efcefa278 100644
  )
  
  const (
-@@ -28,21 +36,94 @@ const (
+@@ -28,21 +36,101 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
@@ -515,9 +561,8 @@ index 677151e78..efcefa278 100644
 +var RootScope = tally.NoopScope
  var rootScopeMutex = &sync.Mutex{}
  var running bool
- 
--// NewOpts create metrics options based config file
--func NewOpts() Opts {
++var debugOn bool
++
 +// StatsdReporterOpts ...
 +type StatsdReporterOpts struct {
 +	Address       string
@@ -540,8 +585,15 @@ index 677151e78..efcefa278 100644
 +	PromReporterOpts   PromReporterOpts
 +}
 +
-+func init() {
++// IsDebug ...
++func IsDebug() bool {
++	return debugOn
++}
 +
++func init() {
+ 
+-// NewOpts create metrics options based config file
+-func NewOpts() Opts {
 +	// load peer config
 +	if err := initPeerConfig(); err != nil {
 +		panic(fmt.Sprintf("error initPeerConfig %v", err))
@@ -588,6 +640,7 @@ index 677151e78..efcefa278 100644
 -	opts.Enabled = viper.GetBool("metrics.enabled")
 -	if report := viper.GetString("metrics.reporter"); report != "" {
 +	opts.Enabled = peerConfig.GetBool("metrics.enabled")
++	debugOn = peerConfig.GetBool("metrics.debug.enabled")
 +	if report := peerConfig.GetString("metrics.reporter"); report != "" {
  		opts.Reporter = report
  	} else {
@@ -598,7 +651,7 @@ index 677151e78..efcefa278 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +131,17 @@ func NewOpts() Opts {
+@@ -50,13 +138,17 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
@@ -619,7 +672,7 @@ index 677151e78..efcefa278 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +151,47 @@ func NewOpts() Opts {
+@@ -66,45 +158,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
@@ -691,7 +744,7 @@ index 677151e78..efcefa278 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +200,35 @@ func isRunning() bool {
+@@ -113,109 +207,35 @@ func isRunning() bool {
  	return running
  }
  
