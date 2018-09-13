@@ -47,4 +47,5 @@ git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_ch
 git am $MY_PATH/../patches/0001-Ledger-metrics.patch
 
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
-git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
+#git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
+git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP-metrics.patch
