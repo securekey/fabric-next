@@ -1,19 +1,19 @@
-From 7bf666f110c036156c4e2d2869bcacce6d5c189e Mon Sep 17 00:00:00 2001
+From 8d4a497eef473d7d9649d61bd69561c7848bbef2 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
-Date: Thu, 13 Sep 2018 15:07:04 -0400
-Subject: [PATCH] Ledger metrics
+Date: Thu, 13 Sep 2018 19:00:55 -0400
+Subject: [PATCH] Fixing metrics
 
-Change-Id: Ia5d267181480f4bb934b75fe41ae18a122d01a5f
+Change-Id: I8e2350575ecfb55762c915d8571f172110846836
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
  bccsp/pkcs11/impl.go                               |  21 +
  bccsp/sw/impl.go                                   |  25 ++
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  30 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  16 +
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  18 +
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  17 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  78 ++++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
- common/metrics/server.go                           | 258 ++++++------
+ common/metrics/server.go                           | 259 ++++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
@@ -30,9 +30,10 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  22 +
  core/ledger/ledgerstorage/store.go                 |  45 ++
  core/ledger/util/couchdb/couchdb.go                |  34 ++
- gossip/privdata/coordinator.go                     |  22 +-
+ gossip/privdata/coordinator.go                     |  21 +-
  gossip/state/state.go                              |  22 +
- 26 files changed, 698 insertions(+), 1199 deletions(-)
+ peer/node/start.go                                 |   4 +
+ 27 files changed, 701 insertions(+), 1199 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -289,7 +290,7 @@ index 3d21b7e45..101938332 100644
  	if len(index.indexItemsMap) == 0 {
  		logger.Debug("Not indexing block... as nothing to index")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 3e06887b6..cdef0ea8a 100644
+index 3e06887b6..6e2ec868e 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 @@ -20,8 +20,18 @@ import (
@@ -311,7 +312,7 @@ index 3e06887b6..cdef0ea8a 100644
  // blocksItr - an iterator for iterating over a sequence of blocks
  type blocksItr struct {
  	mgr                  *blockfileMgr
-@@ -37,8 +47,16 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
+@@ -37,6 +47,13 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
  }
  
  func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
@@ -324,10 +325,7 @@ index 3e06887b6..cdef0ea8a 100644
 +
  	itr.mgr.cpInfoCond.L.Lock()
  	defer itr.mgr.cpInfoCond.L.Unlock()
-+
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
- 		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
- 			itr.mgr.cpInfo.lastBlockNumber, blockNum)
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
 index 9e2ab17df..72f272693 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
@@ -534,7 +532,7 @@ index db41651d7..3afb87e3c 100644
  	for k, v := range batch.KVs {
  		key := constructLevelKey(h.dbName, []byte(k))
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..dd5e093d2 100644
+index 677151e78..4ccf7280b 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,19 @@ package metrics
@@ -558,7 +556,7 @@ index 677151e78..dd5e093d2 100644
  )
  
  const (
-@@ -28,21 +36,101 @@ const (
+@@ -28,21 +36,102 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
@@ -606,7 +604,8 @@ index 677151e78..dd5e093d2 100644
 +	return debugOn
 +}
 +
-+func init() {
++// Initialize ...
++func Initialize() {
  
 -// NewOpts create metrics options based config file
 -func NewOpts() Opts {
@@ -667,7 +666,7 @@ index 677151e78..dd5e093d2 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +138,17 @@ func NewOpts() Opts {
+@@ -50,13 +139,17 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
@@ -688,7 +687,7 @@ index 677151e78..dd5e093d2 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +158,47 @@ func NewOpts() Opts {
+@@ -66,45 +159,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
@@ -760,7 +759,7 @@ index 677151e78..dd5e093d2 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +207,35 @@ func isRunning() bool {
+@@ -113,109 +208,35 @@ func isRunning() bool {
  	return running
  }
  
@@ -2776,7 +2775,7 @@ index 16d479802..eba649d69 100644
  
  	//create the return objects for couchDB
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 1d1152bac..7ee2ea6e9 100644
+index 1d1152bac..4f6439ddf 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
@@ -2811,15 +2810,7 @@ index 1d1152bac..7ee2ea6e9 100644
  }
  
  // TransientStore holds private data that the corresponding blocks haven't been committed yet into the ledger
-@@ -150,6 +161,7 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
- 
- // StoreBlock stores block with private data into the ledger
- func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDataCollections) error {
-+
- 	if block.Data == nil {
- 		return errors.New("Block data is empty")
- 	}
-@@ -193,6 +205,12 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+@@ -193,6 +204,12 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  	}
  	start := time.Now()
  	limit := start.Add(retryThresh)
@@ -2832,7 +2823,7 @@ index 1d1152bac..7ee2ea6e9 100644
  	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
  		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
  		// If succeeded to fetch everything, no need to sleep before
-@@ -202,7 +220,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+@@ -202,7 +219,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  		}
  		time.Sleep(pullRetrySleepInterval)
  	}
@@ -2914,6 +2905,28 @@ index 1cd3db30d..526cce6a0 100644
  	// Commit block with available private transactions
  	if err := s.ledger.StoreBlock(block, pvtData); err != nil {
  		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
+diff --git a/peer/node/start.go b/peer/node/start.go
+index 9735efe79..7ebbfb4ef 100644
+--- a/peer/node/start.go
++++ b/peer/node/start.go
+@@ -23,6 +23,7 @@ import (
+ 	"github.com/hyperledger/fabric/common/deliver"
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/localmsp"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/common/policies"
+ 	"github.com/hyperledger/fabric/common/viperutil"
+ 	"github.com/hyperledger/fabric/core/aclmgmt"
+@@ -113,6 +114,9 @@ var nodeStartCmd = &cobra.Command{
+ }
+ 
+ func serve(args []string) error {
++
++	metrics.Initialize()
++
+ 	// currently the peer only works with the standard MSP
+ 	// because in certain scenarios the MSP has to make sure
+ 	// that from a single credential you only have a single 'identity'.
 -- 
 2.14.3 (Apple Git-98)
 
