@@ -1,4 +1,4 @@
-From c5ce04cd652d1e4e3b9e92390ee69bfcb22552b9 Mon Sep 17 00:00:00 2001
+From bea1e371ef2d67c0769d2941fb56ad943f1787f7 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 13 Sep 2018 15:07:04 -0400
 Subject: [PATCH] Ledger metrics
@@ -27,13 +27,12 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../txmgmt/statedb/statecouchdb/commit_handling.go |  14 +
  .../txmgmt/statedb/statecouchdb/statecouchdb.go    |  14 +
  .../txmgmt/statedb/stateleveldb/stateleveldb.go    |  14 +
- .../kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go |   4 +
  .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  20 +
  core/ledger/ledgerstorage/store.go                 |  43 ++
  core/ledger/util/couchdb/couchdb.go                |  32 ++
  gossip/privdata/coordinator.go                     |  20 +-
  gossip/state/state.go                              |  22 +
- 27 files changed, 673 insertions(+), 1199 deletions(-)
+ 26 files changed, 669 insertions(+), 1199 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -530,7 +529,7 @@ index db41651d7..c7eda914b 100644
  	for k, v := range batch.KVs {
  		key := constructLevelKey(h.dbName, []byte(k))
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..9d02628df 100644
+index 677151e78..dd5e093d2 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,19 @@ package metrics
@@ -614,6 +613,7 @@ index 677151e78..9d02628df 100644
 +	if peerConfig.GetBool("peer.profile.enabled") {
 +		runtime.SetMutexProfileFraction(5)
 +	}
++	debugOn = peerConfig.GetBool("metrics.debug.enabled")
 +
 +	// start metric server
 +	opts := NewOpts(peerConfig)
@@ -652,7 +652,6 @@ index 677151e78..9d02628df 100644
 -	opts.Enabled = viper.GetBool("metrics.enabled")
 -	if report := viper.GetString("metrics.reporter"); report != "" {
 +	opts.Enabled = peerConfig.GetBool("metrics.enabled")
-+	debugOn = peerConfig.GetBool("metrics.debug.enabled")
 +	if report := peerConfig.GetString("metrics.reporter"); report != "" {
  		opts.Reporter = report
  	} else {
@@ -2520,28 +2519,6 @@ index ba3be0ea3..5ae100442 100644
  	dbBatch := leveldbhelper.NewUpdateBatch()
  	namespaces := batch.GetUpdatedNamespaces()
  	for _, ns := range namespaces {
-diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
-index f13febb53..a3e160a36 100644
---- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
-+++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
-@@ -12,6 +12,7 @@ import (
- 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
- 
- 	commonledger "github.com/hyperledger/fabric/common/ledger"
-+	"github.com/hyperledger/fabric/common/metrics"
- 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
- 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
- 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-@@ -185,6 +186,9 @@ func (h *queryHelper) done() {
- 
- 	defer func() {
- 		h.txmgr.commitRWLock.RUnlock()
-+		if metrics.IsDebug() {
-+			h.txmgr.commitRWLockRLockStopwatch.Stop()
-+		}
- 		h.doneInvoked = true
- 		for _, itr := range h.itrs {
- 			itr.Close()
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 index d03bd0535..db99d494f 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
