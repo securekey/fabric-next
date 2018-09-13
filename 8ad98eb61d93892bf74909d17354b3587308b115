@@ -22,6 +22,30 @@
       "revId": "8ad98eb61d93892bf74909d17354b3587308b115",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b2bc58e3_a4ee60b6",
+        "filename": "patches/0001-GREP11-Remote-EP11-BCCSP.patch",
+        "patchSetId": 2
+      },
+      "lineNbr": 1389,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-13T20:43:54Z",
+      "side": 1,
+      "message": "suggest extract into its own patch on top",
+      "parentUuid": "a23e935a_62903ee3",
+      "range": {
+        "startLine": 1386,
+        "startChar": 2,
+        "endLine": 1389,
+        "endChar": 3
+      },
+      "revId": "8ad98eb61d93892bf74909d17354b3587308b115",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
