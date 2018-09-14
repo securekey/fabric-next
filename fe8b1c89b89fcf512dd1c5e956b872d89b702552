@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3d67de1b_a965af34",
+        "filename": "patches/0001-Ledger-metrics.patch",
+        "patchSetId": 1
+      },
+      "lineNbr": 380,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-14T01:51:52Z",
+      "side": 1,
+      "message": "do this as a global package variable - so that it\u0027s compiled only once...\nditto the rest.",
+      "range": {
+        "startLine": 380,
+        "startChar": 2,
+        "endLine": 380,
+        "endChar": 46
+      },
+      "revId": "fe8b1c89b89fcf512dd1c5e956b872d89b702552",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
