@@ -1,4 +1,4 @@
-From 8d4a497eef473d7d9649d61bd69561c7848bbef2 Mon Sep 17 00:00:00 2001
+From c1d4f3a9a3f815780fe03df1592d0e084e144022 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 13 Sep 2018 19:00:55 -0400
 Subject: [PATCH] Fixing metrics
@@ -11,7 +11,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  30 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  16 +
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  17 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  78 ++++
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  92 ++++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
  common/metrics/server.go                           | 259 ++++++------
  common/metrics/server_test.go                      | 242 -----------
@@ -33,7 +33,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  gossip/privdata/coordinator.go                     |  21 +-
  gossip/state/state.go                              |  22 +
  peer/node/start.go                                 |   4 +
- 27 files changed, 701 insertions(+), 1199 deletions(-)
+ 27 files changed, 715 insertions(+), 1199 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -73,7 +73,7 @@ index 148c9e198..9b0c77fe7 100644
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil")
 @@ -421,6 +430,10 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
- 
+
  // Verify verifies signature against key k and digest
  func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
 +	if metrics.IsDebug() {
@@ -104,19 +104,19 @@ index 148c9e198..9b0c77fe7 100644
 +	}
  	return csp.BCCSP.Decrypt(k, ciphertext, opts)
  }
- 
+
 diff --git a/bccsp/sw/impl.go b/bccsp/sw/impl.go
 index d6a9da6c0..a172735da 100644
 --- a/bccsp/sw/impl.go
 +++ b/bccsp/sw/impl.go
 @@ -21,6 +21,7 @@ import (
- 
+
  	"github.com/hyperledger/fabric/bccsp"
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/pkg/errors"
  )
- 
+
 @@ -165,6 +166,10 @@ func (csp *CSP) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.Ke
  // GetKey returns the key this CSP associates to
  // the Subject Key Identifier ski.
@@ -129,7 +129,7 @@ index d6a9da6c0..a172735da 100644
  	if err != nil {
  		return nil, errors.Wrapf(err, "Failed getting key for SKI [%v]", ski)
 @@ -175,6 +180,10 @@ func (csp *CSP) GetKey(ski []byte) (k bccsp.Key, err error) {
- 
+
  // Hash hashes messages msg using options opts.
  func (csp *CSP) Hash(msg []byte, opts bccsp.HashOpts) (digest []byte, err error) {
 +	if metrics.IsDebug() {
@@ -151,7 +151,7 @@ index d6a9da6c0..a172735da 100644
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil.")
 @@ -245,6 +258,10 @@ func (csp *CSP) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signatu
- 
+
  // Verify verifies signature against key k and digest
  func (csp *CSP) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
 +	if metrics.IsDebug() {
@@ -197,7 +197,7 @@ index ab6caa8c4..b0b4ac842 100644
  	putil "github.com/hyperledger/fabric/protos/utils"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var addBlockTimer tally.Timer
 +var saveCurrentInfoTimer tally.Timer
 +var updateCheckpointTimer tally.Timer
@@ -211,11 +211,11 @@ index ab6caa8c4..b0b4ac842 100644
 +}
 +
  var logger = flogging.MustGetLogger("fsblkstorage")
- 
+
  const (
 @@ -247,6 +261,11 @@ func (mgr *blockfileMgr) moveToNextFile() {
  }
- 
+
  func (mgr *blockfileMgr) addBlock(block *common.Block) error {
 +
 +	if metrics.IsDebug() {
@@ -227,7 +227,7 @@ index ab6caa8c4..b0b4ac842 100644
  	}
 @@ -428,6 +447,13 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
  }
- 
+
  func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
 +
 +	if metrics.IsDebug() {
@@ -241,7 +241,7 @@ index ab6caa8c4..b0b4ac842 100644
  	mgr.cpInfo = cpInfo
 @@ -590,6 +616,10 @@ func (mgr *blockfileMgr) loadCurrentInfo() (*checkpointInfo, error) {
  }
- 
+
  func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
 +	if metrics.IsDebug() {
 +		stopWatch := saveCurrentInfoTimer.Start()
@@ -264,7 +264,7 @@ index 3d21b7e45..101938332 100644
  	"github.com/hyperledger/fabric/protos/peer"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var indexBlockTimer tally.Timer
 +
 +func init() {
@@ -278,7 +278,7 @@ index 3d21b7e45..101938332 100644
  	blockHashIdxKeyPrefix          = 'h'
 @@ -98,6 +108,12 @@ func (index *blockIndex) getLastBlockIndexed() (uint64, error) {
  }
- 
+
  func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 +
 +	if metrics.IsDebug() {
@@ -295,12 +295,12 @@ index 3e06887b6..6e2ec868e 100644
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 @@ -20,8 +20,18 @@ import (
  	"sync"
- 
+
  	"github.com/hyperledger/fabric/common/ledger"
 +	"github.com/hyperledger/fabric/common/metrics"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var waitForBlockTimer tally.Timer
 +
 +func init() {
@@ -314,7 +314,7 @@ index 3e06887b6..6e2ec868e 100644
  	mgr                  *blockfileMgr
 @@ -37,6 +47,13 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
  }
- 
+
  func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
 +
 +	if metrics.IsDebug() {
@@ -327,17 +327,19 @@ index 3e06887b6..6e2ec868e 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..72f272693 100644
+index 9e2ab17df..0d1076726 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
-@@ -20,14 +20,30 @@ import (
+@@ -20,14 +20,32 @@ import (
  	"fmt"
  	"sync"
- 
+
 +	"strings"
 +
 +	"bytes"
 +	"time"
++
++	"regexp"
 +
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/util"
@@ -349,7 +351,7 @@ index 9e2ab17df..72f272693 100644
  	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var writeBatch1Timer tally.Timer
 +
 +func init() {
@@ -359,9 +361,9 @@ index 9e2ab17df..72f272693 100644
 +}
 +
  var logger = flogging.MustGetLogger("leveldbhelper")
- 
+
  type dbState int32
-@@ -88,6 +104,9 @@ func (dbInst *DB) Open() {
+@@ -88,6 +106,9 @@ func (dbInst *DB) Open() {
  		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
  	}
  	dbInst.dbState = opened
@@ -369,18 +371,22 @@ index 9e2ab17df..72f272693 100644
 +		go dbInst.getState()
 +	}
  }
- 
+
  // Close closes the underlying db
-@@ -105,6 +124,18 @@ func (dbInst *DB) Close() {
- 
+@@ -105,6 +126,22 @@ func (dbInst *DB) Close() {
+
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
++	reg, err := regexp.Compile("[^a-zA-Z0-9_]+")
++	if err != nil {
++		logger.Error(err)
++	}
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
 +		} else {
-+			dbName = strings.Replace(dbName, "/", "_", -1)
++			dbName = reg.ReplaceAllString(dbName, "_")
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -390,16 +396,20 @@ index 9e2ab17df..72f272693 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +150,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
- 
+@@ -119,6 +156,21 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
++	reg, err := regexp.Compile("[^a-zA-Z0-9_]+")
++	if err != nil {
++		logger.Error(err)
++	}
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
 +		} else {
-+			dbName = strings.Replace(dbName, "/", "_", -1)
++			dbName = reg.ReplaceAllString(dbName, "_")
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -408,16 +418,20 @@ index 9e2ab17df..72f272693 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +175,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
- 
+@@ -133,6 +185,21 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
++	reg, err := regexp.Compile("[^a-zA-Z0-9_]+")
++	if err != nil {
++		logger.Error(err)
++	}
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
 +		} else {
-+			dbName = strings.Replace(dbName, "/", "_", -1)
++			dbName = reg.ReplaceAllString(dbName, "_")
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -426,8 +440,8 @@ index 9e2ab17df..72f272693 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -154,6 +207,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
- 
+@@ -154,6 +221,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+
  // WriteBatch writes a batch
  func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
 +	if metrics.IsDebug() {
@@ -437,7 +451,7 @@ index 9e2ab17df..72f272693 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -163,3 +220,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+@@ -163,3 +234,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
  	}
  	return nil
  }
@@ -469,13 +483,13 @@ index db41651d7..3afb87e3c 100644
 @@ -20,10 +20,20 @@ import (
  	"bytes"
  	"sync"
- 
+
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var writeBatchTimer tally.Timer
 +
 +func init() {
@@ -486,14 +500,14 @@ index db41651d7..3afb87e3c 100644
 +
  var dbNameKeySep = []byte{0x00}
  var lastKeyIndicator = byte(0x01)
- 
+
 @@ -32,13 +42,14 @@ type Provider struct {
  	db        *DB
  	dbHandles map[string]*DBHandle
  	mux       sync.Mutex
 +	dbPath    string
  }
- 
+
  // NewProvider constructs a Provider
  func NewProvider(conf *Conf) *Provider {
  	db := CreateDB(conf)
@@ -501,7 +515,7 @@ index db41651d7..3afb87e3c 100644
 -	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
 +	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}, conf.DBPath}
  }
- 
+
  // GetDBHandle returns a handle to a named db
 @@ -47,7 +58,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
  	defer p.mux.Unlock()
@@ -518,10 +532,10 @@ index db41651d7..3afb87e3c 100644
  	db     *DB
 +	dbPath string
  }
- 
+
  // Get returns the value for the given key
 @@ -81,6 +93,10 @@ func (h *DBHandle) Delete(key []byte, sync bool) error {
- 
+
  // WriteBatch writes a batch in an atomic way
  func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
 +	if metrics.IsDebug() {
@@ -536,13 +550,13 @@ index 677151e78..4ccf7280b 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,19 @@ package metrics
- 
+
  import (
  	"fmt"
 -	"sync"
 +	"io"
  	"time"
- 
+
 +	"sync"
 +
 +	"strings"
@@ -554,12 +568,12 @@ index 677151e78..4ccf7280b 100644
  	"github.com/uber-go/tally"
 +	promreporter "github.com/uber-go/tally/prometheus"
  )
- 
+
  const (
 @@ -28,21 +36,102 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
- 
+
 -var RootScope Scope
 -var once sync.Once
 +const (
@@ -606,7 +620,7 @@ index 677151e78..4ccf7280b 100644
 +
 +// Initialize ...
 +func Initialize() {
- 
+
 -// NewOpts create metrics options based config file
 -func NewOpts() Opts {
 +	// load peer config
@@ -667,7 +681,7 @@ index 677151e78..4ccf7280b 100644
  	} else {
  		opts.Interval = defaultInterval
 @@ -50,13 +139,17 @@ func NewOpts() Opts {
- 
+
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
 -		statsdOpts.Address = viper.GetString("metrics.statsdReporter.address")
@@ -688,17 +702,17 @@ index 677151e78..4ccf7280b 100644
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
 @@ -66,45 +159,47 @@ func NewOpts() Opts {
- 
+
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
 -		promOpts.ListenAddress = viper.GetString("metrics.promReporter.listenAddress")
 +		promOpts.ListenAddress = peerConfig.GetString("metrics.fabric.PromReporter.listenAddress")
  		opts.PromReporterOpts = promOpts
  	}
- 
+
  	return opts
  }
- 
+
 -//Init initializes global root metrics scope instance, all callers can only use it to extend sub scope
 -func Init(opts Opts) (err error) {
 -	once.Do(func() {
@@ -731,7 +745,7 @@ index 677151e78..4ccf7280b 100644
 -	return RootScope.Start()
 +	return errors.New("metrics server was already started")
  }
- 
+
 -//Shutdown closes underlying resources used by metrics server
 +// Shutdown closes underlying resources used by metrics server
  func Shutdown() error {
@@ -757,12 +771,12 @@ index 677151e78..4ccf7280b 100644
 -	return err
 +	return nil
  }
- 
+
  func isRunning() bool {
 @@ -113,109 +208,35 @@ func isRunning() bool {
  	return running
  }
- 
+
 -type StatsdReporterOpts struct {
 -	Address       string
 -	FlushInterval time.Duration
@@ -1133,7 +1147,7 @@ index cf1e3deff..aca8d54ab 100644
 +++ b/common/metrics/tally_provider.go
 @@ -7,17 +7,16 @@ SPDX-License-Identifier: Apache-2.0
  package metrics
- 
+
  import (
 -	"context"
  	"errors"
@@ -1143,7 +1157,7 @@ index cf1e3deff..aca8d54ab 100644
 -	"sort"
 -	"sync"
  	"time"
- 
+
 +	"net"
 +
 +	"sort"
@@ -1157,7 +1171,7 @@ index cf1e3deff..aca8d54ab 100644
 @@ -25,74 +24,11 @@ import (
  	statsdreporter "github.com/uber-go/tally/statsd"
  )
- 
+
 -var logger = logging.MustGetLogger("common/metrics/tally")
 -
 -var scopeRegistryKey = tally.KeyForPrefixedStringMap
@@ -1182,7 +1196,7 @@ index cf1e3deff..aca8d54ab 100644
 -	return &gauge{tallyGauge: tallyGauge}
 -}
 +var logger = flogging.MustGetLogger("common/metrics/tally")
- 
+
 -func (g *gauge) Update(v float64) {
 -	g.tallyGauge.Update(v)
 -}
@@ -1230,11 +1244,11 @@ index cf1e3deff..aca8d54ab 100644
 -		gauges:       make(map[string]*gauge)}
 +	return s
  }
- 
+
  func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReporter, error) {
 @@ -109,13 +45,13 @@ func newStatsdReporter(statsdReporterOpts StatsdReporterOpts) (tally.StatsReport
  	}
- 
+
  	statter, err := statsd.NewBufferedClient(statsdReporterOpts.Address,
 -		"", statsdReporterOpts.FlushInterval, statsdReporterOpts.FlushBytes)
 +		statsdReporterOpts.Prefix, statsdReporterOpts.FlushInterval, statsdReporterOpts.FlushBytes)
@@ -1247,7 +1261,7 @@ index cf1e3deff..aca8d54ab 100644
 +	statsdReporter := &statsdReporter{StatsReporter: reporter, statter: statter}
  	return statsdReporter, nil
  }
- 
+
 @@ -127,159 +63,52 @@ func newPromReporter(promReporterOpts PromReporterOpts) (promreporter.Reporter,
  	opts := promreporter.Options{Registerer: prometheus.NewRegistry()}
  	reporter := promreporter.NewReporter(opts)
@@ -1275,7 +1289,7 @@ index cf1e3deff..aca8d54ab 100644
 +	go server.Serve(listener)
  	return promReporter, nil
  }
- 
+
 -func (s *scope) Counter(name string) Counter {
 -	s.cm.RLock()
 -	val, ok := s.counters[name]
@@ -1404,7 +1418,7 @@ index cf1e3deff..aca8d54ab 100644
 +	tally.StatsReporter
 +	statter statsd.Statter
  }
- 
+
  type promReporter struct {
 -	reporter promreporter.Reporter
 +	promreporter.Reporter
@@ -1412,7 +1426,7 @@ index cf1e3deff..aca8d54ab 100644
 +	listener net.Listener
  	registry *prometheus.Registry
  }
- 
+
 +func (r *statsdReporter) Close() error {
 +	return r.statter.Close()
 +}
@@ -1421,17 +1435,17 @@ index cf1e3deff..aca8d54ab 100644
 -	r.reporter.ReportCounter(tagsToName(name, tags), tags, value)
 +	r.StatsReporter.ReportCounter(tagsToName(name, tags), tags, value)
  }
- 
+
  func (r *statsdReporter) ReportGauge(name string, tags map[string]string, value float64) {
 -	r.reporter.ReportGauge(tagsToName(name, tags), tags, value)
 +	r.StatsReporter.ReportGauge(tagsToName(name, tags), tags, value)
  }
- 
+
  func (r *statsdReporter) ReportTimer(name string, tags map[string]string, interval time.Duration) {
 -	r.reporter.ReportTimer(tagsToName(name, tags), tags, interval)
 +	r.StatsReporter.ReportTimer(tagsToName(name, tags), tags, interval)
  }
- 
+
  func (r *statsdReporter) ReportHistogramValueSamples(
 @@ -290,7 +119,7 @@ func (r *statsdReporter) ReportHistogramValueSamples(
  	bucketUpperBound float64,
@@ -1440,7 +1454,7 @@ index cf1e3deff..aca8d54ab 100644
 -	r.reporter.ReportHistogramValueSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
 +	r.StatsReporter.ReportHistogramValueSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
  }
- 
+
  func (r *statsdReporter) ReportHistogramDurationSamples(
 @@ -301,7 +130,7 @@ func (r *statsdReporter) ReportHistogramDurationSamples(
  	bucketUpperBound time.Duration,
@@ -1449,12 +1463,12 @@ index cf1e3deff..aca8d54ab 100644
 -	r.reporter.ReportHistogramDurationSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
 +	r.StatsReporter.ReportHistogramDurationSamples(tagsToName(name, tags), tags, buckets, bucketLowerBound, bucketUpperBound, samples)
  }
- 
+
  func (r *statsdReporter) Capabilities() tally.Capabilities {
 @@ -316,127 +145,20 @@ func (r *statsdReporter) Tagging() bool {
  	return true
  }
- 
+
 -func (r *statsdReporter) Flush() {
 -	// no-op
 -}
@@ -1541,12 +1555,12 @@ index cf1e3deff..aca8d54ab 100644
 +	r.listener.Close()
 +	return err
  }
- 
+
  func (r *promReporter) HTTPHandler() http.Handler {
 -	return promReporterHttpHandler(r.registry)
 +	return promReporterHTTPHandler(r.registry)
  }
- 
+
 -func (s *scope) fullyQualifiedName(name string) string {
 -	if len(s.prefix) == 0 {
 -		return name
@@ -1585,16 +1599,16 @@ index cf1e3deff..aca8d54ab 100644
 +func promReporterHTTPHandler(registry *prometheus.Registry) http.Handler {
 +	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
  }
- 
+
  func tagsToName(name string, tags map[string]string) string {
 @@ -447,12 +169,8 @@ func tagsToName(name string, tags map[string]string) string {
  	sort.Strings(keys)
- 
+
  	for _, k := range keys {
 -		name = name + tally.DefaultSeparator + k + "-" + tags[k]
 +		name = name + promreporter.DefaultSeparator + k + "-" + tags[k]
  	}
- 
+
  	return name
  }
 -
@@ -2127,7 +2141,7 @@ index c385e3ca1..af8151fca 100644
 @@ -11,8 +11,11 @@ import (
  	"sync/atomic"
  	"time"
- 
+
 +	"fmt"
 +
  	"github.com/golang/protobuf/proto"
@@ -2139,7 +2153,7 @@ index c385e3ca1..af8151fca 100644
 @@ -167,6 +170,10 @@ func (b *blocksProviderImpl) DeliverBlocks() {
  			statusCounter = 0
  			seqNum := t.Block.Header.Number
- 
+
 +			if metrics.IsDebug() {
 +				metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", b.chainID)).Update(float64(seqNum))
 +			}
@@ -2150,7 +2164,7 @@ index c385e3ca1..af8151fca 100644
 @@ -189,6 +196,9 @@ func (b *blocksProviderImpl) DeliverBlocks() {
  				logger.Warning("Failed adding payload of", seqNum, "because:", err)
  			}
- 
+
 +			if metrics.IsDebug() {
 +				metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_gossiping_block_number", b.chainID)).Update(float64(payload.SeqNum))
 +			}
@@ -2175,9 +2189,9 @@ index 369787d44..e71488c42 100644
  	putils "github.com/hyperledger/fabric/protos/utils"
 +	"github.com/uber-go/tally"
  )
- 
+
  var logger = flogging.MustGetLogger("historyleveldb")
- 
+
 +var commitTimer tally.Timer
 +
 +func init() {
@@ -2188,11 +2202,11 @@ index 369787d44..e71488c42 100644
 +
  var savePointKey = []byte{0x00}
  var emptyValue = []byte{}
- 
+
 @@ -73,6 +83,12 @@ func (historyDB *historyDB) Close() {
  // Commit implements method in HistoryDB interface
  func (historyDB *historyDB) Commit(block *common.Block) error {
- 
+
 +	if metrics.IsDebug() {
 +		// Measure the whole
 +		stopWatch := commitTimer.Start()
@@ -2207,7 +2221,7 @@ index 385f90917..4dd54b4d3 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -15,6 +15,7 @@ import (
- 
+
  	"github.com/hyperledger/fabric/common/flogging"
  	commonledger "github.com/hyperledger/fabric/common/ledger"
 +	"github.com/hyperledger/fabric/common/metrics"
@@ -2220,9 +2234,9 @@ index 385f90917..4dd54b4d3 100644
  	"github.com/hyperledger/fabric/protos/peer"
 +	"github.com/uber-go/tally"
  )
- 
+
  var logger = flogging.MustGetLogger("kvledger")
- 
+
 +var commitWithPvtDataTimer tally.Timer
 +var pvtDataAndBlockByNumTimer tally.Timer
 +var pvtDataByNumTimer tally.Timer
@@ -2239,7 +2253,7 @@ index 385f90917..4dd54b4d3 100644
  // This implementation provides a key-value based data model
  type kvLedger struct {
 @@ -249,6 +263,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
- 
+
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 +
@@ -2260,7 +2274,7 @@ index 385f90917..4dd54b4d3 100644
 +	// KEEP EVEN WHEN metrics.debug IS OFF
 +	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", l.ledgerID)).Update(float64(block.Header.Number))
  	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", l.ledgerID, block.Header.Number, len(block.Data.Data))
- 
+
  	logger.Debugf("Channel [%s]: Committing block [%d] transactions to state database", l.ledgerID, blockNo)
 @@ -286,6 +310,11 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
@@ -2292,21 +2306,21 @@ index f522ab2cc..6e0c94193 100644
 +++ b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 @@ -12,6 +12,7 @@ import (
  	"strings"
- 
+
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
- 
+
 @@ -20,10 +21,21 @@ import (
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 +	"github.com/uber-go/tally"
  )
- 
+
  var logger = flogging.MustGetLogger("privacyenabledstate")
- 
+
 +var addPvtUpdatesTimer tally.Timer
 +var addHashedUpdatesTimer tally.Timer
 +
@@ -2322,7 +2336,7 @@ index f522ab2cc..6e0c94193 100644
  	pvtDataPrefix  = "p"
 @@ -257,6 +269,10 @@ func deriveHashedDataNs(namespace, collection string) string {
  }
- 
+
  func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
 +	if metrics.IsDebug() {
 +		stopWatch := addPvtUpdatesTimer.Start()
@@ -2333,7 +2347,7 @@ index f522ab2cc..6e0c94193 100644
  			for key, vv := range nsBatch.GetUpdates(coll) {
 @@ -267,6 +283,10 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
  }
- 
+
  func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
 +	if metrics.IsDebug() {
 +		stopWatch := addHashedUpdatesTimer.Start()
@@ -2354,7 +2368,7 @@ index 1d1436cb5..f487222bc 100644
  	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var updateBookkeepingTimer tally.Timer
 +
 +func init() {
@@ -2364,7 +2378,7 @@ index 1d1436cb5..f487222bc 100644
 +}
 +
  var logger = flogging.MustGetLogger("pvtstatepurgemgmt")
- 
+
  const (
 @@ -64,6 +74,10 @@ type expKeeper struct {
  // at the time of the commit of the block number 45 and the second entry was created at the time of the commit of the block number 40, however
@@ -2382,14 +2396,14 @@ index 2dd88237c..c2e6018f2 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 @@ -7,8 +7,21 @@ package statecouchdb
- 
+
  import (
  	"sync"
 +
 +	"github.com/hyperledger/fabric/common/metrics"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var executeBatchesTimer tally.Timer
 +var numBatchesGauge tally.Gauge
 +
@@ -2426,14 +2440,14 @@ index 240667a73..f24de9e29 100644
 @@ -9,11 +9,21 @@ import (
  	"errors"
  	"fmt"
- 
+
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var ensureFullCommitTimer tally.Timer
 +
 +func init() {
@@ -2447,7 +2461,7 @@ index 240667a73..f24de9e29 100644
  type nsCommittersBuilder struct {
 @@ -151,6 +161,12 @@ type nsFlusher struct {
  }
- 
+
  func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
 +
 +	if metrics.IsDebug() {
@@ -2464,7 +2478,7 @@ index b10b1d229..f1b59432b 100644
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,13 +12,23 @@ import (
  	"sync"
- 
+
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -2474,7 +2488,7 @@ index b10b1d229..f1b59432b 100644
  	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var applyUpdatesTimer tally.Timer
 +
 +func init() {
@@ -2484,10 +2498,10 @@ index b10b1d229..f1b59432b 100644
 +}
 +
  var logger = flogging.MustGetLogger("statecouchdb")
- 
+
  // querySkip is implemented for future use by query paging
 @@ -290,6 +300,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
- 
+
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
 +
@@ -2504,7 +2518,7 @@ index ba3be0ea3..a7ca932ec 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
 @@ -11,12 +11,22 @@ import (
- 
+
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 +	"github.com/hyperledger/fabric/common/metrics"
@@ -2514,7 +2528,7 @@ index ba3be0ea3..a7ca932ec 100644
  	"github.com/syndtr/goleveldb/leveldb/iterator"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var applyUpdatesTimer tally.Timer
 +
 +func init() {
@@ -2524,10 +2538,10 @@ index ba3be0ea3..a7ca932ec 100644
 +}
 +
  var logger = flogging.MustGetLogger("stateleveldb")
- 
+
  var compositeKeySep = []byte{0x00}
 @@ -138,6 +148,12 @@ func (vdb *versionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
- 
+
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
 +
@@ -2545,7 +2559,7 @@ index d03bd0535..734b9b222 100644
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
  	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
- 
+
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/ledger"
@@ -2557,9 +2571,9 @@ index d03bd0535..734b9b222 100644
  	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 +	"github.com/uber-go/tally"
  )
- 
+
  var logger = flogging.MustGetLogger("lockbasedtxmgr")
- 
+
 +var commitTimer tally.Timer
 +var updateStateListenersTimer tally.Timer
 +
@@ -2574,7 +2588,7 @@ index d03bd0535..734b9b222 100644
  // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
  type LockBasedTxMgr struct {
 @@ -129,6 +141,12 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
- 
+
  // Commit implements method in interface `txmgmt.TxMgr`
  func (txmgr *LockBasedTxMgr) Commit() error {
 +	if metrics.IsDebug() {
@@ -2588,7 +2602,7 @@ index d03bd0535..734b9b222 100644
  	// in advance for the next block
 @@ -223,6 +241,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
  }
- 
+
  func (txmgr *LockBasedTxMgr) updateStateListeners() {
 +	if metrics.IsDebug() {
 +		stopWatch := updateStateListenersTimer.Start()
@@ -2613,7 +2627,7 @@ index 5655969d5..bfd7a543d 100644
  	"github.com/hyperledger/fabric/protos/common"
 +	"github.com/uber-go/tally"
  )
- 
+
 +var commitWithPvtDataTimer tally.Timer
 +var pvtDataAndBlockByNumTimer tally.Timer
 +var pvtDataByNumTimer tally.Timer
@@ -2631,10 +2645,10 @@ index 5655969d5..bfd7a543d 100644
 +}
 +
  var logger = flogging.MustGetLogger("ledgerstorage")
- 
+
  // Provider encapusaltes two providers 1) block store provider and 2) and pvt data store provider
 @@ -97,6 +115,13 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
- 
+
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
 +
@@ -2654,7 +2668,7 @@ index 5655969d5..bfd7a543d 100644
 +	if metrics.IsDebug() {
 +		commitWithPvtDataBlockDiff.Update(float64(blockNum - pvtBlkStoreHt))
 +	}
- 
+
  	writtenToPvtStore := false
  	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
 @@ -120,6 +148,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
@@ -2666,7 +2680,7 @@ index 5655969d5..bfd7a543d 100644
 +		}
  		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
  	}
- 
+
 @@ -137,6 +168,13 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
@@ -2680,7 +2694,7 @@ index 5655969d5..bfd7a543d 100644
 +
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
- 
+
 @@ -156,6 +194,13 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
@@ -2701,16 +2715,16 @@ index 16d479802..eba649d69 100644
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -27,12 +27,26 @@ import (
  	"unicode/utf8"
- 
+
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	logging "github.com/op/go-logging"
 +	"github.com/uber-go/tally"
  )
- 
+
  var logger = flogging.MustGetLogger("couchdb")
- 
+
 +var saveDocTimer tally.Timer
 +var handleRequestTimer tally.Timer
 +var ensureFullCommitTimer tally.Timer
@@ -2725,34 +2739,34 @@ index 16d479802..eba649d69 100644
 +
  //time between retry attempts in milliseconds
  const retryWaitTime = 125
- 
+
 @@ -491,6 +505,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
- 
+
 +	if metrics.IsDebug() {
 +		stopWatch := ensureFullCommitTimer.Start()
 +		defer stopWatch.Stop()
 +	}
  	logger.Debugf("Entering EnsureFullCommit()")
- 
+
  	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 @@ -549,6 +567,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
- 
+
 +	if metrics.IsDebug() {
 +		stopWatch := saveDocTimer.Start()
 +		defer stopWatch.Stop()
 +	}
 +
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
- 
+
  	if !utf8.ValidString(id) {
 @@ -1280,6 +1303,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
- 
+
 +	if metrics.IsDebug() {
 +		timer := metrics.RootScope.Timer("couchdb_WarmIndex")
 +		stopWatch := timer.Start()
@@ -2765,14 +2779,14 @@ index 16d479802..eba649d69 100644
 @@ -1650,6 +1679,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
- 
+
 +	if metrics.IsDebug() {
 +		stopWatch := handleRequestTimer.Start()
 +		defer stopWatch.Stop()
 +	}
 +
  	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
- 
+
  	//create the return objects for couchDB
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
 index 1d1152bac..4f6439ddf 100644
@@ -2780,7 +2794,7 @@ index 1d1152bac..4f6439ddf 100644
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
  	"time"
- 
+
  	"github.com/golang/protobuf/proto"
 +	"github.com/hyperledger/fabric/common/metrics"
  	util2 "github.com/hyperledger/fabric/common/util"
@@ -2797,10 +2811,10 @@ index 1d1152bac..4f6439ddf 100644
 +	gossipMissingKeysGauge           tally.Gauge
 +	gossipWaitingForMissingKeysTimer tally.Timer
  )
- 
+
  const (
 @@ -43,6 +50,10 @@ var logger *logging.Logger // package-level logger
- 
+
  func init() {
  	logger = util.GetLogger(util.LoggingPrivModule, "")
 +	if metrics.IsDebug() {
@@ -2808,7 +2822,7 @@ index 1d1152bac..4f6439ddf 100644
 +		gossipWaitingForMissingKeysTimer = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time_seconds")
 +	}
  }
- 
+
  // TransientStore holds private data that the corresponding blocks haven't been committed yet into the ledger
 @@ -193,6 +204,12 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  	}
@@ -2841,7 +2855,7 @@ index 1cd3db30d..526cce6a0 100644
 @@ -12,8 +12,11 @@ import (
  	"sync/atomic"
  	"time"
- 
+
 +	"fmt"
 +
  	pb "github.com/golang/protobuf/proto"
@@ -2861,7 +2875,7 @@ index 1cd3db30d..526cce6a0 100644
  		if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), payload.SeqNum, payload.Data); err != nil {
  			err = errors.WithStack(err)
 @@ -514,6 +520,11 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
- 
+
  	dataMsg := msg.GetDataMsg()
  	if dataMsg != nil {
 +
@@ -2895,9 +2909,9 @@ index 1cd3db30d..526cce6a0 100644
  	if err != nil {
  		return errors.Wrap(err, "Failed obtaining ledger height")
 @@ -767,6 +785,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
- 
+
  func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
- 
+
 +	if metrics.IsDebug() {
 +		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_about_to_store_block_number", s.chainID)).Update(float64(block.Header.Number))
 +	}
@@ -2919,7 +2933,7 @@ index 9735efe79..7ebbfb4ef 100644
  	"github.com/hyperledger/fabric/core/aclmgmt"
 @@ -113,6 +114,9 @@ var nodeStartCmd = &cobra.Command{
  }
- 
+
  func serve(args []string) error {
 +
 +	metrics.Initialize()
@@ -2927,6 +2941,5 @@ index 9735efe79..7ebbfb4ef 100644
  	// currently the peer only works with the standard MSP
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
--- 
-2.14.3 (Apple Git-98)
-
+--
+2.15.2 (Apple Git-101.1)
