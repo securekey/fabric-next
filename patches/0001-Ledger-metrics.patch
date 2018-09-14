@@ -1,4 +1,4 @@
-From 25d6cb26121faa03c954bdb005353049db9e9a57 Mon Sep 17 00:00:00 2001
+From f00bc0fbcc4db2e1d43fad3c84fac4592277c34f Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 13 Sep 2018 19:00:55 -0400
 Subject: [PATCH] Fixing metrics
@@ -11,9 +11,9 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  30 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  16 +
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  17 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  82 ++++
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  78 ++++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
- common/metrics/server.go                           | 259 ++++++------
+ common/metrics/server.go                           | 269 ++++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
@@ -31,9 +31,10 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/ledgerstorage/store.go                 |  45 ++
  core/ledger/util/couchdb/couchdb.go                |  34 ++
  gossip/privdata/coordinator.go                     |  21 +-
- gossip/state/state.go                              |  23 +
+ gossip/state/payloads_buffer.go                    |  13 +-
+ gossip/state/state.go                              |  25 +-
  peer/node/start.go                                 |   4 +
- 27 files changed, 710 insertions(+), 1199 deletions(-)
+ 28 files changed, 729 insertions(+), 1201 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -327,10 +328,10 @@ index 3e06887b6..6e2ec868e 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..6c72b1f23 100644
+index 9e2ab17df..90360b2e7 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
-@@ -20,14 +20,34 @@ import (
+@@ -20,14 +20,30 @@ import (
  	"fmt"
  	"sync"
  
@@ -338,8 +339,6 @@ index 9e2ab17df..6c72b1f23 100644
 +
 +	"bytes"
 +	"time"
-+
-+	"regexp"
 +
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/util"
@@ -353,19 +352,17 @@ index 9e2ab17df..6c72b1f23 100644
  )
  
 +var writeBatch1Timer tally.Timer
-+var reg *regexp.Regexp
 +
 +func init() {
 +	if metrics.IsDebug() {
 +		writeBatch1Timer = metrics.RootScope.Timer("leveldbhelper_db_WriteBatch_time_seconds")
 +	}
-+	reg, _ = regexp.Compile("[^a-zA-Z0-9_]+")
 +}
 +
  var logger = flogging.MustGetLogger("leveldbhelper")
  
  type dbState int32
-@@ -88,6 +108,9 @@ func (dbInst *DB) Open() {
+@@ -88,6 +104,9 @@ func (dbInst *DB) Open() {
  		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
  	}
  	dbInst.dbState = opened
@@ -375,16 +372,16 @@ index 9e2ab17df..6c72b1f23 100644
  }
  
  // Close closes the underlying db
-@@ -105,6 +128,18 @@ func (dbInst *DB) Close() {
+@@ -105,6 +124,18 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
++			dbName = metrics.FilterMetricName(strings.Split(dbName, "ledgersData/")[1])
 +		} else {
-+			dbName = reg.ReplaceAllString(dbName, "_")
++			dbName = metrics.FilterMetricName(dbName)
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -394,16 +391,16 @@ index 9e2ab17df..6c72b1f23 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +154,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -119,6 +150,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
++			dbName = metrics.FilterMetricName(strings.Split(dbName, "ledgersData/")[1])
 +		} else {
-+			dbName = reg.ReplaceAllString(dbName, "_")
++			dbName = metrics.FilterMetricName(dbName)
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -412,16 +409,16 @@ index 9e2ab17df..6c72b1f23 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +179,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -133,6 +175,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
++			dbName = metrics.FilterMetricName(strings.Split(dbName, "ledgersData/")[1])
 +		} else {
-+			dbName = reg.ReplaceAllString(dbName, "_")
++			dbName = metrics.FilterMetricName(dbName)
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -430,7 +427,7 @@ index 9e2ab17df..6c72b1f23 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -154,6 +211,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+@@ -154,6 +207,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
  
  // WriteBatch writes a batch
  func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
@@ -441,7 +438,7 @@ index 9e2ab17df..6c72b1f23 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -163,3 +224,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+@@ -163,3 +220,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
  	}
  	return nil
  }
@@ -536,10 +533,10 @@ index db41651d7..3afb87e3c 100644
  	for k, v := range batch.KVs {
  		key := constructLevelKey(h.dbName, []byte(k))
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..4ccf7280b 100644
+index 677151e78..9e27d17f1 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
-@@ -8,11 +8,19 @@ package metrics
+@@ -8,11 +8,21 @@ package metrics
  
  import (
  	"fmt"
@@ -553,6 +550,8 @@ index 677151e78..4ccf7280b 100644
 +
 +	"runtime"
 +
++	"regexp"
++
 +	"github.com/pkg/errors"
  	"github.com/spf13/viper"
  	"github.com/uber-go/tally"
@@ -560,7 +559,7 @@ index 677151e78..4ccf7280b 100644
  )
  
  const (
-@@ -28,21 +36,102 @@ const (
+@@ -28,21 +38,110 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
@@ -608,11 +607,13 @@ index 677151e78..4ccf7280b 100644
 +	return debugOn
 +}
 +
-+// Initialize ...
-+func Initialize() {
++var reg *regexp.Regexp
  
 -// NewOpts create metrics options based config file
 -func NewOpts() Opts {
++// Initialize ...
++func Initialize() {
++
 +	// load peer config
 +	if err := initPeerConfig(); err != nil {
 +		panic(fmt.Sprintf("error initPeerConfig %v", err))
@@ -630,7 +631,13 @@ index 677151e78..4ccf7280b 100644
 +		logger.Errorf("Failed to start metrics collection: %s", err)
 +	}
 +
++	reg = regexp.MustCompile("[^a-zA-Z0-9_]+")
++
 +	logger.Info("Fabric Bootstrap filter initialized")
++}
++
++func FilterMetricName(name string) string {
++	return reg.ReplaceAllString(name, "_")
 +}
 +
 +func initPeerConfig() error {
@@ -670,7 +677,7 @@ index 677151e78..4ccf7280b 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +139,17 @@ func NewOpts() Opts {
+@@ -50,13 +149,17 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
@@ -691,7 +698,7 @@ index 677151e78..4ccf7280b 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +159,47 @@ func NewOpts() Opts {
+@@ -66,45 +169,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
@@ -763,7 +770,7 @@ index 677151e78..4ccf7280b 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +208,35 @@ func isRunning() bool {
+@@ -113,109 +218,35 @@ func isRunning() bool {
  	return running
  }
  
@@ -2125,7 +2132,7 @@ index c70001ea1..000000000
 -	Start() error
 -}
 diff --git a/core/deliverservice/blocksprovider/blocksprovider.go b/core/deliverservice/blocksprovider/blocksprovider.go
-index c385e3ca1..af8151fca 100644
+index c385e3ca1..97eea9c5c 100644
 --- a/core/deliverservice/blocksprovider/blocksprovider.go
 +++ b/core/deliverservice/blocksprovider/blocksprovider.go
 @@ -11,8 +11,11 @@ import (
@@ -2842,8 +2849,58 @@ index 1d1152bac..4f6439ddf 100644
  	// Only log results if we actually attempted to fetch
  	if bFetchFromPeers {
  		if len(privateInfo.missingKeys) == 0 {
+diff --git a/gossip/state/payloads_buffer.go b/gossip/state/payloads_buffer.go
+index 9b74b6b53..74103becc 100644
+--- a/gossip/state/payloads_buffer.go
++++ b/gossip/state/payloads_buffer.go
+@@ -10,6 +10,9 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 
++	"fmt"
++
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/gossip/util"
+ 	proto "github.com/hyperledger/fabric/protos/gossip"
+ 	"github.com/op/go-logging"
+@@ -51,15 +54,18 @@ type PayloadsBufferImpl struct {
+ 	mutex sync.RWMutex
+ 
+ 	logger *logging.Logger
++
++	chainID string
+ }
+ 
+ // NewPayloadsBuffer is factory function to create new payloads buffer
+-func NewPayloadsBuffer(next uint64) PayloadsBuffer {
++func NewPayloadsBuffer(chainID string, next uint64) PayloadsBuffer {
+ 	return &PayloadsBufferImpl{
+ 		buf:       make(map[uint64]*proto.Payload),
+ 		readyChan: make(chan struct{}, 0),
+ 		next:      next,
+ 		logger:    util.GetLogger(util.LoggingStateModule, ""),
++		chainID:   chainID,
+ 	}
+ }
+ 
+@@ -84,10 +90,15 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
+ 		return
+ 	}
+ 
++	if metrics.IsDebug() {
++		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", b.chainID)).Update(float64(seqNum))
++	}
++
+ 	b.buf[seqNum] = payload
+ 
+ 	// Send notification that next sequence has arrived
+ 	if seqNum == b.next {
++		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_notify_block_number", b.chainID)).Update(float64(seqNum))
+ 		// Do not block execution of current routine
+ 		go func() {
+ 			b.readyChan <- struct{}{}
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 1cd3db30d..1e4ceea47 100644
+index 1cd3db30d..a24a9e541 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
@@ -2858,6 +2915,15 @@ index 1cd3db30d..1e4ceea47 100644
  	"github.com/hyperledger/fabric/gossip/api"
  	"github.com/hyperledger/fabric/gossip/comm"
  	common2 "github.com/hyperledger/fabric/gossip/common"
+@@ -211,7 +214,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
+ 		commChan: commChan,
+ 
+ 		// Create a queue for payload received
+-		payloads: NewPayloadsBuffer(height),
++		payloads: NewPayloadsBuffer(chainID, height),
+ 
+ 		ledger: ledger,
+ 
 @@ -470,6 +473,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
  		return uint64(0), errors.New("Received state transfer response without payload")
  	}
@@ -2892,7 +2958,7 @@ index 1cd3db30d..1e4ceea47 100644
  			logger.Debugf("Ready to transfer payloads to the ledger, next sequence number is = [%d]", s.payloads.Next())
  			// Collect all subsequent payloads
  			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
-@@ -747,7 +763,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+@@ -747,6 +763,9 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  	if payload == nil {
  		return errors.New("Given payload is nil")
  	}
@@ -2902,7 +2968,6 @@ index 1cd3db30d..1e4ceea47 100644
  	logger.Debug("Adding new payload into the buffer, seqNum = ", payload.SeqNum)
  	height, err := s.ledger.LedgerHeight()
  	if err != nil {
- 		return errors.Wrap(err, "Failed obtaining ledger height")
 @@ -767,6 +786,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  
  func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
@@ -2937,5 +3002,5 @@ index 9735efe79..7ebbfb4ef 100644
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
 -- 
-2.14.3 (Apple Git-98)
+2.15.2 (Apple Git-101.1)
 
