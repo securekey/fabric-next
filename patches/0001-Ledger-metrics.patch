@@ -2144,9 +2144,9 @@ index c385e3ca1..af8151fca 100644
  			statusCounter = 0
  			seqNum := t.Block.Header.Number
  
-+			if metrics.IsDebug() {
++			//if metrics.IsDebug() {
 +				metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", b.chainID)).Update(float64(seqNum))
-+			}
++			//}
 +
  			marshaledBlock, err := proto.Marshal(t.Block)
  			if err != nil {
@@ -2897,7 +2897,7 @@ index 1cd3db30d..1e4ceea47 100644
  		return errors.New("Given payload is nil")
  	}
 +	// KEEP EVEN WHEN metrics.debug IS OFF
-+	metrics.RootScope.Gauge("gossip_state_addPayload_time_seconds").Update(float64(payload.SeqNum))
++	metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_addPayload", s.chainID)).Update(float64(payload.SeqNum))
  	logger.Debug("Adding new payload into the buffer, seqNum = ", payload.SeqNum)
 +
  	height, err := s.ledger.LedgerHeight()
