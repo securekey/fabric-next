@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b0e75cb5_543149d6",
+        "filename": "patches/0001-Ledger-metrics.patch",
+        "patchSetId": 2
+      },
+      "lineNbr": 356,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-14T02:02:34Z",
+      "side": 1,
+      "message": "suggest dbnameRegexp",
+      "range": {
+        "startLine": 356,
+        "startChar": 5,
+        "endLine": 356,
+        "endChar": 8
+      },
+      "revId": "3f49fb49978ce3571bab762b258b3225fd6b9ac8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "434340ed_4e2ebf3d",
+        "filename": "patches/0001-Ledger-metrics.patch",
+        "patchSetId": 2
+      },
+      "lineNbr": 362,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-14T02:02:34Z",
+      "side": 1,
+      "message": "should be MustCompile",
+      "range": {
+        "startLine": 362,
+        "startChar": 18,
+        "endLine": 362,
+        "endChar": 25
+      },
+      "revId": "3f49fb49978ce3571bab762b258b3225fd6b9ac8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
