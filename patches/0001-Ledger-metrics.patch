@@ -1,4 +1,4 @@
-From 8d4a497eef473d7d9649d61bd69561c7848bbef2 Mon Sep 17 00:00:00 2001
+From 4bcee37363002f8fda27c95f5eadb9be5e9d60b2 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Thu, 13 Sep 2018 19:00:55 -0400
 Subject: [PATCH] Fixing metrics
@@ -11,7 +11,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../blkstorage/fsblkstorage/blockfile_mgr.go       |  30 ++
  .../ledger/blkstorage/fsblkstorage/blockindex.go   |  16 +
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |  17 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  78 ++++
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  82 ++++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  20 +-
  common/metrics/server.go                           | 259 ++++++------
  common/metrics/server_test.go                      | 242 -----------
@@ -33,7 +33,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  gossip/privdata/coordinator.go                     |  21 +-
  gossip/state/state.go                              |  22 +
  peer/node/start.go                                 |   4 +
- 27 files changed, 701 insertions(+), 1199 deletions(-)
+ 27 files changed, 705 insertions(+), 1199 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -327,10 +327,10 @@ index 3e06887b6..6e2ec868e 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..72f272693 100644
+index 9e2ab17df..6c72b1f23 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
-@@ -20,14 +20,30 @@ import (
+@@ -20,14 +20,34 @@ import (
  	"fmt"
  	"sync"
  
@@ -338,6 +338,8 @@ index 9e2ab17df..72f272693 100644
 +
 +	"bytes"
 +	"time"
++
++	"regexp"
 +
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/util"
@@ -351,17 +353,19 @@ index 9e2ab17df..72f272693 100644
  )
  
 +var writeBatch1Timer tally.Timer
++var reg *regexp.Regexp
 +
 +func init() {
 +	if metrics.IsDebug() {
 +		writeBatch1Timer = metrics.RootScope.Timer("leveldbhelper_db_WriteBatch_time_seconds")
 +	}
++	reg, _ = regexp.Compile("[^a-zA-Z0-9_]+")
 +}
 +
  var logger = flogging.MustGetLogger("leveldbhelper")
  
  type dbState int32
-@@ -88,6 +104,9 @@ func (dbInst *DB) Open() {
+@@ -88,6 +108,9 @@ func (dbInst *DB) Open() {
  		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
  	}
  	dbInst.dbState = opened
@@ -371,16 +375,16 @@ index 9e2ab17df..72f272693 100644
  }
  
  // Close closes the underlying db
-@@ -105,6 +124,18 @@ func (dbInst *DB) Close() {
+@@ -105,6 +128,18 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
 +		} else {
-+			dbName = strings.Replace(dbName, "/", "_", -1)
++			dbName = reg.ReplaceAllString(dbName, "_")
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -390,16 +394,16 @@ index 9e2ab17df..72f272693 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +150,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -119,6 +154,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
 +		} else {
-+			dbName = strings.Replace(dbName, "/", "_", -1)
++			dbName = reg.ReplaceAllString(dbName, "_")
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -408,16 +412,16 @@ index 9e2ab17df..72f272693 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +175,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -133,6 +179,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
 +	if metrics.IsDebug() {
 +		dbName := dbInst.conf.DBPath
 +		if strings.Contains(dbName, "ledgersData/") {
-+			dbName = strings.Replace(strings.Split(dbName, "ledgersData/")[1], "/", "_", -1)
++			dbName = reg.ReplaceAllString(strings.Split(dbName, "ledgersData/")[1], "_")
 +		} else {
-+			dbName = strings.Replace(dbName, "/", "_", -1)
++			dbName = reg.ReplaceAllString(dbName, "_")
 +		}
 +		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
 +		ccStopWatch := ccTimer.Start()
@@ -426,7 +430,7 @@ index 9e2ab17df..72f272693 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -154,6 +207,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+@@ -154,6 +211,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
  
  // WriteBatch writes a batch
  func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
@@ -437,7 +441,7 @@ index 9e2ab17df..72f272693 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -163,3 +220,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+@@ -163,3 +224,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
  	}
  	return nil
  }
@@ -2928,5 +2932,5 @@ index 9735efe79..7ebbfb4ef 100644
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
 -- 
-2.14.3 (Apple Git-98)
+2.15.2 (Apple Git-101.1)
 
