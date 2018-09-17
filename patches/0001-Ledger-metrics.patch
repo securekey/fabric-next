@@ -1,4 +1,4 @@
-From d168f926c69ae68e1c168d9a00cc96634b625dfd Mon Sep 17 00:00:00 2001
+From 362cd57032666d113e5ffafe96c81e05df3fc655 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Fri, 14 Sep 2018 15:13:31 -0400
 Subject: [PATCH] Ledger metrics
@@ -13,7 +13,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |   8 +
  common/ledger/util/leveldbhelper/leveldb_helper.go |  69 +++
  .../ledger/util/leveldbhelper/leveldb_provider.go  |  11 +-
- common/metrics/server.go                           | 269 ++++++------
+ common/metrics/server.go                           | 271 ++++++------
  common/metrics/server_test.go                      | 242 -----------
  common/metrics/tally_provider.go                   | 374 ++---------------
  common/metrics/tally_provider_test.go              | 462 ---------------------
@@ -34,7 +34,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  gossip/state/payloads_buffer.go                    |  13 +-
  gossip/state/state.go                              |  25 +-
  peer/node/start.go                                 |   4 +
- 28 files changed, 552 insertions(+), 1203 deletions(-)
+ 28 files changed, 554 insertions(+), 1203 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -462,7 +462,7 @@ index db41651d7..8bcc91a2c 100644
  	for k, v := range batch.KVs {
  		key := constructLevelKey(h.dbName, []byte(k))
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..9e27d17f1 100644
+index 677151e78..fc42eac09 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,21 @@ package metrics
@@ -488,7 +488,7 @@ index 677151e78..9e27d17f1 100644
  )
  
  const (
-@@ -28,21 +38,110 @@ const (
+@@ -28,21 +38,112 @@ const (
  	defaultStatsdReporterFlushBytes    = 1432
  )
  
@@ -551,7 +551,9 @@ index 677151e78..9e27d17f1 100644
 +	if peerConfig.GetBool("peer.profile.enabled") {
 +		runtime.SetMutexProfileFraction(5)
 +	}
-+	debugOn = peerConfig.GetBool("metrics.debug.enabled")
++	if peerConfig.GetBool("metrics.enabled") {
++		debugOn = peerConfig.GetBool("metrics.debug.enabled")
++	}
 +
 +	// start metric server
 +	opts := NewOpts(peerConfig)
@@ -606,7 +608,7 @@ index 677151e78..9e27d17f1 100644
  		opts.Interval = interval
  	} else {
  		opts.Interval = defaultInterval
-@@ -50,13 +149,17 @@ func NewOpts() Opts {
+@@ -50,13 +151,17 @@ func NewOpts() Opts {
  
  	if opts.Reporter == statsdReporterType {
  		statsdOpts := StatsdReporterOpts{}
@@ -627,7 +629,7 @@ index 677151e78..9e27d17f1 100644
  			statsdOpts.FlushBytes = flushBytes
  		} else {
  			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
-@@ -66,45 +169,47 @@ func NewOpts() Opts {
+@@ -66,45 +171,47 @@ func NewOpts() Opts {
  
  	if opts.Reporter == promReporterType {
  		promOpts := PromReporterOpts{}
@@ -699,7 +701,7 @@ index 677151e78..9e27d17f1 100644
  }
  
  func isRunning() bool {
-@@ -113,109 +218,35 @@ func isRunning() bool {
+@@ -113,109 +220,35 @@ func isRunning() bool {
  	return running
  }
  
