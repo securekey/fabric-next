@@ -33,7 +33,7 @@ var couchDBDef *CouchDBDef
 func cleanup(database string) error {
 	//create a new connection
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 
 	if err != nil {
 		fmt.Println("Unexpected error", err)
@@ -78,7 +78,6 @@ func testMain(m *testing.M) int {
 	viper.Set("ledger.state.couchDBConfig.maxRetries", 3)
 	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 10)
 	viper.Set("ledger.state.couchDBConfig.requestTimeout", time.Second*35)
-	viper.Set("ledger.state.couchDBConfig.createGlobalChangesDB", true)
 
 	//set the logging level to DEBUG to test debug only code
 	logging.SetModuleLevel("couchdb", "Debug")
@@ -110,7 +109,7 @@ func TestDBConnectionDef(t *testing.T) {
 
 	//create a new connection
 	_, err := CreateConnectionDefinition(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create database connection definition"))
 
 }
@@ -119,7 +118,7 @@ func TestDBBadConnectionDef(t *testing.T) {
 
 	//create a new connection
 	_, err := CreateConnectionDefinition(badParseConnectURL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Did not receive error when trying to create database connection definition with a bad hostname"))
 
 }
@@ -236,7 +235,7 @@ func TestDBCreateSaveWithoutRevision(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -259,7 +258,7 @@ func TestDBCreateEnsureFullCommit(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -280,28 +279,28 @@ func TestDBBadDatabaseName(t *testing.T) {
 
 	//create a new instance and database object using a valid database name mixed case
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	_, dberr := CreateCouchDatabase(couchInstance, "testDB")
 	testutil.AssertError(t, dberr, "Error should have been thrown for an invalid db name")
 
 	//create a new instance and database object using a valid database name letters and numbers
 	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	_, dberr = CreateCouchDatabase(couchInstance, "test132")
 	testutil.AssertNoError(t, dberr, fmt.Sprintf("Error when testing a valid database name"))
 
 	//create a new instance and database object using a valid database name - special characters
 	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	_, dberr = CreateCouchDatabase(couchInstance, "test1234~!@#$%^&*()[]{}.")
 	testutil.AssertError(t, dberr, "Error should have been thrown for an invalid db name")
 
 	//create a new instance and database object using a invalid database name - too long	/*
 	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	_, dberr = CreateCouchDatabase(couchInstance, "a12345678901234567890123456789012345678901234"+
 		"56789012345678901234567890123456789012345678901234567890123456789012345678901234567890"+
@@ -316,7 +315,7 @@ func TestDBBadConnection(t *testing.T) {
 	//create a new instance and database object
 	//Limit the maxRetriesOnStartup to 3 in order to reduce time for the failure
 	_, err := CreateCouchInstance(badConnectURL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, 3, couchDBDef.RequestTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for a bad connection"))
 }
 
@@ -329,7 +328,7 @@ func TestBadDBCredentials(t *testing.T) {
 
 	//create a new instance and database object
 	_, err = CreateCouchInstance(couchDBDef.URL, "fred", "fred",
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown for bad credentials"))
 
 }
@@ -359,7 +358,7 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		maxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		maxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -578,12 +577,12 @@ func TestDBRequestTimeout(t *testing.T) {
 	//create a new instance and database object with a timeout that will fail
 	//Also use a maxRetriesOnStartup=3 to reduce the number of retries
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, 3, impossibleTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, 3, impossibleTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thown while trying to create a couchdb instance with a connection timeout"))
 
 	//create a new instance and database object
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		-1, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		-1, 3, couchDBDef.RequestTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown while attempting to create a database"))
 
 }
@@ -597,7 +596,7 @@ func TestDBTimeoutConflictRetry(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, 3, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -637,7 +636,7 @@ func TestDBBadNumberOfRetries(t *testing.T) {
 
 	//create a new instance and database object
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		-1, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		-1, 3, couchDBDef.RequestTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thrown while attempting to create a database"))
 
 }
@@ -651,7 +650,7 @@ func TestDBBadJSON(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -681,7 +680,7 @@ func TestPrefixScan(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -750,7 +749,7 @@ func TestDBSaveAttachment(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -779,7 +778,7 @@ func TestDBDeleteDocument(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -814,7 +813,7 @@ func TestDBDeleteNonExistingDocument(t *testing.T) {
 
 	//create a new instance and database object
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -863,7 +862,7 @@ func TestIndexOperations(t *testing.T) {
 
 	//create a new instance and database object   --------------------------------------------------------
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -1122,7 +1121,7 @@ func TestRichQuery(t *testing.T) {
 
 	//create a new instance and database object   --------------------------------------------------------
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -1379,7 +1378,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 
 	//create a new instance and database object   --------------------------------------------------------
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 
@@ -1580,7 +1579,7 @@ func TestDatabaseSecuritySettings(t *testing.T) {
 
 	//create a new instance and database object   --------------------------------------------------------
 	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 

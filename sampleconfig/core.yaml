@@ -663,8 +663,6 @@ ledger:
        # Increasing the value may improve write efficiency of peer and CouchDB,
        # but may degrade query response time.
        warmIndexesAfterNBlocks: 1
-       # enable or disable create global changes db
-       createGlobalChangesDB: true
 
   history:
     # enableHistoryDatabase - options are true or false

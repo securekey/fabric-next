@@ -117,13 +117,12 @@ type QueryResult struct {
 
 //CouchConnectionDef contains parameters
 type CouchConnectionDef struct {
-	URL                   string
-	Username              string
-	Password              string
-	MaxRetries            int
-	MaxRetriesOnStartup   int
-	RequestTimeout        time.Duration
-	CreateGlobalChangesDB bool
+	URL                 string
+	Username            string
+	Password            string
+	MaxRetries          int
+	MaxRetriesOnStartup int
+	RequestTimeout      time.Duration
 }
 
 //CouchInstance represents a CouchDB instance
@@ -231,7 +230,7 @@ func closeResponseBody(resp *http.Response) {
 
 //CreateConnectionDefinition for a new client connection
 func CreateConnectionDefinition(couchDBAddress, username, password string, maxRetries,
-	maxRetriesOnStartup int, requestTimeout time.Duration, createGlobalChangesDB bool) (*CouchConnectionDef, error) {
+	maxRetriesOnStartup int, requestTimeout time.Duration) (*CouchConnectionDef, error) {
 
 	logger.Debugf("Entering CreateConnectionDefinition()")
 
@@ -252,7 +251,7 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
 
 	//return an object containing the connection information
 	return &CouchConnectionDef{finalURL.String(), username, password, maxRetries,
-		maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}, nil
+		maxRetriesOnStartup, requestTimeout}, nil
 
 }
 
