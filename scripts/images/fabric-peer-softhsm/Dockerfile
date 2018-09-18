@@ -30,8 +30,18 @@ RUN   set -xe; \
       if [ "${ARCH}" = "s390x" ]; then export ARCH_URL=s390x; \
       echo 'deb http://ftp.debian.org/debian jessie-backports main' >> /etc/apt/sources.list; fi && \
       apt-get update && \
-      apt-get install -y --no-install-recommends softhsm2 curl git gcc g++ libtool libltdl-dev && \
+      apt-get install -y --no-install-recommends curl git gcc g++ libtool libltdl-dev debhelper dh-autoreconf libssl-dev libsqlite3-dev sqlite3 libsqlite3-dev && \
+      wget https://github.com/opendnssec/SoftHSMv2/archive/2.4.0.tar.gz -O /tmp/2.4.0.tar.gz && \
+      tar -C /tmp/ -xvf /tmp/2.4.0.tar.gz && \
+      cd /tmp/SoftHSMv2-2.4.0 && \
+      sh ./autogen.sh && \
+      ./configure --build=x86_64-linux-gnu --prefix=/usr --includedir=\${prefix}/include --mandir=\${prefix}/share/man --infodir=\${prefix}/share/info --sysconfdir=/etc --localstatedir=/var --disable-silent-rules --libdir=\${prefix}/lib/x86_64-linux-gnu --libexecdir=\${prefix}/lib/x86_64-linux-gnu --disable-dependency-tracking --sysconfdir=/etc/softhsm --localstatedir=/var --with-crypto-backend=openssl --with-migrate --with-pic --disable-gost --enable-64bit && \
+      make && \
+      make install && \
+      apt-get -y remove debhelper dh-autoreconf libssl-dev libsqlite3-dev sqlite3 libsqlite3-dev && \
       rm -rf /var/lib/apt/lists/* && \
+      rm -rf /tmp/2.4.0.tar.gz && \
+      rm -rf /tmp/SoftHSMv2-2.4.0 && \
       mkdir -p /var/lib/softhsm/tokens/ && \
       softhsm2-util --init-token --slot 0 --label "ForFabric" --so-pin 1234 --pin 98765432 && \
       mkdir -p ${GOROOT} ${GOPATH}/src && \
