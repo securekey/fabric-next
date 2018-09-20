@@ -59,7 +59,10 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	// Initialize the ID store (inventory of chainIds/ledgerIds)
 	idStore := openIDStore(ledgerconfig.GetLedgerProviderPath())
 
-	ledgerStoreProvider := ledgerstorage.NewProvider()
+	ledgerStoreProvider, err := ledgerstorage.NewProvider()
+	if err != nil {
+		return nil, err
+	}
 
 	// Initialize the versioned database (state database)
 	vdbProvider, err := privacyenabledstate.NewCommonStorageDBProvider()

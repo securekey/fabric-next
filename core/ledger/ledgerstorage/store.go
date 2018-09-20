@@ -18,13 +18,15 @@ package ledgerstorage
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/pkg/errors"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
 	"github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/protos/common"
@@ -46,7 +48,7 @@ type Store struct {
 }
 
 // NewProvider returns the handle to the provider
-func NewProvider() *Provider {
+func NewProvider() (*Provider, error) {
 	// Initialize the block storage
 	attrsToIndex := []blkstorage.IndexableAttr{
 		blkstorage.IndexableAttrBlockHash,
@@ -57,12 +59,35 @@ func NewProvider() *Provider {
 		blkstorage.IndexableAttrTxValidationCode,
 	}
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
-	blockStoreProvider := fsblkstorage.NewProvider(
-		fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
-		indexConfig)
 
+	blockStoreProvider, err := createBlockStoreProvider(indexConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	//
+	// TODO: CHANGE TO COUCHDB-PVTSTORAGE
+	//
 	pvtStoreProvider := pvtdatastorage.NewProvider()
-	return &Provider{blockStoreProvider, pvtStoreProvider}
+	//
+	//
+	//
+	return &Provider{blockStoreProvider, pvtStoreProvider}, nil
+}
+
+func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProvider, error) {
+	blockStorageConfig := ledgerconfig.GetBlockStoreProvider()
+
+	switch blockStorageConfig {
+	case ledgerconfig.FilesystemLedgerStorage:
+		return fsblkstorage.NewProvider(
+			               fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
+			               indexConfig), nil
+	case ledgerconfig.CouchDBLedgerStorage:
+		return cdbblkstorage.NewProvider(indexConfig)
+	}
+
+	return nil, errors.New("block storage provider creation failed due to unknown configuration")
 }
 
 // Open opens the store
