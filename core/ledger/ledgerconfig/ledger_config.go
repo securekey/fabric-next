@@ -36,6 +36,18 @@ const confEnableHistoryDatabase = "ledger.history.enableHistoryDatabase"
 const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
+const confBlockStorage = "ledger.blockchain.blockStorage"
+
+
+// BlockStorageProvider holds the configuration names of the available storage providers
+type BlockStorageProvider int
+const (
+	// FilesystemLedgerStorage stores blocks in a raw file with a LevelDB index (default)
+	FilesystemLedgerStorage BlockStorageProvider = iota
+	// CouchDBLedgerStorage stores blocks in CouchDB
+	CouchDBLedgerStorage
+)
+
 
 // GetRootPath returns the filesystem path.
 // All ledger related contents are expected to be stored under this path
@@ -150,4 +162,18 @@ func GetWarmIndexesAfterNBlocks() int {
 		warmAfterNBlocks = 1
 	}
 	return warmAfterNBlocks
+}
+
+// GetBlockStoreProvider returns the block storage provider specified in the configuration
+func GetBlockStoreProvider() BlockStorageProvider {
+	blockStorageConfig := viper.GetString(confBlockStorage)
+
+	switch blockStorageConfig {
+	case "CouchDB":
+		return CouchDBLedgerStorage
+	default:
+		fallthrough
+	case "filesystem":
+		return FilesystemLedgerStorage
+	}
 }

@@ -34,7 +34,8 @@ func TestMain(m *testing.M) {
 func TestStore(t *testing.T) {
 	testEnv := newTestEnv(t)
 	defer testEnv.cleanup()
-	provider := NewProvider()
+	provider, err := NewProvider()
+	assert.NoError(t, err)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -127,7 +128,8 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 
 	// Simulating the upgrade from 1.0 situation:
 	// Open the ledger storage - pvtdata store is opened for the first time with an existing block storage
-	provider := NewProvider()
+	provider, err := NewProvider()
+	assert.NoError(t, err)
 	defer provider.Close()
 	store, err := provider.Open(testLedgerid)
 	store.Init(btlPolicyForSampleData())
@@ -149,7 +151,8 @@ func TestStoreWithExistingBlockchain(t *testing.T) {
 func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	testEnv := newTestEnv(t)
 	defer testEnv.cleanup()
-	provider := NewProvider()
+	provider, err := NewProvider()
+	assert.NoError(t, err)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -172,7 +175,8 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash)
 	store.Shutdown()
 	provider.Close()
-	provider = NewProvider()
+	provider, err = NewProvider()
+	assert.NoError(t, err)
 	store, err = provider.Open("testLedger")
 	assert.NoError(t, err)
 	store.Init(btlPolicyForSampleData())
@@ -192,7 +196,8 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	testEnv := newTestEnv(t)
 	defer testEnv.cleanup()
-	provider := NewProvider()
+	provider, err := NewProvider()
+	assert.NoError(t, err)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -218,7 +223,8 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	store.BlockStore.AddBlock(dataAtCrash.Block)
 	store.Shutdown()
 	provider.Close()
-	provider = NewProvider()
+	provider, err = NewProvider()
+	assert.NoError(t, err)
 	store, err = provider.Open("testLedger")
 	assert.NoError(t, err)
 	store.Init(btlPolicyForSampleData())
@@ -230,7 +236,8 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 func TestAddAfterPvtdataStoreError(t *testing.T) {
 	testEnv := newTestEnv(t)
 	defer testEnv.cleanup()
-	provider := NewProvider()
+	provider, err := NewProvider()
+	assert.NoError(t, err)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())
@@ -267,7 +274,8 @@ func TestAddAfterPvtdataStoreError(t *testing.T) {
 func TestAddAfterBlkStoreError(t *testing.T) {
 	testEnv := newTestEnv(t)
 	defer testEnv.cleanup()
-	provider := NewProvider()
+	provider, err := NewProvider()
+	assert.NoError(t, err)
 	defer provider.Close()
 	store, err := provider.Open("testLedger")
 	store.Init(btlPolicyForSampleData())

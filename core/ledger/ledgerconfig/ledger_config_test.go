@@ -241,7 +241,29 @@ func TestGetMaxBlockfileSize(t *testing.T) {
 	testutil.AssertEquals(t, GetMaxBlockfileSize(), 67108864)
 }
 
+func TestGetBlockStoreProviderDefault(t *testing.T) {
+	provider := GetBlockStoreProvider()
+	testutil.AssertEquals(t, provider, FilesystemLedgerStorage)
+}
+
+func TestGetBlockStoreProviderFilesystem(t *testing.T) {
+	setUpCoreYAMLConfig()
+	defer ledgertestutil.ResetConfigToDefaultValues()
+	viper.Set("ledger.blockchain.blockStorage", "filesystem")
+	provider := GetBlockStoreProvider()
+	testutil.AssertEquals(t, provider, FilesystemLedgerStorage)
+}
+
+func TestGetBlockStoreProviderCouchDB(t *testing.T) {
+	setUpCoreYAMLConfig()
+	defer ledgertestutil.ResetConfigToDefaultValues()
+	viper.Set("ledger.blockchain.blockStorage", "CouchDB")
+	provider := GetBlockStoreProvider()
+	testutil.AssertEquals(t, provider, CouchDBLedgerStorage)
+}
+
 func setUpCoreYAMLConfig() {
 	//call a helper method to load the core.yaml
 	ledgertestutil.SetupCoreYAMLConfig()
 }
+
