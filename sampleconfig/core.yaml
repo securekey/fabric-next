@@ -626,6 +626,8 @@ chaincode:
 ledger:
 
   blockchain:
+      blockStorage: filesystem
+      pvtdataStorage: goleveldb
 
   state:
     # stateDatabase - options are "goleveldb", "CouchDB"
