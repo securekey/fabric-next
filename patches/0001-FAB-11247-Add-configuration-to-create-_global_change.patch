@@ -1,11 +1,12 @@
-From 989fd6b6c2bc7d0f722fb111a2aeb5ff11fbb6c8 Mon Sep 17 00:00:00 2001
+From 84161d50a4a414af5212d25cc4a86ed934da209a Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Fri, 20 Jul 2018 13:08:07 -0400
-Subject: [PATCH] [FAB-11247] Add configuration to create _global_changes
+Subject: [PATCH] Add configuration to create _global_changes
 
 Change-Id: Idcee6cc17854db52c3a5b38f162171742c47d2d6
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
+ .../cdbblkstorage/cdb_blockstore_provider.go       |  2 +-
  core/chaincode/exectransaction_test.go             |  3 +-
  .../txmgmt/statedb/statecouchdb/statecouchdb.go    |  2 +-
  .../statecouchdb/statecouchdb_test_export.go       |  2 +-
@@ -15,10 +16,23 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/util/couchdb/couchdbutil.go            | 21 +++++----
  core/ledger/util/couchdb/couchdbutil_test.go       | 30 ++++++++++++-
  sampleconfig/core.yaml                             |  2 +
- 9 files changed, 88 insertions(+), 56 deletions(-)
+ 10 files changed, 89 insertions(+), 57 deletions(-)
 
+diff --git a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go
+index 9505923..d9a6cdb 100644
+--- a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go
++++ b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go
+@@ -26,7 +26,7 @@ func NewProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProv
+ 	logger.Debugf("constructing CouchDB block storage provider")
+ 	couchDBDef := couchdb.GetCouchDBDefinition()
+ 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
+-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
++		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout,couchDBDef.CreateGlobalChangesDB)
+ 	if err != nil {
+ 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
+ 	}
 diff --git a/core/chaincode/exectransaction_test.go b/core/chaincode/exectransaction_test.go
-index 3701986b4..61b320df8 100644
+index 3701986..61b320d 100644
 --- a/core/chaincode/exectransaction_test.go
 +++ b/core/chaincode/exectransaction_test.go
 @@ -195,8 +195,9 @@ func finitPeer(lis net.Listener, chainIDs ...string) {
@@ -33,7 +47,7 @@ index 3701986b4..61b320df8 100644
  		//drop the test database
  		db.DropDatabase()
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index b10b1d229..58f297a02 100644
+index b10b1d2..58f297a 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -38,7 +38,7 @@ func NewVersionedDBProvider() (*VersionedDBProvider, error) {
@@ -46,7 +60,7 @@ index b10b1d229..58f297a02 100644
  		return nil, err
  	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb_test_export.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb_test_export.go
-index b1b6def37..8b4762418 100644
+index b1b6def..8b47624 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb_test_export.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb_test_export.go
 @@ -41,7 +41,7 @@ func CleanupDB(dbName string) {
@@ -59,7 +73,7 @@ index b1b6def37..8b4762418 100644
  	//drop the test database
  	db.DropDatabase()
 diff --git a/core/ledger/util/couchdb/config.go b/core/ledger/util/couchdb/config.go
-index 6da645f6c..281fdbe50 100644
+index 6da645f..281fdbe 100644
 --- a/core/ledger/util/couchdb/config.go
 +++ b/core/ledger/util/couchdb/config.go
 @@ -24,12 +24,13 @@ import (
@@ -92,7 +106,7 @@ index 6da645f6c..281fdbe50 100644
 +	return &CouchDBDef{couchDBAddress, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}
  }
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..103186f67 100644
+index 16d4798..103186f 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -117,12 +117,13 @@ type QueryResult struct {
@@ -134,7 +148,7 @@ index 16d479802..103186f67 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb_test.go b/core/ledger/util/couchdb/couchdb_test.go
-index 994dc3f07..7a8bbb505 100644
+index 994dc3f..7a8bbb5 100644
 --- a/core/ledger/util/couchdb/couchdb_test.go
 +++ b/core/ledger/util/couchdb/couchdb_test.go
 @@ -33,7 +33,7 @@ var couchDBDef *CouchDBDef
@@ -365,7 +379,7 @@ index 994dc3f07..7a8bbb505 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
 diff --git a/core/ledger/util/couchdb/couchdbutil.go b/core/ledger/util/couchdb/couchdbutil.go
-index e12a19103..246cfe3a4 100644
+index 2cd7589..dea39b2 100644
 --- a/core/ledger/util/couchdb/couchdbutil.go
 +++ b/core/ledger/util/couchdb/couchdbutil.go
 @@ -31,10 +31,10 @@ var collectionNameAllowedLength = 50
@@ -414,7 +428,7 @@ index e12a19103..246cfe3a4 100644
  
  }
 diff --git a/core/ledger/util/couchdb/couchdbutil_test.go b/core/ledger/util/couchdb/couchdbutil_test.go
-index e05e5648b..11640c730 100644
+index d27328e..f05cab9 100644
 --- a/core/ledger/util/couchdb/couchdbutil_test.go
 +++ b/core/ledger/util/couchdb/couchdbutil_test.go
 @@ -22,7 +22,7 @@ func TestCreateCouchDBConnectionAndDB(t *testing.T) {
@@ -426,11 +440,10 @@ index e05e5648b..11640c730 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to CreateCouchInstance"))
  
  	_, err = CreateCouchDatabase(couchInstance, database)
-@@ -30,6 +30,31 @@ func TestCreateCouchDBConnectionAndDB(t *testing.T) {
- 
+@@ -31,6 +31,31 @@ func TestCreateCouchDBConnectionAndDB(t *testing.T) {
  }
  
-+//Unit test of couch db util functionality
+ //Unit test of couch db util functionality
 +func TestNotCreateCouchGlobalChangesDB(t *testing.T) {
 +	value := couchDBDef.CreateGlobalChangesDB
 +	couchDBDef.CreateGlobalChangesDB = false
@@ -455,9 +468,10 @@ index e05e5648b..11640c730 100644
 +	couchDBDef.CreateGlobalChangesDB = value
 +}
 +
- //Unit test of couch db util functionality
++//Unit test of couch db util functionality
  func TestCreateCouchDBSystemDBs(t *testing.T) {
  
+ 	database := "testcreatecouchdbsystemdb"
 @@ -39,7 +64,7 @@ func TestCreateCouchDBSystemDBs(t *testing.T) {
  
  	//create a new connection
@@ -476,10 +490,10 @@ index e05e5648b..11640c730 100644
  	//create a new instance and database object using a database name mixed case
  	_, err := mapAndValidateDatabaseName("testDB")
 diff --git a/sampleconfig/core.yaml b/sampleconfig/core.yaml
-index a94477069..aa86c7068 100644
+index 53fd857..be4f7eb 100644
 --- a/sampleconfig/core.yaml
 +++ b/sampleconfig/core.yaml
-@@ -663,6 +663,8 @@ ledger:
+@@ -664,6 +664,8 @@ ledger:
         # Increasing the value may improve write efficiency of peer and CouchDB,
         # but may degrade query response time.
         warmIndexesAfterNBlocks: 1
@@ -489,5 +503,5 @@ index a94477069..aa86c7068 100644
    history:
      # enableHistoryDatabase - options are true or false
 -- 
-2.15.2 (Apple Git-101.1)
+2.10.1 (Apple Git-78)
 
