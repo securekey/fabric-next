@@ -7,13 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
+	"fmt"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
-	"strconv"
 )
 
 // cdbBlockStore ...
@@ -29,19 +29,18 @@ func newCDBBlockStore(db *couchdb.CouchDatabase, ledgerID string, indexConfig *b
 
 // AddBlock adds a new block
 func (s *cdbBlockStore) AddBlock(block *common.Block) error {
-	logger.Infof("AddBlock %v", block)
 	doc, err := blockToCouchDoc(block)
 	if err != nil {
 		return errors.WithMessage(err, "converting block to couchDB document failed")
 	}
 
-	id := "b" + strconv.FormatUint(block.GetHeader().Number, 10)
+	id := blockNumberToKey(block.GetHeader().Number)
 
 	rev, err := s.db.SaveDoc(id, "", doc)
 	if err != nil {
 		return errors.WithMessage(err, "adding block to couchDB failed")
 	}
-	logger.Infof("AddBlock has revision %s", rev)
+	logger.Debugf("block added to couchDB [%d, %s]", block.GetHeader().Number, rev)
 
 	return nil
 }
@@ -63,7 +62,19 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
 func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
-	return nil, errors.New("not implemented")
+	id := blockNumberToKey(blockNum)
+
+	doc, _, err := s.db.ReadDoc(id)
+	if err != nil {
+		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block from couchDB failed [%d]", blockNum))
+	}
+
+	block, err := couchDocToBlock(doc)
+	if err != nil {
+		return nil, errors.WithMessage(err, fmt.Sprintf("unmarshal of block from couchDB failed [%d]", blockNum))
+	}
+
+	return block, nil
 }
 
 // RetrieveTxByID returns a transaction for given transaction id

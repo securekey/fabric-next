@@ -26,7 +26,9 @@ func newSplitterBlockStore(bsa blkstorage.BlockStore, bsb blkstorage.BlockStore)
 // AddBlock adds a new block
 func (s *splitterBlockStore) AddBlock(block *common.Block) error {
 	err := s.bsb.AddBlock(block)
-	logger.Infof("CouchDB AddBlock returned %s", err)
+	if err != nil {
+		logger.Errorf("CouchDB AddBlock returned %s", err)
+	}
 	return s.bsa.AddBlock(block)
 }
 
@@ -49,8 +51,8 @@ func (s *splitterBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Bloc
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
 func (s *splitterBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
-	s.bsb.RetrieveBlockByNumber(blockNum)
-	return s.bsa.RetrieveBlockByNumber(blockNum)
+	return s.bsb.RetrieveBlockByNumber(blockNum)
+	//s.bsa.RetrieveBlockByNumber(blockNum)
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
