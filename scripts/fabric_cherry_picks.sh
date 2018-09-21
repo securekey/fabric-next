@@ -18,11 +18,11 @@ fi
 
 mkdir -p $GOPATH/src/github.com/hyperledger/
 cd $GOPATH/src/github.com/hyperledger/
-git clone https://gerrit.hyperledger.org/r/fabric
+git clone https://gerrit.securekey.com/fabric-next fabric
 cd fabric
 git config advice.detachedHead false
-# Tip of release-1.2 (September 6, 2018)
-git checkout 78a3a8dadf2a82c2e535bcacaeb95fbdd4fbafde
+# Tip of cluster (September 21, 2018)
+git checkout ed92dc029edae14b27a9a0675731510d96a735eb
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
