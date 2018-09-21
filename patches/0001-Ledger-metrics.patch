@@ -1,4 +1,4 @@
-From 362cd57032666d113e5ffafe96c81e05df3fc655 Mon Sep 17 00:00:00 2001
+From 6d0fc1257a092aed71636820a98061a8668e0de0 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Fri, 14 Sep 2018 15:13:31 -0400
 Subject: [PATCH] Ledger metrics
@@ -40,7 +40,7 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  delete mode 100644 common/metrics/types.go
 
 diff --git a/bccsp/pkcs11/impl.go b/bccsp/pkcs11/impl.go
-index 148c9e198..9b0c77fe7 100644
+index 148c9e1..9b0c77f 100644
 --- a/bccsp/pkcs11/impl.go
 +++ b/bccsp/pkcs11/impl.go
 @@ -19,6 +19,7 @@ import (
@@ -107,7 +107,7 @@ index 148c9e198..9b0c77fe7 100644
  }
  
 diff --git a/bccsp/sw/impl.go b/bccsp/sw/impl.go
-index d6a9da6c0..a172735da 100644
+index d6a9da6..a172735 100644
 --- a/bccsp/sw/impl.go
 +++ b/bccsp/sw/impl.go
 @@ -21,6 +21,7 @@ import (
@@ -185,7 +185,7 @@ index d6a9da6c0..a172735da 100644
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil.")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
-index ab6caa8c4..968af68db 100644
+index ab6caa8..968af68 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 @@ -29,6 +29,7 @@ import (
@@ -234,7 +234,7 @@ index ab6caa8c4..968af68db 100644
  	if err != nil {
  		return err
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockindex.go b/common/ledger/blkstorage/fsblkstorage/blockindex.go
-index 3d21b7e45..2060bb9e5 100644
+index 3d21b7e..2060bb9 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockindex.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blockindex.go
 @@ -25,6 +25,7 @@ import (
@@ -259,7 +259,7 @@ index 3d21b7e45..2060bb9e5 100644
  	if len(index.indexItemsMap) == 0 {
  		logger.Debug("Not indexing block... as nothing to index")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 3e06887b6..28d00d944 100644
+index 3e06887..28d00d9 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 @@ -20,6 +20,7 @@ import (
@@ -285,7 +285,7 @@ index 3e06887b6..28d00d944 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..0a65722ef 100644
+index 9e2ab17..0a65722 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
 @@ -20,8 +20,15 @@ import (
@@ -406,7 +406,7 @@ index 9e2ab17df..0a65722ef 100644
 +	}
 +}
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d7..8bcc91a2c 100644
+index db41651..8bcc91a 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
 @@ -20,6 +20,7 @@ import (
@@ -462,7 +462,7 @@ index db41651d7..8bcc91a2c 100644
  	for k, v := range batch.KVs {
  		key := constructLevelKey(h.dbName, []byte(k))
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e78..fc42eac09 100644
+index 677151e..fc42eac 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,21 @@ package metrics
@@ -823,7 +823,7 @@ index 677151e78..fc42eac09 100644
  }
 diff --git a/common/metrics/server_test.go b/common/metrics/server_test.go
 deleted file mode 100644
-index 07d010ca8..000000000
+index 07d010c..0000000
 --- a/common/metrics/server_test.go
 +++ /dev/null
 @@ -1,242 +0,0 @@
@@ -1070,7 +1070,7 @@ index 07d010ca8..000000000
 -	}
 -}
 diff --git a/common/metrics/tally_provider.go b/common/metrics/tally_provider.go
-index cf1e3deff..aca8d54ab 100644
+index cf1e3de..aca8d54 100644
 --- a/common/metrics/tally_provider.go
 +++ b/common/metrics/tally_provider.go
 @@ -7,17 +7,16 @@ SPDX-License-Identifier: Apache-2.0
@@ -1545,7 +1545,7 @@ index cf1e3deff..aca8d54ab 100644
 -}
 diff --git a/common/metrics/tally_provider_test.go b/common/metrics/tally_provider_test.go
 deleted file mode 100644
-index 9e911c275..000000000
+index 9e911c2..0000000
 --- a/common/metrics/tally_provider_test.go
 +++ /dev/null
 @@ -1,462 +0,0 @@
@@ -2013,7 +2013,7 @@ index 9e911c275..000000000
 -}
 diff --git a/common/metrics/types.go b/common/metrics/types.go
 deleted file mode 100644
-index c70001ea1..000000000
+index c70001e..0000000
 --- a/common/metrics/types.go
 +++ /dev/null
 @@ -1,45 +0,0 @@
@@ -2063,7 +2063,7 @@ index c70001ea1..000000000
 -	Start() error
 -}
 diff --git a/core/deliverservice/blocksprovider/blocksprovider.go b/core/deliverservice/blocksprovider/blocksprovider.go
-index c385e3ca1..849685b18 100644
+index c385e3c..849685b 100644
 --- a/core/deliverservice/blocksprovider/blocksprovider.go
 +++ b/core/deliverservice/blocksprovider/blocksprovider.go
 @@ -11,8 +11,11 @@ import (
@@ -2100,7 +2100,7 @@ index c385e3ca1..849685b18 100644
  			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, seqNum, numberOfPeers)
  			if !b.isDone() {
 diff --git a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
-index 369787d44..1dd037616 100644
+index 369787d..1dd0376 100644
 --- a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
 +++ b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
 @@ -10,6 +10,7 @@ import (
@@ -2125,7 +2125,7 @@ index 369787d44..1dd037616 100644
  	//Set the starting tranNo to 0
  	var tranNo uint64
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 385f90917..e7ef6cf12 100644
+index 385f909..e7ef6cf 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -15,6 +15,7 @@ import (
@@ -2191,7 +2191,7 @@ index 385f90917..e7ef6cf12 100644
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
 diff --git a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
-index f522ab2cc..9ca7313bf 100644
+index f522ab2..9ca7313 100644
 --- a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 +++ b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 @@ -12,6 +12,7 @@ import (
@@ -2225,7 +2225,7 @@ index f522ab2cc..9ca7313bf 100644
  		for _, coll := range nsBatch.GetCollectionNames() {
  			for key, vv := range nsBatch.GetUpdates(coll) {
 diff --git a/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go b/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
-index 1d1436cb5..0f94a7ec3 100644
+index 1d1436c..0f94a7e 100644
 --- a/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
 +++ b/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
 @@ -7,10 +7,11 @@ SPDX-License-Identifier: Apache-2.0
@@ -2253,7 +2253,7 @@ index 1d1436cb5..0f94a7ec3 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
-index 2dd88237c..a80f2f3a3 100644
+index 2dd8823..a80f2f3 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 @@ -7,6 +7,8 @@ package statecouchdb
@@ -2282,7 +2282,7 @@ index 2dd88237c..a80f2f3a3 100644
  		return nil
  	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
-index 240667a73..e328658dd 100644
+index 240667a..e328658 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
 @@ -9,6 +9,7 @@ import (
@@ -2307,7 +2307,7 @@ index 240667a73..e328658dd 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index b10b1d229..fc06e3558 100644
+index b10b1d2..fc06e35 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2332,7 +2332,7 @@ index b10b1d229..fc06e3558 100644
  	// the function `Apply update can be split into three functions. Each carrying out one of the following three stages`.
  	// The write lock is needed only for the stage 2.
 diff --git a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
-index ba3be0ea3..6adaf3bd5 100644
+index ba3be0e..6adaf3b 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
 @@ -11,6 +11,7 @@ import (
@@ -2357,7 +2357,7 @@ index ba3be0ea3..6adaf3bd5 100644
  	namespaces := batch.GetUpdatedNamespaces()
  	for _, ns := range namespaces {
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd0535..aba0c264e 100644
+index d03bd05..aba0c26 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2393,18 +2393,18 @@ index d03bd0535..aba0c264e 100644
  		l.StateCommitDone(txmgr.ledgerid)
  	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index 5655969d5..26b352199 100644
+index c4fdda8..b3c349d 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
-@@ -23,6 +23,7 @@ import (
- 	"github.com/hyperledger/fabric/common/flogging"
- 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
- 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
-+	"github.com/hyperledger/fabric/common/metrics"
- 	"github.com/hyperledger/fabric/core/ledger"
- 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+@@ -30,6 +30,7 @@ import (
  	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-@@ -97,6 +98,13 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+ 	"github.com/hyperledger/fabric/protos/common"
++	"github.com/hyperledger/fabric/common/metrics"
+ )
+ 
+ var logger = flogging.MustGetLogger("ledgerstorage")
+@@ -122,6 +123,13 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
@@ -2418,7 +2418,7 @@ index 5655969d5..26b352199 100644
  	blockNum := blockAndPvtdata.Block.Header.Number
  	s.rwlock.Lock()
  	defer s.rwlock.Unlock()
-@@ -105,6 +113,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -130,6 +138,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  	if err != nil {
  		return err
  	}
@@ -2428,7 +2428,7 @@ index 5655969d5..26b352199 100644
  
  	writtenToPvtStore := false
  	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
-@@ -120,6 +131,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -145,6 +156,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  		}
  		writtenToPvtStore = true
  	} else {
@@ -2438,7 +2438,7 @@ index 5655969d5..26b352199 100644
  		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
  	}
  
-@@ -137,6 +151,13 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -162,6 +176,13 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2452,7 +2452,7 @@ index 5655969d5..26b352199 100644
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
  
-@@ -156,6 +177,13 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+@@ -181,6 +202,13 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
  func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2467,7 +2467,7 @@ index 5655969d5..26b352199 100644
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..ba23268aa 100644
+index 16d4798..ba23268 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -27,6 +27,7 @@ import (
@@ -2527,7 +2527,7 @@ index 16d479802..ba23268aa 100644
  
  	//create the return objects for couchDB
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 1d1152bac..e46fd13a9 100644
+index 1d1152b..e46fd13 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
@@ -2571,7 +2571,7 @@ index 1d1152bac..e46fd13a9 100644
  	if bFetchFromPeers {
  		if len(privateInfo.missingKeys) == 0 {
 diff --git a/gossip/state/payloads_buffer.go b/gossip/state/payloads_buffer.go
-index 9b74b6b53..efd8e68d0 100644
+index 9b74b6b..efd8e68 100644
 --- a/gossip/state/payloads_buffer.go
 +++ b/gossip/state/payloads_buffer.go
 @@ -10,6 +10,9 @@ import (
@@ -2621,7 +2621,7 @@ index 9b74b6b53..efd8e68d0 100644
  		go func() {
  			b.readyChan <- struct{}{}
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 1cd3db30d..683ee23d1 100644
+index 1cd3db3..683ee23 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
@@ -2701,7 +2701,7 @@ index 1cd3db30d..683ee23d1 100644
  	if err := s.ledger.StoreBlock(block, pvtData); err != nil {
  		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 diff --git a/peer/node/start.go b/peer/node/start.go
-index 9735efe79..7ebbfb4ef 100644
+index 9735efe..7ebbfb4 100644
 --- a/peer/node/start.go
 +++ b/peer/node/start.go
 @@ -23,6 +23,7 @@ import (
@@ -2723,5 +2723,5 @@ index 9735efe79..7ebbfb4ef 100644
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
 -- 
-2.14.3 (Apple Git-98)
+2.10.1 (Apple Git-78)
 
