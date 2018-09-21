@@ -13,7 +13,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("cdbblkstorage")
+var logger = flogging.MustGetLogger("peer")
+
+const (
+	blockStoreDBName = "blocks"
+)
 
 // CDBBlockstoreProvider provides block storage in CouchDB
 type CDBBlockstoreProvider struct {
@@ -35,22 +39,29 @@ func NewProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProv
 
 // CreateBlockStore creates a block store instance for the given ledger ID
 func (p *CDBBlockstoreProvider) CreateBlockStore(ledgerid string) (blkstorage.BlockStore, error) {
-	return newCDBBlockStore(ledgerid, p.indexConfig), nil
+	return p.OpenBlockStore(ledgerid)
 }
 
 // OpenBlockStore opens the block store for the given ledger ID
 func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.BlockStore, error) {
-	return nil, errors.New("not implemented")
+	dbName := couchdb.ConstructBlockchainDBName(ledgerid, blockStoreDBName)
+
+	db, err := couchdb.CreateCouchDatabase(p.couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	return newCDBBlockStore(db, ledgerid, p.indexConfig), nil
 }
 
 // Exists returns whether or not the given ledger ID exists
 func (p *CDBBlockstoreProvider) Exists(ledgerid string) (bool, error) {
-	return false, nil
+	return false, errors.New("not implemented")
 }
 
 // List returns the available ledger IDs
 func (p *CDBBlockstoreProvider) List() ([]string, error) {
-	return []string{}, nil
+	return []string{}, errors.New("not implemented")
 }
 
 // Close cleans up the Provider
