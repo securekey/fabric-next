@@ -37,10 +37,11 @@ const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 const confBlockStorage = "ledger.blockchain.blockStorage"
-
+const confHistoryStorage = "ledger.state.historyStorage"
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
+
 const (
 	// FilesystemLedgerStorage stores blocks in a raw file with a LevelDB index (default)
 	FilesystemLedgerStorage BlockStorageProvider = iota
@@ -48,6 +49,15 @@ const (
 	CouchDBLedgerStorage
 )
 
+// HistoryStorageProvider holds the configuration names of the available history storage providers
+type HistoryStorageProvider int
+
+const (
+	// LevelDBHistoryStorage stores blocks in LevelDB (default)
+	LevelDBHistoryStorage HistoryStorageProvider = iota
+	// CouchDBHistoryStorage stores blocks in CouchDB
+	CouchDBHistoryStorage
+)
 
 // GetRootPath returns the filesystem path.
 // All ledger related contents are expected to be stored under this path
@@ -175,5 +185,19 @@ func GetBlockStoreProvider() BlockStorageProvider {
 		fallthrough
 	case "filesystem":
 		return FilesystemLedgerStorage
+	}
+}
+
+// GetHistoryStoreProvider returns the history storage provider specified in the configuration
+func GetHistoryStoreProvider() HistoryStorageProvider {
+	historyStorageConfig := viper.GetString(confHistoryStorage)
+
+	switch historyStorageConfig {
+	case "CouchDB":
+		return CouchDBHistoryStorage
+	default:
+		fallthrough
+	case "goleveldb":
+		return LevelDBHistoryStorage
 	}
 }

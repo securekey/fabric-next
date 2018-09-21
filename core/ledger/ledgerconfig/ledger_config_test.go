@@ -262,8 +262,28 @@ func TestGetBlockStoreProviderCouchDB(t *testing.T) {
 	testutil.AssertEquals(t, provider, CouchDBLedgerStorage)
 }
 
+func TestGetHistoryStoreProviderDefault(t *testing.T) {
+	provider := GetHistoryStoreProvider()
+	testutil.AssertEquals(t, provider, LevelDBHistoryStorage)
+}
+
+func TestGetHistoryStoreProviderLevelDB(t *testing.T) {
+	setUpCoreYAMLConfig()
+	defer ledgertestutil.ResetConfigToDefaultValues()
+	viper.Set("ledger.state.historyStorage", "goleveldb")
+	provider := GetHistoryStoreProvider()
+	testutil.AssertEquals(t, provider, LevelDBHistoryStorage)
+}
+
+func TestGetHistoryStoreProviderCouchDB(t *testing.T) {
+	setUpCoreYAMLConfig()
+	defer ledgertestutil.ResetConfigToDefaultValues()
+	viper.Set("ledger.state.historyStorage", "CouchDB")
+	provider := GetHistoryStoreProvider()
+	testutil.AssertEquals(t, provider, CouchDBHistoryStorage)
+}
+
 func setUpCoreYAMLConfig() {
 	//call a helper method to load the core.yaml
 	ledgertestutil.SetupCoreYAMLConfig()
 }
-

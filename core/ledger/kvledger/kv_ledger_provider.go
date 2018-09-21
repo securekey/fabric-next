@@ -18,7 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb/historyleveldb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb/historydbprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
@@ -71,7 +71,11 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	}
 
 	// Initialize the history database (index for history of values by key)
-	historydbProvider := historyleveldb.NewHistoryDBProvider()
+	historydbProvider, err := historydbprovider.NewHistoryDBProvider()
+	if err != nil {
+		return nil, err
+	}
+
 	bookkeepingProvider := bookkeeping.NewProvider()
 	// Initialize config history mgr
 	configHistoryMgr := confighistory.NewMgr()
