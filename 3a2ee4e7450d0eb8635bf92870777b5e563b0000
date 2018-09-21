@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f8275352_9e621cd0",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/couchdoc_conv.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 21,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-21T19:26:55Z",
+      "side": 1,
+      "message": "should we prefix the block number for the primary key?",
+      "range": {
+        "startLine": 21,
+        "startChar": 23,
+        "endLine": 21,
+        "endChar": 25
+      },
+      "revId": "3a2ee4e7450d0eb8635bf92870777b5e563b0000",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
