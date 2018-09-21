@@ -114,6 +114,66 @@ func TestConstructMetadataDBName(t *testing.T) {
 	testutil.AssertEquals(t, constructedDBName, expectedDBName)
 }
 
+func TestBlockchainDBNames(t *testing.T) {
+	constructedDBName := ConstructBlockchainDBName("traders", "")
+	expectedDBName := "traders_"
+	testutil.AssertEquals(t, constructedDBName, expectedDBName)
+
+	constructedDBName = ConstructBlockchainDBName("traders", "blocks")
+	expectedDBName = "traders$$blocks_"
+	testutil.AssertEquals(t, constructedDBName, expectedDBName)
+}
+
+func TestTruncatedBlockchainDBNames(t *testing.T) {
+	testTruncatedBlockchainDBName(t, "")
+	testTruncatedBlockchainDBName(t, "blocks")
+}
+
+func testTruncatedBlockchainDBName(t *testing.T, dbName string) {
+	// Allowed pattern for chainName: [a-z][a-z0-9.-]
+	chainName := "tob2g.y-z0f.qwp-rq5g4-ogid5g6oucyryg9sc16mz0t4vuake5q557esz7sn493nf0ghch0xih6dwuirokyoi4jvs67gh6r5v6mhz3-292un2-9egdcs88cstg3f7xa9m1i8v4gj0t3jedsm-woh3kgiqehwej6h93hdy5tr4v.1qmmqjzz0ox62k.507sh3fkw3-mfqh.ukfvxlm5szfbwtpfkd1r4j.cy8oft5obvwqpzjxb27xuw6"
+
+	truncatedChainName := "tob2g.y-z0f.qwp-rq5g4-ogid5g6oucyryg9sc16mz0t4vuak"
+	testutil.AssertEquals(t, len(truncatedChainName), chainNameAllowedLength)
+
+	// <first 50 chars (i.e., chainNameAllowedLength) of chainName> + 1 char for '(' + <64 chars for SHA256 hash
+	// (hex encoding) of untruncated chainName> + 1 char for ')' + 1 char for '_' = 117 chars
+	// plus 2 for $$ seperator + length of the dbName
+	hash := hex.EncodeToString(util.ComputeSHA256([]byte(chainName + "$$" + dbName)))
+	expectedDBName := truncatedChainName + "$$" + dbName + "(" + hash + ")" + "_"
+	expectedDBNameLength := 119 + len(dbName)
+
+	if len(dbName) == 0 {
+		hash = hex.EncodeToString(util.ComputeSHA256([]byte(chainName)))
+		expectedDBName = truncatedChainName + "(" + hash + ")" + "_"
+		expectedDBNameLength = 117
+	}
+
+	constructedDBName := ConstructBlockchainDBName(chainName, dbName)
+	testutil.AssertEquals(t, len(constructedDBName), expectedDBNameLength)
+	testutil.AssertEquals(t, constructedDBName, expectedDBName)
+}
+
+
+func TestConstructBlockchainDBName(t *testing.T) {
+	// Allowed pattern for chainName: [a-z][a-z0-9.-]
+	chainName := "tob2g.y-z0f.qwp-rq5g4-ogid5g6oucyryg9sc16mz0t4vuake5q557esz7sn493nf0ghch0xih6dwuirokyoi4jvs67gh6r5v6mhz3-292un2-9egdcs88cstg3f7xa9m1i8v4gj0t3jedsm-woh3kgiqehwej6h93hdy5tr4v.1qmmqjzz0ox62k.507sh3fkw3-mfqh.ukfvxlm5szfbwtpfkd1r4j.cy8oft5obvwqpzjxb27xuw6"
+
+	truncatedChainName := "tob2g.y-z0f.qwp-rq5g4-ogid5g6oucyryg9sc16mz0t4vuak"
+	testutil.AssertEquals(t, len(truncatedChainName), chainNameAllowedLength)
+
+	// <first 50 chars (i.e., chainNameAllowedLength) of chainName> + 1 char for '(' + <64 chars for SHA256 hash
+	// (hex encoding) of untruncated chainName> + 1 char for ')' + 1 char for '_' = 117 chars
+	hash := hex.EncodeToString(util.ComputeSHA256([]byte(chainName)))
+	expectedDBName := truncatedChainName + "(" + hash + ")" + "_"
+	expectedDBNameLength := 117
+
+	constructedDBName := ConstructMetadataDBName(chainName)
+	testutil.AssertEquals(t, len(constructedDBName), expectedDBNameLength)
+	testutil.AssertEquals(t, constructedDBName, expectedDBName)
+
+}
+
 func TestConstructedNamespaceDBName(t *testing.T) {
 	// === SCENARIO 1: chainName_ns$$coll ===
 
