@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
@@ -14,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
+	"math"
 )
 
 // cdbBlockStore ...
@@ -57,16 +59,53 @@ func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator,
 
 // RetrieveBlockByHash returns the block for given block-hash
 func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
-	return nil, errors.New("not implemented")
+	blockHashHex := hex.EncodeToString(blockHash)
+	const queryFmt = `
+	{
+		"selector": {
+			"hash": {
+				"$eq": "%s"
+			}
+		},
+		"use_index": ["_design/`+blockHashIndexDoc+`", "` + blockHashIndexName + `"]
+	}`
+
+	resultsP, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, blockHashHex))
+	if err != nil {
+		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block from couchDB failed [%s]", blockHashHex))
+	}
+	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
+
+	if len(results) != 1 {
+		return nil, errors.Errorf("block not found [%s]", blockHashHex)
+	}
+
+	if len(results[0].Attachments) == 0 {
+		return nil, errors.Errorf("block bytes not found [%s]", blockHashHex)
+	}
+
+	return couchAttachmentsToBlock(results[0].Attachments)
 }
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
 func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
+	// interpret math.MaxUint64 as a request for last block
+	if blockNum == math.MaxUint64 {
+		bcinfo, err := s.GetBlockchainInfo()
+		if err != nil {
+			return nil, errors.WithMessage(err, "retrieval of blockchain info failed")
+		}
+		blockNum = bcinfo.Height - 1
+	}
+
 	id := blockNumberToKey(blockNum)
 
 	doc, _, err := s.db.ReadDoc(id)
 	if err != nil {
 		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block from couchDB failed [%d]", blockNum))
+	}
+	if doc == nil {
+		return nil, errors.Errorf("block does not exist [%d]", blockNum)
 	}
 
 	block, err := couchDocToBlock(doc)

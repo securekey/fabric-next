@@ -36,7 +36,6 @@ func NewProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProv
 	}
 	return &CDBBlockstoreProvider{couchInstance, indexConfig}, nil
 }
-
 // CreateBlockStore creates a block store instance for the given ledger ID
 func (p *CDBBlockstoreProvider) CreateBlockStore(ledgerid string) (blkstorage.BlockStore, error) {
 	return p.OpenBlockStore(ledgerid)
@@ -51,8 +50,24 @@ func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.Bloc
 		return nil, err
 	}
 
+	err = p.createIndices(db)
+	if err != nil {
+		return nil, err
+	}
+
 	return newCDBBlockStore(db, ledgerid, p.indexConfig), nil
 }
+
+func (p *CDBBlockstoreProvider) createIndices(db *couchdb.CouchDatabase) error {
+	// TODO: only create index if it doesn't exist
+	_, err := db.CreateIndex(blockHashIndexDef)
+	if err != nil {
+		return errors.WithMessage(err, "creation of block hash index failed")
+	}
+
+	return nil
+}
+
 
 // Exists returns whether or not the given ledger ID exists
 func (p *CDBBlockstoreProvider) Exists(ledgerid string) (bool, error) {
