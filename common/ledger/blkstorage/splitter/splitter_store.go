@@ -45,8 +45,8 @@ func (s *splitterBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIter
 
 // RetrieveBlockByHash returns the block for given block-hash
 func (s *splitterBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
-	s.bsb.RetrieveBlockByHash(blockHash)
-	return s.bsa.RetrieveBlockByHash(blockHash)
+	return s.bsb.RetrieveBlockByHash(blockHash)
+	//return s.bsa.RetrieveBlockByHash(blockHash)
 }
 
 // RetrieveBlockByNumber returns the block at a given blockchain height

@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"github.com/gogo/protobuf/proto"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -17,9 +18,22 @@ import (
 
 const (
 	idField             = "_id"
+	blockHashField      = "hash"
+	blockHashIndexName  = "by_hash"
+	blockHashIndexDoc   = "indexHash"
 	blockAttachmentName = "block"
 	blockKeyPrefix      = ""
 )
+
+const blockHashIndexDef = `
+	{
+		"index": {
+			"fields": ["` + blockHashField + `"]
+		},
+		"name": "` + blockHashIndexName + `",
+		"ddoc": "` + blockHashIndexDoc + `",
+		"type": "json"
+	}`
 
 type jsonValue map[string]interface{}
 
@@ -30,10 +44,13 @@ func (v jsonValue) toBytes() ([]byte, error) {
 func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 
-	key := blockNumberToKey(block.GetHeader().Number)
+	blockHeader := block.GetHeader()
+	key := blockNumberToKey(blockHeader.Number)
+	blockHashHex := hex.EncodeToString(blockHeader.Hash())
 
-	// add the version, id, revision, and delete marker (if needed)
 	jsonMap[idField] = key
+	jsonMap[blockHashField] = blockHashHex
+
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
 		return nil, err
@@ -65,11 +82,15 @@ func blockToAttachment(block *common.Block) (*couchdb.AttachmentInfo, error) {
 }
 
 func couchDocToBlock(doc *couchdb.CouchDoc) (*common.Block, error) {
+	return couchAttachmentsToBlock(doc.Attachments)
+}
+
+func couchAttachmentsToBlock(attachments []*couchdb.AttachmentInfo) (*common.Block, error) {
 	var blockBytes []byte
 	block := common.Block{}
 
 	// get binary data from attachment
-	for _, a := range doc.Attachments {
+	for _, a := range attachments {
 		if a.Name == blockAttachmentName {
 			blockBytes = a.AttachmentBytes
 		}
