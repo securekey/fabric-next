@@ -9,24 +9,63 @@ package cdbblkstorage
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
+	"sync/atomic"
+
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
-	"math"
 )
 
 // cdbBlockStore ...
 type cdbBlockStore struct {
-	db *couchdb.CouchDatabase
+	db       *couchdb.CouchDatabase
 	ledgerID string
+	//cpInfoCond *sync.Cond
+	bcInfo atomic.Value
+	cp     *checkpoint
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
 func newCDBBlockStore(db *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
-	return &cdbBlockStore{db, ledgerID}
+	cdbBlockStore := &cdbBlockStore{db: db, ledgerID: ledgerID}
+
+	cdbBlockStore.cp = newCheckpoint(db)
+
+	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
+	cpInfo := cdbBlockStore.cp.getCheckpointInfo()
+	err := cdbBlockStore.cp.saveCurrentInfo(cpInfo)
+	if err != nil {
+		panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
+	}
+	// Create a checkpoint condition (event) variable, for the  goroutine waiting for
+	// or announcing the occurrence of an event.
+	//cdbBlockStore.cpInfoCond = sync.NewCond(&sync.Mutex{})
+	// init BlockchainInfo for external API's
+	bcInfo := &common.BlockchainInfo{
+		Height:            0,
+		CurrentBlockHash:  nil,
+		PreviousBlockHash: nil}
+
+	if !cpInfo.isChainEmpty {
+		//If start up is a restart of an existing storage, update BlockchainInfo for external API's
+		lastBlockHeader, err := cdbBlockStore.RetrieveBlockByHash(cpInfo.lastBlockHash)
+		if err != nil {
+			panic(fmt.Sprintf("Could not retrieve header of the last block form file: %s", err))
+		}
+		lastBlockHash := lastBlockHeader.Header.Hash()
+		previousBlockHash := lastBlockHeader.Header.PreviousHash
+		bcInfo = &common.BlockchainInfo{
+			Height:            lastBlockHeader.Header.Number + 1,
+			CurrentBlockHash:  lastBlockHash,
+			PreviousBlockHash: previousBlockHash}
+	}
+
+	cdbBlockStore.bcInfo.Store(bcInfo)
+	return cdbBlockStore
 }
 
 // AddBlock adds a new block
@@ -42,14 +81,25 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 	if err != nil {
 		return errors.WithMessage(err, "adding block to couchDB failed")
 	}
+	blockHash := block.GetHeader().Hash()
+	//Update the checkpoint info with the results of adding the new block
+	newCPInfo := &checkpointInfo{
+		isChainEmpty:  false,
+		lastBlockHash: blockHash}
+	//save the checkpoint information in the database
+	if err = s.cp.saveCurrentInfo(newCPInfo); err != nil {
+		return errors.WithMessage(err, "adding cpInfo to couchDB failed")
+	}
+	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
+	//s.updateCheckpoint(newCPInfo)
+	s.updateBlockchainInfo(blockHash, block)
 	logger.Debugf("block added to couchDB [%d, %s]", block.GetHeader().Number, rev)
-
 	return nil
 }
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	return nil, errors.New("not implemented")
+	return s.bcInfo.Load().(*common.BlockchainInfo), nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
@@ -67,7 +117,7 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 				"$eq": "%s"
 			}
 		},
-		"use_index": ["_design/`+blockHashIndexDoc+`", "` + blockHashIndexName + `"]
+		"use_index": ["_design/` + blockHashIndexDoc + `", "` + blockHashIndexName + `"]
 	}`
 
 	resultsP, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, blockHashHex))
@@ -139,3 +189,26 @@ func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxVali
 // Shutdown closes the storage instance
 func (s *cdbBlockStore) Shutdown() {
 }
+
+func (s *cdbBlockStore) updateBlockchainInfo(latestBlockHash []byte, latestBlock *common.Block) {
+	currentBCInfo, err := s.GetBlockchainInfo()
+	if err != nil {
+		logger.Errorf("getblockchainInfo return error %s", err)
+		return
+	}
+	newBCInfo := &common.BlockchainInfo{
+		Height:            currentBCInfo.Height + 1,
+		CurrentBlockHash:  latestBlockHash,
+		PreviousBlockHash: latestBlock.Header.PreviousHash}
+	if latestBlock.Header.Number != currentBCInfo.Height {
+		logger.Warningf("latestBlock block height %d not equal to currentBCInfo block height %d", latestBlock.Header.Number, currentBCInfo.Height)
+	}
+	s.bcInfo.Store(newBCInfo)
+}
+
+//func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
+//	s.cpInfoCond.L.Lock()
+//	defer s.cpInfoCond.L.Unlock()
+//	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
+//	s.cpInfoCond.Broadcast()
+//}
