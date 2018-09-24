@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d074d291_c01f360b",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 212,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-24T19:38:26Z",
+      "side": 1,
+      "message": "prefer to put the checkpoint functions into a separate file",
+      "range": {
+        "startLine": 212,
+        "startChar": 0,
+        "endLine": 212,
+        "endChar": 66
+      },
+      "revId": "82ab04b0c2104ffd3df1edb74e78c9b881a4fd76",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9a7fa4b6_601f7ca0",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 246,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-24T19:38:26Z",
+      "side": 1,
+      "message": "where is the corresponding Wait?",
+      "range": {
+        "startLine": 246,
+        "startChar": 1,
+        "endLine": 246,
+        "endChar": 25
+      },
+      "revId": "82ab04b0c2104ffd3df1edb74e78c9b881a4fd76",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
