@@ -9,7 +9,6 @@ Fabric Next is a custom build of Hyperledger Fabric with the following enhanceme
 
 Prerequisites:
 - A Git Client
-- Go - 1.9.2
 - Docker - 17.06.2-ce or later
 - Docker Compose - 1.14.0 or later
 - You may need libtool - sudo apt-get install -y libtool (linux) or brew install libtool (macOS)
