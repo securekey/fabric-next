@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ae4275e5_027beb72",
+        "filename": "core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000023
+      },
+      "writtenOn": "2018-09-24T20:56:37Z",
+      "side": 1,
+      "message": "Need dbName in here, see https://gerrit.securekey.com/#/c/fabric-next/+/11455/1/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go",
+      "range": {
+        "startLine": 57,
+        "startChar": 5,
+        "endLine": 57,
+        "endChar": 14
+      },
+      "revId": "fbaf19c9b58c3b4be47058be6ca959ea54e90cb0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
