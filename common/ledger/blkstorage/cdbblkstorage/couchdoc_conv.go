@@ -19,8 +19,12 @@ import (
 const (
 	idField             = "_id"
 	blockHashField      = "hash"
+	blockTxnsField      = "transactions"
+	blockTxnIDField     = "id"
 	blockHashIndexName  = "by_hash"
 	blockHashIndexDoc   = "indexHash"
+	blockTxnIDIndexName  = "by_txn_id"
+	blockTxnIndexDoc   = "indexTxn"
 	blockAttachmentName = "block"
 	blockKeyPrefix      = ""
 )
@@ -32,6 +36,19 @@ const blockHashIndexDef = `
 		},
 		"name": "` + blockHashIndexName + `",
 		"ddoc": "` + blockHashIndexDoc + `",
+		"type": "json"
+	}`
+
+const blockTxnIndexDef = `
+	{
+		"index": {
+			"fields": [
+				"`+ idField + `",
+				"` + blockTxnsField + `.[].` + blockTxnIDField + `"
+			]
+		},
+		"name": "` + blockTxnIDIndexName + `",
+		"ddoc": "` + blockTxnIndexDoc + `",
 		"type": "json"
 	}`
 
@@ -47,9 +64,14 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	blockHeader := block.GetHeader()
 	key := blockNumberToKey(blockHeader.Number)
 	blockHashHex := hex.EncodeToString(blockHeader.Hash())
+	blockTxns, err := blockToTransactionsField(block)
+	if err != nil {
+		return nil, err
+	}
 
 	jsonMap[idField] = key
 	jsonMap[blockHashField] = blockHashHex
+	jsonMap[blockTxnsField] = blockTxns
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
@@ -65,6 +87,26 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
 	couchDoc.Attachments = attachments
 	return couchDoc, nil
+}
+
+func blockToTransactionsField(block *common.Block) ([]jsonValue, error) {
+	blockData := block.GetData()
+
+	var txns []jsonValue
+
+	for _, txEnvelopeBytes := range blockData.Data {
+		txID, err := extractTxID(txEnvelopeBytes)
+		if err != nil {
+			return nil, errors.WithMessage(err, "transaction ID could not be extracted")
+		}
+
+		txField := make(jsonValue)
+		txField[blockTxnIDField] = txID
+
+		txns = append(txns, txField)
+	}
+
+	return txns, nil
 }
 
 func blockToAttachment(block *common.Block) (*couchdb.AttachmentInfo, error) {

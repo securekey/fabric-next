@@ -57,8 +57,8 @@ func (s *splitterBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Blo
 
 // RetrieveTxByID returns a transaction for given transaction id
 func (s *splitterBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
-	s.bsb.RetrieveTxByID(txID)
-	return s.bsa.RetrieveTxByID(txID)
+	return s.bsb.RetrieveTxByID(txID)
+	//return s.bsa.RetrieveTxByID(txID)
 }
 
 // RetrieveTxByBlockNumTranNum returns a transaction for given block ID and transaction ID
@@ -69,8 +69,8 @@ func (s *splitterBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNu
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *splitterBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
-	s.bsb.RetrieveBlockByTxID(txID)
-	return s.bsa.RetrieveBlockByTxID(txID)
+	return s.bsb.RetrieveBlockByTxID(txID)
+	//return s.bsa.RetrieveBlockByTxID(txID)
 }
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID

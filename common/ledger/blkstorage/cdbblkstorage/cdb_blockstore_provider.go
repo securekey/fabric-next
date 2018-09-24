@@ -65,6 +65,12 @@ func (p *CDBBlockstoreProvider) createIndices(db *couchdb.CouchDatabase) error {
 		return errors.WithMessage(err, "creation of block hash index failed")
 	}
 
+	// TODO: fix this index
+	_, err = db.CreateIndex(blockTxnIndexDef)
+	if err != nil {
+		return errors.WithMessage(err, "creation of block transaction index failed")
+	}
+
 	return nil
 }
 
