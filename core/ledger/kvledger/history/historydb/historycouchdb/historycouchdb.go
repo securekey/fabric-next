@@ -43,7 +43,7 @@ func (provider *HistoryDBProvider) Close() {
 
 // historyDB implements HistoryDB interface
 type historyDB struct {
-	// TODO
+	dbName string
 }
 
 // newHistoryDB constructs an instance of HistoryDB
@@ -58,7 +58,24 @@ func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockS
 
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
-	return fmt.Errorf("Not implemented")
+
+	// Get the history batch from the block, including the savepoint
+	//historyBatch, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
+	_, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
+	if err != nil {
+		return err
+	}
+
+	// Move the batch to LevelDB batch
+	// TODO
+
+	// write the block's history records and savepoint to LevelDB
+	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
+	// TODO
+
+	logger.Debugf("Channel [%s]: Updates committed to history database for blockNo [%v]", historyDB.dbName, block.Header.Number)
+	return nil
+
 }
 
 // GetBlockNumFromSavepoint implements method in HistoryDB interface
