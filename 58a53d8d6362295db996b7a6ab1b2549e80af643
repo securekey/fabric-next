@@ -116,6 +116,30 @@
       "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b086d554_b2cef729",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-09-24T15:27:29Z",
+      "side": 1,
+      "message": "I\u0027m not sure how to do that. Should i check the \tlatestBlock.Header.Number",
+      "parentUuid": "580c73bb_49f8f91d",
+      "range": {
+        "startLine": 69,
+        "startChar": 21,
+        "endLine": 69,
+        "endChar": 46
+      },
+      "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
