@@ -140,6 +140,30 @@
       "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b7a47d1d_c7483cfd",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-09-24T15:57:38Z",
+      "side": 1,
+      "message": "If it\u0027s a copy of the code they had then I guess we can leave it - maybe add a warning if latestBlock.Header.Number !\u003d currentBCInfo.Height.",
+      "parentUuid": "b086d554_b2cef729",
+      "range": {
+        "startLine": 69,
+        "startChar": 21,
+        "endLine": 69,
+        "endChar": 46
+      },
+      "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
