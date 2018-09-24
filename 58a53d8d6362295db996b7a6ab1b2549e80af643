@@ -46,6 +46,29 @@
       "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "77e94f46_124df53f",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 45,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-24T15:17:47Z",
+      "side": 1,
+      "message": "suggest that this be extracted in a separate utility func. I think it pollutes the purpose of blockToCouchDoc.",
+      "range": {
+        "startLine": 45,
+        "startChar": 5,
+        "endLine": 45,
+        "endChar": 14
+      },
+      "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
