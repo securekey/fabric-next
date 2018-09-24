@@ -22,6 +22,30 @@
       "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "14764772_f8c31d23",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-09-24T15:16:03Z",
+      "side": 1,
+      "message": "Will do that in the next commit",
+      "parentUuid": "3f24cab3_4916c1dc",
+      "range": {
+        "startLine": 34,
+        "startChar": 19,
+        "endLine": 34,
+        "endChar": 33
+      },
+      "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
