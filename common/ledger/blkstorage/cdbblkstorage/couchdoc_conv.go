@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
@@ -20,8 +21,12 @@ import (
 const (
 	idField             = "_id"
 	blockHashField      = "hash"
+	blockTxnsField      = "transactions"
+	blockTxnIDField     = "id"
 	blockHashIndexName  = "by_hash"
 	blockHashIndexDoc   = "indexHash"
+	blockTxnIDIndexName  = "by_txn_id"
+	blockTxnIndexDoc   = "indexTxn"
 	blockAttachmentName = "block"
 	cpiAttachmentName   = "checkpointinfo"
 	blockKeyPrefix      = ""
@@ -37,6 +42,19 @@ const blockHashIndexDef = `
 		"type": "json"
 	}`
 
+const blockTxnIndexDef = `
+	{
+		"index": {
+			"fields": [
+				"`+ idField + `",
+				"` + blockTxnsField + `.[].` + blockTxnIDField + `"
+			]
+		},
+		"name": "` + blockTxnIDIndexName + `",
+		"ddoc": "` + blockTxnIndexDoc + `",
+		"type": "json"
+	}`
+
 type jsonValue map[string]interface{}
 
 func (v jsonValue) toBytes() ([]byte, error) {
@@ -49,9 +67,14 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	blockHeader := block.GetHeader()
 	key := blockNumberToKey(blockHeader.Number)
 	blockHashHex := hex.EncodeToString(blockHeader.Hash())
+	blockTxns, err := blockToTransactionsField(block)
+	if err != nil {
+		return nil, err
+	}
 
 	jsonMap[idField] = key
 	jsonMap[blockHashField] = blockHashHex
+	jsonMap[blockTxnsField] = blockTxns
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
@@ -102,6 +125,26 @@ func checkpointInfoToAttachment(i *checkpointInfo) (*couchdb.AttachmentInfo, err
 	attachment.Name = cpiAttachmentName
 
 	return attachment, nil
+}
+
+func blockToTransactionsField(block *common.Block) ([]jsonValue, error) {
+	blockData := block.GetData()
+
+	var txns []jsonValue
+
+	for _, txEnvelopeBytes := range blockData.Data {
+		txID, err := extractTxID(txEnvelopeBytes)
+		if err != nil {
+			return nil, errors.WithMessage(err, "transaction ID could not be extracted")
+		}
+
+		txField := make(jsonValue)
+		txField[blockTxnIDField] = txID
+
+		txns = append(txns, txField)
+	}
+
+	return txns, nil
 }
 
 func blockToAttachment(block *common.Block) (*couchdb.AttachmentInfo, error) {
@@ -170,4 +213,22 @@ func couchAttachmentsToCheckpointInfo(attachments []*couchdb.AttachmentInfo) (*c
 
 func blockNumberToKey(blockNum uint64) string {
 	return blockKeyPrefix + strconv.FormatUint(blockNum, 10)
+}
+
+func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block, error) {
+	resultsP, err := db.QueryDocuments(query)
+	if err != nil {
+		return nil, err
+	}
+	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
+
+	if len(results) != 1 {
+		return nil, blkstorage.ErrNotFoundInIndex
+	}
+
+	if len(results[0].Attachments) == 0 {
+		return nil, errors.New("block bytes not found")
+	}
+
+	return couchAttachmentsToBlock(results[0].Attachments)
 }

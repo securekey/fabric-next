@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/hyperledger/fabric/common/ledger"
@@ -113,28 +114,18 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 	const queryFmt = `
 	{
 		"selector": {
-			"hash": {
+			"` + blockHashField + `": {
 				"$eq": "%s"
 			}
 		},
 		"use_index": ["_design/` + blockHashIndexDoc + `", "` + blockHashIndexName + `"]
 	}`
 
-	resultsP, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, blockHashHex))
+	block, err := retrieveBlockQuery(s.db, fmt.Sprintf(queryFmt, blockHashHex))
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block from couchDB failed [%s]", blockHashHex))
+		return nil, errors.WithMessage(err, fmt.Sprintf("block not found by hash []", blockHashHex))
 	}
-	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
-
-	if len(results) != 1 {
-		return nil, errors.Errorf("block not found [%s]", blockHashHex)
-	}
-
-	if len(results[0].Attachments) == 0 {
-		return nil, errors.Errorf("block bytes not found [%s]", blockHashHex)
-	}
-
-	return couchAttachmentsToBlock(results[0].Attachments)
+	return block, nil
 }
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
@@ -168,17 +159,47 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 
 // RetrieveTxByID returns a transaction for given transaction id
 func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
-	return nil, errors.New("not implemented")
+	block, err := s.RetrieveBlockByTxID(txID)
+	if err != nil {
+		return nil, err
+	}
+
+	return extractTxnEnvelopeFromBlock(block, txID)
 }
 
 // RetrieveTxByBlockNumTranNum returns a transaction for given block ID and transaction ID
 func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
-	return nil, errors.New("not implemented")
+	block, err := s.RetrieveBlockByNumber(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	txID := strconv.FormatUint(tranNum, 10)
+	return extractTxnEnvelopeFromBlock(block, txID)
 }
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
-	return nil, errors.New("not implemented")
+	// TODO: array index (need to enable full text search in CouchDB build)
+	const queryFmt = `
+	{
+		"selector": {
+			"` + blockTxnsField + `": {
+				"$elemMatch": {
+					"` + blockTxnIDField + `": "%s"
+				}
+			}
+		}
+	}`
+
+	block, err := retrieveBlockQuery(s.db, fmt.Sprintf(queryFmt, txID))
+	if err == blkstorage.ErrNotFoundInIndex {
+		return nil, err
+	}
+	if err != nil {
+		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block by transaction ID failed [%s]", txID))
+	}
+	return block, nil
 }
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID

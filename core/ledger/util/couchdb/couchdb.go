@@ -314,7 +314,7 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 				return errSecurity
 			}
 
-			logger.Infof("Created state database %s", dbclient.DBName)
+			logger.Infof("Created database %s", dbclient.DBName)
 			logger.Debugf("Exiting CreateDatabaseIfNotExist()")
 			return nil
 		}
@@ -329,7 +329,7 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 		return errSecurity
 	}
 
-	logger.Infof("Created state database %s", dbclient.DBName)
+	logger.Infof("Created database %s", dbclient.DBName)
 
 	logger.Debugf("Exiting CreateDatabaseIfNotExist()")
 
@@ -1229,13 +1229,13 @@ func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndex
 
 	if couchDBReturn.Result == "created" {
 
-		logger.Infof("Created CouchDB index [%s] in state database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
+		logger.Infof("Created CouchDB index [%s] in database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
 
 		return couchDBReturn, nil
 
 	}
 
-	logger.Infof("Updated CouchDB index [%s] in state database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
+	logger.Infof("Updated CouchDB index [%s] in database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
 
 	return couchDBReturn, nil
 }
