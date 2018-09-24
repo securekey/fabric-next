@@ -9,6 +9,9 @@ package historycouchdb
 import (
 	"fmt"
 
+	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+	"github.com/pkg/errors"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -19,36 +22,40 @@ import (
 
 var logger = flogging.MustGetLogger("historycouchdb")
 
-// HistoryDBProvider implements interface HistoryDBProvider
-type HistoryDBProvider struct {
-	// TODO
+// historyDBProvider implements interface historydb.HistoryDBProvider
+type historyDBProvider struct {
+	couchDBInstance *couchdb.CouchInstance
 }
 
-// NewHistoryDBProvider instantiates HistoryDBProvider
-func NewHistoryDBProvider() *HistoryDBProvider {
-	// TODO
-	return &HistoryDBProvider{}
+// NewHistoryDBProvider instantiates historyDBProvider
+func NewHistoryDBProvider() (*historyDBProvider, error) {
+	logger.Debugf("constructing CouchDB historyDB storage provider")
+	couchDBDef := couchdb.GetCouchDBDefinition()
+	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
+	if err != nil {
+		return nil, errors.WithMessage(err, "obtaining CouchDB HistoryDB provider failed")
+	}
+	return &historyDBProvider{couchDBInstance: couchInstance}, nil
 }
 
 // GetDBHandle gets the handle to a named database
-func (provider *HistoryDBProvider) GetDBHandle(dbName string) (historydb.HistoryDB, error) {
-	// TODO
-	return newHistoryDB(), nil
+func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.HistoryDB, error) {
+	database, err := couchdb.CreateCouchDatabase(provider.couchDBInstance, dbName)
+	if err != nil {
+		return nil, errors.WithMessage(err, "obtaining handle on CouchDB HistoryDB failed")
+	}
+	return &historyDB{couchDB: database}, nil
 }
 
 // Close closes the underlying db
-func (provider *HistoryDBProvider) Close() {
+func (provider *historyDBProvider) Close() {
 	panic("Not implemented")
 }
 
 // historyDB implements HistoryDB interface
 type historyDB struct {
-	dbName string
-}
-
-// newHistoryDB constructs an instance of HistoryDB
-func newHistoryDB() *historyDB {
-	return &historyDB{}
+	couchDB *couchdb.CouchDatabase
 }
 
 // NewHistoryQueryExecutor implements method in HistoryDB interface
@@ -61,19 +68,19 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 
 	// Get the history batch from the block, including the savepoint
 	//historyBatch, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
-	_, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
+	_, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
 	if err != nil {
 		return err
 	}
 
-	// Move the batch to LevelDB batch
+	// Move the batch to CouchDB batch
 	// TODO
 
 	// write the block's history records and savepoint to LevelDB
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
 	// TODO
 
-	logger.Debugf("Channel [%s]: Updates committed to history database for blockNo [%v]", historyDB.dbName, block.Header.Number)
+	logger.Debugf("Channel [%s]: Updates committed to history database for blockNo [%v]", historyDB.couchDB.DBName, block.Header.Number)
 	return nil
 
 }
