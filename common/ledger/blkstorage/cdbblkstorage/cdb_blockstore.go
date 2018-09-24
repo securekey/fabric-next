@@ -16,17 +16,28 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
 	"math"
+	"sync/atomic"
 )
 
 // cdbBlockStore ...
 type cdbBlockStore struct {
 	db *couchdb.CouchDatabase
 	ledgerID string
+	bcInfo            atomic.Value
+
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
 func newCDBBlockStore(db *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
-	return &cdbBlockStore{db, ledgerID}
+	cdbBlockStore:= &cdbBlockStore{db:db,ledgerID:ledgerID}
+	// init BlockchainInfo for external API's
+	bcInfo := &common.BlockchainInfo{
+		Height:            0,
+		CurrentBlockHash:  nil,
+		PreviousBlockHash: nil}
+
+	cdbBlockStore.bcInfo.Store(bcInfo)
+	return  cdbBlockStore
 }
 
 // AddBlock adds a new block
@@ -42,14 +53,29 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 	if err != nil {
 		return errors.WithMessage(err, "adding block to couchDB failed")
 	}
+	//update the blockchain info (for APIs) in the manager
+	s.updateBlockchainInfo(block.GetHeader().Hash(), block)
 	logger.Debugf("block added to couchDB [%d, %s]", block.GetHeader().Number, rev)
-
 	return nil
+}
+
+func (s *cdbBlockStore) updateBlockchainInfo(latestBlockHash []byte, latestBlock *common.Block) {
+	currentBCInfo,err := s.GetBlockchainInfo()
+	if err!=nil{
+		logger.Errorf("getblockchainInfo return error %s",err)
+		return
+	}
+	newBCInfo := &common.BlockchainInfo{
+		Height:            currentBCInfo.Height + 1,
+		CurrentBlockHash:  latestBlockHash,
+		PreviousBlockHash: latestBlock.Header.PreviousHash}
+
+	s.bcInfo.Store(newBCInfo)
 }
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	return nil, errors.New("not implemented")
+	return s.bcInfo.Load().(*common.BlockchainInfo),nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
