@@ -69,6 +69,30 @@
       "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "02fc81b4_1109a14c",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 45,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-24T15:19:01Z",
+      "side": 1,
+      "message": "i.e., call blockNumberToKey",
+      "parentUuid": "77e94f46_124df53f",
+      "range": {
+        "startLine": 45,
+        "startChar": 5,
+        "endLine": 45,
+        "endChar": 14
+      },
+      "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
