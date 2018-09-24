@@ -41,7 +41,7 @@ func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
+func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc ,error) {
 	jsonMap := make(jsonValue)
 
 	blockHeader := block.GetHeader()
@@ -59,7 +59,7 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 
 	attachment, err := blockToAttachment(block)
 	if err != nil {
-		return nil, err
+		return nil,err
 	}
 
 	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
