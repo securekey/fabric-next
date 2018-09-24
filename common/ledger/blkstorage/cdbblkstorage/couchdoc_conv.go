@@ -41,30 +41,31 @@ func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
+func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, []byte ,error) {
 	jsonMap := make(jsonValue)
 
 	blockHeader := block.GetHeader()
+	blockHash:=blockHeader.Hash()
 	key := blockNumberToKey(blockHeader.Number)
-	blockHashHex := hex.EncodeToString(blockHeader.Hash())
+	blockHashHex := hex.EncodeToString(blockHash)
 
 	jsonMap[idField] = key
 	jsonMap[blockHashField] = blockHashHex
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
-		return nil, err
+		return nil,nil, err
 	}
 	couchDoc := &couchdb.CouchDoc{JSONValue: jsonBytes}
 
 	attachment, err := blockToAttachment(block)
 	if err != nil {
-		return nil, err
+		return nil, nil,err
 	}
 
 	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
 	couchDoc.Attachments = attachments
-	return couchDoc, nil
+	return couchDoc,blockHash, nil
 }
 
 func blockToAttachment(block *common.Block) (*couchdb.AttachmentInfo, error) {
