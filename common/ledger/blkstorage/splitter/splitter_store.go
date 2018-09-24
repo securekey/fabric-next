@@ -34,7 +34,8 @@ func (s *splitterBlockStore) AddBlock(block *common.Block) error {
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *splitterBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	return s.bsa.GetBlockchainInfo()
+	return s.bsb.GetBlockchainInfo()
+	//return s.bsa.GetBlockchainInfo()
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
