@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "3f24cab3_4916c1dc",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-24T15:07:46Z",
+      "side": 1,
+      "message": "On peer restart, the idea is to load from checkpoint from DB.\n\nSince we are hitting a replicated DB, our checkpoint should probably include all of the block documents and revisions since the previous checkpoint.\n\nOn start, the peer should load this checkpoint and ensure all of the blocks/revisions exist before proceeding. \n\nTBD: After some timeout of the above logic, should we go to a previous checkpoint???",
+      "range": {
+        "startLine": 34,
+        "startChar": 19,
+        "endLine": 34,
+        "endChar": 33
+      },
+      "revId": "58a53d8d6362295db996b7a6ab1b2549e80af643",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
