@@ -22,7 +22,7 @@ git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
 # Tip of release-1.2 (September 6, 2018)
-git checkout 78a3a8dadf2a82c2e535bcacaeb95fbdd4fbafde
+git checkout 3cd00d1da6f216e9aaefcc5e0db0584c2cc46a5a
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
