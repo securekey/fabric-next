@@ -22,6 +22,30 @@
       "revId": "4ffdb483185c98e79dd190a2f3e0ef2cb21e97b0",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f65bc0b2_3ed954a0",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/blocks_itr.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-25T20:25:20Z",
+      "side": 1,
+      "message": "i.e., this function unblocks the thread while it waits for new blocks to arrive. however, there is no logic that is watching for new blocks to arrive...",
+      "parentUuid": "190c292a_cf11fc6c",
+      "range": {
+        "startLine": 34,
+        "startChar": 2,
+        "endLine": 34,
+        "endChar": 37
+      },
+      "revId": "4ffdb483185c98e79dd190a2f3e0ef2cb21e97b0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
