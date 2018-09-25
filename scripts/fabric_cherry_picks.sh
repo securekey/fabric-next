@@ -38,6 +38,9 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/70/26170/4 && git
 # [FAB-11247] Add configuration to create _global_changes
 git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_change.patch
 
+# [FAB-12060] payload buf don't signal ready if empty
+git am $MY_PATH/../patches/0001-FAB-12060-payload-buf-don-t-signal-ready-if-empty.patch
+
 # [FAB-8622] Reduce exclusive lock duration during commit
 #git am $MY_PATH/../patches/0001-FAB-8622-Red.-exclusive-lock-dur.-during-commit.patch
 
