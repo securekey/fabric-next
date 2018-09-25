@@ -15,6 +15,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
@@ -27,10 +29,11 @@ type cdbBlockStore struct {
 	blockStore *couchdb.CouchDatabase
 	txnStore   *couchdb.CouchDatabase
 	ledgerID   string
-	//cpInfoCond *sync.Cond
-	bcInfo    atomic.Value
-	cp        *checkpoint
-	attachTxn bool
+	cpInfo     *checkpointInfo
+	cpInfoCond *sync.Cond
+	bcInfo     atomic.Value
+	cp         *checkpoint
+	attachTxn  bool
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
@@ -51,7 +54,8 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 	if err != nil {
 		panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
 	}
-
+	// Update the manager with the checkpoint info and the file writer
+	cdbBlockStore.cpInfo = cpInfo
 	bcInfo := createBlockchainInfo(cdbBlockStore, cpInfo)
 	cdbBlockStore.bcInfo.Store(bcInfo)
 
@@ -61,7 +65,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 func createBlockchainInfo(s *cdbBlockStore, cpInfo *checkpointInfo) *common.BlockchainInfo {
 	// Create a checkpoint condition (event) variable, for the  goroutine waiting for
 	// or announcing the occurrence of an event.
-	//cdbBlockStore.cpInfoCond = sync.NewCond(&sync.Mutex{})
+	s.cpInfoCond = sync.NewCond(&sync.Mutex{})
 
 	// init BlockchainInfo for external API's
 	bcInfo := &common.BlockchainInfo{
@@ -72,7 +76,7 @@ func createBlockchainInfo(s *cdbBlockStore, cpInfo *checkpointInfo) *common.Bloc
 
 	if !cpInfo.isChainEmpty {
 		//If start up is a restart of an existing storage, update BlockchainInfo for external API's
-		lastBlock, err := s.RetrieveBlockByHash(cpInfo.lastBlockHash)
+		lastBlock, err := s.RetrieveBlockByNumber(cpInfo.lastBlockNumber)
 		if err != nil {
 			panic(fmt.Sprintf("Could not retrieve header of the last block form file: %s", err))
 		}
@@ -141,16 +145,17 @@ func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
 func (s *cdbBlockStore) checkpointBlock(block *common.Block) error {
 	blockHash := block.GetHeader().Hash()
 	//Update the checkpoint info with the results of adding the new block
+
 	newCPInfo := &checkpointInfo{
-		isChainEmpty:  false,
-		lastBlockHash: blockHash}
+		isChainEmpty:    false,
+		lastBlockNumber: block.Header.Number}
 	//save the checkpoint information in the database
 	err := s.cp.saveCurrentInfo(newCPInfo)
 	if err != nil {
 		return errors.WithMessage(err, "adding cpInfo to couchDB failed")
 	}
 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
-	//s.updateCheckpoint(newCPInfo)
+	s.updateCheckpoint(newCPInfo)
 	s.updateBlockchainInfo(blockHash, block)
 	return nil
 }
@@ -162,7 +167,7 @@ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
 func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
-	return nil, errors.New("not implemented")
+	return newBlockItr(s, startNum), nil
 }
 
 // RetrieveBlockByHash returns the block for given block-hash
@@ -307,7 +312,6 @@ func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxVali
 		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Errorf("validation code was not found for transaction ID [%s]", txID)
 	}
 
-
 	txnValidationCodeStored, ok := txnValidationCodeStoredUT.(string)
 	if !ok {
 		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Errorf("validation code has invalid type for transaction ID [%s]", txID)
@@ -343,9 +347,10 @@ func (s *cdbBlockStore) updateBlockchainInfo(latestBlockHash []byte, latestBlock
 	s.bcInfo.Store(newBCInfo)
 }
 
-//func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
-//	s.cpInfoCond.L.Lock()
-//	defer s.cpInfoCond.L.Unlock()
-//	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
-//	s.cpInfoCond.Broadcast()
-//}
+func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
+	s.cpInfoCond.L.Lock()
+	defer s.cpInfoCond.L.Unlock()
+	s.cpInfo = cpInfo
+	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
+	s.cpInfoCond.Broadcast()
+}
