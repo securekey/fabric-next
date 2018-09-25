@@ -179,6 +179,7 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 	}`
 	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, blockHashHex))
 	if err != nil {
+		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
 
@@ -218,6 +219,7 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 	doc, _, err := s.txnStore.ReadDoc(txID)
 	if err != nil {
+		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
 	if doc == nil {
@@ -237,6 +239,7 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 	// Otherwise, we need to extract the transaction from the block document.
 	block, err := s.RetrieveBlockByTxID(txID)
 	if err != nil {
+		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
 
@@ -247,6 +250,7 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
 	block, err := s.RetrieveBlockByNumber(blockNum)
 	if err != nil {
+		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
 
@@ -258,6 +262,7 @@ func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uin
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
 	blockHash, err := s.retrieveBlockHashByTxID(txID)
 	if err != nil {
+		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
 
@@ -267,12 +272,18 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 func (s *cdbBlockStore) retrieveBlockHashByTxID(txID string) ([]byte, error) {
 	jsonResult, err := retrieveJSONQuery(s.txnStore, txID)
 	if err != nil {
-		return nil, errors.WithMessage(err, "retrieving transaction document from DB failed")
+		// note: allow ErrNotFoundInIndex to pass through
+		return nil, err
 	}
 
-	blockHashStored, ok := jsonResult[txnBlockHashField].(string)
+	blockHashStoredUT, ok := jsonResult[txnBlockHashField]
 	if !ok {
 		return nil, errors.Errorf("block hash was not found for transaction ID [%s]", txID)
+	}
+
+	blockHashStored, ok := blockHashStoredUT.(string)
+	if !ok {
+		return nil, errors.Errorf("block hash has invalid type for transaction ID [%s]", txID)
 	}
 
 	blockHash, err := hex.DecodeString(blockHashStored)
@@ -285,7 +296,30 @@ func (s *cdbBlockStore) retrieveBlockHashByTxID(txID string) ([]byte, error) {
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
-	return peer.TxValidationCode_INVALID_ENDORSER_TRANSACTION, errors.New("not implemented")
+	jsonResult, err := retrieveJSONQuery(s.txnStore, txID)
+	if err != nil {
+		// note: allow ErrNotFoundInIndex to pass through
+		return peer.TxValidationCode_INVALID_OTHER_REASON, err
+	}
+
+	txnValidationCodeStoredUT, ok := jsonResult[txnValidationCode]
+	if !ok {
+		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Errorf("validation code was not found for transaction ID [%s]", txID)
+	}
+
+
+	txnValidationCodeStored, ok := txnValidationCodeStoredUT.(string)
+	if !ok {
+		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Errorf("validation code has invalid type for transaction ID [%s]", txID)
+	}
+
+	const sizeOfTxValidationCode = 32
+	txnValidationCode, err := strconv.ParseInt(txnValidationCodeStored, txnValidationCodeBase, sizeOfTxValidationCode)
+	if err != nil {
+		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Wrapf(err, "validation code was invalid for transaction ID [%s]", txID)
+	}
+
+	return peer.TxValidationCode(txnValidationCode), nil
 }
 
 // Shutdown closes the storage instance

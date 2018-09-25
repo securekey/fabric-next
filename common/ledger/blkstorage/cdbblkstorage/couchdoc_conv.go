@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/hyperledger/fabric/protos/peer"
 	"strconv"
 
 	"fmt"
@@ -18,9 +19,11 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
+
 )
 
 // block document
@@ -41,9 +44,11 @@ const (
 
 // txn document
 const (
-	txnBlockNumberField = "block_number"
-	txnBlockHashField   = "block_hash"
-	txnAttachmentName   = "transaction"
+	txnBlockNumberField   = "block_number"
+	txnBlockHashField     = "block_hash"
+	txnAttachmentName     = "transaction"
+	txnValidationCode     = "validation_code"
+	txnValidationCodeBase = 16
 )
 
 // checkpoint document
@@ -115,19 +120,23 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 
 func blockToTxnCouchDocs(block *common.Block, attachTxn bool) ([]*couchdb.CouchDoc, error) {
 	blockHeader := block.GetHeader()
-	blockData := block.GetData()
 	blockNumber := blockNumberToKey(blockHeader.GetNumber())
 	blockHash := hex.EncodeToString(blockHeader.Hash())
 
+	blockData := block.GetData()
+
+	blockMetadata := block.GetMetadata()
+	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
 	txnDocs := make([]*couchdb.CouchDoc, 0)
 
-	for _, txEnvelopeBytes := range blockData.GetData() {
+	for i, txEnvelopeBytes := range blockData.GetData() {
 		envelope, err := utils.GetEnvelopeFromBlock(txEnvelopeBytes)
 		if err != nil {
 			return nil, err
 		}
 
-		txnDoc, err := txnEnvelopeToCouchDoc(blockNumber, blockHash, envelope, attachTxn)
+		txnDoc, err := blockTxnToCouchDoc(blockNumber, blockHash, envelope, txValidationFlags.Flag(i), attachTxn)
 		if err == errorNoTxID {
 			continue
 		} else if err != nil {
@@ -142,7 +151,7 @@ func blockToTxnCouchDocs(block *common.Block, attachTxn bool) ([]*couchdb.CouchD
 
 var errorNoTxID = errors.New("missing transaction ID")
 
-func txnEnvelopeToCouchDoc(blockNumber string, blockHash string, txEnvelope *common.Envelope, attachTxn bool) (*couchdb.CouchDoc, error) {
+func blockTxnToCouchDoc(blockNumber string, blockHash string, txEnvelope *common.Envelope, validationCode peer.TxValidationCode, attachTxn bool) (*couchdb.CouchDoc, error) {
 	txID, err := extractTxIDFromEnvelope(txEnvelope)
 	if err != nil {
 		return nil, errors.WithMessage(err, "transaction ID could not be extracted")
@@ -157,6 +166,7 @@ func txnEnvelopeToCouchDoc(blockNumber string, blockHash string, txEnvelope *com
 	jsonMap[idField] = txID
 	jsonMap[txnBlockHashField] = blockHash
 	jsonMap[txnBlockNumberField] = blockNumber
+	jsonMap[txnValidationCode] = strconv.FormatInt(int64(validationCode), txnValidationCodeBase)
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
