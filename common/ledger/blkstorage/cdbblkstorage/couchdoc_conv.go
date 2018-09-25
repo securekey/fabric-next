@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -23,14 +25,18 @@ import (
 
 // block document
 const (
-	idField             = "_id"
-	blockHashField      = "hash"
-	blockTxnsField      = "transactions"
-	blockTxnIDField     = "id"
-	blockHashIndexName  = "by_hash"
-	blockHashIndexDoc   = "indexHash"
-	blockAttachmentName = "block"
-	blockKeyPrefix      = ""
+	idField              = "_id"
+	blockHashField       = "hash"
+	blockTxnsField       = "transactions"
+	blockTxnIDField      = "id"
+	blockHashIndexName   = "by_hash"
+	blockHashIndexDoc    = "indexHash"
+	blockAttachmentName  = "block"
+	blockKeyPrefix       = ""
+	blockHeaderField     = "header"
+	blockNumberField     = "number"
+	blockNumberIndexName = "by_number"
+	blockNumberIndexDoc  = "indexNumber"
 )
 
 // txn document
@@ -40,19 +46,28 @@ const (
 	txnAttachmentName   = "transaction"
 )
 
-
 // checkpoint document
 const (
-	cpiAttachmentName   = "checkpointinfo"
+	cpiAttachmentName = "checkpointinfo"
 )
 
 const blockHashIndexDef = `
 	{
 		"index": {
-			"fields": ["` + blockHashField + `"]
+			"fields": ["` + blockHeaderField + `.` + blockHashField + `"]
 		},
 		"name": "` + blockHashIndexName + `",
 		"ddoc": "` + blockHashIndexDoc + `",
+		"type": "json"
+	}`
+
+const blockNumberIndexDef = `
+	{
+		"index": {
+			"fields": ["` + blockHeaderField + `.` + blockNumberField + `"]
+		},
+		"name": "` + blockNumberIndexName + `",
+		"ddoc": "` + blockNumberIndexDoc + `",
 		"type": "json"
 	}`
 
@@ -66,7 +81,9 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 
 	blockHeader := block.GetHeader()
+
 	key := blockNumberToKey(blockHeader.GetNumber())
+	blockNumber := fmt.Sprintf("%064s", strconv.FormatUint(blockHeader.GetNumber(), 16))
 	blockHashHex := hex.EncodeToString(blockHeader.Hash())
 	blockTxns, err := blockToTransactionsField(block)
 	if err != nil {
@@ -74,7 +91,10 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	}
 
 	jsonMap[idField] = key
-	jsonMap[blockHashField] = blockHashHex
+	header := make(jsonValue)
+	header[blockHashField] = blockHashHex
+	header[blockNumberField] = blockNumber
+	jsonMap[blockHeaderField] = header
 	jsonMap[blockTxnsField] = blockTxns
 
 	jsonBytes, err := jsonMap.toBytes()

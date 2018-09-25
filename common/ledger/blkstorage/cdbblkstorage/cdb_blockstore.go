@@ -24,13 +24,13 @@ import (
 )
 
 type cdbBlockStore struct {
-	blockStore  *couchdb.CouchDatabase
-	txnStore    *couchdb.CouchDatabase
-	ledgerID    string
+	blockStore *couchdb.CouchDatabase
+	txnStore   *couchdb.CouchDatabase
+	ledgerID   string
 	//cpInfoCond *sync.Cond
-	bcInfo      atomic.Value
-	cp          *checkpoint
-	attachTxn   bool
+	bcInfo    atomic.Value
+	cp        *checkpoint
+	attachTxn bool
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
@@ -39,10 +39,10 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 
 	cdbBlockStore := &cdbBlockStore{
 		blockStore: blockStore,
-		txnStore: txnStore,
-		ledgerID: ledgerID,
-		cp: cp,
-		attachTxn: ledgerconfig.GetBlockStorageAttachTxn(),
+		txnStore:   txnStore,
+		ledgerID:   ledgerID,
+		cp:         cp,
+		attachTxn:  ledgerconfig.GetBlockStorageAttachTxn(),
 	}
 
 	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
@@ -57,7 +57,6 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 
 	return cdbBlockStore
 }
-
 
 func createBlockchainInfo(s *cdbBlockStore, cpInfo *checkpointInfo) *common.BlockchainInfo {
 	// Create a checkpoint condition (event) variable, for the  goroutine waiting for
@@ -78,7 +77,7 @@ func createBlockchainInfo(s *cdbBlockStore, cpInfo *checkpointInfo) *common.Bloc
 			panic(fmt.Sprintf("Could not retrieve header of the last block form file: %s", err))
 		}
 
-		lastBlockHeader := 	lastBlock.GetHeader()
+		lastBlockHeader := lastBlock.GetHeader()
 		lastBlockHash := lastBlockHeader.Hash()
 		previousBlockHash := lastBlockHeader.GetPreviousHash()
 		bcInfo = &common.BlockchainInfo{
@@ -172,17 +171,17 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 	const queryFmt = `
 	{
 		"selector": {
-			"` + blockHashField + `": {
+			"` + blockHeaderField + `.` + blockHashField + `": {
 				"$eq": "%s"
 			}
 		},
 		"use_index": ["_design/` + blockHashIndexDoc + `", "` + blockHashIndexName + `"]
 	}`
-
 	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, blockHashHex))
 	if err != nil {
 		return nil, err
 	}
+
 	return block, nil
 }
 
