@@ -37,6 +37,7 @@ const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 const confBlockStorage = "ledger.blockchain.blockStorage"
+const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
 const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
 
@@ -48,6 +49,16 @@ const (
 	FilesystemLedgerStorage BlockStorageProvider = iota
 	// CouchDBLedgerStorage stores blocks in CouchDB
 	CouchDBLedgerStorage
+)
+
+// PvtDataStorageProvider holds the configuration names of the available storage providers
+type PvtDataStorageProvider int
+
+const (
+	// LevelDBPvtDataStorage stores private data in LevelDB (default)
+	LevelDBPvtDataStorage PvtDataStorageProvider = iota
+	// CouchDBPvtDataStorage stores private data in CouchDB
+	CouchDBPvtDataStorage
 )
 
 // HistoryStorageProvider holds the configuration names of the available history storage providers
@@ -186,6 +197,20 @@ func GetBlockStoreProvider() BlockStorageProvider {
 		fallthrough
 	case "filesystem":
 		return FilesystemLedgerStorage
+	}
+}
+
+// GetPvtDataStoreProvider returns the private data storage provider specified in the configuration
+func GetPvtDataStoreProvider() PvtDataStorageProvider {
+	pvtDataStorageConfig := viper.GetString(confPvtDataStorage)
+
+	switch pvtDataStorageConfig {
+	case "CouchDB":
+		return CouchDBPvtDataStorage
+	default:
+		fallthrough
+	case "goleveldb":
+		return LevelDBPvtDataStorage
 	}
 }
 
