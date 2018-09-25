@@ -46,6 +46,53 @@
       "revId": "4ffdb483185c98e79dd190a2f3e0ef2cb21e97b0",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "426c97c2_1f8b71c0",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/blocks_itr.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-25T20:29:13Z",
+      "side": 1,
+      "message": "it\u0027s in updateCheckpoint. ok.",
+      "parentUuid": "f65bc0b2_3ed954a0",
+      "range": {
+        "startLine": 34,
+        "startChar": 2,
+        "endLine": 34,
+        "endChar": 37
+      },
+      "revId": "4ffdb483185c98e79dd190a2f3e0ef2cb21e97b0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ef7ae57c_cc1cf77d",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/blocks_itr.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 70,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-25T20:29:13Z",
+      "side": 1,
+      "message": "sigh - the double locks again :P",
+      "range": {
+        "startLine": 67,
+        "startChar": 0,
+        "endLine": 70,
+        "endChar": 35
+      },
+      "revId": "4ffdb483185c98e79dd190a2f3e0ef2cb21e97b0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
