@@ -76,8 +76,8 @@ func (s *splitterBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, er
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *splitterBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
-	s.bsb.RetrieveTxValidationCodeByTxID(txID)
-	return s.bsa.RetrieveTxValidationCodeByTxID(txID)
+	return s.bsb.RetrieveTxValidationCodeByTxID(txID)
+	//return s.bsa.RetrieveTxValidationCodeByTxID(txID)
 }
 
 // Shutdown closes the storage instance
