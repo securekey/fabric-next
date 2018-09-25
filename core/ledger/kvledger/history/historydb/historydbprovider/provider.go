@@ -21,9 +21,9 @@ func NewHistoryDBProvider() (historydb.HistoryDBProvider, error) {
 
 	switch historyStorageConfig {
 	case ledgerconfig.LevelDBHistoryStorage:
-		return historyleveldb.NewHistoryDBProvider(), nil
+		return historyleveldb.NewHistoryDBProvider()
 	case ledgerconfig.CouchDBHistoryStorage:
-		return historycouchdb.NewHistoryDBProvider(), nil
+		return historycouchdb.NewHistoryDBProvider()
 	}
 
 	return nil, errors.New("history storage provider creation failed due to unknown configuration")

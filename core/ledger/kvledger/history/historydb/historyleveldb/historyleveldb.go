@@ -25,11 +25,11 @@ type HistoryDBProvider struct {
 }
 
 // NewHistoryDBProvider instantiates HistoryDBProvider
-func NewHistoryDBProvider() *HistoryDBProvider {
+func NewHistoryDBProvider() (*HistoryDBProvider, error) {
 	dbPath := ledgerconfig.GetHistoryLevelDBPath()
 	logger.Debugf("constructing HistoryDBProvider dbPath=%s", dbPath)
 	dbProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
-	return &HistoryDBProvider{dbProvider}
+	return &HistoryDBProvider{dbProvider}, nil
 }
 
 // GetDBHandle gets the handle to a named database

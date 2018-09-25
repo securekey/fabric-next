@@ -28,7 +28,7 @@ type historyDBProvider struct {
 }
 
 // NewHistoryDBProvider instantiates historyDBProvider
-func NewHistoryDBProvider() (*historyDBProvider, error) {
+func NewHistoryDBProvider() (historydb.HistoryDBProvider, error) {
 	logger.Debugf("constructing CouchDB historyDB storage provider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,

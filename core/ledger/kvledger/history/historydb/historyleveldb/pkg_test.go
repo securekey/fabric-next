@@ -63,7 +63,8 @@ func newTestHistoryEnv(t *testing.T) *levelDBLockBasedHistoryEnv {
 	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider)
 	testutil.AssertNoError(t, err, "")
 
-	testHistoryDBProvider := NewHistoryDBProvider()
+	testHistoryDBProvider, err := NewHistoryDBProvider()
+	testutil.AssertNoError(t, err, "")
 	testHistoryDB, err := testHistoryDBProvider.GetDBHandle("TestHistoryDB")
 	testutil.AssertNoError(t, err, "")
 
