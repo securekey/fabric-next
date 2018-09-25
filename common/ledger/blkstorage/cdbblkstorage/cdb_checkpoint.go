@@ -23,8 +23,8 @@ type checkpoint struct {
 
 // checkpointInfo
 type checkpointInfo struct {
-	isChainEmpty  bool
-	lastBlockHash []byte
+	isChainEmpty    bool
+	lastBlockNumber uint64
 }
 
 func newCheckpoint(db *couchdb.CouchDatabase) *checkpoint {
@@ -38,8 +38,9 @@ func (cp *checkpoint) getCheckpointInfo() *checkpointInfo {
 	}
 	if cpInfo == nil {
 		cpInfo = &checkpointInfo{
-			isChainEmpty:  true,
-			lastBlockHash: nil}
+			isChainEmpty:    true,
+			lastBlockNumber: 0,
+		}
 	}
 	return cpInfo
 }
@@ -76,7 +77,7 @@ func (cp *checkpoint) saveCurrentInfo(i *checkpointInfo) error {
 func (i *checkpointInfo) marshal() ([]byte, error) {
 	buffer := proto.NewBuffer([]byte{})
 	var err error
-	if err = buffer.EncodeRawBytes(i.lastBlockHash); err != nil {
+	if err = buffer.EncodeVarint(i.lastBlockNumber); err != nil {
 		return nil, err
 	}
 	var chainEmptyMarker uint64
@@ -91,13 +92,13 @@ func (i *checkpointInfo) marshal() ([]byte, error) {
 
 func (i *checkpointInfo) unmarshal(b []byte) error {
 	buffer := proto.NewBuffer(b)
-	var val []byte
+	var val uint64
 	var chainEmptyMarker uint64
 	var err error
-	if val, err = buffer.DecodeRawBytes(false); err != nil {
+	if val, err = buffer.DecodeVarint(); err != nil {
 		return err
 	}
-	i.lastBlockHash = val
+	i.lastBlockNumber = val
 	if chainEmptyMarker, err = buffer.DecodeVarint(); err != nil {
 		return err
 	}

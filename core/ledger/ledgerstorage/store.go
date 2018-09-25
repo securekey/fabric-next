@@ -18,17 +18,18 @@ package ledgerstorage
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
-	"github.com/hyperledger/fabric/common/ledger/blkstorage/splitter"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
-	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 )
 
@@ -81,11 +82,10 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 	switch blockStorageConfig {
 	case ledgerconfig.FilesystemLedgerStorage:
 		return fsblkstorage.NewProvider(
-			               fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
-			               indexConfig), nil
+			fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
+			indexConfig), nil
 	case ledgerconfig.CouchDBLedgerStorage:
-		//return cdbblkstorage.NewProvider(indexConfig)
-		return splitter.NewProvider(indexConfig)
+		return cdbblkstorage.NewProvider(indexConfig)
 	}
 
 	return nil, errors.New("block storage provider creation failed due to unknown configuration")
