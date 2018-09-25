@@ -1,40 +1,39 @@
-From 362cd57032666d113e5ffafe96c81e05df3fc655 Mon Sep 17 00:00:00 2001
-From: Aleksandar Likic <aleksandar.likic@securekey.com>
-Date: Fri, 14 Sep 2018 15:13:31 -0400
+From 5812f5a58386269ba5377c9f776be144e90197eb Mon Sep 17 00:00:00 2001
+From: jenkins <jenkins@jenkins.com>
+Date: Tue, 25 Sep 2018 17:16:31 -0400
 Subject: [PATCH] Ledger metrics
 
-Change-Id: I3a8db2f1338f86af1efae625cb915a05c4481865
-Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
+Signed-off-by: jenkins <jenkins@jenkins.com>
 ---
- bccsp/pkcs11/impl.go                               |  21 +
- bccsp/sw/impl.go                                   |  25 ++
- .../blkstorage/fsblkstorage/blockfile_mgr.go       |  17 +
- .../ledger/blkstorage/fsblkstorage/blockindex.go   |   7 +
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |   8 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  69 +++
- .../ledger/util/leveldbhelper/leveldb_provider.go  |  11 +-
- common/metrics/server.go                           | 271 ++++++------
- common/metrics/server_test.go                      | 242 -----------
- common/metrics/tally_provider.go                   | 374 ++---------------
- common/metrics/tally_provider_test.go              | 462 ---------------------
- common/metrics/types.go                            |  45 --
- .../blocksprovider/blocksprovider.go               |  10 +
- .../historydb/historyleveldb/historyleveldb.go     |   7 +
- core/ledger/kvledger/kv_ledger.go                  |  27 +-
- .../privacyenabledstate/common_storage_db.go       |   9 +
- .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |   7 +-
- .../txmgmt/statedb/statecouchdb/batch_util.go      |  10 +
- .../txmgmt/statedb/statecouchdb/commit_handling.go |   7 +
- .../txmgmt/statedb/statecouchdb/statecouchdb.go    |   7 +
- .../txmgmt/statedb/stateleveldb/stateleveldb.go    |   7 +
- .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  11 +
- core/ledger/ledgerstorage/store.go                 |  28 ++
- core/ledger/util/couchdb/couchdb.go                |  21 +
- gossip/privdata/coordinator.go                     |  12 +-
- gossip/state/payloads_buffer.go                    |  13 +-
- gossip/state/state.go                              |  25 +-
- peer/node/start.go                                 |   4 +
- 28 files changed, 554 insertions(+), 1203 deletions(-)
+ bccsp/pkcs11/impl.go                          |  21 +
+ bccsp/sw/impl.go                              |  25 +
+ .../blkstorage/fsblkstorage/blockfile_mgr.go  |  17 +
+ .../blkstorage/fsblkstorage/blockindex.go     |   7 +
+ .../blkstorage/fsblkstorage/blocks_itr.go     |   8 +
+ .../util/leveldbhelper/leveldb_helper.go      |  69 +++
+ .../util/leveldbhelper/leveldb_provider.go    |  11 +-
+ common/metrics/server.go                      | 271 +++++-----
+ common/metrics/server_test.go                 | 242 ---------
+ common/metrics/tally_provider.go              | 374 ++------------
+ common/metrics/tally_provider_test.go         | 462 ------------------
+ common/metrics/types.go                       |  45 --
+ .../blocksprovider/blocksprovider.go          |  10 +
+ .../historyleveldb/historyleveldb.go          |   7 +
+ core/ledger/kvledger/kv_ledger.go             |  27 +-
+ .../privacyenabledstate/common_storage_db.go  |   9 +
+ .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go |   7 +-
+ .../txmgmt/statedb/statecouchdb/batch_util.go |  10 +
+ .../statedb/statecouchdb/commit_handling.go   |   7 +
+ .../statedb/statecouchdb/statecouchdb.go      |   7 +
+ .../statedb/stateleveldb/stateleveldb.go      |   7 +
+ .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  11 +
+ core/ledger/ledgerstorage/store.go            |  28 ++
+ core/ledger/util/couchdb/couchdb.go           |  21 +
+ gossip/privdata/coordinator.go                |  13 +
+ gossip/state/payloads_buffer.go               |  13 +-
+ gossip/state/state.go                         |  25 +-
+ peer/node/start.go                            |   4 +
+ 28 files changed, 556 insertions(+), 1202 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -285,7 +284,7 @@ index 3e06887b6..28d00d944 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..0a65722ef 100644
+index 5086d7e82..1a69b35ee 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
 @@ -20,8 +20,15 @@ import (
@@ -304,7 +303,7 @@ index 9e2ab17df..0a65722ef 100644
  	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
  	"github.com/syndtr/goleveldb/leveldb/opt"
-@@ -88,6 +95,9 @@ func (dbInst *DB) Open() {
+@@ -99,6 +106,9 @@ func (dbInst *DB) Open() {
  		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
  	}
  	dbInst.dbState = opened
@@ -314,7 +313,7 @@ index 9e2ab17df..0a65722ef 100644
  }
  
  // Close closes the underlying db
-@@ -105,6 +115,18 @@ func (dbInst *DB) Close() {
+@@ -116,6 +126,18 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
@@ -333,7 +332,7 @@ index 9e2ab17df..0a65722ef 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +141,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -130,6 +152,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
@@ -351,7 +350,7 @@ index 9e2ab17df..0a65722ef 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +166,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -144,6 +177,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
@@ -369,7 +368,7 @@ index 9e2ab17df..0a65722ef 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -154,6 +198,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+@@ -165,6 +209,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
  
  // WriteBatch writes a batch
  func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
@@ -380,7 +379,7 @@ index 9e2ab17df..0a65722ef 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -163,3 +211,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+@@ -174,3 +222,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
  	}
  	return nil
  }
@@ -2063,7 +2062,7 @@ index c70001ea1..000000000
 -	Start() error
 -}
 diff --git a/core/deliverservice/blocksprovider/blocksprovider.go b/core/deliverservice/blocksprovider/blocksprovider.go
-index c385e3ca1..849685b18 100644
+index 4a7441c58..4dae2ee5d 100644
 --- a/core/deliverservice/blocksprovider/blocksprovider.go
 +++ b/core/deliverservice/blocksprovider/blocksprovider.go
 @@ -11,8 +11,11 @@ import (
@@ -2080,7 +2079,7 @@ index c385e3ca1..849685b18 100644
  	"github.com/hyperledger/fabric/gossip/discovery"
 @@ -167,6 +170,10 @@ func (b *blocksProviderImpl) DeliverBlocks() {
  			statusCounter = 0
- 			seqNum := t.Block.Header.Number
+ 			blockNum := t.Block.Header.Number
  
 +			//if metrics.IsDebug() {
 +			metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(seqNum))
@@ -2088,16 +2087,16 @@ index c385e3ca1..849685b18 100644
 +
  			marshaledBlock, err := proto.Marshal(t.Block)
  			if err != nil {
- 				logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", b.chainID, seqNum, err)
+ 				logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", b.chainID, blockNum, err)
 @@ -189,6 +196,9 @@ func (b *blocksProviderImpl) DeliverBlocks() {
- 				logger.Warning("Failed adding payload of", seqNum, "because:", err)
+ 				logger.Warningf("Block [%d] received from ordering service wasn't added to payload buffer: %v", blockNum, err)
  			}
  
 +			if metrics.IsDebug() {
 +				metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_gossiping_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(payload.SeqNum))
 +			}
  			// Gossip messages with other nodes
- 			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, seqNum, numberOfPeers)
+ 			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)
  			if !b.isDone() {
 diff --git a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
 index 369787d44..1dd037616 100644
@@ -2125,10 +2124,10 @@ index 369787d44..1dd037616 100644
  	//Set the starting tranNo to 0
  	var tranNo uint64
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 385f90917..e7ef6cf12 100644
+index d24aab19b..1cbb2e1c8 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
-@@ -15,6 +15,7 @@ import (
+@@ -16,6 +16,7 @@ import (
  
  	"github.com/hyperledger/fabric/common/flogging"
  	commonledger "github.com/hyperledger/fabric/common/ledger"
@@ -2136,7 +2135,7 @@ index 385f90917..e7ef6cf12 100644
  	"github.com/hyperledger/fabric/common/util"
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-@@ -249,6 +250,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
+@@ -250,6 +251,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
@@ -2150,19 +2149,19 @@ index 385f90917..e7ef6cf12 100644
  	var err error
  	block := pvtdataAndBlock.Block
  	blockNo := pvtdataAndBlock.Block.Header.Number
-@@ -266,7 +274,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -269,7 +277,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
  		return err
  	}
--	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", l.ledgerID, block.Header.Number, len(block.Data.Data))
+-	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 +
 +	// KEEP EVEN WHEN metrics.debug IS OFF
 +	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
 +	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
  
- 	logger.Debugf("Channel [%s]: Committing block [%d] transactions to state database", l.ledgerID, blockNo)
- 	if err = l.txtmgmt.Commit(); err != nil {
-@@ -286,6 +297,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ 	startCommitState := time.Now()
+ 	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
+@@ -299,6 +310,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2176,7 +2175,7 @@ index 385f90917..e7ef6cf12 100644
  	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
-@@ -295,6 +313,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+@@ -308,6 +326,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
  // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2307,7 +2306,7 @@ index 240667a73..e328658dd 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index b10b1d229..fc06e3558 100644
+index 58f297a02..ed578b3a5 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2467,7 +2466,7 @@ index 5655969d5..26b352199 100644
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 16d479802..ba23268aa 100644
+index 3120fb596..caec9d9ca 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -27,6 +27,7 @@ import (
@@ -2478,7 +2477,7 @@ index 16d479802..ba23268aa 100644
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	logging "github.com/op/go-logging"
  )
-@@ -491,6 +492,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+@@ -492,6 +493,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
  
@@ -2489,7 +2488,7 @@ index 16d479802..ba23268aa 100644
  	logger.Debugf("Entering EnsureFullCommit()")
  
  	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
-@@ -549,6 +554,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+@@ -550,6 +555,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2501,7 +2500,7 @@ index 16d479802..ba23268aa 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1280,6 +1290,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1285,6 +1295,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2514,7 +2513,7 @@ index 16d479802..ba23268aa 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1650,6 +1666,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1655,6 +1671,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
@@ -2527,7 +2526,7 @@ index 16d479802..ba23268aa 100644
  
  	//create the return objects for couchDB
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 1d1152bac..e46fd13a9 100644
+index 39cb9c1a2..865881f67 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
@@ -2546,32 +2545,33 @@ index 1d1152bac..e46fd13a9 100644
  )
  
  const (
-@@ -193,6 +195,12 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+@@ -195,6 +197,13 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  	}
- 	start := time.Now()
- 	limit := start.Add(retryThresh)
+ 	startPull := time.Now()
+ 	limit := startPull.Add(retryThresh)
 +
 +	var waitingForMissingKeysStopWatch tally.Stopwatch
 +	if metrics.IsDebug() {
 +		metrics.RootScope.Gauge("privdata_gossipMissingKeys").Update(float64(len(privateInfo.missingKeys)))
 +		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time_seconds").Start()
 +	}
++
  	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
  		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
  		// If succeeded to fetch everything, no need to sleep before
-@@ -202,7 +210,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
- 		}
- 		time.Sleep(pullRetrySleepInterval)
+@@ -206,6 +215,10 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  	}
--
+ 	elapsedPull := int64(time.Since(startPull) / time.Millisecond) // duration in ms
+ 
 +	if metrics.IsDebug() {
 +		waitingForMissingKeysStopWatch.Stop()
 +	}
++>>>>>>> Ledger metrics
  	// Only log results if we actually attempted to fetch
  	if bFetchFromPeers {
  		if len(privateInfo.missingKeys) == 0 {
 diff --git a/gossip/state/payloads_buffer.go b/gossip/state/payloads_buffer.go
-index 9b74b6b53..efd8e68d0 100644
+index e7fbf5b18..d74672088 100644
 --- a/gossip/state/payloads_buffer.go
 +++ b/gossip/state/payloads_buffer.go
 @@ -10,6 +10,9 @@ import (
@@ -2597,14 +2597,14 @@ index 9b74b6b53..efd8e68d0 100644
 +func NewPayloadsBuffer(chainID string, next uint64) PayloadsBuffer {
  	return &PayloadsBufferImpl{
  		buf:       make(map[uint64]*proto.Payload),
- 		readyChan: make(chan struct{}, 0),
+ 		readyChan: make(chan struct{}, 1),
  		next:      next,
  		logger:    util.GetLogger(util.LoggingStateModule, ""),
 +		chainID:   chainID,
  	}
  }
  
-@@ -84,10 +90,15 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
+@@ -85,10 +91,15 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
  		return
  	}
  
@@ -2615,13 +2615,13 @@ index 9b74b6b53..efd8e68d0 100644
  	b.buf[seqNum] = payload
  
  	// Send notification that next sequence has arrived
- 	if seqNum == b.next {
+ 	if seqNum == b.next && len(b.readyChan) == 0 {
 +		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_notify_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(seqNum))
- 		// Do not block execution of current routine
- 		go func() {
- 			b.readyChan <- struct{}{}
+ 		b.readyChan <- struct{}{}
+ 	}
+ }
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 1cd3db30d..683ee23d1 100644
+index 4850613ef..b987e94d5 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
@@ -2666,19 +2666,20 @@ index 1cd3db30d..683ee23d1 100644
 +		}
 +
  		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
- 			logger.Warning("Failed adding payload:", err)
+ 			logger.Warningf("Block [%d] received from gossip wasn't added to payload buffer: %v", dataMsg.Payload.SeqNum, err)
  			return
-@@ -531,6 +543,10 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
+@@ -531,7 +543,11 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
  		select {
  		// Wait for notification that next seq has arrived
  		case <-s.payloads.Ready():
-+
 +			// KEEP EVEN WHEN metrics.debug IS OFF
 +			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
 +
- 			logger.Debugf("Ready to transfer payloads to the ledger, next sequence number is = [%d]", s.payloads.Next())
+ 			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
++
  			// Collect all subsequent payloads
  			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
+ 				rawBlock := &common.Block{}
 @@ -747,6 +763,9 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  	if payload == nil {
  		return errors.New("Given payload is nil")
@@ -2686,7 +2687,7 @@ index 1cd3db30d..683ee23d1 100644
 +	if metrics.IsDebug() {
 +		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_addPayload", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
 +	}
- 	logger.Debug("Adding new payload into the buffer, seqNum = ", payload.SeqNum)
+ 	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
  	height, err := s.ledger.LedgerHeight()
  	if err != nil {
 @@ -767,6 +786,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
@@ -2723,5 +2724,5 @@ index 9735efe79..7ebbfb4ef 100644
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
 -- 
-2.14.3 (Apple Git-98)
+2.17.1 (Apple Git-112)
 
