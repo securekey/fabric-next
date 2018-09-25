@@ -23,8 +23,9 @@ type checkpoint struct {
 
 // checkpointInfo
 type checkpointInfo struct {
-	isChainEmpty  bool
-	lastBlockHash []byte
+	isChainEmpty    bool
+	lastBlockHash   []byte
+	lastBlockNumber uint64
 }
 
 func newCheckpoint(db *couchdb.CouchDatabase) *checkpoint {

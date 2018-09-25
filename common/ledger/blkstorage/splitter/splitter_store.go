@@ -40,8 +40,8 @@ func (s *splitterBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error)
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
 func (s *splitterBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
-	s.bsb.RetrieveBlocks(startNum)
-	return s.bsa.RetrieveBlocks(startNum)
+	return s.bsb.RetrieveBlocks(startNum)
+	//return s.bsa.RetrieveBlocks(startNum)
 }
 
 // RetrieveBlockByHash returns the block for given block-hash
