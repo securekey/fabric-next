@@ -30,6 +30,7 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+	psplitter "github.com/hyperledger/fabric/core/ledger/pvtdatastorage/splitter"
 )
 
 var logger = flogging.MustGetLogger("ledgerstorage")
@@ -65,13 +66,11 @@ func NewProvider() (*Provider, error) {
 		return nil, err
 	}
 
-	//
-	// TODO: CHANGE TO COUCHDB-PVTSTORAGE
-	//
-	pvtStoreProvider := pvtdatastorage.NewProvider()
-	//
-	//
-	//
+	pvtStoreProvider, err := createPvtDataStoreProvider()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Provider{blockStoreProvider, pvtStoreProvider}, nil
 }
 
@@ -89,6 +88,21 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 	}
 
 	return nil, errors.New("block storage provider creation failed due to unknown configuration")
+}
+
+
+func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
+	pvtDataStorageConfig := ledgerconfig.GetPvtDataStoreProvider()
+
+	switch pvtDataStorageConfig {
+	case ledgerconfig.LevelDBPvtDataStorage:
+		return pvtdatastorage.NewProvider(), nil
+	case ledgerconfig.CouchDBPvtDataStorage:
+		//return cdbpvtdata.NewProvider(), nil
+		return psplitter.NewProvider(), nil
+	}
+
+	return nil, errors.New("private data storage provider creation failed due to unknown configuration")
 }
 
 // Open opens the store
