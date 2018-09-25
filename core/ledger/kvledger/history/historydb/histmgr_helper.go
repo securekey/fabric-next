@@ -33,7 +33,6 @@ var logger = flogging.MustGetLogger("historydb")
 var compositeKeySep = []byte{0x00}
 
 var savePointKey = []byte{0x00}
-var emptyValue = []byte{}
 
 //ConstructCompositeHistoryKey builds the History Key of namespace~key~blocknum~trannum
 // using an order preserving encoding so that history query results are ordered by height
@@ -72,9 +71,13 @@ func SplitCompositeHistoryKey(bytesToSplit []byte, separator []byte) ([]byte, []
 
 // ConstructHistoryBatch takes a block and constructs a map of (key, value) pairs
 // to be commited to a history store as a batch
-func ConstructHistoryBatch(channel string, block *common.Block) (map[string][]byte, error) {
+// Returns:
+// [][]byte composite history keys in the form ns~key~blockNo~tranNo (each key is []byte)
+// []byte save point
+// error
+func ConstructHistoryBatch(channel string, block *common.Block) ([][]byte, *version.Height, error) {
 
-	batch := make(map[string][]byte)
+	keys := [][]byte{{}}
 
 	blockNo := block.Header.Number
 	//Set the starting tranNo to 0
@@ -99,17 +102,17 @@ func ConstructHistoryBatch(channel string, block *common.Block) (map[string][]by
 
 		env, err := putils.GetEnvelopeFromBlock(envBytes)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		payload, err := putils.GetPayload(env)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		chdr, err := putils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if common.HeaderType(chdr.Type) == common.HeaderType_ENDORSER_TRANSACTION {
@@ -117,7 +120,7 @@ func ConstructHistoryBatch(channel string, block *common.Block) (map[string][]by
 			// extract actions from the envelope message
 			respPayload, err := putils.GetActionFromEnvelope(envBytes)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
 			//preparation for extracting RWSet from transaction
@@ -126,7 +129,7 @@ func ConstructHistoryBatch(channel string, block *common.Block) (map[string][]by
 			// Get the Result from the Action and then Unmarshal
 			// it into a TxReadWriteSet using custom unmarshalling
 			if err = txRWSet.FromProtoBytes(respPayload.Results); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			// for each transaction, loop through the namespaces and writesets
 			// and add a history record for each write
@@ -140,7 +143,7 @@ func ConstructHistoryBatch(channel string, block *common.Block) (map[string][]by
 					compositeHistoryKey := ConstructCompositeHistoryKey(ns, writeKey, blockNo, tranNo)
 
 					// No value is required, write an empty byte array (emptyValue) since Put() of nil is not allowed
-					batch[string(compositeHistoryKey)] = emptyValue
+					keys = append(keys, compositeHistoryKey)
 				}
 			}
 
@@ -150,11 +153,10 @@ func ConstructHistoryBatch(channel string, block *common.Block) (map[string][]by
 		tranNo++
 	}
 
-	// add savepoint for recovery purpose
+	// savepoint for recovery purpose
 	height := version.NewHeight(blockNo, tranNo)
-	batch[string(savePointKey)] = height.ToBytes()
 
-	return batch, nil
+	return keys, height, nil
 }
 
 func SavePointKey() []byte {

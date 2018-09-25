@@ -66,14 +66,17 @@ func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockS
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
 
-	// Get the history batch from the block, including the savepoint
-	//historyBatch, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
-	_, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
+	// Get the history batch from the block
+	// keys, height, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
+	_, _, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
 	if err != nil {
 		return err
 	}
 
-	// Move the batch to CouchDB batch
+	// Move the batch to LevelDB batch
+	// TODO
+
+	// Add the savepoint
 	// TODO
 
 	// write the block's history records and savepoint to LevelDB

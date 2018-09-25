@@ -19,6 +19,8 @@ import (
 
 var logger = flogging.MustGetLogger("historyleveldb")
 
+var emptyValue = []byte{}
+
 // HistoryDBProvider implements interface HistoryDBProvider
 type HistoryDBProvider struct {
 	dbProvider *leveldbhelper.Provider
@@ -67,17 +69,20 @@ func (historyDB *historyDB) Close() {
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
 
-	// Get the history batch from the block, including the savepoint
-	historyBatch, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
+	// Get the history batch from the block
+	keys, height, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
 	if err != nil {
 		return err
 	}
 
 	// Move the batch to LevelDB batch
 	dbBatch := leveldbhelper.NewUpdateBatch()
-	for k, v := range historyBatch {
-		dbBatch.Put([]byte(k), v)
+	for _, key := range keys {
+		dbBatch.Put(key, emptyValue)
 	}
+
+	// Add the savepoint
+	dbBatch.Put(historydb.SavePointKey(), height.ToBytes())
 
 	// write the block's history records and savepoint to LevelDB
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
