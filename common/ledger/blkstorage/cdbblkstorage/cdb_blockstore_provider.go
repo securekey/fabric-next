@@ -16,7 +16,8 @@ import (
 var logger = flogging.MustGetLogger("peer")
 
 const (
-	blockStoreDBName = "blocks"
+	blockStoreName = "blocks"
+	txnStoreName = "transactions"
 )
 
 // CDBBlockstoreProvider provides block storage in CouchDB
@@ -43,32 +44,31 @@ func (p *CDBBlockstoreProvider) CreateBlockStore(ledgerid string) (blkstorage.Bl
 
 // OpenBlockStore opens the block store for the given ledger ID
 func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.BlockStore, error) {
-	dbName := couchdb.ConstructBlockchainDBName(ledgerid, blockStoreDBName)
-
-	db, err := couchdb.CreateCouchDatabase(p.couchInstance, dbName)
+	blockStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, blockStoreName)
+	blockStoreDB, err := couchdb.CreateCouchDatabase(p.couchInstance, blockStoreDBName)
 	if err != nil {
 		return nil, err
 	}
 
-	err = p.createIndices(db)
+	txnStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, txnStoreName)
+	txnStoreDB, err := couchdb.CreateCouchDatabase(p.couchInstance, txnStoreDBName)
 	if err != nil {
 		return nil, err
 	}
 
-	return newCDBBlockStore(db, ledgerid, p.indexConfig), nil
+	err = p.createBlockStoreIndices(blockStoreDB)
+	if err != nil {
+		return nil, err
+	}
+
+	return newCDBBlockStore(blockStoreDB, txnStoreDB, ledgerid, p.indexConfig), nil
 }
 
-func (p *CDBBlockstoreProvider) createIndices(db *couchdb.CouchDatabase) error {
+func (p *CDBBlockstoreProvider) createBlockStoreIndices(db *couchdb.CouchDatabase) error {
 	// TODO: only create index if it doesn't exist
 	_, err := db.CreateIndex(blockHashIndexDef)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block hash index failed")
-	}
-
-	// TODO: fix this index
-	_, err = db.CreateIndex(blockTxnIndexDef)
-	if err != nil {
-		return errors.WithMessage(err, "creation of block transaction index failed")
 	}
 
 	return nil
