@@ -38,6 +38,7 @@ const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 const confBlockStorage = "ledger.blockchain.blockStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
+const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
@@ -200,4 +201,12 @@ func GetHistoryStoreProvider() HistoryStorageProvider {
 	case "goleveldb":
 		return LevelDBHistoryStorage
 	}
+}
+
+// GetBlockStorageAttachTxn returns whether or not the block storage provider should attach a copy
+// of the transaction to the transaction ID index.
+// TODO: this was made configurable to make it easier to measure the performance & storage differences.
+// TODO: based on the analysis, we might remove this configuration.
+func GetBlockStorageAttachTxn() bool {
+	return viper.GetBool(confBlockStorageAttachTxn)
 }

@@ -7,17 +7,21 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
-	"github.com/pkg/errors"
+	"github.com/hyperledger/fabric/protos/utils"
 )
 
+// block document
 const (
 	idField             = "_id"
 	blockHashField      = "hash"
@@ -25,11 +29,21 @@ const (
 	blockTxnIDField     = "id"
 	blockHashIndexName  = "by_hash"
 	blockHashIndexDoc   = "indexHash"
-	blockTxnIDIndexName  = "by_txn_id"
-	blockTxnIndexDoc   = "indexTxn"
 	blockAttachmentName = "block"
-	cpiAttachmentName   = "checkpointinfo"
 	blockKeyPrefix      = ""
+)
+
+// txn document
+const (
+	txnBlockNumberField = "block_number"
+	txnBlockHashField   = "block_hash"
+	txnAttachmentName   = "transaction"
+)
+
+
+// checkpoint document
+const (
+	cpiAttachmentName   = "checkpointinfo"
 )
 
 const blockHashIndexDef = `
@@ -39,19 +53,6 @@ const blockHashIndexDef = `
 		},
 		"name": "` + blockHashIndexName + `",
 		"ddoc": "` + blockHashIndexDoc + `",
-		"type": "json"
-	}`
-
-const blockTxnIndexDef = `
-	{
-		"index": {
-			"fields": [
-				"`+ idField + `",
-				"` + blockTxnsField + `.[].` + blockTxnIDField + `"
-			]
-		},
-		"name": "` + blockTxnIDIndexName + `",
-		"ddoc": "` + blockTxnIndexDoc + `",
 		"type": "json"
 	}`
 
@@ -65,7 +66,7 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 
 	blockHeader := block.GetHeader()
-	key := blockNumberToKey(blockHeader.Number)
+	key := blockNumberToKey(blockHeader.GetNumber())
 	blockHashHex := hex.EncodeToString(blockHeader.Hash())
 	blockTxns, err := blockToTransactionsField(block)
 	if err != nil {
@@ -89,6 +90,69 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 
 	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
 	couchDoc.Attachments = attachments
+	return couchDoc, nil
+}
+
+func blockToTxnCouchDocs(block *common.Block, attachTxn bool) ([]*couchdb.CouchDoc, error) {
+	blockHeader := block.GetHeader()
+	blockData := block.GetData()
+	blockNumber := blockNumberToKey(blockHeader.GetNumber())
+	blockHash := hex.EncodeToString(blockHeader.Hash())
+
+	txnDocs := make([]*couchdb.CouchDoc, 0)
+
+	for _, txEnvelopeBytes := range blockData.GetData() {
+		envelope, err := utils.GetEnvelopeFromBlock(txEnvelopeBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		txnDoc, err := txnEnvelopeToCouchDoc(blockNumber, blockHash, envelope, attachTxn)
+		if err == errorNoTxID {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+
+		txnDocs = append(txnDocs, txnDoc)
+	}
+
+	return txnDocs, nil
+}
+
+var errorNoTxID = errors.New("missing transaction ID")
+
+func txnEnvelopeToCouchDoc(blockNumber string, blockHash string, txEnvelope *common.Envelope, attachTxn bool) (*couchdb.CouchDoc, error) {
+	txID, err := extractTxIDFromEnvelope(txEnvelope)
+	if err != nil {
+		return nil, errors.WithMessage(err, "transaction ID could not be extracted")
+	}
+
+	// TODO: is the empty transaction queryable? If so, need to change this to a default transaction ID.
+	if txID == "" {
+		return nil, errorNoTxID
+	}
+
+	jsonMap := make(jsonValue)
+	jsonMap[idField] = txID
+	jsonMap[txnBlockHashField] = blockHash
+	jsonMap[txnBlockNumberField] = blockNumber
+
+	jsonBytes, err := jsonMap.toBytes()
+	if err != nil {
+		return nil, err
+	}
+	couchDoc := &couchdb.CouchDoc{JSONValue: jsonBytes}
+
+	if attachTxn {
+		attachment, err := txnEnvelopeToAttachment(txEnvelope)
+		if err != nil {
+			return nil, err
+		}
+
+		attachments := append([]*couchdb.AttachmentInfo{}, attachment)
+		couchDoc.Attachments = attachments
+	}
 	return couchDoc, nil
 }
 
@@ -132,8 +196,13 @@ func blockToTransactionsField(block *common.Block) ([]jsonValue, error) {
 
 	var txns []jsonValue
 
-	for _, txEnvelopeBytes := range blockData.Data {
-		txID, err := extractTxID(txEnvelopeBytes)
+	for _, txEnvelopeBytes := range blockData.GetData() {
+		envelope, err := utils.GetEnvelopeFromBlock(txEnvelopeBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		txID, err := extractTxIDFromEnvelope(envelope)
 		if err != nil {
 			return nil, errors.WithMessage(err, "transaction ID could not be extracted")
 		}
@@ -145,6 +214,20 @@ func blockToTransactionsField(block *common.Block) ([]jsonValue, error) {
 	}
 
 	return txns, nil
+}
+
+func txnEnvelopeToAttachment(txEnvelope *common.Envelope) (*couchdb.AttachmentInfo, error) {
+	txEnvelopeBytes, err := proto.Marshal(txEnvelope)
+	if err != nil {
+		return nil, errors.Wrapf(err, "marshaling block failed")
+	}
+
+	attachment := &couchdb.AttachmentInfo{}
+	attachment.AttachmentBytes = txEnvelopeBytes
+	attachment.ContentType = "application/octet-stream"
+	attachment.Name = txnAttachmentName
+
+	return attachment, nil
 }
 
 func blockToAttachment(block *common.Block) (*couchdb.AttachmentInfo, error) {
@@ -188,6 +271,29 @@ func couchAttachmentsToBlock(attachments []*couchdb.AttachmentInfo) (*common.Blo
 	return &block, nil
 }
 
+func couchAttachmentsToTxnEnvelope(attachments []*couchdb.AttachmentInfo) (*common.Envelope, error) {
+	var envelope common.Envelope
+	var txnBytes []byte
+
+	// get binary data from attachment
+	for _, a := range attachments {
+		if a.Name == txnAttachmentName {
+			txnBytes = a.AttachmentBytes
+		}
+	}
+
+	if len(txnBytes) == 0 {
+		return nil, errors.New("transaction envelope is not within couchDB document")
+	}
+
+	err := proto.Unmarshal(txnBytes, &envelope)
+	if err != nil {
+		return nil, errors.Wrapf(err, "transaction from couchDB document could not be unmarshaled")
+	}
+
+	return &envelope, nil
+}
+
 func couchDocToCheckpointInfo(doc *couchdb.CouchDoc) (*checkpointInfo, error) {
 	return couchAttachmentsToCheckpointInfo(doc.Attachments)
 }
@@ -222,7 +328,7 @@ func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block,
 	}
 	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
 
-	if len(results) != 1 {
+	if len(results) == 0 {
 		return nil, blkstorage.ErrNotFoundInIndex
 	}
 
@@ -231,4 +337,30 @@ func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block,
 	}
 
 	return couchAttachmentsToBlock(results[0].Attachments)
+}
+
+func retrieveJSONQuery(db *couchdb.CouchDatabase, id string) (jsonValue, error) {
+	doc, _, err := db.ReadDoc(id)
+	if err != nil {
+		return nil, err
+	}
+	if doc == nil {
+		return nil, blkstorage.ErrNotFoundInIndex
+	}
+
+	return couchDocToJSON(doc)
+}
+
+func couchDocToJSON(doc *couchdb.CouchDoc) (jsonValue, error) {
+	// create a generic map unmarshal the json
+	jsonResult := make(map[string]interface{})
+	decoder := json.NewDecoder(bytes.NewBuffer(doc.JSONValue))
+	decoder.UseNumber()
+
+	err := decoder.Decode(&jsonResult)
+	if err != nil {
+		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
+	}
+
+	return jsonResult, nil
 }
