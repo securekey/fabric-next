@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package historycouchdb
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -65,27 +66,33 @@ func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockS
 
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
-
 	// Get the history batch from the block
-	// keys, height, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
-	_, _, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
+	batch, height, err := historydb.ConstructHistoryBatch(historyDB.couchDB.DBName, block)
 	if err != nil {
 		return err
 	}
 
-	// Move the batch to LevelDB batch
-	// TODO
+	// Convert batch writes to CouchDB docs
+	docs, err := toCouchDocs(batch)
+	if err != nil {
+		return err
+	}
 
-	// Add the savepoint
-	// TODO
+	// Create CouchDB doc savepoint
+	heightDoc, err := newHeightDoc(height)
+	if err != nil {
+		return err
+	}
+	docs = append(docs, heightDoc)
 
-	// write the block's history records and savepoint to LevelDB
-	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
-	// TODO
+	// Insert history batch. Update save-point doc.
+	_, err = historyDB.couchDB.BatchUpdateDocuments(docs)
+	if err != nil {
+		return err
+	}
 
 	logger.Debugf("Channel [%s]: Updates committed to history database for blockNo [%v]", historyDB.couchDB.DBName, block.Header.Number)
 	return nil
-
 }
 
 // GetBlockNumFromSavepoint implements method in HistoryDB interface
@@ -101,4 +108,34 @@ func (historyDB *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint
 // CommitLostBlock implements method in interface kvledger.Recoverer
 func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	return fmt.Errorf("Not implemented")
+}
+
+// Converts batch writes to CouchDB docs
+func toCouchDocs(batch [][]byte) ([]*couchdb.CouchDoc, error) {
+	var docs []*couchdb.CouchDoc
+
+	for _, write := range batch {
+		doc := make(map[string]interface{})
+		doc["_id"] = string(write)
+
+		bytes, err := json.Marshal(doc)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error marshalling write [%s] to json", string(write))
+		}
+
+		docs = append(docs, &couchdb.CouchDoc{JSONValue: bytes})
+	}
+
+	return docs, nil
+}
+
+// Returns a new CouchDB doc for the height ("save-point")
+func newHeightDoc(height *version.Height) (*couchdb.CouchDoc, error) {
+	doc := make(map[string]interface{})
+	doc["height"] = string(height.ToBytes())
+	bytes, err := json.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	return &couchdb.CouchDoc{JSONValue: bytes}, nil
 }
