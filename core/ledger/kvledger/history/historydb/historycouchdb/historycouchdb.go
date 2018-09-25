@@ -41,7 +41,7 @@ func NewHistoryDBProvider() (historydb.HistoryDBProvider, error) {
 
 // GetDBHandle gets the handle to a named database
 func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.HistoryDB, error) {
-	database, err := couchdb.CreateCouchDatabase(provider.couchDBInstance, dbName)
+	database, err := couchdb.CreateCouchDatabase(provider.couchDBInstance, couchdb.ConstructBlockchainDBName(dbName, "history"))
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining handle on CouchDB HistoryDB failed")
 	}
