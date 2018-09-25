@@ -22,6 +22,30 @@
       "revId": "5f269e1278b18c05165200bb192432dc105f8aea",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7b1c8c1a_e80841e3",
+        "filename": "scripts/fabric_cherry_picks.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-25T19:30:09Z",
+      "side": 1,
+      "message": "to the latest of release-1.2 branch (currently 3cd00d1da6f216e9aaefcc5e0db0584c2cc46a5a -- see https://github.com/hyperledger/fabric/commit/3cd00d1da6f216e9aaefcc5e0db0584c2cc46a5a)",
+      "parentUuid": "69a790d0_b086cd03",
+      "range": {
+        "startLine": 25,
+        "startChar": 13,
+        "endLine": 25,
+        "endChar": 53
+      },
+      "revId": "5f269e1278b18c05165200bb192432dc105f8aea",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
