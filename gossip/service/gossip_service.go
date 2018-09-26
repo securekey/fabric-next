@@ -14,6 +14,7 @@ import (
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/hyperledger/fabric/core/deliverservice"
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
+	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/gossip/api"
 	gossipCommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/election"
@@ -205,6 +206,7 @@ type Support struct {
 	Store                privdata2.TransientStore
 	Cs                   privdata.CollectionStore
 	IdDeserializeFactory privdata2.IdentityDeserializerFactory
+	Ledger               ledger.PeerLedger
 }
 
 // DataStoreSupport aggregates interfaces capable
@@ -247,7 +249,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 		coordinator: coordinator,
 		distributor: privdata2.NewDistributor(chainID, g, collectionAccessFactory),
 	}
-	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator)
+	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator, support.Ledger)
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, endpoints, g.mcs)
