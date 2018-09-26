@@ -13,6 +13,7 @@ package cscc
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/channelconfig"
@@ -23,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/policy"
@@ -226,11 +228,28 @@ func validateConfigBlock(block *common.Block) error {
 // Since it is the first block, it is the genesis block containing configuration
 // for this chain, so we want to update the Chain object with this info
 func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider) pb.Response {
-	if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
-		return shim.Error(err.Error())
-	}
+	if ledgerconfig.IsCommitter() {
+		// Only a committer can create a new channel in the DB
+		// FIXME: Change to Debugf
+		cnflogger.Infof("Creating channel [%s]", chainID)
+		if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
+			return shim.Error(err.Error())
+		}
 
-	peer.InitChain(chainID)
+		// FIXME: Change to Debugf
+		cnflogger.Infof("Initializing channel [%s]", chainID)
+		peer.InitChain(chainID)
+	} else {
+		// FIXME: Change to Debugf
+		cnflogger.Infof("Not a commiter - Sleeping before initializing channel [%s]", chainID)
+		// FIXME: Need to wait until the committer persists block 0 Get rid of sleep - maybe use retries?
+		time.Sleep(5 * time.Second)
+		if err := peer.InitializeChannel(chainID); err != nil {
+			// FIXME: Change to Debugf
+			cnflogger.Infof("Error initializing channel [%s]: %s", chainID, err)
+			return shim.Error(fmt.Sprintf("Error initializing channel [%s]: %s", chainID, err))
+		}
+	}
 
 	bevent, _, _, err := producer.CreateBlockEvents(block)
 	if err != nil {
