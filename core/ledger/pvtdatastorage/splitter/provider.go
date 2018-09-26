@@ -17,11 +17,15 @@ type Provider struct {
 }
 
 // NewProvider instantiates a private data storage provider backed by CouchDB
-func NewProvider() *Provider {
+func NewProvider() (*Provider, error) {
 	pa := pvtdatastorage.NewProvider()
-	pb := cdbpvtdata.NewProvider()
+	pb, err := cdbpvtdata.NewProvider()
+	if err != nil {
+		return nil, err
+	}
 
-	return &Provider{pa, pb}
+	provider := Provider{pa, pb}
+	return &provider, nil
 }
 
 
