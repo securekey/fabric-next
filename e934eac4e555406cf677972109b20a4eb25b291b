@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "89ee9215_9381a10b",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/blocks_itr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-26T16:22:51Z",
+      "side": 1,
+      "message": "doesn\u0027t this mean we don\u0027t need the padded block number index anymore?",
+      "range": {
+        "startLine": 57,
+        "startChar": 19,
+        "endLine": 57,
+        "endChar": 82
+      },
+      "revId": "e934eac4e555406cf677972109b20a4eb25b291b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
