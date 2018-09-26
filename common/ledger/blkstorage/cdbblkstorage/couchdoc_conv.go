@@ -10,10 +10,9 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/hyperledger/fabric/protos/peer"
 	"strconv"
 
-	"fmt"
+	"github.com/hyperledger/fabric/protos/peer"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -23,25 +22,19 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
-
 )
 
 // block document
 const (
-	idField              = "_id"
-	blockHashField       = "hash"
-	blockTxnsField       = "transactions"
-	blockTxnIDField      = "id"
-	blockHashIndexName   = "by_hash"
-	blockHashIndexDoc    = "indexHash"
-	blockAttachmentName  = "block"
-	blockKeyPrefix       = ""
-	blockHeaderField     = "header"
-	blockNumberField     = "number"
-	blockNumberBase      = 16
-	blockNumberFormat    = "%064s" // left-padded with zero to a width of 64
-	blockNumberIndexName = "by_number"
-	blockNumberIndexDoc  = "indexNumber"
+	idField             = "_id"
+	blockHashField      = "hash"
+	blockTxnsField      = "transactions"
+	blockTxnIDField     = "id"
+	blockHashIndexName  = "by_hash"
+	blockHashIndexDoc   = "indexHash"
+	blockAttachmentName = "block"
+	blockKeyPrefix      = ""
+	blockHeaderField    = "header"
 )
 
 // txn document
@@ -68,16 +61,6 @@ const blockHashIndexDef = `
 		"type": "json"
 	}`
 
-const blockNumberIndexDef = `
-	{
-		"index": {
-			"fields": ["` + blockHeaderField + `.` + blockNumberField + `"]
-		},
-		"name": "` + blockNumberIndexName + `",
-		"ddoc": "` + blockNumberIndexDoc + `",
-		"type": "json"
-	}`
-
 type jsonValue map[string]interface{}
 
 func (v jsonValue) toBytes() ([]byte, error) {
@@ -90,7 +73,6 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	blockHeader := block.GetHeader()
 
 	key := blockNumberToKey(blockHeader.GetNumber())
-	blockNumber := fmt.Sprintf(blockNumberFormat, strconv.FormatUint(blockHeader.GetNumber(), blockNumberBase))
 	blockHashHex := hex.EncodeToString(blockHeader.Hash())
 	blockTxns, err := blockToTransactionsField(block)
 	if err != nil {
@@ -100,7 +82,6 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	jsonMap[idField] = key
 	header := make(jsonValue)
 	header[blockHashField] = blockHashHex
-	header[blockNumberField] = blockNumber
 	jsonMap[blockHeaderField] = header
 	jsonMap[blockTxnsField] = blockTxns
 
