@@ -9,12 +9,14 @@ package cc
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/chaincode"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 // DirEnumerator enumerates directories
@@ -80,6 +82,47 @@ type ChaincodePredicate func(cc chaincode.Metadata) bool
 func DeployedChaincodes(q Query, filter ChaincodePredicate, loadCollections bool, chaincodes ...string) (chaincode.MetadataSet, error) {
 	defer q.Done()
 
+	committer := viper.GetBool("peer.committer")
+	if committer {
+		set, err := doDeployedChaincodes(q, filter, loadCollections, chaincodes...)
+		if err != nil {
+			Logger.Errorf("Query failed: %s", err)
+			return nil, err
+		}
+		return set, nil
+	}
+
+	// The data may not be in the state DB yet. Try a few times.
+	Logger.Infof("I am NOT a committer. Attempting to retrieve deployed chaincodes from state DB...")
+
+	// FIXME: Make configurable
+	maxAttempts := 10
+	backoff := 250 * time.Millisecond
+
+	var set chaincode.MetadataSet
+	for i := 1; i <= maxAttempts; i++ {
+		var err error
+		set, err = doDeployedChaincodes(q, filter, loadCollections, chaincodes...)
+		if err != nil {
+			Logger.Errorf("Query failed: %s", err)
+			return nil, err
+		}
+		if len(set) == 0 {
+			if i < maxAttempts {
+				Logger.Warningf("Empty set returned on attempt #%d. Sleeping and trying again...", i)
+				time.Sleep(backoff)
+			} else {
+				Logger.Warningf("Empty set returned on attempt #%d. Giving up.", i)
+			}
+		} else {
+			Logger.Infof("After %d attempt(s), returning set: %#v", i, set)
+			return set, err
+		}
+	}
+	return set, nil
+}
+
+func doDeployedChaincodes(q Query, filter ChaincodePredicate, loadCollections bool, chaincodes ...string) (chaincode.MetadataSet, error) {
 	var res chaincode.MetadataSet
 	for _, cc := range chaincodes {
 		data, err := q.GetState("lscc", cc)
