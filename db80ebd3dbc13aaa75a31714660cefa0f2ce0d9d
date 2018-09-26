@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "30ebf1cc_c384fe40",
+        "filename": "core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 119,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-26T19:55:15Z",
+      "side": 1,
+      "message": "should be a named const (to match our other packages).",
+      "range": {
+        "startLine": 119,
+        "startChar": 6,
+        "endLine": 119,
+        "endChar": 11
+      },
+      "revId": "db80ebd3dbc13aaa75a31714660cefa0f2ce0d9d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "054609cc_6cbbe390",
+        "filename": "core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 135,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-26T19:55:15Z",
+      "side": 1,
+      "message": "should be a named const (see other packages in this fork to match style).",
+      "range": {
+        "startLine": 135,
+        "startChar": 5,
+        "endLine": 135,
+        "endChar": 13
+      },
+      "revId": "db80ebd3dbc13aaa75a31714660cefa0f2ce0d9d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
