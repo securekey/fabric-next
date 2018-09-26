@@ -98,8 +98,8 @@ func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
 	case ledgerconfig.LevelDBPvtDataStorage:
 		return pvtdatastorage.NewProvider(), nil
 	case ledgerconfig.CouchDBPvtDataStorage:
-		//return cdbpvtdata.NewProvider(), nil
-		return psplitter.NewProvider(), nil
+		//return cdbpvtdata.NewProvider()
+		return psplitter.NewProvider()
 	}
 
 	return nil, errors.New("private data storage provider creation failed due to unknown configuration")
