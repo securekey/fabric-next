@@ -9,10 +9,22 @@ package cdbpvtdata
 import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
 )
 
 type store struct {
+	db *couchdb.CouchDatabase
+
+	commonStore
+}
+
+func newStore(db *couchdb.CouchDatabase) *store {
+	s := store {
+		db: db,
+	}
+
+	return &s
 }
 
 
@@ -25,6 +37,18 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 }
 
 func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+	err := s.prepareInit(blockNum, pvtData)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Add CouchDB logic here!
+
+	s.prepareDone(blockNum, pvtData)
+	if err != nil {
+		return err
+	}
+
 	return errors.New("not implemented")
 }
 
