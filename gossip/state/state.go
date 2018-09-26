@@ -14,6 +14,8 @@ import (
 
 	pb "github.com/golang/protobuf/proto"
 	vsccErrors "github.com/hyperledger/fabric/common/errors"
+	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	common2 "github.com/hyperledger/fabric/gossip/common"
@@ -147,13 +149,17 @@ type GossipStateProviderImpl struct {
 	once sync.Once
 
 	stateTransferActive int32
+
+	peerLedger ledger.PeerLedger
+
+	blockPublisher *publisher
 }
 
 var logger = util.GetLogger(util.LoggingStateModule, "")
 
 // NewGossipStateProvider creates state provider with coordinator instance
 // to orchestrate arrival of private rwsets and blocks before committing them into the ledger.
-func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources) GossipStateProvider {
+func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, peerLedger ledger.PeerLedger) GossipStateProvider {
 
 	gossipChan, _ := services.Accept(func(message interface{}) bool {
 		// Get only data messages
@@ -197,6 +203,12 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		return nil
 	}
 
+	// FIXME: Find a better way to pass the interface
+	var bp BlockPublisher
+	if peerLedger != nil {
+		bp = peerLedger.(BlockPublisher)
+	}
+
 	s := &GossipStateProviderImpl{
 		// MessageCryptoService
 		mediator: services,
@@ -224,6 +236,10 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		stateTransferActive: 0,
 
 		once: sync.Once{},
+
+		peerLedger: peerLedger,
+
+		blockPublisher: newBlockPublisher(chainID, bp),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -377,6 +393,12 @@ func (s *GossipStateProviderImpl) processStateRequests() {
 // Handle state request message, validate batch size, read current leader state to
 // obtain required blocks, build response message and send it back
 func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) {
+	// FIXME: Is this safe to do?
+	// if !s.committer {
+	// 	logger.Infof("Ignoring state request since I am not a committer")
+	// 	return
+	// }
+
 	if msg == nil {
 		return
 	}
@@ -582,6 +604,8 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 			return
 		case <-time.After(defAntiEntropyInterval):
 			ourHeight, err := s.ledger.LedgerHeight()
+			// FIXME: Change to Debugf
+			logger.Infof("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
 			if err != nil {
 				// Unable to read from ledger continue to the next round
 				logger.Errorf("Cannot obtain ledger height, due to %+v", errors.WithStack(err))
@@ -767,18 +791,71 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 
-	// Commit block with available private transactions
-	if err := s.ledger.StoreBlock(block, pvtData); err != nil {
-		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
-		return err
+	if ledgerconfig.IsCommitter() {
+		// FIXME: Change to Debugf
+		logger.Infof("Storing block %d to ledger", block.Header.Number)
+		// Commit block with available private transactions
+		if err := s.ledger.StoreBlock(block, pvtData); err != nil {
+			logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
+			return err
+		}
+	} else {
+		// FIXME: Change to Debugf
+		logger.Infof("Not storing block %d to ledger since I'm not a committer - just publishing the block", block.Header.Number)
+		s.publishBlock(block)
 	}
 
 	// Update ledger height
+	// FIXME: Change to Debugf
+	logger.Infof("Updating ledger height to %d", block.Header.Number+1)
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
 	logger.Debugf("Channel [%s]: Created block [%d] with %d transaction(s)",
 		s.chainID, block.Header.Number, len(block.Data.Data))
 
 	return nil
+}
+
+func (s *GossipStateProviderImpl) publishBlock(block *common.Block) {
+	block, err := s.getBlockFromLedger(block.Header.Number)
+	if err != nil {
+		logger.Errorf("Unable to get block number %d from ledger: %s", block.Header.Number, err)
+		return
+	}
+
+	if err := s.blockPublisher.Publish(block); err != nil {
+		logger.Errorf("Error updating block number %d: %s", block.Header.Number, err)
+	}
+}
+
+func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Block, error) {
+	// FIXME: Make configurable
+	attempts := 10
+	backoff := 250 * time.Millisecond
+
+	var block *common.Block
+	for i := 0; i < attempts; i++ {
+		var err error
+		block, err = s.peerLedger.GetBlockByNumber(number)
+		if err == nil {
+			// FIXME: Change to Debugf
+			logger.Infof("Got block number %d from ledger.", number)
+			break
+		}
+		if i+1 < attempts {
+			// FIXME: Change to Debugf
+			logger.Infof("Error getting block %d: %s. Retrying in %s", number, err, backoff)
+			time.Sleep(backoff)
+		} else {
+			logger.Errorf("Error getting block %d: %s", number, err)
+			return nil, errors.Wrapf(err, "Unable to get block number %d from ledger", number)
+		}
+	}
+
+	if block.Header.Number != number {
+		return nil, errors.Errorf("Expecting block number %d from ledger but got %d", number, block.Header.Number)
+	}
+
+	return block, nil
 }
 
 func min(a uint64, b uint64) uint64 {

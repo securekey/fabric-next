@@ -64,16 +64,19 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 
 // AddBlock adds a new block
 func (s *cdbBlockStore) AddBlock(block *common.Block) error {
-	err := s.storeBlock(block)
-	if err != nil {
-		return err
-	}
+	if ledgerconfig.IsCommitter() {
+		// FIXME: Change to Debugf
+		logger.Infof("Storing block %d", block.Header.Number)
+		err := s.storeBlock(block)
+		if err != nil {
+			return err
+		}
 
-	err = s.storeTransactions(block)
-	if err != nil {
-		return err
+		err = s.storeTransactions(block)
+		if err != nil {
+			return err
+		}
 	}
-
 	return s.checkpointBlock(block)
 }
 
@@ -115,11 +118,20 @@ func (s *cdbBlockStore) checkpointBlock(block *common.Block) error {
 	newCPInfo := &checkpointInfo{
 		isChainEmpty:    false,
 		lastBlockNumber: block.Header.Number}
-	//save the checkpoint information in the database
-	err := s.cp.saveCurrentInfo(newCPInfo)
-	if err != nil {
-		return errors.WithMessage(err, "adding cpInfo to couchDB failed")
+
+	if ledgerconfig.IsCommitter() {
+		// FIXME: Change to Debugf
+		logger.Infof("Saving checkpoint info for block %d", block.Header.Number)
+		//save the checkpoint information in the database
+		err := s.cp.saveCurrentInfo(newCPInfo)
+		if err != nil {
+			return errors.WithMessage(err, "adding cpInfo to couchDB failed")
+		}
+	} else {
+		// FIXME: Change to Debugf
+		logger.Infof("Not saving checkpoint info for block %d since I'm not a committer. Just publishing the block.", block.Header.Number)
 	}
+
 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
 	s.updateCheckpoint(newCPInfo)
 	return nil
