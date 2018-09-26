@@ -93,6 +93,7 @@ type gossipServiceImpl struct {
 	mcs             api.MessageCryptoService
 	peerIdentity    []byte
 	secAdv          api.SecurityAdvisor
+	isCommitter     bool
 }
 
 // This is an implementation of api.JoinChannelMessage.
@@ -125,20 +126,20 @@ var logger = util.GetLogger(util.LoggingServiceModule, "")
 
 // InitGossipService initialize gossip service
 func InitGossipService(peerIdentity []byte, endpoint string, s *grpc.Server, certs *gossipCommon.TLSCertificates,
-	mcs api.MessageCryptoService, secAdv api.SecurityAdvisor, secureDialOpts api.PeerSecureDialOpts, bootPeers ...string) error {
+	mcs api.MessageCryptoService, secAdv api.SecurityAdvisor, secureDialOpts api.PeerSecureDialOpts, isCommitter bool, bootPeers ...string) error {
 	// TODO: Remove this.
 	// TODO: This is a temporary work-around to make the gossip leader election module load its logger at startup
 	// TODO: in order for the flogging package to register this logger in time so it can set the log levels as requested in the config
 	util.GetLogger(util.LoggingElectionModule, "")
 	return InitGossipServiceCustomDeliveryFactory(peerIdentity, endpoint, s, certs, &deliveryFactoryImpl{},
-		mcs, secAdv, secureDialOpts, bootPeers...)
+		mcs, secAdv, secureDialOpts, isCommitter, bootPeers...)
 }
 
 // InitGossipServiceCustomDeliveryFactory initialize gossip service with customize delivery factory
 // implementation, might be useful for testing and mocking purposes
 func InitGossipServiceCustomDeliveryFactory(peerIdentity []byte, endpoint string, s *grpc.Server,
 	certs *gossipCommon.TLSCertificates, factory DeliveryServiceFactory, mcs api.MessageCryptoService,
-	secAdv api.SecurityAdvisor, secureDialOpts api.PeerSecureDialOpts, bootPeers ...string) error {
+	secAdv api.SecurityAdvisor, secureDialOpts api.PeerSecureDialOpts, isCommitter bool, bootPeers ...string) error {
 	var err error
 	var gossip gossip.Gossip
 	once.Do(func() {
@@ -160,6 +161,7 @@ func InitGossipServiceCustomDeliveryFactory(peerIdentity []byte, endpoint string
 			deliveryFactory: factory,
 			peerIdentity:    peerIdentity,
 			secAdv:          secAdv,
+			isCommitter:     isCommitter,
 		}
 	})
 	return errors.WithStack(err)
@@ -247,7 +249,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 		coordinator: coordinator,
 		distributor: privdata2.NewDistributor(chainID, g, collectionAccessFactory),
 	}
-	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator)
+	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator, g.isCommitter, support.Committer)
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, endpoints, g.mcs)

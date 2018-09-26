@@ -327,8 +327,15 @@ func serve(args []string) error {
 		certs.TLSClientCert.Store(&clientCert)
 	}
 
+	committer := viper.GetBool("peer.committer")
+	if committer {
+		logger.Infof("This peer is a committer")
+	} else {
+		logger.Infof("This peer is an endorser")
+	}
+
 	err = service.InitGossipService(serializedIdentity, peerEndpoint.Address, peerServer.Server(), certs,
-		messageCryptoService, secAdv, secureDialOpts, bootstrap...)
+		messageCryptoService, secAdv, secureDialOpts, committer, bootstrap...)
 	if err != nil {
 		return err
 	}
