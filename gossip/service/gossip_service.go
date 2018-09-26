@@ -247,7 +247,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 		coordinator: coordinator,
 		distributor: privdata2.NewDistributor(chainID, g, collectionAccessFactory),
 	}
-	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator)
+	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator, support.Committer)
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, endpoints, g.mcs)

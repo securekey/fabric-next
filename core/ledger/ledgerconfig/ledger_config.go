@@ -8,6 +8,8 @@ package ledgerconfig
 
 import (
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
@@ -40,6 +42,7 @@ const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
 const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
+const confRoles = "ledger.roles"
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
@@ -234,4 +237,49 @@ func GetHistoryStoreProvider() HistoryStorageProvider {
 // TODO: based on the analysis, we might remove this configuration.
 func GetBlockStorageAttachTxn() bool {
 	return viper.GetBool(confBlockStorageAttachTxn)
+}
+
+// Role is the role of the peer
+type Role string
+
+const (
+	// CommitterRole indicates that the peer commits data to the ledger
+	CommitterRole Role = "committer"
+	// EndorserRole indicates that the peer endorses transaction proposals
+	EndorserRole Role = "endorser"
+)
+
+var initOnce sync.Once
+var roles map[Role]struct{}
+
+// HasRole returns true if the peer has the given role
+func HasRole(role Role) bool {
+	initOnce.Do(func() {
+		roles = getRoles()
+	})
+	_, ok := roles[role]
+	return ok
+}
+
+//IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
+func IsCommitter() bool {
+	return HasRole(CommitterRole)
+}
+
+func getRoles() map[Role]struct{} {
+	exists := struct{}{}
+	strRoles := viper.GetString(confRoles)
+	if strRoles == "" {
+		// The peer has all roles by default
+		return map[Role]struct{}{
+			EndorserRole:  exists,
+			CommitterRole: exists,
+		}
+	}
+
+	roles := make(map[Role]struct{})
+	for _, r := range strings.Split(strRoles, ",") {
+		roles[Role(r)] = exists
+	}
+	return roles
 }
