@@ -144,14 +144,22 @@ func Close() {
 	logger.Infof("ledger mgmt closed")
 }
 
+type publisher interface {
+	AddBlock(block *common.Block) error
+}
+
 func wrapLedger(id string, l ledger.PeerLedger) ledger.PeerLedger {
-	return &closableLedger{id, l}
+	return &closableLedger{
+		id, l,
+		l.(publisher), // FIXME: This is a hack
+	}
 }
 
 // closableLedger extends from actual validated ledger and overwrites the Close method
 type closableLedger struct {
 	id string
 	ledger.PeerLedger
+	publisher
 }
 
 // Close closes the actual ledger and removes the entries from opened ledgers map
