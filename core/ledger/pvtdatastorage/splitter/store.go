@@ -29,7 +29,10 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 }
 
 func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	s.sb.Prepare(blockNum, pvtData)
+	err := s.sb.Prepare(blockNum, pvtData)
+	if err != nil {
+		return err
+	}
 	return s.sa.Prepare(blockNum, pvtData)
 }
 

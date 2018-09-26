@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cdbpvtdata
 
 import (
+	"fmt"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -29,27 +30,53 @@ func newStore(db *couchdb.CouchDatabase) *store {
 
 
 func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
-
+	// Note: this is a copy of the base implementation
+	s.btlPolicy = btlPolicy
 }
 
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
-	return errors.New("not implemented")
+	// TODO: fill in the rest
+
+	s.isEmpty = false
+	s.lastCommittedBlock = blockNum
+	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
+	return nil
 }
 
 func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	err := s.prepareInit(blockNum, pvtData)
 	if err != nil {
-		return err
+		logger.Debugf("TODO - this will not work until more is filled in [%s]", err)
+		// TODO return error
+		// return err
 	}
 
-	// TODO: Add CouchDB logic here!
-
-	s.prepareDone(blockNum, pvtData)
+	var docs []*couchdb.CouchDoc
+	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
 		return err
 	}
 
-	return errors.New("not implemented")
+	dataEntryDocs, err := dataEntriesToCouchDocs(dataEntries)
+	if err != nil {
+		return err
+	}
+	docs = append(docs, dataEntryDocs...)
+
+	expiryEntryDocs, err := expiryEntriesToCouchDocs(expiryEntries)
+	if err != nil {
+		return err
+	}
+	docs = append(docs, expiryEntryDocs...)
+
+	if len(docs) > 0 {
+		_, err = s.db.BatchUpdateDocuments(docs)
+		if err != nil {
+			return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
+		}
+	}
+
+	return s.prepareDone(blockNum, pvtData)
 }
 
 func (s *store) Commit() error {
