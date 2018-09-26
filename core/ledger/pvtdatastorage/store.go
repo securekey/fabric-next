@@ -68,6 +68,11 @@ type ErrIllegalCall struct {
 	msg string
 }
 
+// NewErrIllegalCall creates an illegal call error
+func NewErrIllegalCall(msg string) *ErrIllegalCall {
+	return &ErrIllegalCall{msg}
+}
+
 func (err *ErrIllegalCall) Error() string {
 	return err.msg
 }
@@ -77,6 +82,12 @@ type ErrIllegalArgs struct {
 	msg string
 }
 
+// NewErrIllegalArgs creates an illegal arguments error
+func NewErrIllegalArgs(msg string) *ErrIllegalArgs {
+	return &ErrIllegalArgs{msg}
+}
+
+
 func (err *ErrIllegalArgs) Error() string {
 	return err.msg
 }
@@ -84,6 +95,11 @@ func (err *ErrIllegalArgs) Error() string {
 // ErrOutOfRange is to be thrown for the request for the data that is not yet committed
 type ErrOutOfRange struct {
 	msg string
+}
+
+// NewErrOutOfRange creates an out of range error
+func NewErrOutOfRange(msg string) *ErrOutOfRange {
+	return &ErrOutOfRange{msg}
 }
 
 func (err *ErrOutOfRange) Error() string {
