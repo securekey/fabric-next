@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "faa0c191_b2182f7d",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 135,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-26T14:29:31Z",
+      "side": 1,
+      "message": "this is not needed. the zero value is nil.",
+      "range": {
+        "startLine": 134,
+        "startChar": 0,
+        "endLine": 135,
+        "endChar": 25
+      },
+      "revId": "e3a8ee8db9a43f1d62ab6e11bc12a90f3879d2dd",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
