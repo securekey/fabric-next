@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/cauthdsl"
 	ccdef "github.com/hyperledger/fabric/common/chaincode"
@@ -325,6 +327,13 @@ func serve(args []string) error {
 		certs = &gossipcommon.TLSCertificates{}
 		certs.TLSServerCert.Store(&serverCert)
 		certs.TLSClientCert.Store(&clientCert)
+	}
+
+	if ledgerconfig.HasRole(ledgerconfig.EndorserRole) {
+		logger.Infof("This peer is an endorser")
+	}
+	if ledgerconfig.HasRole(ledgerconfig.CommitterRole) {
+		logger.Infof("This peer is a committer")
 	}
 
 	err = service.InitGossipService(serializedIdentity, peerEndpoint.Address, peerServer.Server(), certs,

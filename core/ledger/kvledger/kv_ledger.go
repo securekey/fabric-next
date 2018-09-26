@@ -189,6 +189,10 @@ func (l *kvLedger) GetBlockByNumber(blockNumber uint64) (*common.Block, error) {
 	return block, err
 }
 
+func (l *kvLedger) AddBlock(block *common.Block) error {
+	return l.blockStore.AddBlock(block)
+}
+
 // GetBlocksIterator returns an iterator that starts from `startBlockNumber`(inclusive).
 // The iterator is a blocking iterator i.e., it blocks till the next block gets available in the ledger
 // ResultsIterator contains type BlockHolder
