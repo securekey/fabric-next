@@ -130,15 +130,13 @@ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
 	cpInfo := s.cp.getCheckpointInfo()
 	s.cpInfo = cpInfo
 	bcInfo := &common.BlockchainInfo{
-		Height:            0,
-		CurrentBlockHash:  nil,
-		PreviousBlockHash: nil,
+		Height: 0,
 	}
 	if !cpInfo.isChainEmpty {
 		//If start up is a restart of an existing storage, update BlockchainInfo for external API's
 		lastBlock, err := s.RetrieveBlockByNumber(cpInfo.lastBlockNumber)
 		if err != nil {
-			panic(fmt.Sprintf("Could not retrieve header of the last block form file: %s", err))
+			return nil, fmt.Errorf("RetrieveBlockByNumber return error: %s", err)
 		}
 
 		lastBlockHeader := lastBlock.GetHeader()

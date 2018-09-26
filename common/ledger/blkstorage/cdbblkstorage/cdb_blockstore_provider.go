@@ -17,7 +17,7 @@ var logger = flogging.MustGetLogger("peer")
 
 const (
 	blockStoreName = "blocks"
-	txnStoreName = "transactions"
+	txnStoreName   = "transactions"
 )
 
 // CDBBlockstoreProvider provides block storage in CouchDB
@@ -70,10 +70,6 @@ func (p *CDBBlockstoreProvider) createBlockStoreIndices(db *couchdb.CouchDatabas
 	_, err := db.CreateIndex(blockHashIndexDef)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block hash index failed")
-	}
-	_, err = db.CreateIndex(blockNumberIndexDef)
-	if err != nil {
-		return errors.WithMessage(err, "creation of block number index failed")
 	}
 
 	return nil
