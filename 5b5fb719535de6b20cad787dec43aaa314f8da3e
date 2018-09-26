@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "727e5515_c352ad5d",
+        "filename": "core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 30,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-26T20:17:45Z",
+      "side": 1,
+      "message": "personally I would use something more descriptive of the value... maybe like block_number.",
+      "range": {
+        "startLine": 30,
+        "startChar": 21,
+        "endLine": 30,
+        "endChar": 28
+      },
+      "revId": "5b5fb719535de6b20cad787dec43aaa314f8da3e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
