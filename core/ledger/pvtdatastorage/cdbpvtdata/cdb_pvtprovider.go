@@ -32,9 +32,9 @@ func NewProvider() (*Provider, error) {
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}
+
 	return &Provider{couchInstance}, nil
 }
-
 
 // OpenStore creates a handle to the private data store for the given ledger ID
 func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
@@ -43,9 +43,22 @@ func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = p.createPvtStoreIndices(pvtStoreDB)
+	if err != nil {
+		return nil, err
+	}
 
 	store := newStore(pvtStoreDB)
 	return store, nil
+}
+
+func (p *Provider) createPvtStoreIndices(db *couchdb.CouchDatabase) error {
+	// TODO: only create index if it doesn't exist
+	_, err := db.CreateIndex(blockNumberIndexDef)
+	if err != nil {
+		return errors.WithMessage(err, "creation of block number index failed")
+	}
+	return nil
 }
 
 // Close cleans up the provider

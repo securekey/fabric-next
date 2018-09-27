@@ -9,13 +9,29 @@ package cdbpvtdata
 import (
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
+
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 )
 
 const (
-	idField       = "_id"
-	binaryWrapper = "valueBytes"
+	idField              = "_id"
+	binaryWrapper        = "valueBytes"
+	blockNumberField     = "number"
+	blockNumberIndexName = "by_number"
+	blockNumberIndexDoc  = "indexNumber"
+	blockNumberBase      = 10
 )
+
+const blockNumberIndexDef = `
+	{
+		"index": {
+			"fields": ["` + blockNumberField + `"]
+		},
+		"name": "` + blockNumberIndexName + `",
+		"ddoc": "` + blockNumberIndexDoc + `",
+		"type": "json"
+	}`
 
 type jsonValue map[string]interface{}
 
@@ -23,7 +39,7 @@ func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func dataEntriesToCouchDocs(dataEntries []*dataEntry) ([]*couchdb.CouchDoc, error) {
+func dataEntriesToCouchDocs(dataEntries []*dataEntry, blockNumber uint64) ([]*couchdb.CouchDoc, error) {
 	var docs []*couchdb.CouchDoc
 
 	for _, dataEntry := range dataEntries {
@@ -32,8 +48,8 @@ func dataEntriesToCouchDocs(dataEntries []*dataEntry) ([]*couchdb.CouchDoc, erro
 		if err != nil {
 			return nil, err
 		}
-
-		doc, err := keyValueToCouchDoc(keyBytes, valBytes)
+		indices := map[string]string{blockNumberField: strconv.FormatUint(blockNumber, blockNumberBase)}
+		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
 		}
@@ -52,7 +68,7 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry) ([]*couchdb.CouchDoc
 			return nil, err
 		}
 
-		doc, err := keyValueToCouchDoc(keyBytes, valBytes)
+		doc, err := keyValueToCouchDoc(keyBytes, valBytes, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -61,10 +77,14 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry) ([]*couchdb.CouchDoc
 	return docs, nil
 }
 
-func keyValueToCouchDoc(key []byte, value []byte) (*couchdb.CouchDoc, error) {
+func keyValueToCouchDoc(key []byte, value []byte, indices map[string]string) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 
 	jsonMap[idField] = hex.EncodeToString(key)
+
+	for key, val := range indices {
+		jsonMap[key] = val
+	}
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
