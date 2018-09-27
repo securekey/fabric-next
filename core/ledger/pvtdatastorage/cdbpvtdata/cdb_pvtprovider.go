@@ -44,8 +44,7 @@ func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
 		return nil, err
 	}
 
-	store := newStore(pvtStoreDB)
-	return store, nil
+	return newStore(pvtStoreDB)
 }
 
 // Close cleans up the provider

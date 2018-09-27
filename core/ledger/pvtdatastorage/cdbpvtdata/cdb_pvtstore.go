@@ -9,7 +9,6 @@ package cdbpvtdata
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
 )
@@ -20,37 +19,34 @@ type store struct {
 	commonStore
 }
 
-func newStore(db *couchdb.CouchDatabase) *store {
+func newStore(db *couchdb.CouchDatabase) (*store, error) {
 	s := store {
 		db: db,
 	}
 
-	return &s
+	err := s.initState()
+	if err != nil {
+		return nil, err
+	}
+
+	return &s, nil
 }
 
+func (s *store) initState() error {
+	m, ok, err := lookupMetadata(s.db)
+	if err != nil {
+		return err
+	}
 
-func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
-	// Note: this is a copy of the base implementation
-	s.btlPolicy = btlPolicy
-}
-
-func (s *store) InitLastCommittedBlock(blockNum uint64) error {
-	// TODO: fill in the rest
-
-	s.isEmpty = false
-	s.lastCommittedBlock = blockNum
-	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
+	s.isEmpty = !ok
+	if ok {
+		s.lastCommittedBlock = m.lastCommitedBlock
+		s.batchPending = m.pending
+	}
 	return nil
 }
 
-func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	err := s.prepareInit(blockNum, pvtData)
-	if err != nil {
-		logger.Debugf("TODO - this will not work until more is filled in [%s]", err)
-		// TODO return error
-		// return err
-	}
-
+func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	var docs []*couchdb.CouchDoc
 	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
@@ -76,11 +72,39 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		}
 	}
 
-	return s.prepareDone(blockNum, pvtData)
+	err = s.updateCommitMetadata(true)
+	if err != nil {
+		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in prepare [%d]", blockNum))
+	}
+
+	return nil
 }
 
-func (s *store) Commit() error {
-	return errors.New("not implemented")
+func (s *store) commitDB(committingBlockNum uint64) error {
+	err := s.updateCommitMetadata(false)
+	if err != nil {
+		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in commit [%d]", committingBlockNum))
+	}
+
+	return nil
+}
+
+func (s *store) updateCommitMetadata(pending bool) error {
+	m := metadata{
+		pending: pending,
+		lastCommitedBlock: s.lastCommittedBlock,
+	}
+
+	return updateCommitMetadataDoc(s.db, &m)
+}
+
+func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
+	m := metadata{
+		pending: false,
+		lastCommitedBlock: blockNum,
+	}
+
+	return updateCommitMetadataDoc(s.db, &m)
 }
 
 func (s *store) Rollback() error {
@@ -105,4 +129,7 @@ func (s *store) HasPendingBatch() (bool, error) {
 
 func (s *store) Shutdown() {
 
+}
+
+func (s *store) performPurgeIfScheduled(latestCommittedBlk uint64) {
 }

@@ -24,7 +24,10 @@ func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 }
 
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
-	s.sb.InitLastCommittedBlock(blockNum)
+	err := s.sb.InitLastCommittedBlock(blockNum)
+	if err != nil {
+		return err
+	}
 	return s.sa.InitLastCommittedBlock(blockNum)
 }
 
@@ -37,7 +40,10 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 }
 
 func (s *store) Commit() error {
-	s.sb.Commit()
+	err := s.sb.Commit()
+	if err != nil {
+		return err
+	}
 	return s.sa.Commit()
 }
 
