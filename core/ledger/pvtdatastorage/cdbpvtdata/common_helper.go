@@ -7,8 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package cdbpvtdata
 
 import (
-	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"math"
+
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
@@ -134,3 +135,16 @@ func (a *txPvtdataAssembler) getTxPvtdata() *ledger.TxPvtData {
 	return &ledger.TxPvtData{SeqInBlock: a.txNum, WriteSet: a.txWset}
 }
 
+// ErrOutOfRange is to be thrown for the request for the data that is not yet committed
+type ErrOutOfRange struct {
+	msg string
+}
+
+// NewErrOutOfRange creates an out of range error
+func NewErrOutOfRange(msg string) *ErrOutOfRange {
+	return &ErrOutOfRange{msg}
+}
+
+func (err *ErrOutOfRange) Error() string {
+	return err.msg
+}

@@ -8,12 +8,13 @@ package cdbpvtdata
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
-	"sync"
 )
 
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
@@ -75,5 +76,15 @@ func (s *store) prepareDone(blockNum uint64, pvtData []*ledger.TxPvtData) error 
 	s.batchPending = true
 	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
 
+	return nil
+}
+
+func (s *store) getPvtDataByBlockNumInit(blockNum uint64, filter ledger.PvtNsCollFilter) error {
+	if s.isEmpty {
+		return &ErrOutOfRange{"The store is empty"}
+	}
+	if blockNum > s.lastCommittedBlock {
+		return &ErrOutOfRange{fmt.Sprintf("Last committed block=%d, block requested=%d", s.lastCommittedBlock, blockNum)}
+	}
 	return nil
 }
