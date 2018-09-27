@@ -82,7 +82,12 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 }
 
 func (s *store) commitDB(committingBlockNum uint64) error {
-	err := s.updateCommitMetadata(false)
+	m := metadata{
+		pending: false,
+		lastCommitedBlock: committingBlockNum,
+	}
+
+	err := updateCommitMetadataDoc(s.db, &m)
 	if err != nil {
 		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in commit [%d]", committingBlockNum))
 	}
