@@ -59,7 +59,11 @@ func (s *store) nextBlockNum() uint64 {
 	return s.lastCommittedBlock + 1
 }
 
-func (s *store) prepareInit(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+	s.btlPolicy = btlPolicy
+}
+
+func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	if s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
@@ -69,10 +73,11 @@ func (s *store) prepareInit(blockNum uint64, pvtData []*ledger.TxPvtData) error 
 		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d, recived block number=%d", expectedBlockNum, blockNum))
 	}
 
-	return nil
-}
+	err := s.prepareDB(blockNum, pvtData)
+	if err != nil {
+		return err
+	}
 
-func (s *store) prepareDone(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	s.batchPending = true
 	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
 
@@ -86,5 +91,41 @@ func (s *store) getPvtDataByBlockNumInit(blockNum uint64, filter ledger.PvtNsCol
 	if blockNum > s.lastCommittedBlock {
 		return &ErrOutOfRange{fmt.Sprintf("Last committed block=%d, block requested=%d", s.lastCommittedBlock, blockNum)}
 	}
+	return nil
+}
+
+func (s *store) Commit() error {
+	if !s.batchPending {
+		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
+	}
+	committingBlockNum := s.nextBlockNum()
+	logger.Debugf("Committing private data for block [%d]", committingBlockNum)
+
+	err := s.commitDB(committingBlockNum)
+	if err != nil {
+		return err
+	}
+
+	s.batchPending = false
+	s.isEmpty = false
+	s.lastCommittedBlock = committingBlockNum
+	logger.Debugf("Committed private data for block [%d]", committingBlockNum)
+	s.performPurgeIfScheduled(committingBlockNum)
+	return nil
+}
+
+func (s *store) InitLastCommittedBlock(blockNum uint64) error {
+	if !(s.isEmpty && !s.batchPending) {
+		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
+	}
+
+	err := s.initLastCommittedBlockDB(blockNum)
+	if err != nil {
+		return err
+	}
+
+	s.isEmpty = false
+	s.lastCommittedBlock = blockNum
+	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
 	return nil
 }

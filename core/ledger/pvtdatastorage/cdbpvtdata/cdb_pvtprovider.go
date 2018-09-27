@@ -48,8 +48,7 @@ func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
 		return nil, err
 	}
 
-	store := newStore(pvtStoreDB)
-	return store, nil
+	return newStore(pvtStoreDB)
 }
 
 func (p *Provider) createPvtStoreIndices(db *couchdb.CouchDatabase) error {
