@@ -22,6 +22,30 @@
       "revId": "68921f6a8667ddd887744d9a61fa9e8c5e348c13",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b011fbb7_3d495ba7",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 8
+      },
+      "lineNbr": 397,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-09-28T18:51:49Z",
+      "side": 1,
+      "message": "Got rid of it.",
+      "parentUuid": "eee6e4c0_6c5b2673",
+      "range": {
+        "startLine": 397,
+        "startChar": 1,
+        "endLine": 397,
+        "endChar": 30
+      },
+      "revId": "68921f6a8667ddd887744d9a61fa9e8c5e348c13",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
