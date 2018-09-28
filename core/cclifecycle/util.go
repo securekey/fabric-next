@@ -9,11 +9,14 @@ package cc
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/chaincode"
+	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/privdata"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
 )
 
@@ -76,10 +79,60 @@ func InstalledCCs(dir string, ls DirEnumerator, ccFromPath ChaincodeExtractor) (
 // ChaincodePredicate accepts or rejects chaincode based on its metadata
 type ChaincodePredicate func(cc chaincode.Metadata) bool
 
+var errEmptySet = errors.New("empty set")
+
 // DeployedChaincodes retrieves the metadata of the given deployed chaincodes
 func DeployedChaincodes(q Query, filter ChaincodePredicate, loadCollections bool, chaincodes ...string) (chaincode.MetadataSet, error) {
 	defer q.Done()
 
+	if ledgerconfig.IsCommitter() {
+		set, err := getDeployedChaincodes(q, filter, loadCollections, chaincodes...)
+		if err != nil {
+			Logger.Errorf("Query failed: %s", err)
+			return nil, err
+		}
+		return set, nil
+	}
+
+	// The data may not be in the state DB yet. Try a few times.
+	Logger.Debugf("I am NOT a committer. Attempting to retrieve deployed chaincodes from state DB...")
+
+	// TODO: Make configurable
+	maxAttempts := 10
+	maxBackoff := 2 * time.Second
+
+	set, err := retry.Invoke(
+		func() (interface{}, error) {
+			set, err := getDeployedChaincodes(q, filter, loadCollections, chaincodes...)
+			if err != nil {
+				return nil, err
+			}
+			if len(set) == 0 {
+				return nil, errEmptySet
+			}
+			return set, nil
+		},
+		retry.WithMaxAttempts(maxAttempts),
+		retry.WithMaxBackoff(maxBackoff),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			if err == errEmptySet {
+				Logger.Debugf("Got empty set on attempt #%d: %s. Retrying in %s.", attempt, err, backoff)
+				return true
+			}
+			Logger.Errorf("Query failed on attempt #%d: %s. No retry will be attempted.", attempt, err)
+			return false
+		}),
+	)
+	if err == errEmptySet {
+		return nil, nil
+	}
+	if set == nil {
+		return nil, err
+	}
+	return set.(chaincode.MetadataSet), nil
+}
+
+func getDeployedChaincodes(q Query, filter ChaincodePredicate, loadCollections bool, chaincodes ...string) (chaincode.MetadataSet, error) {
 	var res chaincode.MetadataSet
 	for _, cc := range chaincodes {
 		data, err := q.GetState("lscc", cc)
