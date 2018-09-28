@@ -1,4 +1,4 @@
-From 91c7c7139d543d66167eab13c51bee3e11b45a1e Mon Sep 17 00:00:00 2001
+From d506a054a7fda5fb61f21b6c54988ee9eb567cf2 Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Fri, 14 Sep 2018 15:13:31 -0400
 Subject: [PATCH] Ledger metrics
@@ -31,10 +31,10 @@ Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
  core/ledger/ledgerstorage/store.go            |  28 ++
  core/ledger/util/couchdb/couchdb.go           |  21 +
  gossip/privdata/coordinator.go                |  11 +
- gossip/state/payloads_buffer.go               |  14 +-
- gossip/state/state.go                         |  24 +-
+ gossip/state/payloads_buffer.go               |   9 +-
+ gossip/state/state.go                         |  27 +-
  peer/node/start.go                            |   4 +
- 28 files changed, 554 insertions(+), 1201 deletions(-)
+ 28 files changed, 550 insertions(+), 1203 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2569,58 +2569,49 @@ index 39cb9c1a2..3f4a13ed8 100644
  	if bFetchFromPeers {
  		if len(privateInfo.missingKeys) == 0 {
 diff --git a/gossip/state/payloads_buffer.go b/gossip/state/payloads_buffer.go
-index e7fbf5b18..0d2d17991 100644
+index e7fbf5b18..232485341 100644
 --- a/gossip/state/payloads_buffer.go
 +++ b/gossip/state/payloads_buffer.go
-@@ -10,6 +10,9 @@ import (
- 	"sync"
- 	"sync/atomic"
+@@ -21,7 +21,7 @@ import (
+ // to signal whenever expected block has arrived.
+ type PayloadsBuffer interface {
+ 	// Adds new block into the buffer
+-	Push(payload *proto.Payload)
++	Push(payload *proto.Payload) bool
  
-+	"fmt"
-+
-+	"github.com/hyperledger/fabric/common/metrics"
- 	"github.com/hyperledger/fabric/gossip/util"
- 	proto "github.com/hyperledger/fabric/protos/gossip"
- 	"github.com/op/go-logging"
-@@ -51,15 +54,18 @@ type PayloadsBufferImpl struct {
- 	mutex sync.RWMutex
+ 	// Returns next expected sequence number
+ 	Next() uint64
+@@ -74,7 +74,7 @@ func (b *PayloadsBufferImpl) Ready() chan struct{} {
+ // sequence number is below the expected next block number payload will be
+ // thrown away.
+ // TODO return bool to indicate if payload was added or not, so that caller can log result.
+-func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
++func (b *PayloadsBufferImpl) Push(payload *proto.Payload) bool {
+ 	b.mutex.Lock()
+ 	defer b.mutex.Unlock()
  
- 	logger *logging.Logger
-+
-+	chainID string
- }
+@@ -82,15 +82,18 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
  
- // NewPayloadsBuffer is factory function to create new payloads buffer
--func NewPayloadsBuffer(next uint64) PayloadsBuffer {
-+func NewPayloadsBuffer(chainID string, next uint64) PayloadsBuffer {
- 	return &PayloadsBufferImpl{
- 		buf:       make(map[uint64]*proto.Payload),
- 		readyChan: make(chan struct{}, 1),
- 		next:      next,
- 		logger:    util.GetLogger(util.LoggingStateModule, ""),
-+		chainID:   chainID,
- 	}
- }
- 
-@@ -85,10 +91,16 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
- 		return
+ 	if seqNum < b.next || b.buf[seqNum] != nil {
+ 		logger.Debugf("Payload with sequence number = %d has been already processed", payload.SeqNum)
+-		return
++		return false
  	}
  
-+	if metrics.IsDebug() {
-+		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(seqNum))
-+	}
-+
  	b.buf[seqNum] = payload
  
  	// Send notification that next sequence has arrived
 +
  	if seqNum == b.next && len(b.readyChan) == 0 {
-+		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_notify_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(seqNum))
  		b.readyChan <- struct{}{}
  	}
++
++	return true
  }
+ 
+ // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 4850613ef..50a9dc536 100644
+index 4850613ef..dd7eb2863 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
@@ -2635,15 +2626,6 @@ index 4850613ef..50a9dc536 100644
  	"github.com/hyperledger/fabric/gossip/api"
  	"github.com/hyperledger/fabric/gossip/comm"
  	common2 "github.com/hyperledger/fabric/gossip/common"
-@@ -211,7 +214,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
- 		commChan: commChan,
- 
- 		// Create a queue for payload received
--		payloads: NewPayloadsBuffer(height),
-+		payloads: NewPayloadsBuffer(chainID, height),
- 
- 		ledger: ledger,
- 
 @@ -470,6 +473,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
  		return uint64(0), errors.New("Received state transfer response without payload")
  	}
@@ -2687,7 +2669,17 @@ index 4850613ef..50a9dc536 100644
  	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
  	height, err := s.ledger.LedgerHeight()
  	if err != nil {
-@@ -767,6 +785,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+@@ -761,12 +779,19 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+ 		time.Sleep(enqueueRetryInterval)
+ 	}
+ 
+-	s.payloads.Push(payload)
++	if s.payloads.Push(payload) {
++		metrics.RootScope.Gauge(fmt.Sprintf("addPayload[%s]", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
++		logger.Debugf("[%s] Adding Payload to local buffer done, blockNum = [%d]", s.chainID, payload.SeqNum)
++	}
+ 	return nil
+ }
  
  func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
  
