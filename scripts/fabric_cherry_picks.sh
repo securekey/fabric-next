@@ -21,8 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Tip of release-1.2 (September 25, 2018)
-git checkout 3cd00d1da6f216e9aaefcc5e0db0584c2cc46a5a
+# Fabric 1.2.1 (September 27, 2018)
+git checkout 5017e4dae6d7a53e88e3c346f9a9f584870bc952
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
