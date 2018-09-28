@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "421cf8fc_ba3e6e3c",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_helper.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 153,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-28T17:37:19Z",
+      "side": 1,
+      "message": "You should use the pvtdatastorage.NewErrOutOfRange method I created in a previous commit.",
+      "range": {
+        "startLine": 153,
+        "startChar": 5,
+        "endLine": 153,
+        "endChar": 23
+      },
+      "revId": "ee73b02575e8f2c8bb5632e880181840cf19fc5b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
