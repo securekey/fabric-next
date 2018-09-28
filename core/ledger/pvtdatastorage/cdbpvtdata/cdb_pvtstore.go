@@ -9,6 +9,8 @@ package cdbpvtdata
 import (
 	"fmt"
 
+	"strconv"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
@@ -21,7 +23,7 @@ type store struct {
 }
 
 func newStore(db *couchdb.CouchDatabase) (*store, error) {
-	s := store {
+	s := store{
 		db: db,
 	}
 
@@ -83,7 +85,7 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 
 func (s *store) commitDB(committingBlockNum uint64) error {
 	m := metadata{
-		pending: false,
+		pending:           false,
 		lastCommitedBlock: committingBlockNum,
 	}
 
@@ -95,9 +97,22 @@ func (s *store) commitDB(committingBlockNum uint64) error {
 	return nil
 }
 
+func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, error) {
+	const queryFmt = `
+	{
+		"selector": {
+			"` + blockNumberField + `": {
+				"$eq": "%s"
+			}
+		},
+		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
+	}`
+	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, strconv.FormatUint(blockNum, blockNumberBase)))
+}
+
 func (s *store) updateCommitMetadata(pending bool) error {
 	m := metadata{
-		pending: pending,
+		pending:           pending,
 		lastCommitedBlock: s.lastCommittedBlock,
 	}
 
@@ -106,7 +121,7 @@ func (s *store) updateCommitMetadata(pending bool) error {
 
 func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
 	m := metadata{
-		pending: false,
+		pending:           false,
 		lastCommitedBlock: blockNum,
 	}
 
@@ -115,63 +130,6 @@ func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
 
 func (s *store) Rollback() error {
 	return errors.New("not implemented")
-}
-
-func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-	logger.Debugf("Get private data for block [%d], filter=%#v", blockNum, filter)
-	err := s.getPvtDataByBlockNumInit(blockNum, filter)
-	if err != nil {
-		return nil, err
-	}
-	startKey, endKey := getDataKeysForRangeScanByBlockNum(blockNum)
-	logger.Debugf("Querying private data storage for write sets using startKey=%#v, endKey=%#v", startKey, endKey)
-	//
-	//itr := s.db.GetIterator(startKey, endKey)
-	//defer itr.Release()
-	//
-	//var blockPvtdata []*ledger.TxPvtData
-	//var currentTxNum uint64
-	//var currentTxWsetAssember *txPvtdataAssembler
-	//firstItr := true
-	//
-	//for itr.Next() {
-	//	dataKeyBytes := itr.Key()
-	//	if v11Format(dataKeyBytes) {
-	//		return v11RetrievePvtdata(itr, filter)
-	//	}
-	//	dataValueBytes := itr.Value()
-	//	dataKey := decodeDatakey(dataKeyBytes)
-	//	expired, err := isExpired(dataKey, s.btlPolicy, s.lastCommittedBlock)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	if expired || !passesFilter(dataKey, filter) {
-	//		continue
-	//	}
-	//	dataValue, err := decodeDataValue(dataValueBytes)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//
-	//	if firstItr {
-	//		currentTxNum = dataKey.txNum
-	//		currentTxWsetAssember = newTxPvtdataAssembler(blockNum, currentTxNum)
-	//		firstItr = false
-	//	}
-	//
-	//	if dataKey.txNum != currentTxNum {
-	//		blockPvtdata = append(blockPvtdata, currentTxWsetAssember.getTxPvtdata())
-	//		currentTxNum = dataKey.txNum
-	//		currentTxWsetAssember = newTxPvtdataAssembler(blockNum, currentTxNum)
-	//	}
-	//	currentTxWsetAssember.add(dataKey.ns, dataValue)
-	//}
-	//if currentTxWsetAssember != nil {
-	//	blockPvtdata = append(blockPvtdata, currentTxWsetAssember.getTxPvtdata())
-	//}
-	//return blockPvtdata, nil
-	return nil, errors.New("not implemented")
-
 }
 
 func (s *store) IsEmpty() (bool, error) {

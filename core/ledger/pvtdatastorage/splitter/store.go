@@ -17,7 +17,6 @@ type store struct {
 	sb pvtdatastorage.Store
 }
 
-
 func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	s.sb.Init(btlPolicy)
 	s.sa.Init(btlPolicy)
@@ -53,8 +52,8 @@ func (s *store) Rollback() error {
 }
 
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-	s.sb.GetPvtDataByBlockNum(blockNum, filter)
-	return s.sa.GetPvtDataByBlockNum(blockNum, filter)
+	return s.sb.GetPvtDataByBlockNum(blockNum, filter)
+	//return s.sa.GetPvtDataByBlockNum(blockNum, filter)
 }
 
 func (s *store) IsEmpty() (bool, error) {

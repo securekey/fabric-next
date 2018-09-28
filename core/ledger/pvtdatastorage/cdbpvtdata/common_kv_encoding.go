@@ -8,6 +8,7 @@ package cdbpvtdata
 
 import (
 	"bytes"
+
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 
 	"github.com/golang/protobuf/proto"
@@ -24,12 +25,6 @@ var (
 	nilByte    = byte(0)
 	emptyValue = []byte{}
 )
-
-func getDataKeysForRangeScanByBlockNum(blockNum uint64) (startKey, endKey []byte) {
-	startKey = append(pvtDataKeyPrefix, version.NewHeight(blockNum, 0).ToBytes()...)
-	endKey = append(pvtDataKeyPrefix, version.NewHeight(blockNum+1, 0).ToBytes()...)
-	return
-}
 
 func getExpiryKeysForRangeScan(minBlkNum, maxBlkNum uint64) (startKey, endKey []byte) {
 	startKey = append(expiryKeyPrefix, version.NewHeight(minBlkNum, 0).ToBytes()...)
