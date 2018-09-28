@@ -72,9 +72,11 @@ func newKVLedger(
 		return nil, err
 	}
 	l.initBlockStore(btlPolicy)
-	//Recover both state DB and history DB if they are out of sync with block storage
-	if err := l.recoverDBs(); err != nil {
-		panic(fmt.Errorf(`Error during state DB recovery:%s`, err))
+	if ledgerconfig.IsCommitter() {
+		//Recover both state DB and history DB if they are out of sync with block storage
+		if err := l.recoverDBs(); err != nil {
+			panic(fmt.Errorf(`Error during state DB recovery:%s`, err))
+		}
 	}
 	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
 	return l, nil
