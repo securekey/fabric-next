@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"sync"
 
+	"encoding/hex"
+
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
@@ -203,4 +206,40 @@ func (s *store) Rollback() error {
 	}
 	s.batchPending = false
 	return nil
+}
+
+func (s *store) performPurgeIfScheduled(latestCommittedBlk uint64) {
+	if latestCommittedBlk%ledgerconfig.GetPvtdataStorePurgeInterval() != 0 {
+		return
+	}
+	go func() {
+		s.purgerLock.Lock()
+		logger.Debugf("Purger started: Purging expired private data till block number [%d]", latestCommittedBlk)
+		defer s.purgerLock.Unlock()
+		err := s.purgeExpiredData(latestCommittedBlk)
+		if err != nil {
+			logger.Warningf("Could not purge data from pvtdata store:%s", err)
+		}
+		logger.Debug("Purger finished")
+	}()
+}
+
+func (s *store) purgeExpiredData(maxBlkNum uint64) error {
+	results, err := s.getExpiryEntriesDB(maxBlkNum)
+	if err != nil {
+		return err
+	}
+	for key, _ := range results {
+		err := s.purgeExpiredDataDB(hex.EncodeToString([]byte(key)))
+		if err != nil {
+			return err
+		}
+	}
+
+	logger.Infof("[%s] - [%d] Entries purged from private data storage till block number [%d]", s.ledgerid, len(results), maxBlkNum)
+	return nil
+}
+
+func (s *store) Shutdown() {
+	// do nothing
 }
