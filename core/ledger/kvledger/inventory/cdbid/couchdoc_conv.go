@@ -23,9 +23,21 @@ const (
 	metadataKey                = "metadata"
 	blockAttachmentName        = "genesis_block"
 	inventoryTypeField         = "type"
+	inventoryTypeIndexName     = "by_type"
+	inventoryTypeIndexDoc      = "indexMetadataInventory"
 	inventoryNameLedgerIDField = "ledger_id"
 	typeLedgerName             = "ledger"
 )
+
+const inventoryTypeIndexDef = `
+	{
+		"index": {
+			"fields": ["` + inventoryTypeField + `"]
+		},
+		"name": "` + inventoryTypeIndexName + `",
+		"ddoc": "` + inventoryTypeIndexDoc + `",
+		"type": "json"
+	}`
 
 type jsonValue map[string]interface{}
 
@@ -119,7 +131,8 @@ func queryInventory(db *couchdb.CouchDatabase, inventoryType string) ([]couchdb.
 			"` + inventoryTypeField + `": {
 				"$eq": "%s"
 			}
-		}
+		},
+		"use_index": ["_design/` + inventoryTypeIndexDoc + `", "` + inventoryTypeIndexName + `"]
 	}`
 
 	resultsP, err := db.QueryDocuments(fmt.Sprintf(queryFmt, inventoryType))

@@ -35,8 +35,22 @@ func OpenStore() (*Store, error) {
 		return nil, err
 	}
 
+	err = createIndices(db)
+	if err != nil {
+		return nil, err
+	}
+
 	s := Store {db}
 	return &s, nil
+}
+
+func createIndices(db *couchdb.CouchDatabase) error {
+	// TODO: only create index if it doesn't exist
+	_, err := db.CreateIndex(inventoryTypeIndexDef)
+	if err != nil {
+		return errors.WithMessage(err, "creation of inventory metadata index failed")
+	}
+	return nil
 }
 
 func createCouchInstance() (*couchdb.CouchInstance, error) {
