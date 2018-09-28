@@ -27,8 +27,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	logging "github.com/op/go-logging"
+	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("couchdb")
@@ -257,6 +259,37 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
 
 //CreateDatabaseIfNotExist method provides function to create database
 func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
+	if ledgerconfig.IsCommitter() {
+		return dbclient.doCreateDatabaseIfNotExist()
+	}
+
+	logger.Debugf("I am not a committer - Checking if DB [%s] exists...", dbclient.DBName)
+
+	// TODO: Make configurable
+	maxAttempts := 10
+
+	_, err := retry.Invoke(
+		func() (interface{}, error) {
+			dbInfo, couchDBReturn, err := dbclient.GetDatabaseInfo()
+			if err != nil {
+				return nil, err
+			}
+
+			//If the dbInfo returns populated and status code is 200, then the database exists
+			if dbInfo != nil && couchDBReturn.StatusCode == 200 {
+				// DB exists
+				return nil, nil
+			}
+			return nil, errors.Errorf("DB not found: [%s]", dbclient.DBName)
+		},
+		retry.WithMaxAttempts(maxAttempts),
+	)
+
+	return errors.Wrapf(err, "Unable to open DB [%s]", dbclient.DBName)
+}
+
+//CreateDatabaseIfNotExist method provides function to create database
+func (dbclient *CouchDatabase) doCreateDatabaseIfNotExist() error {
 
 	logger.Debugf("Entering CreateDatabaseIfNotExist()")
 
