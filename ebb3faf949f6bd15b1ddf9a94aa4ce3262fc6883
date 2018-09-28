@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "04088537_88a6ab3f",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/v11.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-28T18:06:23Z",
+      "side": 1,
+      "message": "I would name this file common_v11.go to indicate that it is a copy.",
+      "revId": "ebb3faf949f6bd15b1ddf9a94aa4ce3262fc6883",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
