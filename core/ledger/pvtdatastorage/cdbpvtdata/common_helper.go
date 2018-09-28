@@ -134,17 +134,3 @@ func (a *txPvtdataAssembler) getTxPvtdata() *ledger.TxPvtData {
 	a.done()
 	return &ledger.TxPvtData{SeqInBlock: a.txNum, WriteSet: a.txWset}
 }
-
-// ErrOutOfRange is to be thrown for the request for the data that is not yet committed
-type ErrOutOfRange struct {
-	msg string
-}
-
-// NewErrOutOfRange creates an out of range error
-func NewErrOutOfRange(msg string) *ErrOutOfRange {
-	return &ErrOutOfRange{msg}
-}
-
-func (err *ErrOutOfRange) Error() string {
-	return err.msg
-}

@@ -118,7 +118,7 @@ func valueToAttachment(v []byte) (*couchdb.AttachmentInfo, error) {
 	return attachment, nil
 }
 
-func createMetadataDoc(pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error)  {
+func createMetadataDoc(pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 	jsonMap[idField] = metadataKey
 
@@ -170,7 +170,7 @@ func extractCommitMap(jsonMap jsonValue) (jsonValue, error) {
 }
 
 type metadata struct {
-	pending bool
+	pending           bool
 	lastCommitedBlock uint64
 }
 
@@ -227,6 +227,56 @@ func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
 		return nil, false, errors.New("private data metadata is invalid")
 	}
 
-	m := metadata {pending, lastCommitedBlock}
+	m := metadata{pending, lastCommitedBlock}
 	return &m, true, nil
+}
+
+func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string) (map[string][]byte, error) {
+	resultsP, err := db.QueryDocuments(query)
+	if err != nil {
+		return nil, err
+	}
+	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
+
+	if len(results) == 0 {
+		return nil, NotFoundInIndexErr("")
+	}
+	m := make(map[string][]byte)
+
+	for _, val := range results {
+		key, err := hex.DecodeString(val.ID)
+		if err != nil {
+			return nil, err
+		}
+		value, err := couchAttachmentsToPvtDataBytes(val.Attachments)
+		if err != nil {
+			return nil, err
+		}
+		m[string(key)] = value
+	}
+	return m, nil
+}
+
+func couchAttachmentsToPvtDataBytes(attachments []*couchdb.AttachmentInfo) ([]byte, error) {
+	var pvtDataBytes []byte
+
+	// get binary data from attachment
+	for _, a := range attachments {
+		if a.Name == binaryWrapper {
+			pvtDataBytes = a.AttachmentBytes
+		}
+	}
+
+	if len(pvtDataBytes) == 0 {
+		return nil, errors.New("pvt data is not within couchDB document")
+	}
+
+	return pvtDataBytes, nil
+}
+
+// NotFoundInIndexErr is used to indicate missing entry in the index
+type NotFoundInIndexErr string
+
+func (NotFoundInIndexErr) Error() string {
+	return "Entry not found in index"
 }
