@@ -22,6 +22,29 @@
       "revId": "ee73b02575e8f2c8bb5632e880181840cf19fc5b",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "971a743e_1c0ad8de",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 126,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-28T17:40:09Z",
+      "side": 1,
+      "message": "see previous comment. Also for line 129.",
+      "range": {
+        "startLine": 126,
+        "startChar": 14,
+        "endLine": 126,
+        "endChar": 30
+      },
+      "revId": "ee73b02575e8f2c8bb5632e880181840cf19fc5b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
