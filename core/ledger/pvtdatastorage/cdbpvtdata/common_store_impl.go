@@ -84,16 +84,6 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	return nil
 }
 
-func (s *store) getPvtDataByBlockNumInit(blockNum uint64, filter ledger.PvtNsCollFilter) error {
-	if s.isEmpty {
-		return &ErrOutOfRange{"The store is empty"}
-	}
-	if blockNum > s.lastCommittedBlock {
-		return &ErrOutOfRange{fmt.Sprintf("Last committed block=%d, block requested=%d", s.lastCommittedBlock, blockNum)}
-	}
-	return nil
-}
-
 func (s *store) Commit() error {
 	if !s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
@@ -128,4 +118,63 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	s.lastCommittedBlock = blockNum
 	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
 	return nil
+}
+
+func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+	logger.Debugf("Get private data for block [%d], filter=%#v", blockNum, filter)
+	if s.isEmpty {
+		return nil, NewErrOutOfRange("The store is empty")
+	}
+	if blockNum > s.lastCommittedBlock {
+		return nil, NewErrOutOfRange(fmt.Sprintf("Last committed block=%d, block requested=%d", s.lastCommittedBlock, blockNum))
+	}
+	logger.Debugf("Querying private data storage for write sets using blockNum=%d", blockNum)
+
+	results, err := s.getPvtDataByBlockNumDB(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	var blockPvtdata []*ledger.TxPvtData
+	var currentTxNum uint64
+	var currentTxWsetAssember *txPvtdataAssembler
+	firstItr := true
+
+	for key, val := range results {
+		dataKeyBytes := []byte(key)
+		if v11Format(dataKeyBytes) {
+			return v11RetrievePvtdata(results, filter)
+		}
+		dataValueBytes := val
+		dataKey := decodeDatakey(dataKeyBytes)
+		expired, err := isExpired(dataKey, s.btlPolicy, s.lastCommittedBlock)
+		if err != nil {
+			return nil, err
+		}
+		if expired || !passesFilter(dataKey, filter) {
+			continue
+		}
+		dataValue, err := decodeDataValue(dataValueBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		if firstItr {
+			currentTxNum = dataKey.txNum
+			currentTxWsetAssember = newTxPvtdataAssembler(blockNum, currentTxNum)
+			firstItr = false
+		}
+
+		if dataKey.txNum != currentTxNum {
+			blockPvtdata = append(blockPvtdata, currentTxWsetAssember.getTxPvtdata())
+			currentTxNum = dataKey.txNum
+			currentTxWsetAssember = newTxPvtdataAssembler(blockNum, currentTxNum)
+		}
+		currentTxWsetAssember.add(dataKey.ns, dataValue)
+	}
+	if currentTxWsetAssember != nil {
+		blockPvtdata = append(blockPvtdata, currentTxWsetAssember.getTxPvtdata())
+	}
+	return blockPvtdata, nil
+
 }

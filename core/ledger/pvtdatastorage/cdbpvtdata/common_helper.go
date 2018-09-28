@@ -148,3 +148,10 @@ func NewErrOutOfRange(msg string) *ErrOutOfRange {
 func (err *ErrOutOfRange) Error() string {
 	return err.msg
 }
+
+// NotFoundInIndexErr is used to indicate missing entry in the index
+type NotFoundInIndexErr string
+
+func (NotFoundInIndexErr) Error() string {
+	return "Entry not found in index"
+}
