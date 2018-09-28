@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "73ce9043_fc5e4399",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 117,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-28T20:46:24Z",
+      "side": 1,
+      "message": "I wonder if we could have added blocksNum and purge block count.",
+      "range": {
+        "startLine": 117,
+        "startChar": 8,
+        "endLine": 117,
+        "endChar": 30
+      },
+      "revId": "d5380c0b78a4dfbbb4b1f915ff84992542c25dbf",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c53ccf72_f01d30ec",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 118,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-28T20:46:24Z",
+      "side": 1,
+      "message": "Is equal correct?",
+      "range": {
+        "startLine": 118,
+        "startChar": 6,
+        "endLine": 118,
+        "endChar": 8
+      },
+      "revId": "d5380c0b78a4dfbbb4b1f915ff84992542c25dbf",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
