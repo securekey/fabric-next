@@ -17,15 +17,18 @@ import (
 )
 
 const (
-	idField              = "_id"
-	binaryWrapper        = "valueBytes"
-	blockNumberField     = "block_number"
-	blockNumberIndexName = "by_block_number"
-	blockNumberIndexDoc  = "indexBlockNumber"
-	blockNumberBase      = 10
-	metadataKey          = "metadata"
-	commitField          = "commit"
-	pendingCommitField   = "pending"
+	idField                    = "_id"
+	binaryWrapper              = "valueBytes"
+	blockNumberField           = "block_number"
+	blockNumberIndexName       = "by_block_number"
+	blockNumberIndexDoc        = "indexBlockNumber"
+	blockNumberExpiryField     = "block_number_expiry"
+	blockNumberExpiryIndexName = "by_block_number_expiry"
+	blockNumberExpiryIndexDoc  = "indexBlockNumberExpiry"
+	blockNumberBase            = 10
+	metadataKey                = "metadata"
+	commitField                = "commit"
+	pendingCommitField         = "pending"
 )
 
 const blockNumberIndexDef = `
@@ -35,6 +38,16 @@ const blockNumberIndexDef = `
 		},
 		"name": "` + blockNumberIndexName + `",
 		"ddoc": "` + blockNumberIndexDoc + `",
+		"type": "json"
+	}`
+
+const blockNumberExpiryIndexDef = `
+	{
+		"index": {
+			"fields": ["` + blockNumberExpiryField + `"]
+		},
+		"name": "` + blockNumberExpiryIndexName + `",
+		"ddoc": "` + blockNumberExpiryIndexDoc + `",
 		"type": "json"
 	}`
 
@@ -63,7 +76,7 @@ func dataEntriesToCouchDocs(dataEntries []*dataEntry, blockNumber uint64) ([]*co
 	return docs, nil
 }
 
-func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry) ([]*couchdb.CouchDoc, error) {
+func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry, blockNumber uint64) ([]*couchdb.CouchDoc, error) {
 	var docs []*couchdb.CouchDoc
 
 	for _, expiryEntry := range expiryEntries {
@@ -72,8 +85,8 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry) ([]*couchdb.CouchDoc
 		if err != nil {
 			return nil, err
 		}
-
-		doc, err := keyValueToCouchDoc(keyBytes, valBytes, nil)
+		indices := map[string]string{blockNumberExpiryField: strconv.FormatUint(blockNumber, blockNumberBase)}
+		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +252,7 @@ func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string) (map[string][
 	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
 
 	if len(results) == 0 {
-		return nil, NotFoundInIndexErr("")
+		return nil, NewErrNotFoundInIndex()
 	}
 	m := make(map[string][]byte)
 
@@ -275,8 +288,14 @@ func couchAttachmentsToPvtDataBytes(attachments []*couchdb.AttachmentInfo) ([]by
 }
 
 // NotFoundInIndexErr is used to indicate missing entry in the index
-type NotFoundInIndexErr string
+type NotFoundInIndexErr struct {
+}
 
-func (NotFoundInIndexErr) Error() string {
+// NewErrNotFoundInIndex creates an missing entry in the index error
+func NewErrNotFoundInIndex() *NotFoundInIndexErr {
+	return &NotFoundInIndexErr{}
+}
+
+func (err *NotFoundInIndexErr) Error() string {
 	return "Entry not found in index"
 }
