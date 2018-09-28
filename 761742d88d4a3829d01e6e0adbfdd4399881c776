@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "a50d8b0d_854c0aa1",
+        "filename": "core/ledger/pvtdatastorage/splitter/store.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-09-28T18:49:27Z",
+      "side": 1,
+      "message": "shouldn\u0027t we delete splitter?",
+      "range": {
+        "startLine": 41,
+        "startChar": 16,
+        "endLine": 41,
+        "endChar": 22
+      },
+      "revId": "761742d88d4a3829d01e6e0adbfdd4399881c776",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
