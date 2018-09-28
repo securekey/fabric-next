@@ -68,18 +68,6 @@ func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, btlPol
 	return expiryEntries, nil
 }
 
-func deriveDataKeys(expiryEntry *expiryEntry) []*dataKey {
-	var dataKeys []*dataKey
-	for ns, colls := range expiryEntry.value.Map {
-		for coll, txNums := range colls.Map {
-			for _, txNum := range txNums.List {
-				dataKeys = append(dataKeys, &dataKey{expiryEntry.key.committingBlk, txNum, ns, coll})
-			}
-		}
-	}
-	return dataKeys
-}
-
 func passesFilter(dataKey *dataKey, filter ledger.PvtNsCollFilter) bool {
 	return filter == nil || filter.Has(dataKey.ns, dataKey.coll)
 }
@@ -133,4 +121,16 @@ func (a *txPvtdataAssembler) done() {
 func (a *txPvtdataAssembler) getTxPvtdata() *ledger.TxPvtData {
 	a.done()
 	return &ledger.TxPvtData{SeqInBlock: a.txNum, WriteSet: a.txWset}
+}
+
+func deriveDataKeys(expiryEntry *expiryEntry) []*dataKey {
+	var dataKeys []*dataKey
+	for ns, colls := range expiryEntry.value.Map {
+		for coll, txNums := range colls.Map {
+			for _, txNum := range txNums.List {
+				dataKeys = append(dataKeys, &dataKey{expiryEntry.key.committingBlk, txNum, ns, coll})
+			}
+		}
+	}
+	return dataKeys
 }

@@ -57,6 +57,10 @@ func (p *Provider) createPvtStoreIndices(db *couchdb.CouchDatabase) error {
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}
+	_, err = db.CreateIndex(blockNumberExpiryIndexDef)
+	if err != nil {
+		return errors.WithMessage(err, "creation of block number index failed")
+	}
 	return nil
 }
 

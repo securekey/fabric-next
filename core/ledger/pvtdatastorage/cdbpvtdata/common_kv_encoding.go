@@ -26,21 +26,6 @@ var (
 	emptyValue = []byte{}
 )
 
-func getExpiryKeysForRangeScan(minBlkNum, maxBlkNum uint64) (startKey, endKey []byte) {
-	startKey = append(expiryKeyPrefix, version.NewHeight(minBlkNum, 0).ToBytes()...)
-	endKey = append(expiryKeyPrefix, version.NewHeight(maxBlkNum+1, 0).ToBytes()...)
-	return
-}
-
-func encodeLastCommittedBlockVal(blockNum uint64) []byte {
-	return proto.EncodeVarint(blockNum)
-}
-
-func decodeLastCommittedBlockVal(blockNumBytes []byte) uint64 {
-	s, _ := proto.DecodeVarint(blockNumBytes)
-	return s
-}
-
 func encodeDataKey(key *dataKey) []byte {
 	dataKeyBytes := append(pvtDataKeyPrefix, version.NewHeight(key.blkNum, key.txNum).ToBytes()...)
 	dataKeyBytes = append(dataKeyBytes, []byte(key.ns)...)
@@ -59,11 +44,6 @@ func encodeExpiryKey(expiryKey *expiryKey) []byte {
 
 func encodeExpiryValue(expiryData *pvtmetadata.ExpiryData) ([]byte, error) {
 	return proto.Marshal(expiryData)
-}
-
-func decodeExpiryKey(expiryKeyBytes []byte) *expiryKey {
-	height, _ := version.NewHeightFromBytes(expiryKeyBytes[1:])
-	return &expiryKey{expiringBlk: height.BlockNum, committingBlk: height.TxNum}
 }
 
 func decodeExpiryValue(expiryValueBytes []byte) (*pvtmetadata.ExpiryData, error) {
@@ -87,4 +67,9 @@ func decodeDataValue(datavalueBytes []byte) (*rwset.CollectionPvtReadWriteSet, e
 	collPvtdata := &rwset.CollectionPvtReadWriteSet{}
 	err := proto.Unmarshal(datavalueBytes, collPvtdata)
 	return collPvtdata, err
+}
+
+func decodeExpiryKey(expiryKeyBytes []byte) *expiryKey {
+	height, _ := version.NewHeightFromBytes(expiryKeyBytes[1:])
+	return &expiryKey{expiringBlk: height.BlockNum, committingBlk: height.TxNum}
 }
