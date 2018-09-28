@@ -62,7 +62,7 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	}
 	docs = append(docs, dataEntryDocs...)
 
-	expiryEntryDocs, err := expiryEntriesToCouchDocs(expiryEntries)
+	expiryEntryDocs, err := expiryEntriesToCouchDocs(expiryEntries, blockNum)
 	if err != nil {
 		return err
 	}
@@ -110,6 +110,27 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, strconv.FormatUint(blockNum, blockNumberBase)))
 }
 
+func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
+	const queryFmt = `
+	{
+		"selector": {
+			"` + blockNumberExpiryField + `": {
+				"$eq": "%s"
+			}
+		},
+		"use_index": ["_design/` + blockNumberExpiryIndexDoc + `", "` + blockNumberExpiryIndexName + `"]
+	}`
+	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, strconv.FormatUint(blockNum, blockNumberBase)))
+	if _, ok := err.(*NotFoundInIndexErr); ok {
+		return nil, nil
+	}
+	return results, err
+}
+
+func (s *store) purgeExpiredDataDB(key string) error {
+	return s.db.DeleteDoc(key, "")
+}
+
 func (s *store) updateCommitMetadata(pending bool) error {
 	m := metadata{
 		pending:           pending,
@@ -126,11 +147,4 @@ func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
 	}
 
 	return updateCommitMetadataDoc(s.db, &m)
-}
-
-func (s *store) Shutdown() {
-
-}
-
-func (s *store) performPurgeIfScheduled(latestCommittedBlk uint64) {
 }
