@@ -1,23 +1,19 @@
 /*
 Copyright IBM Corp. All Rights Reserved.
-
 SPDX-License-Identifier: Apache-2.0
 */
-
 package cdbpvtdata
 
 import (
 	"math"
 
-	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
-
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 )
 
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
-
 func prepareStoreEntries(blockNum uint64, pvtdata []*ledger.TxPvtData, btlPolicy pvtdatapolicy.BTLPolicy) ([]*dataEntry, []*expiryEntry, error) {
 	dataEntries := prepareDataEntries(blockNum, pvtdata)
 	expiryEntries, err := prepareExpiryEntries(blockNum, dataEntries, btlPolicy)
@@ -26,7 +22,6 @@ func prepareStoreEntries(blockNum uint64, pvtdata []*ledger.TxPvtData, btlPolicy
 	}
 	return dataEntries, expiryEntries, nil
 }
-
 func prepareDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) []*dataEntry {
 	var dataEntries []*dataEntry
 	for _, txPvtdata := range pvtData {
@@ -42,7 +37,6 @@ func prepareDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) []*dataEnt
 	}
 	return dataEntries
 }
-
 func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, btlPolicy pvtdatapolicy.BTLPolicy) ([]*expiryEntry, error) {
 	mapByExpiringBlk := make(map[uint64]*pvtmetadata.ExpiryData)
 	for _, dataEntry := range dataEntries {
@@ -67,7 +61,6 @@ func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, btlPol
 	}
 	return expiryEntries, nil
 }
-
 func deriveDataKeys(expiryEntry *expiryEntry) []*dataKey {
 	var dataKeys []*dataKey
 	for ns, colls := range expiryEntry.value.Map {
@@ -79,11 +72,9 @@ func deriveDataKeys(expiryEntry *expiryEntry) []*dataKey {
 	}
 	return dataKeys
 }
-
 func passesFilter(dataKey *dataKey, filter ledger.PvtNsCollFilter) bool {
 	return filter == nil || filter.Has(dataKey.ns, dataKey.coll)
 }
-
 func isExpired(dataKey *dataKey, btl pvtdatapolicy.BTLPolicy, latestBlkNum uint64) (bool, error) {
 	expiringBlk, err := btl.GetExpiringBlock(dataKey.ns, dataKey.coll, dataKey.blkNum)
 	if err != nil {
@@ -91,7 +82,6 @@ func isExpired(dataKey *dataKey, btl pvtdatapolicy.BTLPolicy, latestBlkNum uint6
 	}
 	return latestBlkNum >= expiringBlk, nil
 }
-
 func neverExpires(expiringBlkNum uint64) bool {
 	return expiringBlkNum == math.MaxUint64
 }
@@ -106,14 +96,12 @@ type txPvtdataAssembler struct {
 func newTxPvtdataAssembler(blockNum, txNum uint64) *txPvtdataAssembler {
 	return &txPvtdataAssembler{blockNum, txNum, &rwset.TxPvtReadWriteSet{}, nil, true}
 }
-
 func (a *txPvtdataAssembler) add(ns string, collPvtWset *rwset.CollectionPvtReadWriteSet) {
 	// start a NsWset
 	if a.firstCall {
 		a.currentNsWSet = &rwset.NsPvtReadWriteSet{Namespace: ns}
 		a.firstCall = false
 	}
-
 	// if a new ns started, add the existing NsWset to TxWset and start a new one
 	if a.currentNsWSet.Namespace != ns {
 		a.txWset.NsPvtRwset = append(a.txWset.NsPvtRwset, a.currentNsWSet)
@@ -122,14 +110,12 @@ func (a *txPvtdataAssembler) add(ns string, collPvtWset *rwset.CollectionPvtRead
 	// add the collWset to the current NsWset
 	a.currentNsWSet.CollectionPvtRwset = append(a.currentNsWSet.CollectionPvtRwset, collPvtWset)
 }
-
 func (a *txPvtdataAssembler) done() {
 	if a.currentNsWSet != nil {
 		a.txWset.NsPvtRwset = append(a.txWset.NsPvtRwset, a.currentNsWSet)
 	}
 	a.currentNsWSet = nil
 }
-
 func (a *txPvtdataAssembler) getTxPvtdata() *ledger.TxPvtData {
 	a.done()
 	return &ledger.TxPvtData{SeqInBlock: a.txNum, WriteSet: a.txWset}
