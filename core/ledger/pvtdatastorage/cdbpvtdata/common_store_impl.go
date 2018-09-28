@@ -178,3 +178,29 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 	return blockPvtdata, nil
 
 }
+
+func (s *store) HasPendingBatch() (bool, error) {
+	return s.batchPending, nil
+}
+
+func (s *store) LastCommittedBlockHeight() (uint64, error) {
+	if s.isEmpty {
+		return 0, nil
+	}
+	return s.lastCommittedBlock + 1, nil
+}
+
+func (s *store) IsEmpty() (bool, error) {
+	return s.isEmpty, nil
+}
+
+// Rollback implements the function in the interface `Store`
+// Not deleting the existing data entries and expiry entries for now
+// Because the next try would have exact same entries and will overwrite those
+func (s *store) Rollback() error {
+	if !s.batchPending {
+		return pvtdatastorage.NewErrIllegalCall("No pending batch to rollback")
+	}
+	s.batchPending = false
+	return nil
+}

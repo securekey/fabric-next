@@ -128,22 +128,6 @@ func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
 	return updateCommitMetadataDoc(s.db, &m)
 }
 
-func (s *store) Rollback() error {
-	return errors.New("not implemented")
-}
-
-func (s *store) IsEmpty() (bool, error) {
-	return false, errors.New("not implemented")
-}
-
-func (s *store) LastCommittedBlockHeight() (uint64, error) {
-	return 0, errors.New("not implemented")
-}
-
-func (s *store) HasPendingBatch() (bool, error) {
-	return false, errors.New("not implemented")
-}
-
 func (s *store) Shutdown() {
 
 }
