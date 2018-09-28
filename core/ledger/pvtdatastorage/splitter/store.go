@@ -47,8 +47,8 @@ func (s *store) Commit() error {
 }
 
 func (s *store) Rollback() error {
-	s.sb.Rollback()
-	return s.sa.Rollback()
+	return s.sb.Rollback()
+	//return s.sa.Rollback()
 }
 
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -57,21 +57,21 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 }
 
 func (s *store) IsEmpty() (bool, error) {
-	s.sb.IsEmpty()
-	return s.sa.IsEmpty()
+	return s.sb.IsEmpty()
+	//return s.sa.IsEmpty()
 }
 
 func (s *store) LastCommittedBlockHeight() (uint64, error) {
-	s.sb.LastCommittedBlockHeight()
-	return s.sa.LastCommittedBlockHeight()
+	return s.sb.LastCommittedBlockHeight()
+	//return s.sa.LastCommittedBlockHeight()
 }
 
 func (s *store) HasPendingBatch() (bool, error) {
-	s.sb.HasPendingBatch()
-	return s.sa.HasPendingBatch()
+	return s.sb.HasPendingBatch()
+	//return s.sa.HasPendingBatch()
 }
 
 func (s *store) Shutdown() {
 	s.sb.Shutdown()
-	s.sa.Shutdown()
+	//s.sa.Shutdown()
 }

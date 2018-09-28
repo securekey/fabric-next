@@ -31,7 +31,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
-	psplitter "github.com/hyperledger/fabric/core/ledger/pvtdatastorage/splitter"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cdbpvtdata"
 )
 
 var logger = flogging.MustGetLogger("ledgerstorage")
@@ -90,7 +90,6 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 	return nil, errors.New("block storage provider creation failed due to unknown configuration")
 }
 
-
 func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
 	pvtDataStorageConfig := ledgerconfig.GetPvtDataStoreProvider()
 
@@ -98,8 +97,7 @@ func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
 	case ledgerconfig.LevelDBPvtDataStorage:
 		return pvtdatastorage.NewProvider(), nil
 	case ledgerconfig.CouchDBPvtDataStorage:
-		//return cdbpvtdata.NewProvider()
-		return psplitter.NewProvider()
+		return cdbpvtdata.NewProvider()
 	}
 
 	return nil, errors.New("private data storage provider creation failed due to unknown configuration")
