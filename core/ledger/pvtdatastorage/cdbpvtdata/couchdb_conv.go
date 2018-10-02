@@ -85,7 +85,7 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry, blockNumber uint64) 
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberField: strconv.FormatUint(blockNumber, blockNumberBase)}
+		indices := map[string]string{blockNumberExpiryField: strconv.FormatUint(blockNumber, blockNumberBase)}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
