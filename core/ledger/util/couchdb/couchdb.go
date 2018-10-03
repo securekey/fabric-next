@@ -273,7 +273,9 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 		func() (interface{}, error) {
 			dbInfo, couchDBReturn, err := dbclient.GetDatabaseInfo()
 			if err != nil {
-				return nil, err
+				if couchDBReturn == nil || couchDBReturn.StatusCode != 404 {
+					return nil, err
+				}
 			}
 
 			//If the dbInfo returns populated and status code is 200, then the database exists

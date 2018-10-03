@@ -811,9 +811,24 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 }
 
 func (s *GossipStateProviderImpl) publishBlock(block *common.Block) {
+	if block == nil {
+		logger.Warning("Cannot publish nil block")
+		return
+	}
+
+	if block.Header == nil {
+		logger.Warning("Cannot publish block with nil header. Block: %#v", block)
+		return
+	}
+
 	block, err := s.getBlockFromLedger(block.Header.Number)
 	if err != nil {
 		logger.Errorf("Unable to get block number %d from ledger: %s", block.Header.Number, err)
+		return
+	}
+
+	if block == nil {
+		logger.Errorf("Nil block retrieved from ledger for block number %d", block.Header.Number)
 		return
 	}
 
