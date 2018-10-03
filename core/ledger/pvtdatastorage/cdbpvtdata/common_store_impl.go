@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/pkg/errors"
 )
 
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
@@ -67,6 +68,10 @@ func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 }
 
 func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+	if !ledgerconfig.IsCommitter() {
+		panic("calling Prepare on a peer that is not a committer")
+	}
+
 	if s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
@@ -88,6 +93,10 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 }
 
 func (s *store) Commit() error {
+	if !ledgerconfig.IsCommitter() {
+		panic("calling Commit on a peer that is not a committer")
+	}
+
 	if !s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
 	}
@@ -128,8 +137,12 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 	if s.isEmpty {
 		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 	}
-	if blockNum > s.lastCommittedBlock {
-		return nil, pvtdatastorage.NewErrOutOfRange(fmt.Sprintf("Last committed block=%d, block requested=%d", s.lastCommittedBlock, blockNum))
+	lastCommittedBlock, err := s.getLastCommittedBlock()
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get last committed block")
+	}
+	if blockNum > lastCommittedBlock {
+		return nil, pvtdatastorage.NewErrOutOfRange(fmt.Sprintf("Last committed block=%d, block requested=%d", lastCommittedBlock, blockNum))
 	}
 	logger.Debugf("Querying private data storage for write sets using blockNum=%d", blockNum)
 
@@ -150,7 +163,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 		}
 		dataValueBytes := val
 		dataKey := decodeDatakey(dataKeyBytes)
-		expired, err := isExpired(dataKey, s.btlPolicy, s.lastCommittedBlock)
+		expired, err := isExpired(dataKey, s.btlPolicy, lastCommittedBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -258,4 +271,29 @@ func (s *store) purgeExpiredData(maxBlkNum uint64) error {
 
 func (s *store) Shutdown() {
 	// do nothing
+}
+
+func (s *store) getLastCommittedBlock() (uint64, error) {
+	if ledgerconfig.IsCommitter() {
+		return s.lastCommittedBlock, nil
+	}
+	// FIXME: Change to Debugf
+	logger.Infof("I am not a committer so looking up last committed block from meta data for [%s]", s.db.DBName)
+	return s.getLastCommittedBlockFromMetaData()
+}
+
+func (s *store) getLastCommittedBlockFromMetaData() (uint64, error) {
+	m, ok, err := lookupMetadata(s.db)
+	if err != nil {
+		logger.Errorf("Error looking up meta data for [%s]: %s", s.db.DBName, err)
+		return 0, err
+	}
+	if !ok {
+		// FIXME: Change to Debugf
+		logger.Infof("Meta data for [%s] is empty", s.db.DBName)
+		return 0, nil
+	}
+	// FIXME: Change to Debugf
+	logger.Infof("Returning lastCommittedBlock %d from meta data for [%s]", m.lastCommitedBlock, s.db.DBName)
+	return m.lastCommitedBlock, nil
 }
