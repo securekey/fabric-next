@@ -171,14 +171,18 @@ func couchValueToJSON(value []byte) (jsonValue, error) {
 func extractCommitMap(jsonMap jsonValue) (jsonValue, error) {
 	commitMapUT, ok := jsonMap[commitField]
 	if !ok {
-		return nil, errors.New("private data metadata is invalid")
+		return nil, errors.New("commit field not found in metadata")
 	}
 
-	commitMap, ok := commitMapUT.(jsonValue)
-	if !ok {
-		return nil, errors.New("private data metadata is invalid")
+	commitMap, ok := commitMapUT.(map[string]interface{})
+	// FIXME: This still returns !ok but it actually gives a valid value.
+	// It must be some type of JSON structure??
+	// if !ok {
+	// 	return nil, errors.New("private data metadata is invalid")
+	// }
+	if commitMap == nil {
+		return nil, errors.New("private data metadata is invalid - nil")
 	}
-
 	return commitMap, nil
 }
 
@@ -222,22 +226,27 @@ func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
 
 	pendingUT, ok := commitMap[pendingCommitField]
 	if !ok {
-		return nil, false, errors.New("private data metadata is invalid")
+		return nil, false, errors.New("pending commit field not found in metadata")
 	}
 
 	pending, ok := pendingUT.(bool)
 	if !ok {
-		return nil, false, errors.New("private data metadata is invalid")
+		return nil, false, errors.New("pending JSON field is not a bool")
 	}
 
 	lastCommitedBlockUT, ok := commitMap[blockNumberField]
 	if !ok {
-		return nil, false, errors.New("private data metadata is invalid")
+		return nil, false, errors.New("block number field not found in metadata")
 	}
 
-	lastCommitedBlock, ok := lastCommitedBlockUT.(uint64)
+	lastCommitedBlockJSON, ok := lastCommitedBlockUT.(json.Number)
 	if !ok {
-		return nil, false, errors.New("private data metadata is invalid")
+		return nil, false, errors.New("block number field is not a JSON number")
+	}
+
+	lastCommitedBlock, err := strconv.ParseUint(lastCommitedBlockJSON.String(), 10, 64)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "error parsing block number")
 	}
 
 	m := metadata{pending, lastCommitedBlock}
