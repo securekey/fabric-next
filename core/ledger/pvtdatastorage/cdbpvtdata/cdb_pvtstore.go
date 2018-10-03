@@ -9,6 +9,8 @@ package cdbpvtdata
 import (
 	"fmt"
 
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+
 	"strconv"
 
 	"github.com/hyperledger/fabric/core/ledger"
@@ -27,9 +29,11 @@ func newStore(db *couchdb.CouchDatabase) (*store, error) {
 		db: db,
 	}
 
-	err := s.initState()
-	if err != nil {
-		return nil, err
+	if ledgerconfig.IsCommitter() {
+		err := s.initState()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &s, nil
