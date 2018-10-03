@@ -271,17 +271,18 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 
 	_, err := retry.Invoke(
 		func() (interface{}, error) {
-			dbInfo, couchDBReturn, err := dbclient.GetDatabaseInfo()
-			if err != nil {
-				return nil, err
-			}
+			_, _, err := dbclient.GetDatabaseInfo()
+			return nil, err
+			// if err != nil {
+			// 	return nil, err
+			// }
 
-			//If the dbInfo returns populated and status code is 200, then the database exists
-			if dbInfo != nil && couchDBReturn.StatusCode == 200 {
-				// DB exists
-				return nil, nil
-			}
-			return nil, errors.Errorf("DB not found: [%s]", dbclient.DBName)
+			// //If the dbInfo returns populated and status code is 200, then the database exists
+			// if dbInfo != nil && couchDBReturn.StatusCode == 200 {
+			// 	// DB exists
+			// 	return nil, nil
+			// }
+			// return nil, errors.Errorf("DB not found: [%s]", dbclient.DBName)
 		},
 		retry.WithMaxAttempts(maxAttempts),
 		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
