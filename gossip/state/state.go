@@ -835,6 +835,10 @@ func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Blo
 		return nil, errors.Wrapf(err, "Unable to get block number %d from ledger", number)
 	}
 
+	if block == nil {
+		return nil, errors.Errorf("Got nil block for number %d", number)
+	}
+
 	return block.(*common.Block), nil
 }
 

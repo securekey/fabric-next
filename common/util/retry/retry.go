@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package retry
 
 import (
+	"errors"
 	"time"
 )
 
@@ -75,6 +76,10 @@ func Invoke(invoke Invocation, opts ...Opt) (interface{}, error) {
 	// Apply the options
 	for _, opt := range opts {
 		opt(retryOpts)
+	}
+
+	if retryOpts.MaxAttempts == 0 {
+		return nil, errors.New("MaxAttempts must be greater than 0")
 	}
 
 	backoff := retryOpts.InitialBackoff

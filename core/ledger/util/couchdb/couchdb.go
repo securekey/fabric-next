@@ -263,7 +263,8 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 		return dbclient.doCreateDatabaseIfNotExist()
 	}
 
-	logger.Debugf("I am not a committer - Checking if DB [%s] exists...", dbclient.DBName)
+	// FIXME: Change to Debugf
+	logger.Infof("I am not a committer - Checking if DB [%s] exists...", dbclient.DBName)
 
 	// TODO: Make configurable
 	maxAttempts := 10
@@ -283,6 +284,11 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 			return nil, errors.Errorf("DB not found: [%s]", dbclient.DBName)
 		},
 		retry.WithMaxAttempts(maxAttempts),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			// FIXME: Change to Debugf
+			logger.Infof("Error getting DB info for [%s] on attempt %d: %s. Will retry in %s", dbclient, attempt, err, backoff)
+			return true
+		}),
 	)
 
 	return errors.Wrapf(err, "Unable to open DB [%s]", dbclient.DBName)
@@ -1219,6 +1225,12 @@ func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
 
 // CreateIndex method provides a function creating an index
 func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndexResponse, error) {
+	if !ledgerconfig.IsCommitter() {
+		// FIXME: Change to Debugf
+		logger.Infof("I am not a committer and will not create the index for DB [%s]", dbclient.DBName)
+		// FIXME: Return existing index instead of nil?
+		return nil, nil
+	}
 
 	logger.Debugf("Entering CreateIndex()  indexdefinition=%s", indexdefinition)
 

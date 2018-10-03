@@ -217,6 +217,12 @@ func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsC
 // not the case then this init will invoke function `syncPvtdataStoreWithBlockStore`
 // to follow the normal course
 func (s *Store) init() error {
+	if !ledgerconfig.IsCommitter() {
+		// FIXME: Change to Debugf
+		logger.Infof("Will not init pvt data since I am not a committer")
+		return nil
+	}
+
 	var initialized bool
 	var err error
 	if initialized, err = s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {

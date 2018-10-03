@@ -13,6 +13,7 @@ package cscc
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/channelconfig"
@@ -362,6 +363,10 @@ func initializeChannel(channelID string) error {
 			return nil, err
 		},
 		retry.WithMaxAttempts(maxAttempts),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			cnflogger.Infof("Error initializing channel [%s] on attempt %d: %s. Will retry in %s", channelID, attempt, err, backoff)
+			return true
+		}),
 	)
 	return err
 }
