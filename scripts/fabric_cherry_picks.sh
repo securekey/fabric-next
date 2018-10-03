@@ -22,7 +22,7 @@ git clone https://gerrit.securekey.com/fabric-next fabric
 cd fabric
 git config advice.detachedHead false
 # Tip of cluster (October 3, 2018)
-git checkout e8ae9fdafe3321fe8355bcf17eb884ea52528c96
+git checkout 53cc9a7728ea5f9dc24e5ee4f144f8fd22087a30
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
