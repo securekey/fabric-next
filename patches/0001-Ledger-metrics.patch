@@ -1,48 +1,48 @@
-From f5a0c3fe16aa37ddc71f6217b7e3ce561f4ca9de Mon Sep 17 00:00:00 2001
+From c54b0fedcb628e703e25c971964defc4585a34c8 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 1 Oct 2018 12:12:56 -0400
-Subject: [PATCH] Ledger metrics
+Date: Wed, 3 Oct 2018 12:27:57 -0400
+Subject: [PATCH] [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
- bccsp/pkcs11/impl.go                               |  21 +
- bccsp/sw/impl.go                                   |  25 ++
- .../blkstorage/fsblkstorage/blockfile_mgr.go       |  17 +
- .../ledger/blkstorage/fsblkstorage/blockindex.go   |   7 +
- .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |   8 +
- common/ledger/util/leveldbhelper/leveldb_helper.go |  69 +++
- .../ledger/util/leveldbhelper/leveldb_provider.go  |  11 +-
- common/metrics/server.go                           | 271 ++++++------
- common/metrics/server_test.go                      | 242 -----------
- common/metrics/tally_provider.go                   | 374 ++---------------
- common/metrics/tally_provider_test.go              | 462 ---------------------
- common/metrics/types.go                            |  45 --
- .../blocksprovider/blocksprovider.go               |  10 +
- .../historydb/historycouchdb/historycouchdb.go     |   2 +-
- .../historydb/historyleveldb/historyleveldb.go     |   7 +
- core/ledger/kvledger/inventory/cdbid/cdb_store.go  |   7 +-
- core/ledger/kvledger/kv_ledger.go                  |  26 ++
- .../privacyenabledstate/common_storage_db.go       |   9 +
- .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |   7 +-
- .../txmgmt/statedb/statecouchdb/batch_util.go      |  10 +
- .../txmgmt/statedb/statecouchdb/commit_handling.go |   7 +
- .../txmgmt/statedb/statecouchdb/statecouchdb.go    |   7 +
- .../txmgmt/statedb/stateleveldb/stateleveldb.go    |   7 +
- .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  11 +
- core/ledger/ledgerstorage/store.go                 |  28 ++
- .../pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go   |   2 +-
- core/ledger/util/couchdb/couchdb.go                |  21 +
- gossip/privdata/coordinator.go                     |  11 +
- gossip/state/payloads_buffer.go                    |   9 +-
- gossip/state/state.go                              |  26 +-
- peer/node/start.go                                 |   4 +
+ bccsp/pkcs11/impl.go                          |  21 +
+ bccsp/sw/impl.go                              |  25 +
+ .../blkstorage/fsblkstorage/blockfile_mgr.go  |  17 +
+ .../blkstorage/fsblkstorage/blockindex.go     |   7 +
+ .../blkstorage/fsblkstorage/blocks_itr.go     |   8 +
+ .../util/leveldbhelper/leveldb_helper.go      |  69 +++
+ .../util/leveldbhelper/leveldb_provider.go    |  11 +-
+ common/metrics/server.go                      | 271 +++++-----
+ common/metrics/server_test.go                 | 242 ---------
+ common/metrics/tally_provider.go              | 374 ++------------
+ common/metrics/tally_provider_test.go         | 462 ------------------
+ common/metrics/types.go                       |  45 --
+ .../blocksprovider/blocksprovider.go          |  10 +
+ .../historycouchdb/historycouchdb.go          |   2 +-
+ .../historyleveldb/historyleveldb.go          |   7 +
+ .../kvledger/inventory/cdbid/cdb_store.go     |   7 +-
+ core/ledger/kvledger/kv_ledger.go             |  26 +
+ .../privacyenabledstate/common_storage_db.go  |   9 +
+ .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go |   7 +-
+ .../txmgmt/statedb/statecouchdb/batch_util.go |  10 +
+ .../statedb/statecouchdb/commit_handling.go   |   7 +
+ .../statedb/statecouchdb/statecouchdb.go      |   7 +
+ .../statedb/stateleveldb/stateleveldb.go      |   7 +
+ .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  11 +
+ core/ledger/ledgerstorage/store.go            |  28 ++
+ .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
+ core/ledger/util/couchdb/couchdb.go           |  21 +
+ gossip/privdata/coordinator.go                |  11 +
+ gossip/state/payloads_buffer.go               |   9 +-
+ gossip/state/state.go                         |  26 +-
+ peer/node/start.go                            |   4 +
  31 files changed, 555 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
 
 diff --git a/bccsp/pkcs11/impl.go b/bccsp/pkcs11/impl.go
-index 148c9e19..9b0c77fe 100644
+index 148c9e198..9b0c77fe7 100644
 --- a/bccsp/pkcs11/impl.go
 +++ b/bccsp/pkcs11/impl.go
 @@ -19,6 +19,7 @@ import (
@@ -109,7 +109,7 @@ index 148c9e19..9b0c77fe 100644
  }
  
 diff --git a/bccsp/sw/impl.go b/bccsp/sw/impl.go
-index d6a9da6c..a172735d 100644
+index d6a9da6c0..a172735da 100644
 --- a/bccsp/sw/impl.go
 +++ b/bccsp/sw/impl.go
 @@ -21,6 +21,7 @@ import (
@@ -187,7 +187,7 @@ index d6a9da6c..a172735d 100644
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil.")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
-index ab6caa8c..968af68d 100644
+index ab6caa8c4..968af68db 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 @@ -29,6 +29,7 @@ import (
@@ -236,7 +236,7 @@ index ab6caa8c..968af68d 100644
  	if err != nil {
  		return err
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockindex.go b/common/ledger/blkstorage/fsblkstorage/blockindex.go
-index 3d21b7e4..2060bb9e 100644
+index 3d21b7e45..2060bb9e5 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockindex.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blockindex.go
 @@ -25,6 +25,7 @@ import (
@@ -261,7 +261,7 @@ index 3d21b7e4..2060bb9e 100644
  	if len(index.indexItemsMap) == 0 {
  		logger.Debug("Not indexing block... as nothing to index")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
-index 3e06887b..28d00d94 100644
+index 3e06887b6..28d00d944 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blocks_itr.go
 @@ -20,6 +20,7 @@ import (
@@ -287,7 +287,7 @@ index 3e06887b..28d00d94 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17d..0a65722e 100644
+index 9e2ab17df..0a65722ef 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
 @@ -20,8 +20,15 @@ import (
@@ -408,7 +408,7 @@ index 9e2ab17d..0a65722e 100644
 +	}
 +}
 diff --git a/common/ledger/util/leveldbhelper/leveldb_provider.go b/common/ledger/util/leveldbhelper/leveldb_provider.go
-index db41651d..8bcc91a2 100644
+index db41651d7..8bcc91a2c 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_provider.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_provider.go
 @@ -20,6 +20,7 @@ import (
@@ -464,7 +464,7 @@ index db41651d..8bcc91a2 100644
  	for k, v := range batch.KVs {
  		key := constructLevelKey(h.dbName, []byte(k))
 diff --git a/common/metrics/server.go b/common/metrics/server.go
-index 677151e7..fc42eac0 100644
+index 677151e78..fc42eac09 100644
 --- a/common/metrics/server.go
 +++ b/common/metrics/server.go
 @@ -8,11 +8,21 @@ package metrics
@@ -825,7 +825,7 @@ index 677151e7..fc42eac0 100644
  }
 diff --git a/common/metrics/server_test.go b/common/metrics/server_test.go
 deleted file mode 100644
-index 07d010ca..00000000
+index 07d010ca8..000000000
 --- a/common/metrics/server_test.go
 +++ /dev/null
 @@ -1,242 +0,0 @@
@@ -1072,7 +1072,7 @@ index 07d010ca..00000000
 -	}
 -}
 diff --git a/common/metrics/tally_provider.go b/common/metrics/tally_provider.go
-index cf1e3def..aca8d54a 100644
+index cf1e3deff..aca8d54ab 100644
 --- a/common/metrics/tally_provider.go
 +++ b/common/metrics/tally_provider.go
 @@ -7,17 +7,16 @@ SPDX-License-Identifier: Apache-2.0
@@ -1547,7 +1547,7 @@ index cf1e3def..aca8d54a 100644
 -}
 diff --git a/common/metrics/tally_provider_test.go b/common/metrics/tally_provider_test.go
 deleted file mode 100644
-index 9e911c27..00000000
+index 9e911c275..000000000
 --- a/common/metrics/tally_provider_test.go
 +++ /dev/null
 @@ -1,462 +0,0 @@
@@ -2015,7 +2015,7 @@ index 9e911c27..00000000
 -}
 diff --git a/common/metrics/types.go b/common/metrics/types.go
 deleted file mode 100644
-index c70001ea..00000000
+index c70001ea1..000000000
 --- a/common/metrics/types.go
 +++ /dev/null
 @@ -1,45 +0,0 @@
@@ -2065,7 +2065,7 @@ index c70001ea..00000000
 -	Start() error
 -}
 diff --git a/core/deliverservice/blocksprovider/blocksprovider.go b/core/deliverservice/blocksprovider/blocksprovider.go
-index 4a7441c5..6cc29548 100644
+index 4a7441c58..6cc295487 100644
 --- a/core/deliverservice/blocksprovider/blocksprovider.go
 +++ b/core/deliverservice/blocksprovider/blocksprovider.go
 @@ -11,8 +11,11 @@ import (
@@ -2102,12 +2102,12 @@ index 4a7441c5..6cc29548 100644
  			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)
  			if !b.isDone() {
 diff --git a/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go b/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
-index 0449720c..f568373a 100644
+index 33ccc7e14..bee7b8f03 100644
 --- a/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
 +++ b/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
-@@ -42,7 +42,7 @@ func NewHistoryDBProvider() (historydb.HistoryDBProvider, error) {
+@@ -53,7 +53,7 @@ type historyDBProvider struct {
+ func NewHistoryDBProvider(couchDBDef *couchdb.CouchDBDef) (historydb.HistoryDBProvider, error) {
  	logger.Debugf("constructing CouchDB historyDB storage provider")
- 	couchDBDef := couchdb.GetCouchDBDefinition()
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 -		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 +		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
@@ -2115,7 +2115,7 @@ index 0449720c..f568373a 100644
  		return nil, errors.WithMessage(err, "obtaining CouchDB HistoryDB provider failed")
  	}
 diff --git a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
-index 7b029648..b6423c12 100644
+index 7b029648e..b6423c123 100644
 --- a/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
 +++ b/core/ledger/kvledger/history/historydb/historyleveldb/historyleveldb.go
 @@ -10,6 +10,7 @@ import (
@@ -2140,7 +2140,7 @@ index 7b029648..b6423c12 100644
  	keys, height, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
  	if err != nil {
 diff --git a/core/ledger/kvledger/inventory/cdbid/cdb_store.go b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
-index 130a8ac5..a3fc89ab 100644
+index 130a8ac59..a3fc89abe 100644
 --- a/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 +++ b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 @@ -8,6 +8,7 @@ package cdbid
@@ -2177,7 +2177,7 @@ index 130a8ac5..a3fc89ab 100644
 \ No newline at end of file
 +}
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index fcb9b474..cc3600ba 100644
+index fcb9b4747..cc3600ba3 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -16,6 +16,7 @@ import (
@@ -2242,7 +2242,7 @@ index fcb9b474..cc3600ba 100644
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
 diff --git a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
-index f522ab2c..9ca7313b 100644
+index f522ab2cc..9ca7313bf 100644
 --- a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 +++ b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 @@ -12,6 +12,7 @@ import (
@@ -2276,7 +2276,7 @@ index f522ab2c..9ca7313b 100644
  		for _, coll := range nsBatch.GetCollectionNames() {
  			for key, vv := range nsBatch.GetUpdates(coll) {
 diff --git a/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go b/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
-index 1d1436cb..0f94a7ec 100644
+index 1d1436cb5..0f94a7ec3 100644
 --- a/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
 +++ b/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt/expiry_keeper.go
 @@ -7,10 +7,11 @@ SPDX-License-Identifier: Apache-2.0
@@ -2304,7 +2304,7 @@ index 1d1436cb..0f94a7ec 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
-index 2dd88237..a80f2f3a 100644
+index 2dd88237c..a80f2f3a3 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/batch_util.go
 @@ -7,6 +7,8 @@ package statecouchdb
@@ -2333,7 +2333,7 @@ index 2dd88237..a80f2f3a 100644
  		return nil
  	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
-index 240667a7..e328658d 100644
+index 240667a73..e328658dd 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
 @@ -9,6 +9,7 @@ import (
@@ -2358,7 +2358,7 @@ index 240667a7..e328658d 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index 58f297a0..ed578b3a 100644
+index b10b1d229..fc06e3558 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2383,7 +2383,7 @@ index 58f297a0..ed578b3a 100644
  	// the function `Apply update can be split into three functions. Each carrying out one of the following three stages`.
  	// The write lock is needed only for the stage 2.
 diff --git a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
-index ba3be0ea..6adaf3bd 100644
+index ba3be0ea3..6adaf3bd5 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/stateleveldb/stateleveldb.go
 @@ -11,6 +11,7 @@ import (
@@ -2408,7 +2408,7 @@ index ba3be0ea..6adaf3bd 100644
  	namespaces := batch.GetUpdatedNamespaces()
  	for _, ns := range namespaces {
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd053..aba0c264 100644
+index d03bd0535..aba0c264e 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2444,7 +2444,7 @@ index d03bd053..aba0c264 100644
  		l.StateCommitDone(txmgr.ledgerid)
  	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index be29c9cd..fad0e42e 100644
+index f9b2d8847..cefb5e044 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
 @@ -30,6 +30,7 @@ import (
@@ -2518,7 +2518,7 @@ index be29c9cd..fad0e42e 100644
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
 diff --git a/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go b/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
-index e470dfcd..23a6a122 100644
+index e470dfcdb..23a6a1222 100644
 --- a/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
 +++ b/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
 @@ -28,7 +28,7 @@ func NewProvider() (*Provider, error) {
@@ -2531,7 +2531,7 @@ index e470dfcd..23a6a122 100644
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 19113fd9..8a46f2ba 100644
+index af71aca12..75264464f 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -27,6 +27,7 @@ import (
@@ -2542,7 +2542,7 @@ index 19113fd9..8a46f2ba 100644
  	"github.com/hyperledger/fabric/common/util/retry"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	logging "github.com/op/go-logging"
-@@ -525,6 +526,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+@@ -530,6 +531,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
  
@@ -2553,7 +2553,7 @@ index 19113fd9..8a46f2ba 100644
  	logger.Debugf("Entering EnsureFullCommit()")
  
  	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
-@@ -583,6 +588,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+@@ -588,6 +593,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2565,7 +2565,7 @@ index 19113fd9..8a46f2ba 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1318,6 +1328,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1329,6 +1339,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2578,7 +2578,7 @@ index 19113fd9..8a46f2ba 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1688,6 +1704,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1699,6 +1715,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
@@ -2591,7 +2591,7 @@ index 19113fd9..8a46f2ba 100644
  
  	//create the return objects for couchDB
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 39cb9c1a..3f4a13ed 100644
+index 39cb9c1a2..3f4a13ed8 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
@@ -2634,7 +2634,7 @@ index 39cb9c1a..3f4a13ed 100644
  	if bFetchFromPeers {
  		if len(privateInfo.missingKeys) == 0 {
 diff --git a/gossip/state/payloads_buffer.go b/gossip/state/payloads_buffer.go
-index e7fbf5b1..23248534 100644
+index e7fbf5b18..232485341 100644
 --- a/gossip/state/payloads_buffer.go
 +++ b/gossip/state/payloads_buffer.go
 @@ -21,7 +21,7 @@ import (
@@ -2676,7 +2676,7 @@ index e7fbf5b1..23248534 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 0e3cabf0..d3143144 100644
+index 26c31ff13..a37e6356a 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
@@ -2754,7 +2754,7 @@ index 0e3cabf0..d3143144 100644
  	if ledgerconfig.IsCommitter() {
  		// FIXME: Change to Debugf
 diff --git a/peer/node/start.go b/peer/node/start.go
-index 710281f5..af799d27 100644
+index 710281f5f..af799d278 100644
 --- a/peer/node/start.go
 +++ b/peer/node/start.go
 @@ -25,6 +25,7 @@ import (
@@ -2776,5 +2776,5 @@ index 710281f5..af799d27 100644
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
 -- 
-2.15.1 (Apple Git-101)
+2.17.1 (Apple Git-112)
 

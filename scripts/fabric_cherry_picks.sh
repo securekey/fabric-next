@@ -22,7 +22,7 @@ git clone https://gerrit.securekey.com/fabric-next fabric
 cd fabric
 git config advice.detachedHead false
 # Tip of cluster (October 3, 2018)
-git checkout b9cffb410c5e781ecdd0f0ab5b2b5e05cea6325e
+git checkout e8ae9fdafe3321fe8355bcf17eb884ea52528c96
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -44,7 +44,7 @@ git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_ch
 #git am $MY_PATH/../patches/0001-FAB-11779-Move-goleveldb-version.patch
 
 # **Temporary** metrics collection
-git am $MY_PATH/../patches/0001-Ledger-metrics.patch
+git am -3 $MY_PATH/../patches/0001-Ledger-metrics.patch
 
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
 #git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
