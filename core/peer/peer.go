@@ -29,8 +29,10 @@ import (
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/transientstore"
+	psplitter "github.com/hyperledger/fabric/core/transientstore/splitter"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -87,7 +89,20 @@ func (sp *storeProvider) OpenStore(ledgerID string) (transientstore.Store, error
 	sp.Lock()
 	defer sp.Unlock()
 	if sp.StoreProvider == nil {
-		sp.StoreProvider = transientstore.NewStoreProvider()
+		transientStorageConfig := ledgerconfig.GetTransientStoreProvider()
+		switch transientStorageConfig {
+		case ledgerconfig.LevelDBTransientStorage:
+			sp.StoreProvider = transientstore.NewStoreProvider()
+		case ledgerconfig.CouchDBTransientStorage:
+			var err error
+			sp.StoreProvider, err = psplitter.NewProvider()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if sp.StoreProvider == nil {
+			return nil, errors.New("transient storage provider creation failed due to unknown configuration")
+		}
 	}
 	store, err := sp.StoreProvider.OpenStore(ledgerID)
 	if err == nil {
