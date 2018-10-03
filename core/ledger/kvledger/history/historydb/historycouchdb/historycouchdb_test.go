@@ -114,9 +114,80 @@ func TestDbHandleCommitsBlockHeightAsSavePoint(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(def, dbname, heightDocKey)
+	results, err := queryCouchDbById(def, dbname, heightDocIdKey)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.NotEmpty(t, results, "block height must be saved to history couchdb")
+}
+
+// DBHandle.GetLastSavePoint() should return the block height with the block number of the _last_ committed
+// block and the number of transactions in said block.
+func TestGetLastSavePointReturnsBlockHeight(t *testing.T) {
+	const dbname = "historydb"
+	const blockNum1 = uint64(1234)
+	const blockNum2 = uint64(5678)
+	require.NotEqual(t, blockNum1, blockNum2)
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle(dbname)
+	require.NoError(t, err)
+	err = handle.Commit(
+		mocks.NewBlock(
+			blockNum1,
+			&common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "123",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+			},
+			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
+			mocks.NewTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: "namespace",
+					KvRwSet: &kvrwset.KVRWSet{
+						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum1, TxNum: uint64(5)}}},
+						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
+					},
+				},
+			),
+		),
+	)
+	require.NoError(t, err)
+	err = handle.Commit(
+		mocks.NewBlock(
+			blockNum2,
+			&common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "123",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+			},
+			[]peer.TxValidationCode{peer.TxValidationCode_VALID, peer.TxValidationCode_VALID},
+			mocks.NewTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: "namespace",
+					KvRwSet: &kvrwset.KVRWSet{
+						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
+						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
+					},
+				},
+			),
+			mocks.NewTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: "namespace",
+					KvRwSet: &kvrwset.KVRWSet{
+						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
+						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_other_value")}},
+					},
+				},
+			),
+		),
+	)
+	require.NoError(t, err)
+	height, err := handle.GetLastSavepoint()
+	require.NoError(t, err)
+	require.NotNil(t, height)
+	assert.Equal(t, blockNum2, height.BlockNum)
+	assert.Equal(t, uint64(2), height.TxNum)
 }
 
 // DBHandle.Commit() must also save the block height document even if there are no write-sets.

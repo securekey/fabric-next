@@ -31,9 +31,11 @@ const (
 	// Avoids naming conflicts with other databases that may reside in the same CouchDB instance.
 	dbNameSuffix = "history"
 	// ID of the block height CouchDB doc
-	heightDocKey = "height"
-	// Key of the block-height document that will hold the height's value
-	heightDocValueKey = "block_number"
+	heightDocIdKey = "height"
+	// Key of the block-height document that will hold the last committed block's number
+	heightDocBlockNumKey = "block_number"
+	// Key of the block-height document that will hold the number of transactions in the last committed block
+	heightDocTrxNumKey = "trx_number"
 )
 
 var logger = flogging.MustGetLogger("historycouchdb")
@@ -66,7 +68,12 @@ func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.History
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining handle on CouchDB HistoryDB failed")
 	}
-	return &historyDB{couchDB: database}, nil
+	_, rev, err := database.ReadDoc(heightDocIdKey)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get CouchDB document revision for savepoint with _id [%s]", heightDocIdKey)
+	}
+	logger.Debugf("CouchDB document revision for savepoint: %s", rev)
+	return &historyDB{couchDB: database, savepointRev: rev}, nil
 }
 
 // Close closes the underlying db
@@ -76,7 +83,10 @@ func (provider *historyDBProvider) Close() {
 
 // historyDB implements HistoryDB interface
 type historyDB struct {
+	// CouchDB client
 	couchDB *couchdb.CouchDatabase
+	// CouchDB document revision for the savepoint
+	savepointRev string
 }
 
 // NewHistoryQueryExecutor implements method in HistoryDB interface
@@ -96,15 +106,22 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 		return err
 	}
 	// Create CouchDB doc savepoint
-	heightDoc, err := newHeightDoc(newHeight(block))
+	heightDoc, err := newSavepointDoc(newHeight(block), historyDB.savepointRev)
 	if err != nil {
 		return err
 	}
 	docs = append(docs, heightDoc)
 	// Save to CouchDB
-	_, err = historyDB.couchDB.BatchUpdateDocuments(docs)
+	results, err := historyDB.couchDB.BatchUpdateDocuments(docs)
 	if err != nil {
 		return err
+	}
+	// Save the savepoint's new revision for the next commit
+	for _, result := range results {
+		if heightDocIdKey == result.ID {
+			historyDB.savepointRev = result.Rev
+			break
+		}
 	}
 	logger.Debugf(
 		"Channel [%s]: Updates committed to history database for blockNo [%v]",
@@ -115,7 +132,26 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 
 // GetBlockNumFromSavepoint implements method in HistoryDB interface
 func (historyDB *historyDB) GetLastSavepoint() (*version.Height, error) {
-	return nil, fmt.Errorf("Not implemented")
+	doc, _, err := historyDB.couchDB.ReadDoc(heightDocIdKey)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get last savepoint with id [%s] from CouchDB", heightDocIdKey)
+	}
+	if doc == nil {
+		return nil, nil
+	}
+	docMap := make(map[string]string)
+	if err := json.Unmarshal(doc.JSONValue, &docMap); err != nil {
+		return nil, errors.Wrapf(err, "failed to unmarshal savepoint with id [%s] from CouchDB", heightDocIdKey)
+	}
+	blockNum, err := strconv.ParseUint(docMap[heightDocBlockNumKey], 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse block number from CouchDB savepoint")
+	}
+	trxNum, err := strconv.ParseUint(docMap[heightDocTrxNumKey], 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse trx number from CouchDB savepoint")
+	}
+	return version.NewHeight(blockNum, trxNum), nil
 }
 
 // ShouldRecover implements method in interface kvledger.Recoverer
@@ -143,11 +179,16 @@ func keysToCouchDocs(keys []string) ([]*couchdb.CouchDoc, error) {
 	return docs, nil
 }
 
-// Returns a new CouchDB doc for the height ("save-point")
-func newHeightDoc(height *version.Height) (*couchdb.CouchDoc, error) {
+// Returns a new CouchDB savepoint document for the new savepoint.
+// The document's revision will be set only if 'rev' is not empty.
+func newSavepointDoc(height *version.Height, rev string) (*couchdb.CouchDoc, error) {
 	doc := make(map[string]interface{})
-	doc["_id"] = heightDocKey
-	doc[heightDocValueKey] = string(height.ToBytes())
+	doc["_id"] = heightDocIdKey
+	if rev != "" {
+		doc["_rev"] = rev
+	}
+	doc[heightDocBlockNumKey] = fmt.Sprintf("%d", height.BlockNum)
+	doc[heightDocTrxNumKey] = fmt.Sprintf("%d", height.TxNum)
 	bytes, err := json.Marshal(doc)
 	if err != nil {
 		return nil, err
@@ -157,10 +198,10 @@ func newHeightDoc(height *version.Height) (*couchdb.CouchDoc, error) {
 
 // Returns the block's height.
 func newHeight(block *common.Block) *version.Height {
-	return &version.Height{
+	return version.NewHeight(
 		block.Header.Number,
 		uint64(len(block.Data.Data)),
-	}
+	)
 }
 
 // Returns the set of modified keys from valid and endorsed transactions.
@@ -244,5 +285,5 @@ func decomposeKey(composite string) (namespace, key string, height *version.Heig
 	if err != nil {
 		return "", "", nil, errors.Wrapf(err, "failed to parse transaction number from composite key [%s]", composite)
 	}
-	return parts[0], parts[1], &version.Height{blockNum, trxNum}, nil
+	return parts[0], parts[1], version.NewHeight(blockNum, trxNum), nil
 }
