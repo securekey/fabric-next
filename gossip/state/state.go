@@ -240,7 +240,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		peerLedger: peerLedger,
 
-		blockPublisher: newBlockPublisher(chainID, bp),
+		blockPublisher: newBlockPublisher(chainID, bp, height),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -588,6 +588,23 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 	}
 }
 
+func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
+	if !ledgerconfig.IsCommitter() {
+		ourHeight := s.blockPublisher.LedgerHeight()
+		logger.Infof("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
+		return ourHeight, nil
+	}
+
+	ourHeight, err := s.ledger.LedgerHeight()
+	if err != nil {
+		logger.Errorf("Error getting height from ledger for channel [%s]: %s", s.chainID, err)
+		return 0, err
+	}
+
+	logger.Infof("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
+	return ourHeight, nil
+}
+
 func (s *GossipStateProviderImpl) antiEntropy() {
 	defer s.done.Done()
 	defer logger.Debug("State Provider stopped, stopping anti entropy procedure.")
@@ -598,9 +615,7 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 			s.stopCh <- struct{}{}
 			return
 		case <-time.After(defAntiEntropyInterval):
-			ourHeight, err := s.ledger.LedgerHeight()
-			// FIXME: Change to Debugf
-			logger.Infof("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
+			ourHeight, err := s.ledgerHeight()
 			if err != nil {
 				// Unable to read from ledger continue to the next round
 				logger.Errorf("Cannot obtain ledger height, due to %+v", errors.WithStack(err))
@@ -787,17 +802,14 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 
 	if ledgerconfig.IsCommitter() {
-		// FIXME: Change to Debugf
-		logger.Infof("Storing block %d to ledger", block.Header.Number)
 		// Commit block with available private transactions
 		if err := s.ledger.StoreBlock(block, pvtData); err != nil {
 			logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 			return err
 		}
-	} else {
-		// FIXME: Change to Debugf
-		logger.Infof("Not storing block %d to ledger since I'm not a committer - just publishing the block", block.Header.Number)
-		s.publishBlock(block)
+	} else if err := s.publishBlock(block); err != nil {
+		logger.Errorf("Error publishing block: %s", err)
+		return err
 	}
 
 	// Update ledger height
@@ -810,31 +822,29 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 	return nil
 }
 
-func (s *GossipStateProviderImpl) publishBlock(block *common.Block) {
+func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 	if block == nil {
-		logger.Warning("Cannot publish nil block")
-		return
+		return errors.New("cannot publish nil block")
 	}
 
 	if block.Header == nil {
-		logger.Warning("Cannot publish block with nil header. Block: %#v", block)
-		return
+		return errors.New("cannot publish block with nil header")
 	}
 
 	block, err := s.getBlockFromLedger(block.Header.Number)
 	if err != nil {
-		logger.Errorf("Unable to get block number %d from ledger: %s", block.Header.Number, err)
-		return
+		return errors.Wrapf(err, "unable to get block number %d from ledger: %s", block.Header.Number, err)
 	}
 
 	if block == nil {
-		logger.Errorf("Nil block retrieved from ledger for block number %d", block.Header.Number)
-		return
+		return errors.Errorf("nil block retrieved from ledger for block number %d", block.Header.Number)
 	}
 
 	if err := s.blockPublisher.Publish(block); err != nil {
-		logger.Errorf("Error updating block number %d: %s", block.Header.Number, err)
+		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
+
+	return nil
 }
 
 func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Block, error) {
