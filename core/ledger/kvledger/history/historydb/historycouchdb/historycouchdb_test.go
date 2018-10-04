@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -351,6 +352,146 @@ func TestDbHandleDoesNotCommitReadSet(t *testing.T) {
 	)
 	require.NoError(t, err, "failed to query test CouchDB")
 	assert.Empty(t, results, "read-sets must not be saved to history couchdb")
+}
+
+// DBHandle.ShouldRecover() should:
+// - return 'true' for recovery because we're passing in a different block number than the last committed block's number
+// - return (last_committed_blockNum + 1) as the value for the recovery block's number
+// - return no error
+func TestShouldRecover(t *testing.T) {
+	viper.Set("ledger.history.enableHistoryDatabase", true)
+	const committedBlockNum = uint64(456)
+	const someOtherBlockNum = uint64(987)
+	require.NotEqual(t, committedBlockNum, someOtherBlockNum)
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle("testhistorydb")
+	require.NoError(t, err)
+	err = handle.Commit(
+		mocks.NewBlock(
+			committedBlockNum,
+			&common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "123",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+			},
+			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
+			mocks.NewTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: "namespace",
+					KvRwSet: &kvrwset.KVRWSet{
+						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
+					},
+				},
+			),
+		),
+	)
+	require.NoError(t, err)
+	recover, recoveryBlockNum, err := handle.ShouldRecover(someOtherBlockNum)
+	assert.True(t, recover, "recovery should be signalled if the given block number is different than the last committed block's number")
+	assert.Equal(t, committedBlockNum+1, recoveryBlockNum, "recovery should indicate the recovery block's number")
+	assert.NoError(t, err, "recovery should not throw an error")
+}
+
+// DBHandle.ShouldRecover() should:
+// - return 'false' for recovery because we're passing in the same block number equal to the last committed block's number
+// - return (last_committed_blockNum + 1) as the value for the recovery block's number
+// - return no error
+func TestShouldNotRecoverIfBlockNumbersMatch(t *testing.T) {
+	viper.Set("ledger.history.enableHistoryDatabase", true)
+	const committedBlockNum = uint64(456)
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle("testhistorydb")
+	require.NoError(t, err)
+	err = handle.Commit(
+		mocks.NewBlock(
+			committedBlockNum,
+			&common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "123",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+			},
+			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
+			mocks.NewTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: "namespace",
+					KvRwSet: &kvrwset.KVRWSet{
+						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
+					},
+				},
+			),
+		),
+	)
+	require.NoError(t, err)
+	recover, recoveryBlockNum, err := handle.ShouldRecover(committedBlockNum)
+	assert.False(t, recover, "recovery should not be signalled if the given block number is equal to the last committed block's number")
+	assert.Equal(t, committedBlockNum+1, recoveryBlockNum, "recovery should indicate the recovery block's expected number")
+	assert.NoError(t, err, "recovery should not throw an error")
+}
+
+// DBHandle.ShouldRecover() should:
+// - return 'false' for recovery because we're passing in the same block number equal to the last committed block's number
+// - return (last_committed_blockNum + 1) as the value for the recovery block's number
+// - return no error
+func TestShouldNotRecoverIfHistoryDbIsDisabled(t *testing.T) {
+	viper.Set("ledger.history.enableHistoryDatabase", false)
+	const committedBlockNum = uint64(456)
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle("testhistorydb")
+	require.NoError(t, err)
+	err = handle.Commit(
+		mocks.NewBlock(
+			committedBlockNum,
+			&common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "123",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+			},
+			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
+			mocks.NewTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: "namespace",
+					KvRwSet: &kvrwset.KVRWSet{
+						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
+					},
+				},
+			),
+		),
+	)
+	require.NoError(t, err)
+	recover, recoveryBlockNum, err := handle.ShouldRecover(committedBlockNum)
+	assert.False(t, recover, "recovery should not be signalled if historyDB is disabled in the configuration")
+	assert.Equal(t, uint64(0), recoveryBlockNum, "recovery should indicate 0 as the recovery block number when historyDB is disabled")
+	assert.NoError(t, err, "recovery should not throw an error")
+}
+
+// DBHandle.ShouldRecover() should:
+// - return 'true' for recovery because there is no savepoint
+// - return 0 as the block to recover from
+// - return no error
+func TestShouldRecoverIfNoSavepoint(t *testing.T) {
+	viper.Set("ledger.history.enableHistoryDatabase", true)
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle("testhistorydb")
+	require.NoError(t, err)
+	savepoint, err := handle.GetLastSavepoint()
+	require.NoError(t, err)
+	require.Nil(t, savepoint)
+	recover, recoveryBlockNum, err := handle.ShouldRecover(uint64(123))
+	assert.True(t, recover, "recovery should always be signalled if there is no savepoint")
+	assert.Equal(t, uint64(0), recoveryBlockNum, "recovery should indicate 0 as the recovery block number when there is no savepoint")
+	assert.NoError(t, err, "recovery should not throw an error")
 }
 
 // Query CouchDB with the given def and dbname for documents matching the given id
