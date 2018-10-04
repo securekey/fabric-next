@@ -41,6 +41,7 @@ const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfter
 const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
+const confTransientStorage = "ledger.blockchain.transientStorage"
 const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
 const confRoles = "ledger.roles"
 
@@ -72,6 +73,16 @@ const (
 	LevelDBHistoryStorage HistoryStorageProvider = iota
 	// CouchDBHistoryStorage stores history in CouchDB
 	CouchDBHistoryStorage
+)
+
+// TransientStorageProvider holds the configuration names of the available transient storage providers
+type TransientStorageProvider int
+
+const (
+	// LevelDBPvtDataStorage stores transient data in LevelDB (default)
+	LevelDBTransientStorage TransientStorageProvider = iota
+	// CouchDBTransientStorage stores transient data in CouchDB
+	CouchDBTransientStorage
 )
 
 // GetRootPath returns the filesystem path.
@@ -203,17 +214,17 @@ func GetBlockStoreProvider() BlockStorageProvider {
 	}
 }
 
-// GetPvtDataStoreProvider returns the private data storage provider specified in the configuration
-func GetPvtDataStoreProvider() PvtDataStorageProvider {
-	pvtDataStorageConfig := viper.GetString(confPvtDataStorage)
+// GetTransientStoreProvider returns the transient storage provider specified in the configuration
+func GetTransientStoreProvider() TransientStorageProvider {
+	transientStorageConfig := viper.GetString(confTransientStorage)
 
-	switch pvtDataStorageConfig {
+	switch transientStorageConfig {
 	case "CouchDB":
-		return CouchDBPvtDataStorage
+		return CouchDBTransientStorage
 	default:
 		fallthrough
 	case "goleveldb":
-		return LevelDBPvtDataStorage
+		return LevelDBTransientStorage
 	}
 }
 
@@ -228,6 +239,20 @@ func GetHistoryStoreProvider() HistoryStorageProvider {
 		fallthrough
 	case "goleveldb":
 		return LevelDBHistoryStorage
+	}
+}
+
+// GetPvtDataStoreProvider returns the private data storage provider specified in the configuration
+func GetPvtDataStoreProvider() PvtDataStorageProvider {
+	pvtDataStorageConfig := viper.GetString(confPvtDataStorage)
+
+	switch pvtDataStorageConfig {
+	case "CouchDB":
+		return CouchDBPvtDataStorage
+	default:
+		fallthrough
+	case "goleveldb":
+		return LevelDBPvtDataStorage
 	}
 }
 
