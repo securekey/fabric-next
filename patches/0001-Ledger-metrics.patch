@@ -1,7 +1,7 @@
-From c54b0fedcb628e703e25c971964defc4585a34c8 Mon Sep 17 00:00:00 2001
+From f62df432f5dc2aed52f34f1bd861942754643d9c Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Wed, 3 Oct 2018 12:27:57 -0400
-Subject: [PATCH] [PATCH] Ledger metrics
+Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
@@ -2102,10 +2102,10 @@ index 4a7441c58..6cc295487 100644
  			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)
  			if !b.isDone() {
 diff --git a/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go b/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
-index 33ccc7e14..bee7b8f03 100644
+index 69a2724d6..fa299331e 100644
 --- a/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
 +++ b/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
-@@ -53,7 +53,7 @@ type historyDBProvider struct {
+@@ -55,7 +55,7 @@ type historyDBProvider struct {
  func NewHistoryDBProvider(couchDBDef *couchdb.CouchDBDef) (historydb.HistoryDBProvider, error) {
  	logger.Debugf("constructing CouchDB historyDB storage provider")
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -2531,7 +2531,7 @@ index e470dfcdb..23a6a1222 100644
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index af71aca12..75264464f 100644
+index a72cb6683..7f2b65768 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -27,6 +27,7 @@ import (
@@ -2539,10 +2539,10 @@ index af71aca12..75264464f 100644
  
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
- 	"github.com/hyperledger/fabric/common/util/retry"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	logging "github.com/op/go-logging"
-@@ -530,6 +531,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+ )
+@@ -491,6 +492,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
  
@@ -2553,7 +2553,7 @@ index af71aca12..75264464f 100644
  	logger.Debugf("Entering EnsureFullCommit()")
  
  	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
-@@ -588,6 +593,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+@@ -549,6 +554,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2565,7 +2565,7 @@ index af71aca12..75264464f 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1329,6 +1339,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1283,6 +1293,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2578,7 +2578,7 @@ index af71aca12..75264464f 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1699,6 +1715,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1653,6 +1669,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
@@ -2676,7 +2676,7 @@ index e7fbf5b18..232485341 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 26c31ff13..a37e6356a 100644
+index 35acb64a8..2c5d34ec1 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
