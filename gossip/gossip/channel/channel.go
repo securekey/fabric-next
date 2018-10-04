@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/fabric/gossip/gossip/pull"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
@@ -144,7 +143,7 @@ type gossipChannel struct {
 	leaderMsgStore            msgstore.MessageStore
 	chainID                   common.ChainID
 	blocksPuller              pull.Mediator
-	logger                    *logging.Logger
+	logger                    util.Logger
 	stateInfoPublishScheduler *time.Ticker
 	stateInfoRequestScheduler *time.Ticker
 	memFilter                 *membershipFilter
@@ -406,7 +405,7 @@ func (gc *gossipChannel) createBlockPuller() pull.Mediator {
 		digests := digestMsg.Digests
 		digestMsg.Digests = nil
 		for i := range digests {
-			seqNum, err := strconv.ParseUint(digests[i], 10, 64)
+			seqNum, err := strconv.ParseUint(string(digests[i]), 10, 64)
 			if err != nil {
 				gc.logger.Warningf("Can't parse digest %s : %+v", digests[i], errors.WithStack(err))
 				continue

@@ -28,6 +28,7 @@ open source architecture; Hyperledger Fabric is your starting point.
 
 ## Releases
 
+- [v1.3.0-rc1 - September 24, 2018](https://github.com/hyperledger/fabric/releases/tag/v1.3.0-rc1)
 - [v1.2.0 - July 3, 2018](https://github.com/hyperledger/fabric/releases/tag/v1.2.0)
 - [v1.2.0-rc1 - June 22, 2018](https://github.com/hyperledger/fabric/releases/tag/v1.2.0-rc1)
 - [v1.1.0 - March 15, 2018](https://github.com/hyperledger/fabric/releases/tag/v1.1.0)
@@ -56,6 +57,7 @@ Please visit the [Hyperledger Fabric wiki](https://wiki.hyperledger.org/projects
 Please visit our
 online documentation for
 information on getting started using and developing with the fabric, SDK and chaincode:
+- [v1.3](http://hyperledger-fabric.readthedocs.io/en/release-1.3/)
 - [v1.2](http://hyperledger-fabric.readthedocs.io/en/release-1.2/)
 - [v1.1](http://hyperledger-fabric.readthedocs.io/en/release-1.1/)
 - [v1.0](http://hyperledger-fabric.readthedocs.io/en/release-1.0/)
@@ -68,6 +70,9 @@ It's recommended for first-time users to begin by going through the Getting Star
 We welcome contributions to the Hyperledger Fabric project in many forms.
 There’s always plenty to do! Check [the documentation on how to contribute to this project](http://hyperledger-fabric.readthedocs.io/en/latest/CONTRIBUTING.html)
 for the full details.
+
+## Testing
+Check [the documentation](testingInfo.rst) for information on the testing structure that the project follows.
 
 ## Community
 

@@ -12,11 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/integration/runner"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 )
 
 // TestEnv - an interface that a test environment implements
@@ -36,15 +38,17 @@ var testEnvs = []TestEnv{&LevelDBCommonStorageTestEnv{}, &CouchDBCommonStorageTe
 
 // LevelDBCommonStorageTestEnv implements TestEnv interface for leveldb based storage
 type LevelDBCommonStorageTestEnv struct {
-	t        testing.TB
-	provider DBProvider
+	t                 testing.TB
+	provider          DBProvider
+	bookkeeperTestEnv *bookkeeping.TestEnv
 }
 
 // Init implements corresponding function from interface TestEnv
 func (env *LevelDBCommonStorageTestEnv) Init(t testing.TB) {
 	viper.Set("ledger.state.stateDatabase", "")
 	removeDBPath(t)
-	dbProvider, err := NewCommonStorageDBProvider()
+	env.bookkeeperTestEnv = bookkeeping.NewTestEnv(t)
+	dbProvider, err := NewCommonStorageDBProvider(env.bookkeeperTestEnv.TestProvider)
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
@@ -65,6 +69,7 @@ func (env *LevelDBCommonStorageTestEnv) GetName() string {
 // Cleanup implements corresponding function from interface TestEnv
 func (env *LevelDBCommonStorageTestEnv) Cleanup() {
 	env.provider.Close()
+	env.bookkeeperTestEnv.Cleanup()
 	removeDBPath(env.t)
 }
 
@@ -72,10 +77,10 @@ func (env *LevelDBCommonStorageTestEnv) Cleanup() {
 
 // CouchDBCommonStorageTestEnv implements TestEnv interface for couchdb based storage
 type CouchDBCommonStorageTestEnv struct {
-	t            testing.TB
-	provider     DBProvider
-	openDbIds    map[string]bool
-	couchCleanup func()
+	t                 testing.TB
+	provider          DBProvider
+	bookkeeperTestEnv *bookkeeping.TestEnv
+	couchCleanup      func()
 }
 
 func (env *CouchDBCommonStorageTestEnv) setupCouch() string {
@@ -104,20 +109,20 @@ func (env *CouchDBCommonStorageTestEnv) Init(t testing.TB) {
 	viper.Set("ledger.state.couchDBConfig.username", "")
 	viper.Set("ledger.state.couchDBConfig.password", "")
 	viper.Set("ledger.state.couchDBConfig.maxRetries", 3)
-	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 10)
+	viper.Set("ledger.state.couchDBConfig.maxRetriesOnStartup", 20)
 	viper.Set("ledger.state.couchDBConfig.requestTimeout", time.Second*35)
-	dbProvider, err := NewCommonStorageDBProvider()
+
+	env.bookkeeperTestEnv = bookkeeping.NewTestEnv(t)
+	dbProvider, err := NewCommonStorageDBProvider(env.bookkeeperTestEnv.TestProvider)
 	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
-	env.openDbIds = make(map[string]bool)
 }
 
 // GetDBHandle implements corresponding function from interface TestEnv
 func (env *CouchDBCommonStorageTestEnv) GetDBHandle(id string) DB {
 	db, err := env.provider.GetDBHandle(id)
 	assert.NoError(env.t, err)
-	env.openDbIds[id] = true
 	return db
 }
 
@@ -128,9 +133,10 @@ func (env *CouchDBCommonStorageTestEnv) GetName() string {
 
 // Cleanup implements corresponding function from interface TestEnv
 func (env *CouchDBCommonStorageTestEnv) Cleanup() {
-	for id := range env.openDbIds {
-		statecouchdb.CleanupDB(id)
-	}
+	csdbProvider, _ := env.provider.(*CommonStorageDBProvider)
+	statecouchdb.CleanupDB(env.t, csdbProvider.VersionedDBProvider)
+
+	env.bookkeeperTestEnv.Cleanup()
 	env.provider.Close()
 	env.couchCleanup()
 }

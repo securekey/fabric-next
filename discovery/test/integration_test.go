@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
@@ -18,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -98,6 +98,14 @@ func TestMain(m *testing.M) {
 		return
 	}
 
+	peerDirPrefix := filepath.Join(testdir, "crypto-config", "peerOrganizations")
+	testPeers = testPeerSet{
+		newPeer(peerDirPrefix, "Org1MSP", 1, 0),
+		newPeer(peerDirPrefix, "Org1MSP", 1, 1),
+		newPeer(peerDirPrefix, "Org2MSP", 2, 0),
+		newPeer(peerDirPrefix, "Org2MSP", 2, 1),
+	}
+
 	rc := m.Run()
 	os.RemoveAll(testdir)
 	gexec.CleanupBuildArtifacts()
@@ -127,7 +135,10 @@ func TestGreenPath(t *testing.T) {
 
 	// Send all queries
 	req := disc.NewRequest().AddLocalPeersQuery().OfChannel("mychannel")
-	req, err := req.AddPeersQuery().AddConfigQuery().AddEndorsersQuery(cc2cc, ccWithCollection)
+	col1 := &ChaincodeCall{Name: "cc2", CollectionNames: []string{"col1"}}
+	nonExistentCollection := &ChaincodeCall{Name: "cc2", CollectionNames: []string{"col3"}}
+	_ = nonExistentCollection
+	req, err := req.AddPeersQuery().AddPeersQuery(col1).AddPeersQuery(nonExistentCollection).AddConfigQuery().AddEndorsersQuery(cc2cc, ccWithCollection)
 	assert.NoError(t, err)
 	res, err := client.Send(context.Background(), req, client.AuthInfo)
 	assert.NoError(t, err)
@@ -138,14 +149,26 @@ func TestGreenPath(t *testing.T) {
 		assert.True(t, peersToTestPeers(returnedPeers).Equal(testPeers.withoutStateInfo()))
 	})
 
-	t.Run("Channel peer query", func(t *testing.T) {
+	t.Run("Channel peer queries", func(t *testing.T) {
 		returnedPeers, err := res.ForChannel("mychannel").Peers()
 		assert.NoError(t, err)
 		assert.True(t, peersToTestPeers(returnedPeers).Equal(testPeers))
+
+		returnedPeers, err = res.ForChannel("mychannel").Peers(col1)
+		assert.NoError(t, err)
+		// Ensure only peers from Org1 are returned
+		for _, p := range returnedPeers {
+			assert.Equal(t, "Org1MSP", p.MSPID)
+		}
+
+		// Ensure that the client handles correctly errors returned from the server
+		// in case of a bad request
+		returnedPeers, err = res.ForChannel("mychannel").Peers(nonExistentCollection)
+		assert.Equal(t, "collection col3 doesn't exist in collection config for chaincode cc2", err.Error())
 	})
 
 	t.Run("Endorser chaincode to chaincode", func(t *testing.T) {
-		endorsers, err := res.ForChannel("mychannel").Endorsers(cc2cc.Chaincodes, disc.PrioritiesByHeight, disc.NoExclusion)
+		endorsers, err := res.ForChannel("mychannel").Endorsers(cc2cc.Chaincodes, disc.NoFilter)
 		assert.NoError(t, err)
 		endorsersByMSP := map[string][]string{}
 
@@ -158,7 +181,7 @@ func TestGreenPath(t *testing.T) {
 	})
 
 	t.Run("Endorser chaincode with collection", func(t *testing.T) {
-		endorsers, err := res.ForChannel("mychannel").Endorsers(ccWithCollection.Chaincodes, disc.PrioritiesByHeight, disc.NoExclusion)
+		endorsers, err := res.ForChannel("mychannel").Endorsers(ccWithCollection.Chaincodes, disc.NoFilter)
 		assert.NoError(t, err)
 
 		endorsersByMSP := map[string][]string{}
@@ -210,7 +233,7 @@ func TestEndorsementComputationFailure(t *testing.T) {
 	res, err := client.Send(context.Background(), req, client.AuthInfo)
 	assert.NoError(t, err)
 
-	endorsers, err := res.ForChannel("mychannel").Endorsers(ccWithCollection.Chaincodes, disc.PrioritiesByHeight, disc.NoExclusion)
+	endorsers, err := res.ForChannel("mychannel").Endorsers(ccWithCollection.Chaincodes, disc.NoFilter)
 	assert.Empty(t, endorsers)
 	assert.Contains(t, err.Error(), "failed constructing descriptor")
 }
@@ -236,7 +259,7 @@ func TestLedgerFailure(t *testing.T) {
 	res, err := client.Send(context.Background(), req, client.AuthInfo)
 	assert.NoError(t, err)
 
-	endorsers, err := res.ForChannel("mychannel").Endorsers(ccWithCollection.Chaincodes, disc.PrioritiesByHeight, disc.NoExclusion)
+	endorsers, err := res.ForChannel("mychannel").Endorsers(ccWithCollection.Chaincodes, disc.NoFilter)
 	assert.Empty(t, endorsers)
 	assert.Contains(t, err.Error(), "failed constructing descriptor")
 }
@@ -390,14 +413,6 @@ func createSupport(t *testing.T, dir string, lc *lifeCycle) *support {
 	assert.NoError(t, err)
 	acl := discacl.NewDiscoverySupport(channelVerifier, org1AdminPolicy, chConfig)
 
-	peerDirPrefix := filepath.Join(dir, "crypto-config", "peerOrganizations")
-	testPeers = testPeerSet{
-		newPeer(peerDirPrefix, "Org1MSP", 1, 0),
-		newPeer(peerDirPrefix, "Org1MSP", 1, 1),
-		newPeer(peerDirPrefix, "Org2MSP", 2, 0),
-		newPeer(peerDirPrefix, "Org2MSP", 2, 1),
-	}
-
 	gSup := &mocks.GossipSupport{}
 	gSup.On("ChannelExists", "mychannel").Return(true)
 	gSup.On("PeersOfChannel", gcommon.ChainID("mychannel")).Return(testPeers.toStateInfoSet())
@@ -479,7 +494,8 @@ func createClientAndService(t *testing.T, testdir string) (*client, *service) {
 	assert.NoError(t, err)
 
 	wrapperClient := &client{AuthInfo: authInfo, conn: conn}
-	c := disc.NewClient(wrapperClient.newConnection, signer.Sign)
+	var signerCacheSize uint = 10
+	c := disc.NewClient(wrapperClient.newConnection, signer.Sign, signerCacheSize)
 	wrapperClient.Client = c
 	service := &service{Server: gRPCServer.Server(), lc: lc, sup: sup}
 	return wrapperClient, service
@@ -637,6 +653,28 @@ type testPeer struct {
 	aliveMsg     gdisc.NetworkMember
 }
 
+func (tp testPeer) Equal(other testPeer) bool {
+	if tp.mspID != other.mspID || !bytes.Equal(tp.identity, other.identity) {
+		return false
+	}
+	if tp.aliveMsg.Endpoint != other.aliveMsg.Endpoint || !bytes.Equal(tp.aliveMsg.PKIid, other.aliveMsg.PKIid) {
+		return false
+	}
+	if !proto.Equal(tp.aliveMsg.Envelope, other.aliveMsg.Envelope) {
+		return false
+	}
+	if !bytes.Equal(tp.stateInfoMsg.PKIid, other.stateInfoMsg.PKIid) {
+		return false
+	}
+	if !proto.Equal(tp.stateInfoMsg.Envelope, other.stateInfoMsg.Envelope) {
+		return false
+	}
+	if !proto.Equal(tp.stateInfoMsg.Properties, other.stateInfoMsg.Properties) {
+		return false
+	}
+	return true
+}
+
 type testPeerSet []*testPeer
 
 func (ps testPeerSet) withoutStateInfo() testPeerSet {
@@ -694,7 +732,7 @@ func (ps testPeerSet) SubsetEqual(that testPeerSet) bool {
 
 func (ps testPeerSet) Contains(peer *testPeer) bool {
 	for _, p := range ps {
-		if reflect.DeepEqual(p, peer) {
+		if peer.Equal(*p) {
 			return true
 		}
 	}
@@ -843,12 +881,6 @@ func policyFromString(s string) *common.SignaturePolicyEnvelope {
 		panic(err)
 	}
 	return p
-}
-
-func randString() string {
-	buff := make([]byte, 10)
-	rand.Read(buff)
-	return hex.EncodeToString(buff)
 }
 
 type signer struct {

@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package nwo
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,14 +23,15 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/hyperledger/fabric/integration/helpers"
 	"github.com/hyperledger/fabric/integration/nwo/commands"
+	"github.com/hyperledger/fabric/integration/nwo/fabricconfig"
 	"github.com/hyperledger/fabric/integration/runner"
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"
 	"github.com/tedsuo/ifrit/ginkgomon"
 	"github.com/tedsuo/ifrit/grouper"
+	"gopkg.in/yaml.v2"
 )
 
 // Organization models information about an Organization. It includes
@@ -126,11 +128,12 @@ type Profile struct {
 
 // Network holds information about a fabric network.
 type Network struct {
-	RootDir      string
-	StartPort    uint16
-	NetworkID    string
-	Components   *Components
-	DockerClient *docker.Client
+	RootDir           string
+	StartPort         uint16
+	Components        *Components
+	DockerClient      *docker.Client
+	NetworkID         string
+	EventuallyTimeout time.Duration
 
 	PortsByBrokerID  map[string]Ports
 	PortsByOrdererID map[string]Ports
@@ -143,6 +146,7 @@ type Network struct {
 	Peers            []*Peer
 	Profiles         []*Profile
 	Consortiums      []*Consortium
+	Templates        *Templates
 
 	colorIndex uint
 }
@@ -157,10 +161,11 @@ func New(c *Config, rootDir string, client *docker.Client, startPort int, compon
 		Components:   components,
 		DockerClient: client,
 
-		NetworkID:        helpers.UniqueName(),
-		PortsByBrokerID:  map[string]Ports{},
-		PortsByOrdererID: map[string]Ports{},
-		PortsByPeerID:    map[string]Ports{},
+		NetworkID:         helpers.UniqueName(),
+		EventuallyTimeout: time.Minute,
+		PortsByBrokerID:   map[string]Ports{},
+		PortsByOrdererID:  map[string]Ports{},
+		PortsByPeerID:     map[string]Ports{},
 
 		Organizations: c.Organizations,
 		Consensus:     c.Consensus,
@@ -170,6 +175,11 @@ func New(c *Config, rootDir string, client *docker.Client, startPort int, compon
 		Channels:      c.Channels,
 		Profiles:      c.Profiles,
 		Consortiums:   c.Consortiums,
+		Templates:     c.Templates,
+	}
+
+	if network.Templates == nil {
+		network.Templates = &Templates{}
 	}
 
 	for i := 0; i < network.Consensus.Brokers; i++ {
@@ -218,14 +228,14 @@ func (n *Network) CryptoConfigPath() string {
 
 // OutputBlockPath returns the path to the genesis block for the named system
 // channel.
-func (n *Network) OutputBlockPath(name string) string {
-	return filepath.Join(n.RootDir, fmt.Sprintf("%s_block.pb", name))
+func (n *Network) OutputBlockPath(channelName string) string {
+	return filepath.Join(n.RootDir, fmt.Sprintf("%s_block.pb", channelName))
 }
 
 // CreateChannelTxPath returns the path to the create channel transaction for
 // the named channel.
-func (n *Network) CreateChannelTxPath(name string) string {
-	return filepath.Join(n.RootDir, fmt.Sprintf("%s_tx.pb", name))
+func (n *Network) CreateChannelTxPath(channelName string) string {
+	return filepath.Join(n.RootDir, fmt.Sprintf("%s_tx.pb", channelName))
 }
 
 // OrdererDir returns the path to the configuration directory for the specified
@@ -240,6 +250,29 @@ func (n *Network) OrdererConfigPath(o *Orderer) string {
 	return filepath.Join(n.OrdererDir(o), "orderer.yaml")
 }
 
+// ReadOrdererConfig  unmarshals an orderer's orderer.yaml and returns an
+// object approximating its contents.
+func (n *Network) ReadOrdererConfig(o *Orderer) *fabricconfig.Orderer {
+	var orderer fabricconfig.Orderer
+	ordererBytes, err := ioutil.ReadFile(n.OrdererConfigPath(o))
+	Expect(err).NotTo(HaveOccurred())
+
+	err = yaml.Unmarshal(ordererBytes, &orderer)
+	Expect(err).NotTo(HaveOccurred())
+
+	return &orderer
+}
+
+// WriteOrdererConfig serializes the provided configuration as the specified
+// orderer's orderer.yaml document.
+func (n *Network) WriteOrdererConfig(o *Orderer, config *fabricconfig.Orderer) {
+	ordererBytes, err := yaml.Marshal(config)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = ioutil.WriteFile(n.OrdererConfigPath(o), ordererBytes, 0644)
+	Expect(err).NotTo(HaveOccurred())
+}
+
 // PeerDir returns the path to the configuration directory for the specified
 // Peer.
 func (n *Network) PeerDir(p *Peer) string {
@@ -252,9 +285,32 @@ func (n *Network) PeerConfigPath(p *Peer) string {
 	return filepath.Join(n.PeerDir(p), "core.yaml")
 }
 
-// PeerUserMSPDir returns the path to the MSP directory containing the
+// ReadPeerConfig unmarshals a peer's core.yaml and returns an object
+// approximating its contents.
+func (n *Network) ReadPeerConfig(p *Peer) *fabricconfig.Core {
+	var core fabricconfig.Core
+	coreBytes, err := ioutil.ReadFile(n.PeerConfigPath(p))
+	Expect(err).NotTo(HaveOccurred())
+
+	err = yaml.Unmarshal(coreBytes, &core)
+	Expect(err).NotTo(HaveOccurred())
+
+	return &core
+}
+
+// WritePeerConfig serializes the provided configuration as the specified
+// peer's core.yaml document.
+func (n *Network) WritePeerConfig(p *Peer, config *fabricconfig.Core) {
+	coreBytes, err := yaml.Marshal(config)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = ioutil.WriteFile(n.PeerConfigPath(p), coreBytes, 0644)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+// peerUserCrpytoDir returns the path to the directory containing the
 // certificates and keys for the specified user of the peer.
-func (n *Network) PeerUserMSPDir(p *Peer, user string) string {
+func (n *Network) peerUserCrpytoDir(p *Peer, user, cryptoMaterialType string) string {
 	org := n.Organization(p.Organization)
 	Expect(org).NotTo(BeNil())
 
@@ -265,12 +321,56 @@ func (n *Network) PeerUserMSPDir(p *Peer, user string) string {
 		org.Domain,
 		"users",
 		fmt.Sprintf("%s@%s", user, org.Domain),
-		"msp",
+		cryptoMaterialType,
 	)
 }
 
-// PeerLocalMSPDir returns the path to the local MSP directory for the peer.
-func (n *Network) PeerLocalMSPDir(p *Peer) string {
+// PeerUserMSPDir returns the path to the MSP directory containing the
+// certificates and keys for the specified user of the peer.
+func (n *Network) PeerUserMSPDir(p *Peer, user string) string {
+	return n.peerUserCrpytoDir(p, user, "msp")
+}
+
+// PeerUserTLSDir returns the path to the TLS directory containing the
+// certificates and keys for the specified user of the peer.
+func (n *Network) PeerUserTLSDir(p *Peer, user string) string {
+	return n.peerUserCrpytoDir(p, user, "tls")
+}
+
+// PeerUserCert returns the path to the certificate for the specified user in
+// the peer organization.
+func (n *Network) PeerUserCert(p *Peer, user string) string {
+	org := n.Organization(p.Organization)
+	Expect(org).NotTo(BeNil())
+
+	return filepath.Join(
+		n.PeerUserMSPDir(p, user),
+		"signcerts",
+		fmt.Sprintf("%s@%s-cert.pem", user, org.Domain),
+	)
+}
+
+// PeerUserKey returns the path to the private key for the specified user in
+// the peer organization.
+func (n *Network) PeerUserKey(p *Peer, user string) string {
+	org := n.Organization(p.Organization)
+	Expect(org).NotTo(BeNil())
+
+	keystore := filepath.Join(
+		n.PeerUserMSPDir(p, user),
+		"keystore",
+	)
+
+	// file names are the SKI and non-deterministic
+	keys, err := ioutil.ReadDir(keystore)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(keys).To(HaveLen(1))
+
+	return filepath.Join(keystore, keys[0].Name())
+}
+
+// peerLocalCryptoDir returns the path to the local crypto directory for the peer.
+func (n *Network) peerLocalCryptoDir(p *Peer, cryptoType string) string {
 	org := n.Organization(p.Organization)
 	Expect(org).NotTo(BeNil())
 
@@ -281,7 +381,29 @@ func (n *Network) PeerLocalMSPDir(p *Peer) string {
 		org.Domain,
 		"peers",
 		fmt.Sprintf("%s.%s", p.Name, org.Domain),
-		"msp",
+		cryptoType,
+	)
+}
+
+// PeerLocalMSPDir returns the path to the local MSP directory for the peer.
+func (n *Network) PeerLocalMSPDir(p *Peer) string {
+	return n.peerLocalCryptoDir(p, "msp")
+}
+
+// PeerLocalTLSDir returns the path to the local TLS directory for the peer.
+func (n *Network) PeerLocalTLSDir(p *Peer) string {
+	return n.peerLocalCryptoDir(p, "tls")
+}
+
+// PeerCert returns the path to the peer's certificate.
+func (n *Network) PeerCert(p *Peer) string {
+	org := n.Organization(p.Organization)
+	Expect(org).NotTo(BeNil())
+
+	return filepath.Join(
+		n.PeerLocalMSPDir(p),
+		"signcerts",
+		fmt.Sprintf("%s.%s-cert.pem", p.Name, org.Domain),
 	)
 }
 
@@ -308,9 +430,9 @@ func (n *Network) OrdererOrgMSPDir(o *Organization) string {
 	)
 }
 
-// OrdererLocalMSPDir returns the path to the local MSP directory for the
+// ordererLocalCryptoDir returns the path to the local crypto directory for the
 // Orderer.
-func (n *Network) OrdererLocalMSPDir(o *Orderer) string {
+func (n *Network) ordererLocalCryptoDir(o *Orderer, cryptoType string) string {
 	org := n.Organization(o.Organization)
 	Expect(org).NotTo(BeNil())
 
@@ -321,7 +443,40 @@ func (n *Network) OrdererLocalMSPDir(o *Orderer) string {
 		org.Domain,
 		"orderers",
 		fmt.Sprintf("%s.%s", o.Name, org.Domain),
-		"msp",
+		cryptoType,
+	)
+}
+
+// OrdererLocalMSPDir returns the path to the local MSP directory for the
+// Orderer.
+func (n *Network) OrdererLocalMSPDir(o *Orderer) string {
+	return n.ordererLocalCryptoDir(o, "msp")
+}
+
+// OrdererLocalTLSDir returns the path to the local TLS directory for the
+// Orderer.
+func (n *Network) OrdererLocalTLSDir(o *Orderer) string {
+	return n.ordererLocalCryptoDir(o, "tls")
+}
+
+// ProfileForChannel gets the configtxgen profile name associated with the
+// specified channel.
+func (n *Network) ProfileForChannel(channelName string) string {
+	for _, ch := range n.Channels {
+		if ch.Name == channelName {
+			return ch.Profile
+		}
+	}
+	return ""
+}
+
+// CACertsBundlePath returns the path to the bundle of CA certificates for the
+// network. This bundle is used when connecting to peers.
+func (n *Network) CACertsBundlePath() string {
+	return filepath.Join(
+		n.RootDir,
+		"crypto",
+		"ca-certs.pem",
 	)
 }
 
@@ -381,7 +536,7 @@ func (n *Network) Bootstrap() {
 		Output: n.CryptoPath(),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	sess, err = n.ConfigTxGen(commands.OutputBlock{
 		ChannelID:   n.SystemChannel.Name,
@@ -390,7 +545,7 @@ func (n *Network) Bootstrap() {
 		OutputBlock: n.OutputBlockPath(n.SystemChannel.Name),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	for _, c := range n.Channels {
 		sess, err := n.ConfigTxGen(commands.CreateChannelTx{
@@ -400,8 +555,42 @@ func (n *Network) Bootstrap() {
 			OutputCreateChannelTx: n.CreateChannelTxPath(c.Name),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
+
+	n.concatenateTLSCACertificates()
+}
+
+// concatenateTLSCACertificates concatenates all TLS CA certificates into a
+// single file to be used by peer CLI.
+func (n *Network) concatenateTLSCACertificates() {
+	bundle := &bytes.Buffer{}
+	for _, tlsCertPath := range n.listTLSCACertificates() {
+		certBytes, err := ioutil.ReadFile(tlsCertPath)
+		Expect(err).NotTo(HaveOccurred())
+		bundle.Write(certBytes)
+	}
+	err := ioutil.WriteFile(n.CACertsBundlePath(), bundle.Bytes(), 0660)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+// listTLSCACertificates returns the paths of all TLS CA certificates in the
+// network, across all organizations.
+func (n *Network) listTLSCACertificates() []string {
+	fileName2Path := make(map[string]string)
+	filepath.Walk(filepath.Join(n.RootDir, "crypto"), func(path string, info os.FileInfo, err error) error {
+		// File starts with "tlsca" and has "-cert.pem" in it
+		if strings.HasPrefix(info.Name(), "tlsca") && strings.Contains(info.Name(), "-cert.pem") {
+			fileName2Path[info.Name()] = path
+		}
+		return nil
+	})
+
+	var tlsCACertificates []string
+	for _, path := range fileName2Path {
+		tlsCACertificates = append(tlsCACertificates, path)
+	}
+	return tlsCACertificates
 }
 
 // Cleanup attempts to cleanup docker related artifacts that may
@@ -472,14 +661,50 @@ func (n *Network) CreateAndJoinChannel(o *Orderer, channelName string) {
 		OutputBlock: tempFile.Name(),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, time.Minute).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	for _, p := range peers {
 		sess, err := n.PeerAdminSession(p, commands.ChannelJoin{
 			BlockPath: tempFile.Name(),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+	}
+}
+
+// UpdateChannelAnchors determines the anchor peers for the specified channel,
+// creates an anchor peer update transaction for each organization, and submits
+// the update transactions to the orderer.
+func (n *Network) UpdateChannelAnchors(o *Orderer, channelName string) {
+	tempFile, err := ioutil.TempFile("", "update-anchors")
+	Expect(err).NotTo(HaveOccurred())
+	tempFile.Close()
+	defer os.Remove(tempFile.Name())
+
+	peersByOrg := map[string]*Peer{}
+	for _, p := range n.AnchorsForChannel(channelName) {
+		peersByOrg[p.Organization] = p
+	}
+
+	for orgName, p := range peersByOrg {
+		anchorUpdate := commands.OutputAnchorPeersUpdate{
+			ChannelID:  channelName,
+			Profile:    n.ProfileForChannel(channelName),
+			ConfigPath: n.RootDir,
+			AsOrg:      orgName,
+			OutputAnchorPeersUpdate: tempFile.Name(),
+		}
+		sess, err := n.ConfigTxGen(anchorUpdate)
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
+
+		sess, err = n.PeerAdminSession(p, commands.ChannelUpdate{
+			ChannelID: channelName,
+			Orderer:   n.OrdererAddress(o, ListenPort),
+			File:      tempFile.Name(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
 }
 
@@ -496,7 +721,7 @@ func (n *Network) CreateChannel(name string, o *Orderer, p *Peer) {
 		OutputBlock: "/dev/null",
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 }
 
 // JoinChannel will join peers to the specified channel. The orderer is used to
@@ -520,42 +745,15 @@ func (n *Network) JoinChannel(name string, o *Orderer, peers ...*Peer) {
 		OutputFile: tempFile.Name(),
 	})
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess).Should(gexec.Exit(0))
+	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	for _, p := range peers {
 		sess, err := n.PeerAdminSession(p, commands.ChannelJoin{
 			BlockPath: tempFile.Name(),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess).Should(gexec.Exit(0))
+		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 	}
-}
-
-// InstallChaincode installs chaincode to the listed peers and verifies that
-// the install has completed.
-func (n *Network) InstallChaincode(peers []*Peer, install commands.ChaincodeInstall) {
-	for _, p := range peers {
-		sess, err := n.PeerAdminSession(p, install)
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, time.Minute).Should(gexec.Exit(0))
-
-		sess, err = n.PeerAdminSession(p, commands.ChaincodeListInstalled{})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, time.Minute).Should(gexec.Exit(0))
-		Expect(sess).To(gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", install.Name, install.Version)))
-	}
-}
-
-// InstantiateChaincode instantiates chaincode at the specified peer and verifies that
-// the instantiation is complete before returning.
-func (n *Network) InstantiateChaincode(peer *Peer, instantiate commands.ChaincodeInstantiate) {
-	sess, err := n.PeerAdminSession(peer, instantiate)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, time.Minute).Should(gexec.Exit(0))
-
-	Eventually(listInstantiated(n, peer, instantiate.ChannelID), time.Minute).Should(
-		gbytes.Say(fmt.Sprintf("Name: %s, Version: %s,", instantiate.Name, instantiate.Version)),
-	)
 }
 
 // Cryptogen starts a gexec.Session for the provided cryptogen command.
@@ -567,6 +765,13 @@ func (n *Network) Cryptogen(command Command) (*gexec.Session, error) {
 // ConfigTxGen starts a gexec.Session for the provided configtxgen command.
 func (n *Network) ConfigTxGen(command Command) (*gexec.Session, error) {
 	cmd := NewCommand(n.Components.ConfigTxGen(), command)
+	return n.StartSession(cmd, command.SessionName())
+}
+
+// Discover starts a gexec.Session for the provided discover command.
+func (n *Network) Discover(command Command) (*gexec.Session, error) {
+	cmd := NewCommand(n.Components.Discover(), command)
+	cmd.Args = append(cmd.Args, "--peerTLSCA", n.CACertsBundlePath())
 	return n.StartSession(cmd, command.SessionName())
 }
 
@@ -723,8 +928,33 @@ func (n *Network) NetworkGroupRunner() ifrit.Runner {
 
 func (n *Network) peerCommand(command Command, env ...string) *exec.Cmd {
 	cmd := NewCommand(n.Components.Peer(), command)
-	cmd.Env = append(env, cmd.Env...)
+	cmd.Env = append(cmd.Env, env...)
+	if ConnectsToOrderer(command) {
+		cmd.Args = append(cmd.Args, "--tls")
+		cmd.Args = append(cmd.Args, "--cafile", n.CACertsBundlePath())
+	}
+
+	// In case we have a peer invoke with multiple certificates,
+	// we need to mimic the correct peer CLI usage,
+	// so we count the number of --peerAddresses usages
+	// we have, and add the same (concatenated TLS CA certificates file)
+	// the same number of times to bypass the peer CLI sanity checks
+	requiredPeerAddresses := flagCount("--peerAddresses", cmd.Args)
+	for i := 0; i < requiredPeerAddresses; i++ {
+		cmd.Args = append(cmd.Args, "--tlsRootCertFiles")
+		cmd.Args = append(cmd.Args, n.CACertsBundlePath())
+	}
 	return cmd
+}
+
+func flagCount(flag string, args []string) int {
+	var c int
+	for _, arg := range args {
+		if arg == flag {
+			c++
+		}
+	}
+	return c
 }
 
 // PeerAdminSession starts a gexec.Session as a peer admin for the provided
@@ -820,7 +1050,7 @@ func (n *Network) AnchorsForChannel(chanName string) []*Peer {
 	anchors := []*Peer{}
 	for _, p := range n.Peers {
 		for _, pc := range p.Channels {
-			if pc.Name == chanName {
+			if pc.Name == chanName && pc.Anchor {
 				anchors = append(anchors, p)
 			}
 		}
@@ -1009,7 +1239,7 @@ func (n *Network) GenerateCryptoConfig() {
 	Expect(err).NotTo(HaveOccurred())
 	defer crypto.Close()
 
-	t, err := template.New("crypto").Parse(CryptoTemplate)
+	t, err := template.New("crypto").Parse(n.Templates.CryptoTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter("[crypto-config.yaml] ", ginkgo.GinkgoWriter)
@@ -1022,7 +1252,7 @@ func (n *Network) GenerateConfigTxConfig() {
 	Expect(err).NotTo(HaveOccurred())
 	defer config.Close()
 
-	t, err := template.New("configtx").Parse(ConfigTxTemplate)
+	t, err := template.New("configtx").Parse(n.Templates.ConfigTxTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter("[configtx.yaml] ", ginkgo.GinkgoWriter)
@@ -1040,7 +1270,7 @@ func (n *Network) GenerateOrdererConfig(o *Orderer) {
 
 	t, err := template.New("orderer").Funcs(template.FuncMap{
 		"Orderer": func() *Orderer { return o },
-	}).Parse(OrdererTemplate)
+	}).Parse(n.Templates.OrdererTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter(fmt.Sprintf("[%s#orderer.yaml] ", o.ID()), ginkgo.GinkgoWriter)
@@ -1058,7 +1288,7 @@ func (n *Network) GenerateCoreConfig(p *Peer) {
 
 	t, err := template.New("orderer").Funcs(template.FuncMap{
 		"Peer": func() *Peer { return p },
-	}).Parse(CoreTemplate)
+	}).Parse(n.Templates.CoreTemplate())
 	Expect(err).NotTo(HaveOccurred())
 
 	pw := gexec.NewPrefixedWriter(fmt.Sprintf("[%s#core.yaml] ", p.ID()), ginkgo.GinkgoWriter)

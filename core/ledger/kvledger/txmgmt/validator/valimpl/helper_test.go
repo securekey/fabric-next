@@ -8,53 +8,40 @@ package valimpl
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
+	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/flogging/floggingtest"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valinternal"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/internal"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-	lgrutil "github.com/hyperledger/fabric/core/ledger/util"
 	lutils "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	putils "github.com/hyperledger/fabric/protos/utils"
-	"github.com/op/go-logging"
+	logging "github.com/op/go-logging"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
-func getPubAndPvtSimulationResults(t *testing.T, key string) *ledger.TxSimulationResults {
-	rwSetBuilder := rwsetutil.NewRWSetBuilder()
-	// public rws ns1 + ns2
-	rwSetBuilder.AddToReadSet("ns1", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToReadSet("ns2", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToWriteSet("ns2", key, []byte("ns2-key1-value"))
-
-	// pvt rwset ns1
-	rwSetBuilder.AddToHashedReadSet("ns1", "coll1", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToHashedReadSet("ns1", "coll2", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToPvtAndHashedWriteSet("ns1", "coll2", key, []byte("pvt-ns1-coll2-key1-value"))
-
-	// pvt rwset ns2
-	rwSetBuilder.AddToHashedReadSet("ns2", "coll1", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToHashedReadSet("ns2", "coll2", key, version.NewHeight(1, 1))
-	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll2", key, []byte("pvt-ns2-coll2-key1-value"))
-	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll3", key, nil)
-
-	rwSetBuilder.AddToHashedReadSet("ns3", "coll1", key, version.NewHeight(1, 1))
-
-	pubAndPvtSimulationResults, err := rwSetBuilder.GetTxSimulationResults()
-	if err != nil {
-		t.Fatalf("ConstructSimulationResultsWithPvtData failed while getting simulation results, err %s", err)
-	}
-
-	return pubAndPvtSimulationResults
+func TestMain(m *testing.M) {
+	flogging.SetModuleLevel("internal", "debug")
+	viper.Set("peer.fileSystemPath", "/tmp/fabric/ledgertests/kvledger/txmgmt/validator/internal")
+	os.Exit(m.Run())
 }
 
 func TestValidateAndPreparePvtBatch(t *testing.T) {
+	testDBEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
+	testDBEnv.Init(t)
+	defer testDBEnv.Cleanup()
+	testDB := testDBEnv.GetDBHandle("emptydb")
+
 	pubSimulationResults := [][]byte{}
 	pvtDataMap := make(map[uint64]*ledger.TxPvtData)
 
@@ -66,7 +53,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 
 	// Tx 1
 	// Get simulation results for tx1
-	tx1SimulationResults := getPubAndPvtSimulationResults(t, "key1")
+	tx1SimulationResults := testutilSampleTxSimulationResults(t, "key1")
 	res, err := tx1SimulationResults.GetPubSimulationBytes()
 	assert.NoError(t, err)
 
@@ -74,12 +61,12 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 	pubSimulationResults = append(pubSimulationResults, res)
 
 	// Add tx1 private rwset to the private data map
-	tx1PvtData := &ledger.TxPvtData{0, tx1SimulationResults.PvtSimulationResults}
+	tx1PvtData := &ledger.TxPvtData{SeqInBlock: 0, WriteSet: tx1SimulationResults.PvtSimulationResults}
 	pvtDataMap[uint64(0)] = tx1PvtData
 
 	// Tx 2
 	// Get simulation results for tx2
-	tx2SimulationResults := getPubAndPvtSimulationResults(t, "key2")
+	tx2SimulationResults := testutilSampleTxSimulationResults(t, "key2")
 	res, err = tx2SimulationResults.GetPubSimulationBytes()
 	assert.NoError(t, err)
 
@@ -91,7 +78,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 
 	// Tx 3
 	// Get simulation results for tx3
-	tx3SimulationResults := getPubAndPvtSimulationResults(t, "key3")
+	tx3SimulationResults := testutilSampleTxSimulationResults(t, "key3")
 	res, err = tx3SimulationResults.GetPubSimulationBytes()
 	assert.NoError(t, err)
 
@@ -99,25 +86,25 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 	pubSimulationResults = append(pubSimulationResults, res)
 
 	// Add tx3 private rwset to the private data map
-	tx3PvtData := &ledger.TxPvtData{2, tx3SimulationResults.PvtSimulationResults}
+	tx3PvtData := &ledger.TxPvtData{SeqInBlock: 2, WriteSet: tx3SimulationResults.PvtSimulationResults}
 	pvtDataMap[uint64(2)] = tx3PvtData
 
 	// Construct a block using all three transactions' simulation results
 	block := testutil.ConstructBlockWithTxid(t, 10, testutil.ConstructRandomBytes(t, 32), pubSimulationResults, txids, false)
 
 	// Construct the expected preprocessed block from preprocessProtoBlock()
-	expectedPerProcessedBlock := &valinternal.Block{Num: 10}
+	expectedPerProcessedBlock := &internal.Block{Num: 10}
 	tx1TxRWSet, err := rwsetutil.TxRwSetFromProtoMsg(tx1SimulationResults.PubSimulationResults)
 	assert.NoError(t, err)
-	expectedPerProcessedBlock.Txs = append(expectedPerProcessedBlock.Txs, &valinternal.Transaction{IndexInBlock: 0, ID: "tx1", RWSet: tx1TxRWSet})
+	expectedPerProcessedBlock.Txs = append(expectedPerProcessedBlock.Txs, &internal.Transaction{IndexInBlock: 0, ID: "tx1", RWSet: tx1TxRWSet})
 
 	tx2TxRWSet, err := rwsetutil.TxRwSetFromProtoMsg(tx2SimulationResults.PubSimulationResults)
 	assert.NoError(t, err)
-	expectedPerProcessedBlock.Txs = append(expectedPerProcessedBlock.Txs, &valinternal.Transaction{IndexInBlock: 1, ID: "tx2", RWSet: tx2TxRWSet})
+	expectedPerProcessedBlock.Txs = append(expectedPerProcessedBlock.Txs, &internal.Transaction{IndexInBlock: 1, ID: "tx2", RWSet: tx2TxRWSet})
 
 	tx3TxRWSet, err := rwsetutil.TxRwSetFromProtoMsg(tx3SimulationResults.PubSimulationResults)
 	assert.NoError(t, err)
-	expectedPerProcessedBlock.Txs = append(expectedPerProcessedBlock.Txs, &valinternal.Transaction{IndexInBlock: 2, ID: "tx3", RWSet: tx3TxRWSet})
+	expectedPerProcessedBlock.Txs = append(expectedPerProcessedBlock.Txs, &internal.Transaction{IndexInBlock: 2, ID: "tx3", RWSet: tx3TxRWSet})
 	alwaysValidKVFunc := func(key string, value []byte) error {
 		return nil
 	}
@@ -141,7 +128,7 @@ func TestValidateAndPreparePvtBatch(t *testing.T) {
 	assert.NoError(t, err)
 	addPvtRWSetToPvtUpdateBatch(tx1TxPvtRWSet, expectedPvtUpdates, version.NewHeight(uint64(10), uint64(0)))
 
-	actualPvtUpdates, err := validateAndPreparePvtBatch(mvccValidatedBlock, pvtDataMap)
+	actualPvtUpdates, err := validateAndPreparePvtBatch(mvccValidatedBlock, testDB, nil, pvtDataMap)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPvtUpdates, actualPvtUpdates)
 
@@ -207,19 +194,20 @@ func TestPreprocessProtoBlock(t *testing.T) {
 	flags = lutils.NewTxValidationFlags(len(gb.Data.Data))
 	flags.SetFlag(0, peer.TxValidationCode_BAD_HEADER_EXTENSION)
 	gb.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = flags
-	// set logging backend for test
-	backend := logging.NewMemoryBackend(1)
-	logging.SetBackend(backend)
+
+	// test logger
+	oldLogger := logger
+	defer func() { logger = oldLogger }()
+	l, recorder := floggingtest.NewTestLogger(t)
+	logger = l
+
 	_, err = preprocessProtoBlock(nil, allwaysValidKVfunc, gb, false)
 	assert.NoError(t, err)
-	expected := fmt.Sprintf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
-		" marked as invalid by committer. Reason code [%s]",
-		util.GetTestChainID(), blockNum, 0, txid, peer.TxValidationCode_BAD_HEADER_EXTENSION.String())
-	t.Log(expected)
-	assert.Equal(t, expected, memoryRecordN(backend, 0).Message())
-	//assert.Equal(t, message, MemoryRecordN(backend, i).Message())
-	t.Log(memoryRecordN(backend, 0).Message())
-
+	expected := fmt.Sprintf(
+		"Channel [%s]: Block [%d] Transaction index [%d] TxId [%s] marked as invalid by committer. Reason code [%s]",
+		util.GetTestChainID(), blockNum, 0, txid, peer.TxValidationCode_BAD_HEADER_EXTENSION,
+	)
+	assert.NotEmpty(t, recorder.MessagesContaining(expected))
 }
 
 func TestPreprocessProtoBlockInvalidWriteset(t *testing.T) {
@@ -246,7 +234,7 @@ func TestPreprocessProtoBlockInvalidWriteset(t *testing.T) {
 
 	block := testutil.ConstructBlock(t, 1, testutil.ConstructRandomBytes(t, 32),
 		[][]byte{simulation1Bytes, simulation2Bytes}, false) // block with two txs
-	txfilter := lgrutil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	txfilter := lutils.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	assert.True(t, txfilter.IsValid(0))
 	assert.True(t, txfilter.IsValid(1)) // both txs are valid initially at the time of block cutting
 
@@ -256,6 +244,56 @@ func TestPreprocessProtoBlockInvalidWriteset(t *testing.T) {
 	assert.True(t, txfilter.IsValid(1))  // tx at index 1 should be marked as valid
 	assert.Len(t, internalBlock.Txs, 1)
 	assert.Equal(t, internalBlock.Txs[0].IndexInBlock, 1)
+}
+
+func TestIncrementPvtdataVersionIfNeeded(t *testing.T) {
+	testDBEnv := &privacyenabledstate.LevelDBCommonStorageTestEnv{}
+	testDBEnv.Init(t)
+	defer testDBEnv.Cleanup()
+	testDB := testDBEnv.GetDBHandle("testdb")
+	updateBatch := privacyenabledstate.NewUpdateBatch()
+	// populate db with some pvt data
+	updateBatch.PvtUpdates.Put("ns", "coll1", "key1", []byte("value1"), version.NewHeight(1, 1))
+	updateBatch.PvtUpdates.Put("ns", "coll2", "key2", []byte("value2"), version.NewHeight(1, 2))
+	updateBatch.PvtUpdates.Put("ns", "coll3", "key3", []byte("value3"), version.NewHeight(1, 3))
+	updateBatch.PvtUpdates.Put("ns", "col4", "key4", []byte("value4"), version.NewHeight(1, 4))
+	testDB.ApplyPrivacyAwareUpdates(updateBatch, version.NewHeight(1, 4))
+
+	// for the current block, mimic the resultant hashed updates
+	hashUpdates := privacyenabledstate.NewHashedUpdateBatch()
+	hashUpdates.PutValHashAndMetadata("ns", "coll1", lutils.ComputeStringHash("key1"),
+		lutils.ComputeStringHash("value1_set_by_tx1"), []byte("metadata1_set_by_tx2"), version.NewHeight(2, 2)) // mimics the situation - value set by tx1 and metadata by tx2
+	hashUpdates.PutValHashAndMetadata("ns", "coll2", lutils.ComputeStringHash("key2"),
+		lutils.ComputeStringHash("value2"), []byte("metadata2_set_by_tx4"), version.NewHeight(2, 4)) // only metadata set by tx4
+	hashUpdates.PutValHashAndMetadata("ns", "coll3", lutils.ComputeStringHash("key3"),
+		lutils.ComputeStringHash("value3_set_by_tx6"), []byte("metadata3"), version.NewHeight(2, 6)) // only value set by tx6
+	pubAndHashedUpdatesBatch := &internal.PubAndHashUpdates{HashUpdates: hashUpdates}
+
+	// for the current block, mimic the resultant pvt updates (without metadata taking into account). Assume that Tx6 pvt data is missing
+	pvtUpdateBatch := privacyenabledstate.NewPvtUpdateBatch()
+	pvtUpdateBatch.Put("ns", "coll1", "key1", []byte("value1_set_by_tx1"), version.NewHeight(2, 1))
+	pvtUpdateBatch.Put("ns", "coll3", "key3", []byte("value3_set_by_tx5"), version.NewHeight(2, 5))
+	// metadata updated for key1 and key3
+	metadataUpdates := metadataUpdates{collKey{"ns", "coll1", "key1"}: true, collKey{"ns", "coll2", "key2"}: true}
+
+	// invoke function and test results
+	err := incrementPvtdataVersionIfNeeded(metadataUpdates, pvtUpdateBatch, pubAndHashedUpdatesBatch, testDB)
+	assert.NoError(t, err)
+
+	assert.Equal(t,
+		&statedb.VersionedValue{Value: []byte("value1_set_by_tx1"), Version: version.NewHeight(2, 2)}, // key1 value should be same and version should be upgraded to (2,2)
+		pvtUpdateBatch.Get("ns", "coll1", "key1"),
+	)
+
+	assert.Equal(t,
+		&statedb.VersionedValue{Value: []byte("value2"), Version: version.NewHeight(2, 4)}, // key2 entry should get added with value in the db and version (2,4)
+		pvtUpdateBatch.Get("ns", "coll2", "key2"),
+	)
+
+	assert.Equal(t,
+		&statedb.VersionedValue{Value: []byte("value3_set_by_tx5"), Version: version.NewHeight(2, 5)}, // key3 should be unaffected because the tx6 was missing from pvt data
+		pvtUpdateBatch.Get("ns", "coll3", "key3"),
+	)
 }
 
 // from go-logging memory_test.go
@@ -271,4 +309,32 @@ func memoryRecordN(b *logging.MemoryBackend, n int) *logging.Record {
 		return nil
 	}
 	return node.Record
+}
+
+func testutilSampleTxSimulationResults(t *testing.T, key string) *ledger.TxSimulationResults {
+	rwSetBuilder := rwsetutil.NewRWSetBuilder()
+	// public rws ns1 + ns2
+	rwSetBuilder.AddToReadSet("ns1", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToReadSet("ns2", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToWriteSet("ns2", key, []byte("ns2-key1-value"))
+
+	// pvt rwset ns1
+	rwSetBuilder.AddToHashedReadSet("ns1", "coll1", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToHashedReadSet("ns1", "coll2", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns1", "coll2", key, []byte("pvt-ns1-coll2-key1-value"))
+
+	// pvt rwset ns2
+	rwSetBuilder.AddToHashedReadSet("ns2", "coll1", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToHashedReadSet("ns2", "coll2", key, version.NewHeight(1, 1))
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll2", key, []byte("pvt-ns2-coll2-key1-value"))
+	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll3", key, nil)
+
+	rwSetBuilder.AddToHashedReadSet("ns3", "coll1", key, version.NewHeight(1, 1))
+
+	pubAndPvtSimulationResults, err := rwSetBuilder.GetTxSimulationResults()
+	if err != nil {
+		t.Fatalf("ConstructSimulationResultsWithPvtData failed while getting simulation results, err %s", err)
+	}
+
+	return pubAndPvtSimulationResults
 }

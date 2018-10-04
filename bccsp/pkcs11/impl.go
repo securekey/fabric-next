@@ -8,16 +8,12 @@ package pkcs11
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"math/big"
 	"os"
 
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric/bccsp/sw"
-	"github.com/hyperledger/fabric/bccsp/utils"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/miekg/pkcs11"
 	"github.com/pkg/errors"
@@ -75,7 +71,8 @@ type impl struct {
 
 	lib        string
 	softVerify bool
-	immutable  bool //Immutable flag makes object immutable
+	//Immutable flag makes object immutable
+	immutable bool
 }
 
 // KeyGen generates a key using opts.
@@ -105,7 +102,7 @@ func (csp *impl) KeyGen(opts bccsp.KeyGenOpts) (k bccsp.Key, err error) {
 	case *bccsp.ECDSAP384KeyGenOpts:
 		ski, pub, err := csp.generateECKey(oidNamedCurveP384, opts.Ephemeral())
 		if err != nil {
-			return nil, errors.Wrapf(err, "Failed generating ECDSA P384 key [%s]")
+			return nil, errors.Wrapf(err, "Failed generating ECDSA P384 key")
 		}
 
 		k = &ecdsaPrivateKey{ski, ecdsaPublicKey{ski, pub}}
@@ -115,152 +112,6 @@ func (csp *impl) KeyGen(opts bccsp.KeyGenOpts) (k bccsp.Key, err error) {
 	}
 
 	return k, nil
-}
-
-// KeyDeriv derives a key from k using opts.
-// The opts argument should be appropriate for the primitive used.
-func (csp *impl) KeyDeriv(k bccsp.Key, opts bccsp.KeyDerivOpts) (dk bccsp.Key, err error) {
-	// Validate arguments
-	if k == nil {
-		return nil, errors.New("Invalid Key. It must not be nil")
-	}
-
-	// Derive key
-	switch k.(type) {
-	case *ecdsaPublicKey:
-		// Validate opts
-		if opts == nil {
-			return nil, errors.New("Invalid Opts parameter. It must not be nil")
-		}
-
-		ecdsaK := k.(*ecdsaPublicKey)
-
-		switch opts.(type) {
-
-		// Re-randomized an ECDSA public key
-		case *bccsp.ECDSAReRandKeyOpts:
-			pubKey := ecdsaK.pub
-			if pubKey == nil {
-				return nil, errors.New("Public base key cannot be nil")
-			}
-			reRandOpts := opts.(*bccsp.ECDSAReRandKeyOpts)
-			tempSK := &ecdsa.PublicKey{
-				Curve: pubKey.Curve,
-				X:     new(big.Int),
-				Y:     new(big.Int),
-			}
-
-			var k = new(big.Int).SetBytes(reRandOpts.ExpansionValue())
-			var one = new(big.Int).SetInt64(1)
-			n := new(big.Int).Sub(pubKey.Params().N, one)
-			k.Mod(k, n)
-			k.Add(k, one)
-
-			// Compute temporary public key
-			tempX, tempY := pubKey.ScalarBaseMult(k.Bytes())
-			tempSK.X, tempSK.Y = tempSK.Add(
-				pubKey.X, pubKey.Y,
-				tempX, tempY,
-			)
-
-			// Verify temporary public key is a valid point on the reference curve
-			isOn := tempSK.Curve.IsOnCurve(tempSK.X, tempSK.Y)
-			if !isOn {
-				return nil, errors.New("Failed temporary public key IsOnCurve check")
-			}
-
-			ecPt := elliptic.Marshal(tempSK.Curve, tempSK.X, tempSK.Y)
-			oid, ok := oidFromNamedCurve(tempSK.Curve)
-			if !ok {
-				return nil, errors.New("Do not know OID for this Curve")
-			}
-
-			ski, err := csp.importECKey(oid, nil, ecPt, opts.Ephemeral(), publicKeyFlag)
-			if err != nil {
-				return nil, errors.Wrapf(err, "Failed getting importing EC Public Key")
-			}
-			reRandomizedKey := &ecdsaPublicKey{ski, tempSK}
-
-			return reRandomizedKey, nil
-
-		default:
-			return nil, errors.Errorf("Unrecognized KeyDerivOpts provided [%s]", opts.Algorithm())
-
-		}
-	case *ecdsaPrivateKey:
-		// Validate opts
-		if opts == nil {
-			return nil, errors.New("Invalid Opts parameter. It must not be nil")
-		}
-
-		ecdsaK := k.(*ecdsaPrivateKey)
-
-		switch opts.(type) {
-
-		// Re-randomized an ECDSA private key
-		case *bccsp.ECDSAReRandKeyOpts:
-			reRandOpts := opts.(*bccsp.ECDSAReRandKeyOpts)
-			pubKey := ecdsaK.pub.pub
-			if pubKey == nil {
-				return nil, errors.New("Public base key cannot be nil")
-			}
-
-			secret := csp.getSecretValue(ecdsaK.ski)
-			if secret == nil {
-				return nil, errors.New("Could not obtain EC Private Key")
-			}
-			bigSecret := new(big.Int).SetBytes(secret)
-
-			tempSK := &ecdsa.PrivateKey{
-				PublicKey: ecdsa.PublicKey{
-					Curve: pubKey.Curve,
-					X:     new(big.Int),
-					Y:     new(big.Int),
-				},
-				D: new(big.Int),
-			}
-
-			var k = new(big.Int).SetBytes(reRandOpts.ExpansionValue())
-			var one = new(big.Int).SetInt64(1)
-			n := new(big.Int).Sub(pubKey.Params().N, one)
-			k.Mod(k, n)
-			k.Add(k, one)
-
-			tempSK.D.Add(bigSecret, k)
-			tempSK.D.Mod(tempSK.D, pubKey.Params().N)
-
-			// Compute temporary public key
-			tempSK.PublicKey.X, tempSK.PublicKey.Y = pubKey.ScalarBaseMult(tempSK.D.Bytes())
-
-			// Verify temporary public key is a valid point on the reference curve
-			isOn := tempSK.Curve.IsOnCurve(tempSK.PublicKey.X, tempSK.PublicKey.Y)
-			if !isOn {
-				return nil, errors.New("Failed temporary public key IsOnCurve check")
-			}
-
-			ecPt := elliptic.Marshal(tempSK.Curve, tempSK.X, tempSK.Y)
-			oid, ok := oidFromNamedCurve(tempSK.Curve)
-			if !ok {
-				return nil, errors.New("Do not know OID for this Curve")
-			}
-
-			ski, err := csp.importECKey(oid, tempSK.D.Bytes(), ecPt, opts.Ephemeral(), privateKeyFlag)
-			if err != nil {
-				return nil, errors.Wrapf(err, "Failed getting importing EC Public Key")
-			}
-			reRandomizedKey := &ecdsaPrivateKey{ski, ecdsaPublicKey{ski, &tempSK.PublicKey}}
-
-			return reRandomizedKey, nil
-
-		default:
-			return nil, errors.Errorf("Unrecognized KeyDerivOpts provided [%s]", opts.Algorithm())
-
-		}
-
-	default:
-		return csp.BCCSP.KeyDeriv(k, opts)
-
-	}
 }
 
 // KeyImport imports a key from its raw representation using opts.
@@ -276,87 +127,6 @@ func (csp *impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 	}
 
 	switch opts.(type) {
-
-	case *bccsp.ECDSAPKIXPublicKeyImportOpts:
-		der, ok := raw.([]byte)
-		if !ok {
-			return nil, errors.New("[ECDSAPKIXPublicKeyImportOpts] Invalid raw material. Expected byte array")
-		}
-
-		if len(der) == 0 {
-			return nil, errors.New("[ECDSAPKIXPublicKeyImportOpts] Invalid raw. It must not be nil")
-		}
-
-		lowLevelKey, err := utils.DERToPublicKey(der)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Failed converting PKIX to ECDSA public key")
-		}
-
-		ecdsaPK, ok := lowLevelKey.(*ecdsa.PublicKey)
-		if !ok {
-			return nil, errors.New("Failed casting to ECDSA public key. Invalid raw material")
-		}
-
-		ecPt := elliptic.Marshal(ecdsaPK.Curve, ecdsaPK.X, ecdsaPK.Y)
-		oid, ok := oidFromNamedCurve(ecdsaPK.Curve)
-		if !ok {
-			return nil, errors.New("Do not know OID for this Curve")
-		}
-
-		var ski []byte
-		// opencryptoki does not support public ec key imports. This is a sufficient
-		// workaround for now to use soft verify
-		hash := sha256.Sum256(ecPt)
-		ski = hash[:]
-
-		// Warn about potential future problems
-		if !csp.softVerify {
-			logger.Debugf("opencryptoki workaround warning: Importing public EC Key does not store out to pkcs11 store,\n" +
-				"so verify with this key will fail, unless key is already present in store. Enable 'softwareverify'\n" +
-				"in pkcs11 options, if suspect this issue.")
-		}
-		ski, err = csp.importECKey(oid, nil, ecPt, opts.Ephemeral(), publicKeyFlag)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Failed getting importing EC Public Key")
-		}
-
-		k = &ecdsaPublicKey{ski, ecdsaPK}
-		return k, nil
-
-	case *bccsp.ECDSAPrivateKeyImportOpts:
-
-		return nil, errors.New("[ECDSADERPrivateKeyImportOpts] PKCS11 options 'sensitivekeys' is set to true. Cannot import")
-
-	case *bccsp.ECDSAGoPublicKeyImportOpts:
-		lowLevelKey, ok := raw.(*ecdsa.PublicKey)
-		if !ok {
-			return nil, errors.New("[ECDSAGoPublicKeyImportOpts] Invalid raw material. Expected *ecdsa.PublicKey")
-		}
-
-		ecPt := elliptic.Marshal(lowLevelKey.Curve, lowLevelKey.X, lowLevelKey.Y)
-		oid, ok := oidFromNamedCurve(lowLevelKey.Curve)
-		if !ok {
-			return nil, errors.New("Do not know OID for this Curve")
-		}
-
-		var ski []byte
-		// opencryptoki does not support public ec key imports. This is a sufficient
-		// workaround for now to use soft verify
-		hash := sha256.Sum256(ecPt)
-		ski = hash[:]
-		// Warn about potential future problems
-		if !csp.softVerify {
-			logger.Debugf("opencryptoki workaround warning: Importing public EC Key does not store out to pkcs11 store,\n" +
-				"so verify with this key will fail, unless key is already present in store. Enable 'softwareverify'\n" +
-				"in pkcs11 options, if suspect this issue.")
-		}
-		ski, err = csp.importECKey(oid, nil, ecPt, opts.Ephemeral(), publicKeyFlag)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Failed getting importing EC Public Key")
-		}
-
-		k = &ecdsaPublicKey{ski, lowLevelKey}
-		return k, nil
 
 	case *bccsp.X509PublicKeyImportOpts:
 		x509Cert, ok := raw.(*x509.Certificate)
@@ -383,14 +153,13 @@ func (csp *impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 
 // GetKey returns the key this CSP associates to
 // the Subject Key Identifier ski.
-func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
+func (csp *impl) GetKey(ski []byte) (bccsp.Key, error) {
 	pubKey, isPriv, err := csp.getECKey(ski)
 	if err == nil {
 		if isPriv {
 			return &ecdsaPrivateKey{ski, ecdsaPublicKey{ski, pubKey}}, nil
-		} else {
-			return &ecdsaPublicKey{ski, pubKey}, nil
 		}
+		return &ecdsaPublicKey{ski, pubKey}, nil
 	}
 	return csp.BCCSP.GetKey(ski)
 }
@@ -401,7 +170,7 @@ func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
 // Note that when a signature of a hash of a larger message is needed,
 // the caller is responsible for hashing the larger message and passing
 // the hash (as digest).
-func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
+func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) ([]byte, error) {
 	// Validate arguments
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil")
@@ -420,7 +189,7 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 }
 
 // Verify verifies signature against key k and digest
-func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
+func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {
 	// Validate arguments
 	if k == nil {
 		return false, errors.New("Invalid Key. It must not be nil")
@@ -445,14 +214,14 @@ func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.Signer
 
 // Encrypt encrypts plaintext using key k.
 // The opts argument should be appropriate for the primitive used.
-func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) (ciphertext []byte, err error) {
+func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) ([]byte, error) {
 	// TODO: Add PKCS11 support for encryption, when fabric starts requiring it
 	return csp.BCCSP.Encrypt(k, plaintext, opts)
 }
 
 // Decrypt decrypts ciphertext using key k.
 // The opts argument should be appropriate for the primitive used.
-func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) (plaintext []byte, err error) {
+func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) ([]byte, error) {
 	return csp.BCCSP.Decrypt(k, ciphertext, opts)
 }
 

@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package comm
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 
 	testpb "github.com/hyperledger/fabric/core/comm/testdata/grpc"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -354,8 +354,8 @@ func testInvoke(
 	creds, err := cs.GetDeliverServiceCredentials(channelID)
 	assert.NoError(t, err)
 	endpoint := fmt.Sprintf("localhost:%d", s.port)
-	ctx := context.Background()
-	ctx, _ = context.WithTimeout(ctx, 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	conn, err := grpc.DialContext(ctx, endpoint, grpc.WithTransportCredentials(creds), grpc.WithBlock())
 	if shouldSucceed {
 		assert.NoError(t, err)

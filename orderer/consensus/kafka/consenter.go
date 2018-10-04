@@ -19,12 +19,21 @@ func New(config localconfig.Kafka) consensus.Consenter {
 	if config.Verbose {
 		logging.SetLevel(logging.DEBUG, saramaLogID)
 	}
-	brokerConfig := newBrokerConfig(config.TLS, config.Retry, config.Version, defaultPartition)
+	brokerConfig := newBrokerConfig(
+		config.TLS,
+		config.SASLPlain,
+		config.Retry,
+		config.Version,
+		defaultPartition)
 	return &consenterImpl{
 		brokerConfigVal: brokerConfig,
 		tlsConfigVal:    config.TLS,
 		retryOptionsVal: config.Retry,
 		kafkaVersionVal: config.Version,
+		topicDetailVal: &sarama.TopicDetail{
+			NumPartitions:     1,
+			ReplicationFactor: config.Topic.ReplicationFactor,
+		},
 	}
 }
 
@@ -36,6 +45,7 @@ type consenterImpl struct {
 	tlsConfigVal    localconfig.TLS
 	retryOptionsVal localconfig.Retry
 	kafkaVersionVal sarama.KafkaVersion
+	topicDetailVal  *sarama.TopicDetail
 }
 
 // HandleChain creates/returns a reference to a consensus.Chain object for the
@@ -55,6 +65,7 @@ func (consenter *consenterImpl) HandleChain(support consensus.ConsenterSupport, 
 type commonConsenter interface {
 	brokerConfig() *sarama.Config
 	retryOptions() localconfig.Retry
+	topicDetail() *sarama.TopicDetail
 }
 
 func (consenter *consenterImpl) brokerConfig() *sarama.Config {
@@ -63,6 +74,10 @@ func (consenter *consenterImpl) brokerConfig() *sarama.Config {
 
 func (consenter *consenterImpl) retryOptions() localconfig.Retry {
 	return consenter.retryOptionsVal
+}
+
+func (consenter *consenterImpl) topicDetail() *sarama.TopicDetail {
+	return consenter.topicDetailVal
 }
 
 // closeable allows the shut down of the calling resource.

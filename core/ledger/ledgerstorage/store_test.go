@@ -10,6 +10,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
@@ -72,11 +73,13 @@ func TestStore(t *testing.T) {
 
 	blockAndPvtdata, err := store.GetPvtDataAndBlockByNum(2, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, sampleData[2], blockAndPvtdata)
+	assert.Equal(t, sampleData[2].Missing, blockAndPvtdata.Missing)
+	assert.True(t, proto.Equal(sampleData[2].Block, blockAndPvtdata.Block))
 
 	blockAndPvtdata, err = store.GetPvtDataAndBlockByNum(3, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, sampleData[3], blockAndPvtdata)
+	assert.Equal(t, sampleData[3].Missing, blockAndPvtdata.Missing)
+	assert.True(t, proto.Equal(sampleData[3].Block, blockAndPvtdata.Block))
 
 	// pvt data retrieval for block 3 with filter should return filtered pvtdata
 	filter := ledger.NewPvtNsCollFilter()
@@ -169,7 +172,7 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 		pvtdataAtCrash = append(pvtdataAtCrash, p)
 	}
 	// Only call Prepare on pvt data store and mimic a crash
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash)
+	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
 	store.Shutdown()
 	provider.Close()
 	provider = NewProvider()
@@ -186,7 +189,19 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	assert.NoError(t, store.CommitWithPvtData(dataAtCrash))
 	pvtdata, err := store.GetPvtDataByNum(blokNumAtCrash, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, dataAtCrash.BlockPvtData, constructPvtdataMap(pvtdata))
+	constructed := constructPvtdataMap(pvtdata)
+	for k, v := range dataAtCrash.BlockPvtData {
+		ov, ok := constructed[k]
+		assert.True(t, ok)
+		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
+		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
+	}
+	for k, v := range constructed {
+		ov, ok := dataAtCrash.BlockPvtData[k]
+		assert.True(t, ok)
+		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
+		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
+	}
 }
 
 func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
@@ -214,7 +229,7 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 
 	// Mimic a crash just short of calling the final commit on pvtdata store
 	// After starting the store again, the block and the pvtdata should be available
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash)
+	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
 	store.BlockStore.AddBlock(dataAtCrash.Block)
 	store.Shutdown()
 	provider.Close()
@@ -224,7 +239,8 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	store.Init(btlPolicyForSampleData())
 	blkAndPvtdata, err := store.GetPvtDataAndBlockByNum(blokNumAtCrash, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, dataAtCrash, blkAndPvtdata)
+	assert.Equal(t, dataAtCrash.Missing, blkAndPvtdata.Missing)
+	assert.True(t, proto.Equal(dataAtCrash.Block, blkAndPvtdata.Block))
 }
 
 func TestAddAfterPvtdataStoreError(t *testing.T) {

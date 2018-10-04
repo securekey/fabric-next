@@ -11,16 +11,11 @@ import (
 	cb "github.com/hyperledger/fabric/protos/common"
 
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/op/go-logging"
 )
 
 const pkgLogID = "orderer/common/blockcutter"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 type OrdererConfigFetcher interface {
 	OrdererConfig() (channelconfig.Orderer, bool)
@@ -30,8 +25,7 @@ type OrdererConfigFetcher interface {
 type Receiver interface {
 	// Ordered should be invoked sequentially as messages are ordered
 	// Each batch in `messageBatches` will be wrapped into a block.
-	// `pending` indicates if there are still messages pending in the receiver. It
-	// is useful for Kafka orderer to determine the `LastOffsetPersisted` of block.
+	// `pending` indicates if there are still messages pending in the receiver.
 	Ordered(msg *cb.Envelope) (messageBatches [][]*cb.Envelope, pending bool)
 
 	// Cut returns the current batch and starts a new one

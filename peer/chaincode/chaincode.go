@@ -11,6 +11,11 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/car"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/golang"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/java"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/node"
 	"github.com/hyperledger/fabric/peer/common"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -22,6 +27,17 @@ const (
 )
 
 var logger = flogging.MustGetLogger("chaincodeCmd")
+
+// XXX This is a terrible singleton hack, however
+// it simply making a latent dependency explicit.
+// It should be removed along with the other package
+// scoped variables
+var platformRegistry = platforms.NewRegistry(
+	&golang.Platform{},
+	&car.Platform{},
+	&java.Platform{},
+	&node.Platform{},
+)
 
 func addFlags(cmd *cobra.Command) {
 	common.AddOrdererFlags(cmd)
@@ -71,10 +87,13 @@ var (
 )
 
 var chaincodeCmd = &cobra.Command{
-	Use:              chainFuncName,
-	Short:            fmt.Sprint(chainCmdDes),
-	Long:             fmt.Sprint(chainCmdDes),
-	PersistentPreRun: common.SetOrdererEnv,
+	Use:   chainFuncName,
+	Short: fmt.Sprint(chainCmdDes),
+	Long:  fmt.Sprint(chainCmdDes),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		common.InitCmd(cmd, args)
+		common.SetOrdererEnv(cmd, args)
+	},
 }
 
 var flags *pflag.FlagSet

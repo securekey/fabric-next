@@ -8,17 +8,20 @@ package peer
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"testing"
 
 	configtxtest "github.com/hyperledger/fabric/common/configtx/test"
 	"github.com/hyperledger/fabric/common/localmsp"
 	mscc "github.com/hyperledger/fabric/common/mocks/scc"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/comm"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/deliverservice"
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
 	"github.com/hyperledger/fabric/core/handlers/validation/api"
+	ledgermocks "github.com/hyperledger/fabric/core/ledger/mock"
 	"github.com/hyperledger/fabric/core/mocks/ccprovider"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
@@ -83,14 +86,15 @@ func TestInitialize(t *testing.T) {
 	cleanup := setupPeerFS(t)
 	defer cleanup()
 
-	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}))
+	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), nil, &ledgermocks.DeployedChaincodeInfoProvider{})
 }
 
 func TestCreateChainFromBlock(t *testing.T) {
 	cleanup := setupPeerFS(t)
 	defer cleanup()
 
-	testChainID := "mytestchainid"
+	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), &platforms.Registry{}, &ledgermocks.DeployedChaincodeInfoProvider{})
+	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
 	block, err := configtxtest.MakeGenesisBlock(testChainID)
 	if err != nil {
 		fmt.Printf("Failed to create a config block, err %s\n", err)
@@ -187,6 +191,11 @@ func TestCreateChainFromBlock(t *testing.T) {
 	if len(channels) != 1 {
 		t.Fatalf("incorrect number of channels")
 	}
+
+	// cleanup the chain referenes to enable execution with -count n
+	chains.Lock()
+	chains.list = map[string]*chain{}
+	chains.Unlock()
 }
 
 func TestGetLocalIP(t *testing.T) {

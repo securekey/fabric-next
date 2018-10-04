@@ -12,11 +12,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/golang"
 	"github.com/hyperledger/fabric/msp"
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/msp/mgmt/testtools"
@@ -53,7 +54,7 @@ func TestBadProposalHeaders(t *testing.T) {
 	// in multiple functions which should be refactored in the future.
 	// For now, simply consolidating the test cases
 
-	// emty header
+	// empty header
 	prop := &pb.Proposal{
 		Header: []byte{},
 	}
@@ -61,6 +62,13 @@ func TestBadProposalHeaders(t *testing.T) {
 	assert.Error(t, err, "Expected error with empty proposal header")
 	_, err = utils.ComputeProposalBinding(prop)
 	assert.Error(t, err, "Expected error with empty proposal header")
+
+	// empty payload
+	prop = &pb.Proposal{
+		Header: []byte("header"),
+	}
+	_, _, err = utils.GetChaincodeProposalContext(prop)
+	assert.Error(t, err, "Expected error with empty proposal payload")
 
 	// malformed proposal header
 	prop = &pb.Proposal{
@@ -108,6 +116,7 @@ func TestBadProposalHeaders(t *testing.T) {
 	prop.Header = hdrBytes
 	_, _, err = utils.GetChaincodeProposalContext(prop)
 	assert.Error(t, err, "Expected error with wrong header type")
+	assert.Contains(t, err.Error(), "invalid proposal: invalid channel header type")
 	_, err = utils.GetNonce(prop)
 	assert.Error(t, err, "Expected error with wrong header type")
 
@@ -157,7 +166,9 @@ func TestGetNonce(t *testing.T) {
 }
 
 func TestGetChaincodeDeploymentSpec(t *testing.T) {
-	_, err := utils.GetChaincodeDeploymentSpec([]byte("bad spec"))
+	pr := platforms.NewRegistry(&golang.Platform{})
+
+	_, err := utils.GetChaincodeDeploymentSpec([]byte("bad spec"), pr)
 	assert.Error(t, err, "Expected error with malformed spec")
 
 	cds, _ := proto.Marshal(&pb.ChaincodeDeploymentSpec{
@@ -165,7 +176,7 @@ func TestGetChaincodeDeploymentSpec(t *testing.T) {
 			Type: pb.ChaincodeSpec_GOLANG,
 		},
 	})
-	_, err = utils.GetChaincodeDeploymentSpec(cds)
+	_, err = utils.GetChaincodeDeploymentSpec(cds, pr)
 	assert.NoError(t, err, "Unexpected error getting deployment spec")
 
 	cds, _ = proto.Marshal(&pb.ChaincodeDeploymentSpec{
@@ -173,7 +184,7 @@ func TestGetChaincodeDeploymentSpec(t *testing.T) {
 			Type: pb.ChaincodeSpec_UNDEFINED,
 		},
 	})
-	_, err = utils.GetChaincodeDeploymentSpec(cds)
+	_, err = utils.GetChaincodeDeploymentSpec(cds, pr)
 	assert.Error(t, err, "Expected error with invalid spec type")
 
 }
@@ -259,7 +270,7 @@ func TestProposal(t *testing.T) {
 		t.Fatalf("Could not deserialize the chaincode proposal, err %s\n", err)
 		return
 	}
-	if !reflect.DeepEqual(prop, propBack) {
+	if !proto.Equal(prop, propBack) {
 		t.Fatalf("Proposal and deserialized proposals don't match\n")
 		return
 	}

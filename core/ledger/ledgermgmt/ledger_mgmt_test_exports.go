@@ -17,26 +17,44 @@ limitations under the License.
 package ledgermgmt
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/golang"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
-
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-
-	"fmt"
+	"github.com/hyperledger/fabric/core/ledger/mock"
 )
 
 // InitializeTestEnv initializes ledgermgmt for tests
 func InitializeTestEnv() {
 	remove()
-	initialize(nil, nil)
+	initialize(&Initializer{
+		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+	})
 }
 
 // InitializeTestEnvWithCustomProcessors initializes ledgermgmt for tests with the supplied custom tx processors
 func InitializeTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
 	remove()
 	customtx.InitializeTestEnv(customTxProcessors)
-	initialize(customTxProcessors, nil)
+	initialize(&Initializer{
+		CustomTxProcessors:            customTxProcessors,
+		PlatformRegistry:              platforms.NewRegistry(&golang.Platform{}),
+		DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
+	})
+}
+
+// InitializeExistingTestEnvWithCustomProcessors initializes ledgermgmt for tests with existing ledgers
+// This function does not remove the existing ledgers and is used in upgrade tests
+// TODO ledgermgmt should be reworked to move the package scoped functions to a struct
+func InitializeExistingTestEnvWithCustomProcessors(customTxProcessors customtx.Processors) {
+	customtx.InitializeTestEnv(customTxProcessors)
+	initialize(&Initializer{
+		CustomTxProcessors: customTxProcessors,
+	})
 }
 
 // CleanupTestEnv closes the ledgermagmt and removes the store directory

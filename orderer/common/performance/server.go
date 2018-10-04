@@ -7,25 +7,20 @@ SPDX-License-Identifier: Apache-2.0
 package performance
 
 import (
+	"context"
 	"io"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	cb "github.com/hyperledger/fabric/protos/common"
 	ab "github.com/hyperledger/fabric/protos/orderer"
-	"github.com/op/go-logging"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 )
 
 const pkgLogID = "orderer/common/performance"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 // BenchmarkServer is a pseudo-server that grpc services could be registered to
 type BenchmarkServer struct {

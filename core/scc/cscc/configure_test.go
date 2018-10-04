@@ -29,6 +29,8 @@ import (
 	"github.com/hyperledger/fabric/core/aclmgmt/resources"
 	"github.com/hyperledger/fabric/core/chaincode"
 	"github.com/hyperledger/fabric/core/chaincode/accesscontrol"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/golang"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/container"
@@ -222,6 +224,7 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 		ca.CertBytes(),
 		certGenerator,
 		&ccprovider.CCInfoFSImpl{},
+		nil,
 		mockAclProvider,
 		container.NewVMController(
 			map[string]container.VMProvider{
@@ -229,6 +232,8 @@ func TestConfigerInvokeJoinChainCorrectParams(t *testing.T) {
 			},
 		),
 		mp,
+		platforms.NewRegistry(&golang.Platform{}),
+		peer.DefaultSupport,
 	)
 
 	// Init the policy checker

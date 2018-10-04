@@ -23,6 +23,21 @@ type TxSimulator struct {
 		result1 []byte
 		result2 error
 	}
+	GetStateRangeScanIteratorStub        func(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error)
+	getStateRangeScanIteratorMutex       sync.RWMutex
+	getStateRangeScanIteratorArgsForCall []struct {
+		namespace string
+		startKey  string
+		endKey    string
+	}
+	getStateRangeScanIteratorReturns struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}
+	getStateRangeScanIteratorReturnsOnCall map[int]struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}
 	GetStateMetadataStub        func(namespace, key string) (map[string][]byte, error)
 	getStateMetadataMutex       sync.RWMutex
 	getStateMetadataArgsForCall []struct {
@@ -51,19 +66,20 @@ type TxSimulator struct {
 		result1 [][]byte
 		result2 error
 	}
-	GetStateRangeScanIteratorStub        func(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error)
-	getStateRangeScanIteratorMutex       sync.RWMutex
-	getStateRangeScanIteratorArgsForCall []struct {
+	GetStateRangeScanIteratorWithMetadataStub        func(namespace string, startKey, endKey string, metadata map[string]interface{}) (ledger.QueryResultsIterator, error)
+	getStateRangeScanIteratorWithMetadataMutex       sync.RWMutex
+	getStateRangeScanIteratorWithMetadataArgsForCall []struct {
 		namespace string
 		startKey  string
 		endKey    string
+		metadata  map[string]interface{}
 	}
-	getStateRangeScanIteratorReturns struct {
-		result1 commonledger.ResultsIterator
+	getStateRangeScanIteratorWithMetadataReturns struct {
+		result1 ledger.QueryResultsIterator
 		result2 error
 	}
-	getStateRangeScanIteratorReturnsOnCall map[int]struct {
-		result1 commonledger.ResultsIterator
+	getStateRangeScanIteratorWithMetadataReturnsOnCall map[int]struct {
+		result1 ledger.QueryResultsIterator
 		result2 error
 	}
 	ExecuteQueryStub        func(namespace, query string) (commonledger.ResultsIterator, error)
@@ -78,6 +94,21 @@ type TxSimulator struct {
 	}
 	executeQueryReturnsOnCall map[int]struct {
 		result1 commonledger.ResultsIterator
+		result2 error
+	}
+	ExecuteQueryWithMetadataStub        func(namespace, query string, metadata map[string]interface{}) (ledger.QueryResultsIterator, error)
+	executeQueryWithMetadataMutex       sync.RWMutex
+	executeQueryWithMetadataArgsForCall []struct {
+		namespace string
+		query     string
+		metadata  map[string]interface{}
+	}
+	executeQueryWithMetadataReturns struct {
+		result1 ledger.QueryResultsIterator
+		result2 error
+	}
+	executeQueryWithMetadataReturnsOnCall map[int]struct {
+		result1 ledger.QueryResultsIterator
 		result2 error
 	}
 	GetPrivateDataStub        func(namespace, collection, key string) ([]byte, error)
@@ -107,6 +138,21 @@ type TxSimulator struct {
 		result2 error
 	}
 	getPrivateDataMetadataReturnsOnCall map[int]struct {
+		result1 map[string][]byte
+		result2 error
+	}
+	GetPrivateDataMetadataByHashStub        func(namespace, collection string, keyhash []byte) (map[string][]byte, error)
+	getPrivateDataMetadataByHashMutex       sync.RWMutex
+	getPrivateDataMetadataByHashArgsForCall []struct {
+		namespace  string
+		collection string
+		keyhash    []byte
+	}
+	getPrivateDataMetadataByHashReturns struct {
+		result1 map[string][]byte
+		result2 error
+	}
+	getPrivateDataMetadataByHashReturnsOnCall map[int]struct {
 		result1 map[string][]byte
 		result2 error
 	}
@@ -366,6 +412,59 @@ func (fake *TxSimulator) GetStateReturnsOnCall(i int, result1 []byte, result2 er
 	}{result1, result2}
 }
 
+func (fake *TxSimulator) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error) {
+	fake.getStateRangeScanIteratorMutex.Lock()
+	ret, specificReturn := fake.getStateRangeScanIteratorReturnsOnCall[len(fake.getStateRangeScanIteratorArgsForCall)]
+	fake.getStateRangeScanIteratorArgsForCall = append(fake.getStateRangeScanIteratorArgsForCall, struct {
+		namespace string
+		startKey  string
+		endKey    string
+	}{namespace, startKey, endKey})
+	fake.recordInvocation("GetStateRangeScanIterator", []interface{}{namespace, startKey, endKey})
+	fake.getStateRangeScanIteratorMutex.Unlock()
+	if fake.GetStateRangeScanIteratorStub != nil {
+		return fake.GetStateRangeScanIteratorStub(namespace, startKey, endKey)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.getStateRangeScanIteratorReturns.result1, fake.getStateRangeScanIteratorReturns.result2
+}
+
+func (fake *TxSimulator) GetStateRangeScanIteratorCallCount() int {
+	fake.getStateRangeScanIteratorMutex.RLock()
+	defer fake.getStateRangeScanIteratorMutex.RUnlock()
+	return len(fake.getStateRangeScanIteratorArgsForCall)
+}
+
+func (fake *TxSimulator) GetStateRangeScanIteratorArgsForCall(i int) (string, string, string) {
+	fake.getStateRangeScanIteratorMutex.RLock()
+	defer fake.getStateRangeScanIteratorMutex.RUnlock()
+	return fake.getStateRangeScanIteratorArgsForCall[i].namespace, fake.getStateRangeScanIteratorArgsForCall[i].startKey, fake.getStateRangeScanIteratorArgsForCall[i].endKey
+}
+
+func (fake *TxSimulator) GetStateRangeScanIteratorReturns(result1 commonledger.ResultsIterator, result2 error) {
+	fake.GetStateRangeScanIteratorStub = nil
+	fake.getStateRangeScanIteratorReturns = struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *TxSimulator) GetStateRangeScanIteratorReturnsOnCall(i int, result1 commonledger.ResultsIterator, result2 error) {
+	fake.GetStateRangeScanIteratorStub = nil
+	if fake.getStateRangeScanIteratorReturnsOnCall == nil {
+		fake.getStateRangeScanIteratorReturnsOnCall = make(map[int]struct {
+			result1 commonledger.ResultsIterator
+			result2 error
+		})
+	}
+	fake.getStateRangeScanIteratorReturnsOnCall[i] = struct {
+		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *TxSimulator) GetStateMetadata(namespace string, key string) (map[string][]byte, error) {
 	fake.getStateMetadataMutex.Lock()
 	ret, specificReturn := fake.getStateMetadataReturnsOnCall[len(fake.getStateMetadataArgsForCall)]
@@ -475,55 +574,56 @@ func (fake *TxSimulator) GetStateMultipleKeysReturnsOnCall(i int, result1 [][]by
 	}{result1, result2}
 }
 
-func (fake *TxSimulator) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (commonledger.ResultsIterator, error) {
-	fake.getStateRangeScanIteratorMutex.Lock()
-	ret, specificReturn := fake.getStateRangeScanIteratorReturnsOnCall[len(fake.getStateRangeScanIteratorArgsForCall)]
-	fake.getStateRangeScanIteratorArgsForCall = append(fake.getStateRangeScanIteratorArgsForCall, struct {
+func (fake *TxSimulator) GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (ledger.QueryResultsIterator, error) {
+	fake.getStateRangeScanIteratorWithMetadataMutex.Lock()
+	ret, specificReturn := fake.getStateRangeScanIteratorWithMetadataReturnsOnCall[len(fake.getStateRangeScanIteratorWithMetadataArgsForCall)]
+	fake.getStateRangeScanIteratorWithMetadataArgsForCall = append(fake.getStateRangeScanIteratorWithMetadataArgsForCall, struct {
 		namespace string
 		startKey  string
 		endKey    string
-	}{namespace, startKey, endKey})
-	fake.recordInvocation("GetStateRangeScanIterator", []interface{}{namespace, startKey, endKey})
-	fake.getStateRangeScanIteratorMutex.Unlock()
-	if fake.GetStateRangeScanIteratorStub != nil {
-		return fake.GetStateRangeScanIteratorStub(namespace, startKey, endKey)
+		metadata  map[string]interface{}
+	}{namespace, startKey, endKey, metadata})
+	fake.recordInvocation("GetStateRangeScanIteratorWithMetadata", []interface{}{namespace, startKey, endKey, metadata})
+	fake.getStateRangeScanIteratorWithMetadataMutex.Unlock()
+	if fake.GetStateRangeScanIteratorWithMetadataStub != nil {
+		return fake.GetStateRangeScanIteratorWithMetadataStub(namespace, startKey, endKey, metadata)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	return fake.getStateRangeScanIteratorReturns.result1, fake.getStateRangeScanIteratorReturns.result2
+	return fake.getStateRangeScanIteratorWithMetadataReturns.result1, fake.getStateRangeScanIteratorWithMetadataReturns.result2
 }
 
-func (fake *TxSimulator) GetStateRangeScanIteratorCallCount() int {
-	fake.getStateRangeScanIteratorMutex.RLock()
-	defer fake.getStateRangeScanIteratorMutex.RUnlock()
-	return len(fake.getStateRangeScanIteratorArgsForCall)
+func (fake *TxSimulator) GetStateRangeScanIteratorWithMetadataCallCount() int {
+	fake.getStateRangeScanIteratorWithMetadataMutex.RLock()
+	defer fake.getStateRangeScanIteratorWithMetadataMutex.RUnlock()
+	return len(fake.getStateRangeScanIteratorWithMetadataArgsForCall)
 }
 
-func (fake *TxSimulator) GetStateRangeScanIteratorArgsForCall(i int) (string, string, string) {
-	fake.getStateRangeScanIteratorMutex.RLock()
-	defer fake.getStateRangeScanIteratorMutex.RUnlock()
-	return fake.getStateRangeScanIteratorArgsForCall[i].namespace, fake.getStateRangeScanIteratorArgsForCall[i].startKey, fake.getStateRangeScanIteratorArgsForCall[i].endKey
+func (fake *TxSimulator) GetStateRangeScanIteratorWithMetadataArgsForCall(i int) (string, string, string, map[string]interface{}) {
+	fake.getStateRangeScanIteratorWithMetadataMutex.RLock()
+	defer fake.getStateRangeScanIteratorWithMetadataMutex.RUnlock()
+	return fake.getStateRangeScanIteratorWithMetadataArgsForCall[i].namespace, fake.getStateRangeScanIteratorWithMetadataArgsForCall[i].startKey, fake.getStateRangeScanIteratorWithMetadataArgsForCall[i].endKey, fake.getStateRangeScanIteratorWithMetadataArgsForCall[i].metadata
 }
 
-func (fake *TxSimulator) GetStateRangeScanIteratorReturns(result1 commonledger.ResultsIterator, result2 error) {
-	fake.GetStateRangeScanIteratorStub = nil
-	fake.getStateRangeScanIteratorReturns = struct {
-		result1 commonledger.ResultsIterator
+func (fake *TxSimulator) GetStateRangeScanIteratorWithMetadataReturns(result1 ledger.QueryResultsIterator, result2 error) {
+	fake.GetStateRangeScanIteratorWithMetadataStub = nil
+	fake.getStateRangeScanIteratorWithMetadataReturns = struct {
+		result1 ledger.QueryResultsIterator
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *TxSimulator) GetStateRangeScanIteratorReturnsOnCall(i int, result1 commonledger.ResultsIterator, result2 error) {
-	fake.GetStateRangeScanIteratorStub = nil
-	if fake.getStateRangeScanIteratorReturnsOnCall == nil {
-		fake.getStateRangeScanIteratorReturnsOnCall = make(map[int]struct {
-			result1 commonledger.ResultsIterator
+func (fake *TxSimulator) GetStateRangeScanIteratorWithMetadataReturnsOnCall(i int, result1 ledger.QueryResultsIterator, result2 error) {
+	fake.GetStateRangeScanIteratorWithMetadataStub = nil
+	if fake.getStateRangeScanIteratorWithMetadataReturnsOnCall == nil {
+		fake.getStateRangeScanIteratorWithMetadataReturnsOnCall = make(map[int]struct {
+			result1 ledger.QueryResultsIterator
 			result2 error
 		})
 	}
-	fake.getStateRangeScanIteratorReturnsOnCall[i] = struct {
-		result1 commonledger.ResultsIterator
+	fake.getStateRangeScanIteratorWithMetadataReturnsOnCall[i] = struct {
+		result1 ledger.QueryResultsIterator
 		result2 error
 	}{result1, result2}
 }
@@ -576,6 +676,59 @@ func (fake *TxSimulator) ExecuteQueryReturnsOnCall(i int, result1 commonledger.R
 	}
 	fake.executeQueryReturnsOnCall[i] = struct {
 		result1 commonledger.ResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *TxSimulator) ExecuteQueryWithMetadata(namespace string, query string, metadata map[string]interface{}) (ledger.QueryResultsIterator, error) {
+	fake.executeQueryWithMetadataMutex.Lock()
+	ret, specificReturn := fake.executeQueryWithMetadataReturnsOnCall[len(fake.executeQueryWithMetadataArgsForCall)]
+	fake.executeQueryWithMetadataArgsForCall = append(fake.executeQueryWithMetadataArgsForCall, struct {
+		namespace string
+		query     string
+		metadata  map[string]interface{}
+	}{namespace, query, metadata})
+	fake.recordInvocation("ExecuteQueryWithMetadata", []interface{}{namespace, query, metadata})
+	fake.executeQueryWithMetadataMutex.Unlock()
+	if fake.ExecuteQueryWithMetadataStub != nil {
+		return fake.ExecuteQueryWithMetadataStub(namespace, query, metadata)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.executeQueryWithMetadataReturns.result1, fake.executeQueryWithMetadataReturns.result2
+}
+
+func (fake *TxSimulator) ExecuteQueryWithMetadataCallCount() int {
+	fake.executeQueryWithMetadataMutex.RLock()
+	defer fake.executeQueryWithMetadataMutex.RUnlock()
+	return len(fake.executeQueryWithMetadataArgsForCall)
+}
+
+func (fake *TxSimulator) ExecuteQueryWithMetadataArgsForCall(i int) (string, string, map[string]interface{}) {
+	fake.executeQueryWithMetadataMutex.RLock()
+	defer fake.executeQueryWithMetadataMutex.RUnlock()
+	return fake.executeQueryWithMetadataArgsForCall[i].namespace, fake.executeQueryWithMetadataArgsForCall[i].query, fake.executeQueryWithMetadataArgsForCall[i].metadata
+}
+
+func (fake *TxSimulator) ExecuteQueryWithMetadataReturns(result1 ledger.QueryResultsIterator, result2 error) {
+	fake.ExecuteQueryWithMetadataStub = nil
+	fake.executeQueryWithMetadataReturns = struct {
+		result1 ledger.QueryResultsIterator
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *TxSimulator) ExecuteQueryWithMetadataReturnsOnCall(i int, result1 ledger.QueryResultsIterator, result2 error) {
+	fake.ExecuteQueryWithMetadataStub = nil
+	if fake.executeQueryWithMetadataReturnsOnCall == nil {
+		fake.executeQueryWithMetadataReturnsOnCall = make(map[int]struct {
+			result1 ledger.QueryResultsIterator
+			result2 error
+		})
+	}
+	fake.executeQueryWithMetadataReturnsOnCall[i] = struct {
+		result1 ledger.QueryResultsIterator
 		result2 error
 	}{result1, result2}
 }
@@ -681,6 +834,64 @@ func (fake *TxSimulator) GetPrivateDataMetadataReturnsOnCall(i int, result1 map[
 		})
 	}
 	fake.getPrivateDataMetadataReturnsOnCall[i] = struct {
+		result1 map[string][]byte
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *TxSimulator) GetPrivateDataMetadataByHash(namespace string, collection string, keyhash []byte) (map[string][]byte, error) {
+	var keyhashCopy []byte
+	if keyhash != nil {
+		keyhashCopy = make([]byte, len(keyhash))
+		copy(keyhashCopy, keyhash)
+	}
+	fake.getPrivateDataMetadataByHashMutex.Lock()
+	ret, specificReturn := fake.getPrivateDataMetadataByHashReturnsOnCall[len(fake.getPrivateDataMetadataByHashArgsForCall)]
+	fake.getPrivateDataMetadataByHashArgsForCall = append(fake.getPrivateDataMetadataByHashArgsForCall, struct {
+		namespace  string
+		collection string
+		keyhash    []byte
+	}{namespace, collection, keyhashCopy})
+	fake.recordInvocation("GetPrivateDataMetadataByHash", []interface{}{namespace, collection, keyhashCopy})
+	fake.getPrivateDataMetadataByHashMutex.Unlock()
+	if fake.GetPrivateDataMetadataByHashStub != nil {
+		return fake.GetPrivateDataMetadataByHashStub(namespace, collection, keyhash)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fake.getPrivateDataMetadataByHashReturns.result1, fake.getPrivateDataMetadataByHashReturns.result2
+}
+
+func (fake *TxSimulator) GetPrivateDataMetadataByHashCallCount() int {
+	fake.getPrivateDataMetadataByHashMutex.RLock()
+	defer fake.getPrivateDataMetadataByHashMutex.RUnlock()
+	return len(fake.getPrivateDataMetadataByHashArgsForCall)
+}
+
+func (fake *TxSimulator) GetPrivateDataMetadataByHashArgsForCall(i int) (string, string, []byte) {
+	fake.getPrivateDataMetadataByHashMutex.RLock()
+	defer fake.getPrivateDataMetadataByHashMutex.RUnlock()
+	return fake.getPrivateDataMetadataByHashArgsForCall[i].namespace, fake.getPrivateDataMetadataByHashArgsForCall[i].collection, fake.getPrivateDataMetadataByHashArgsForCall[i].keyhash
+}
+
+func (fake *TxSimulator) GetPrivateDataMetadataByHashReturns(result1 map[string][]byte, result2 error) {
+	fake.GetPrivateDataMetadataByHashStub = nil
+	fake.getPrivateDataMetadataByHashReturns = struct {
+		result1 map[string][]byte
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *TxSimulator) GetPrivateDataMetadataByHashReturnsOnCall(i int, result1 map[string][]byte, result2 error) {
+	fake.GetPrivateDataMetadataByHashStub = nil
+	if fake.getPrivateDataMetadataByHashReturnsOnCall == nil {
+		fake.getPrivateDataMetadataByHashReturnsOnCall = make(map[int]struct {
+			result1 map[string][]byte
+			result2 error
+		})
+	}
+	fake.getPrivateDataMetadataByHashReturnsOnCall[i] = struct {
 		result1 map[string][]byte
 		result2 error
 	}{result1, result2}
@@ -1472,18 +1683,24 @@ func (fake *TxSimulator) Invocations() map[string][][]interface{} {
 	defer fake.invocationsMutex.RUnlock()
 	fake.getStateMutex.RLock()
 	defer fake.getStateMutex.RUnlock()
+	fake.getStateRangeScanIteratorMutex.RLock()
+	defer fake.getStateRangeScanIteratorMutex.RUnlock()
 	fake.getStateMetadataMutex.RLock()
 	defer fake.getStateMetadataMutex.RUnlock()
 	fake.getStateMultipleKeysMutex.RLock()
 	defer fake.getStateMultipleKeysMutex.RUnlock()
-	fake.getStateRangeScanIteratorMutex.RLock()
-	defer fake.getStateRangeScanIteratorMutex.RUnlock()
+	fake.getStateRangeScanIteratorWithMetadataMutex.RLock()
+	defer fake.getStateRangeScanIteratorWithMetadataMutex.RUnlock()
 	fake.executeQueryMutex.RLock()
 	defer fake.executeQueryMutex.RUnlock()
+	fake.executeQueryWithMetadataMutex.RLock()
+	defer fake.executeQueryWithMetadataMutex.RUnlock()
 	fake.getPrivateDataMutex.RLock()
 	defer fake.getPrivateDataMutex.RUnlock()
 	fake.getPrivateDataMetadataMutex.RLock()
 	defer fake.getPrivateDataMetadataMutex.RUnlock()
+	fake.getPrivateDataMetadataByHashMutex.RLock()
+	defer fake.getPrivateDataMetadataByHashMutex.RUnlock()
 	fake.getPrivateDataMultipleKeysMutex.RLock()
 	defer fake.getPrivateDataMultipleKeysMutex.RUnlock()
 	fake.getPrivateDataRangeScanIteratorMutex.RLock()

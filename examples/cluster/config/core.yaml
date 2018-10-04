@@ -25,7 +25,7 @@ logging:
     # subcommands, the defaults also apply to all subcommands of the command.
     # Valid logging levels are case-insensitive strings chosen from
 
-    #     CRITICAL | ERROR | WARNING | NOTICE | INFO | DEBUG
+    #     FATAL | PANIC | ERROR | WARNING | INFO | DEBUG
 
     # The logging levels specified here can be overridden in various ways,
     # listed below from strongest to weakest:
@@ -197,22 +197,6 @@ peer:
                 # but rather lost if the channel write blocks.
                 channelSize: 20
 
-    # Validator defines whether this peer is a validating peer or not, and if
-    # it is enabled, what consensus plugin to load
-    events:
-        # The address that the Event service will be enabled on the validator
-        address: 0.0.0.0:7053
-
-        # total number of events that could be buffered without blocking the
-        # validator sends
-        buffersize: 100
-
-        # milliseconds timeout for producer to send an event.
-        # if < 0, if buffer full, unblocks immediately and not send
-        # if 0, if buffer full, will block and guarantee the event will be sent out
-        # if > 0, if buffer full, blocks till timeout
-        timeout: 10
-
     # TLS Settings for p2p communications
     tls:
         enabled: true
@@ -343,8 +327,7 @@ chaincode:
         # tools added for java shim layer packaging.
         # This image is packed with shim layer libraries that are necessary
         # for Java chaincode runtime.
-        Dockerfile:  |
-            from $(DOCKER_NS)/fabric-javaenv:$(ARCH)-$(PROJECT_VERSION)
+        runtime: $(DOCKER_NS)/fabric-javaenv:$(ARCH)-$(PROJECT_VERSION)
 
     # timeout in millisecs for starting up a container and waiting for Register
     # to come through. 1sec should be plenty for chaincode unit tests

@@ -7,13 +7,17 @@ SPDX-License-Identifier: Apache-2.0
 package txvalidator
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/configtx"
 	commonerrors "github.com/hyperledger/fabric/common/errors"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
+	"github.com/hyperledger/fabric/core/chaincode/platforms/golang"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/common/validation"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -23,9 +27,7 @@ import (
 	mspprotos "github.com/hyperledger/fabric/protos/msp"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // Support provides all of the needed to evaluate the VSCC
@@ -71,16 +73,12 @@ type vsccValidator interface {
 // reference to the ledger to enable tx simulation
 // and execution of vscc
 type TxValidator struct {
+	ChainID string
 	Support Support
 	Vscc    vsccValidator
 }
 
-var logger *logging.Logger // package-level logger
-
-func init() {
-	// Init logger with module name
-	logger = flogging.MustGetLogger("committer/txvalidator")
-}
+var logger = flogging.MustGetLogger("committer/txvalidator")
 
 type blockValidationRequest struct {
 	block *common.Block
@@ -98,12 +96,13 @@ type blockValidationResult struct {
 }
 
 // NewTxValidator creates new transactions validator
-func NewTxValidator(support Support, sccp sysccprovider.SystemChaincodeProvider, pm PluginMapper) *TxValidator {
+func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemChaincodeProvider, pm PluginMapper) *TxValidator {
 	// Encapsulates interface implementation
 	pluginValidator := NewPluginValidator(pm, support.Ledger(), &dynamicDeserializer{support: support}, &dynamicCapabilities{support: support})
 	return &TxValidator{
+		ChainID: chainID,
 		Support: support,
-		Vscc:    newVSCCValidator(support, sccp, pluginValidator)}
+		Vscc:    newVSCCValidator(chainID, support, sccp, pluginValidator)}
 }
 
 func (v *TxValidator) chainExists(chain string) bool {
@@ -135,8 +134,9 @@ func (v *TxValidator) Validate(block *common.Block) error {
 	var err error
 	var errPos int
 
-	logger.Debug("START Block Validation")
-	defer logger.Debug("END Block Validation")
+	startValidation := time.Now() // timer to log Validate block duration
+	logger.Debugf("[%s] START Block Validation for block [%d]", v.ChainID, block.Header.Number)
+
 	// Initialize trans as valid here, then set invalidation reason code upon invalidation below
 	txsfltr := ledgerUtil.NewTxValidationFlags(len(block.Data.Data))
 	// txsChaincodeNames records all the invoked chaincodes by tx in a block
@@ -228,6 +228,9 @@ func (v *TxValidator) Validate(block *common.Block) error {
 
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsfltr
 
+	elapsedValidation := time.Since(startValidation) / time.Millisecond // duration in ms
+	logger.Infof("[%s] Validated block [%d] in %dms", v.ChainID, block.Header.Number, elapsedValidation)
+
 	return nil
 }
 
@@ -287,8 +290,8 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		// chain binding proposal to endorsements to tx holds. We do
 		// NOT check the validity of endorsements, though. That's a
 		// job for VSCC below
-		logger.Debugf("validateTx starts for block %p env %p txn %d", block, env, tIdx)
-		defer logger.Debugf("validateTx completes for block %p env %p txn %d", block, env, tIdx)
+		logger.Debugf("[%s] validateTx starts for block %p env %p txn %d", v.ChainID, block, env, tIdx)
+		defer logger.Debugf("[%s] validateTx completes for block %p env %p txn %d", v.ChainID, block, env, tIdx)
 		var payload *common.Payload
 		var err error
 		var txResult peer.TxValidationCode
@@ -563,7 +566,7 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
 }
 
 func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
-	cds, err := utils.GetChaincodeDeploymentSpec(cdsBytes)
+	cds, err := utils.GetChaincodeDeploymentSpec(cdsBytes, platforms.NewRegistry(&golang.Platform{}))
 	if err != nil {
 		return nil, err
 	}
@@ -603,6 +606,10 @@ func (ds *dynamicCapabilities) ForbidDuplicateTXIdInBlock() bool {
 	return ds.support.Capabilities().ForbidDuplicateTXIdInBlock()
 }
 
+func (ds *dynamicCapabilities) KeyLevelEndorsement() bool {
+	return ds.support.Capabilities().KeyLevelEndorsement()
+}
+
 func (ds *dynamicCapabilities) MetadataLifecycle() bool {
 	return ds.support.Capabilities().MetadataLifecycle()
 }
@@ -621,4 +628,8 @@ func (ds *dynamicCapabilities) V1_1Validation() bool {
 
 func (ds *dynamicCapabilities) V1_2Validation() bool {
 	return ds.support.Capabilities().V1_2Validation()
+}
+
+func (ds *dynamicCapabilities) V1_3Validation() bool {
+	return ds.support.Capabilities().V1_3Validation()
 }

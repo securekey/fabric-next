@@ -8,9 +8,11 @@ package chaincode
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric/protos/common"
@@ -18,7 +20,6 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/net/context"
 )
 
 var getInstalledChaincodes bool
@@ -136,6 +137,10 @@ func (cci ccInfo) String() string {
 			val = hex.EncodeToString(f.Bytes())
 		}
 		if len(val) == 0 {
+			continue
+		}
+		// Skip the proto-internal generated fields
+		if strings.HasPrefix(md2.Field(i).Name, "XXX") {
 			continue
 		}
 		b.WriteString(fmt.Sprintf("%s: %s, ", md2.Field(i).Name, val))

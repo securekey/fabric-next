@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -446,6 +447,161 @@ func TestChain(t *testing.T) {
 	})
 }
 
+func TestSetupTopicForChannel(t *testing.T) {
+
+	mockChannel := newChannel(channelNameForTest(t), defaultPartition)
+	haltChan := make(chan struct{})
+
+	mockBrokerNoError := sarama.NewMockBroker(t, 0)
+	defer mockBrokerNoError.Close()
+	metadataResponse := sarama.NewMockMetadataResponse(t)
+	metadataResponse.SetBroker(mockBrokerNoError.Addr(),
+		mockBrokerNoError.BrokerID())
+	metadataResponse.SetController(mockBrokerNoError.BrokerID())
+
+	mdrUnknownTopicOrPartition := &sarama.MetadataResponse{
+		Version:      1,
+		Brokers:      []*sarama.Broker{sarama.NewBroker(mockBrokerNoError.Addr())},
+		ControllerID: -1,
+		Topics: []*sarama.TopicMetadata{
+			{
+				Err:  sarama.ErrUnknownTopicOrPartition,
+				Name: mockChannel.topic(),
+			},
+		},
+	}
+
+	mockBrokerNoError.SetHandlerByMap(map[string]sarama.MockResponse{
+		"CreateTopicsRequest": sarama.NewMockWrapper(
+			&sarama.CreateTopicsResponse{
+				TopicErrors: map[string]*sarama.TopicError{
+					mockChannel.topic(): {
+						Err: sarama.ErrNoError}}}),
+		"MetadataRequest": sarama.NewMockWrapper(mdrUnknownTopicOrPartition)})
+
+	mockBrokerTopicExists := sarama.NewMockBroker(t, 1)
+	defer mockBrokerTopicExists.Close()
+	mockBrokerTopicExists.SetHandlerByMap(map[string]sarama.MockResponse{
+		"CreateTopicsRequest": sarama.NewMockWrapper(
+			&sarama.CreateTopicsResponse{
+				TopicErrors: map[string]*sarama.TopicError{
+					mockChannel.topic(): {
+						Err: sarama.ErrTopicAlreadyExists}}}),
+		"MetadataRequest": sarama.NewMockWrapper(&sarama.MetadataResponse{
+			Version: 1,
+			Topics: []*sarama.TopicMetadata{
+				{
+					Name: channelNameForTest(t),
+					Err:  sarama.ErrNoError}}})})
+
+	mockBrokerInvalidTopic := sarama.NewMockBroker(t, 2)
+	defer mockBrokerInvalidTopic.Close()
+	metadataResponse = sarama.NewMockMetadataResponse(t)
+	metadataResponse.SetBroker(mockBrokerInvalidTopic.Addr(),
+		mockBrokerInvalidTopic.BrokerID())
+	metadataResponse.SetController(mockBrokerInvalidTopic.BrokerID())
+	mockBrokerInvalidTopic.SetHandlerByMap(map[string]sarama.MockResponse{
+		"CreateTopicsRequest": sarama.NewMockWrapper(
+			&sarama.CreateTopicsResponse{
+				TopicErrors: map[string]*sarama.TopicError{
+					mockChannel.topic(): {
+						Err: sarama.ErrInvalidTopic}}}),
+		"MetadataRequest": metadataResponse})
+
+	mockBrokerInvalidTopic2 := sarama.NewMockBroker(t, 3)
+	defer mockBrokerInvalidTopic2.Close()
+	mockBrokerInvalidTopic2.SetHandlerByMap(map[string]sarama.MockResponse{
+		"CreateTopicsRequest": sarama.NewMockWrapper(
+			&sarama.CreateTopicsResponse{
+				TopicErrors: map[string]*sarama.TopicError{
+					mockChannel.topic(): {
+						Err: sarama.ErrInvalidTopic}}}),
+		"MetadataRequest": sarama.NewMockWrapper(&sarama.MetadataResponse{
+			Version:      1,
+			Brokers:      []*sarama.Broker{sarama.NewBroker(mockBrokerInvalidTopic2.Addr())},
+			ControllerID: mockBrokerInvalidTopic2.BrokerID()})})
+
+	closedBroker := sarama.NewMockBroker(t, 99)
+	badAddress := closedBroker.Addr()
+	closedBroker.Close()
+
+	var tests = []struct {
+		name         string
+		brokers      []string
+		brokerConfig *sarama.Config
+		version      sarama.KafkaVersion
+		expectErr    bool
+		errorMsg     string
+	}{
+		{
+			name:         "Unsupported Version",
+			brokers:      []string{mockBrokerNoError.Addr()},
+			brokerConfig: sarama.NewConfig(),
+			version:      sarama.V0_9_0_0,
+			expectErr:    false,
+		},
+		{
+			name:         "No Error",
+			brokers:      []string{mockBrokerNoError.Addr()},
+			brokerConfig: sarama.NewConfig(),
+			version:      sarama.V0_10_2_0,
+			expectErr:    false,
+		},
+		{
+			name:         "Topic Exists",
+			brokers:      []string{mockBrokerTopicExists.Addr()},
+			brokerConfig: sarama.NewConfig(),
+			version:      sarama.V0_10_2_0,
+			expectErr:    false,
+		},
+		{
+			name:         "Invalid Topic",
+			brokers:      []string{mockBrokerInvalidTopic.Addr()},
+			brokerConfig: sarama.NewConfig(),
+			version:      sarama.V0_10_2_0,
+			expectErr:    true,
+			errorMsg:     "process asked to exit",
+		},
+		{
+			name:         "Multiple Brokers - One No Error",
+			brokers:      []string{badAddress, mockBrokerNoError.Addr()},
+			brokerConfig: sarama.NewConfig(),
+			version:      sarama.V0_10_2_0,
+			expectErr:    false,
+		},
+		{
+			name:         "Multiple Brokers - All Errors",
+			brokers:      []string{badAddress, badAddress},
+			brokerConfig: sarama.NewConfig(),
+			version:      sarama.V0_10_2_0,
+			expectErr:    true,
+			errorMsg:     "failed to retrieve metadata",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			test.brokerConfig.Version = test.version
+			err := setupTopicForChannel(
+				mockRetryOptions,
+				haltChan,
+				test.brokers,
+				test.brokerConfig,
+				&sarama.TopicDetail{
+					NumPartitions:     1,
+					ReplicationFactor: 2},
+				mockChannel)
+			if test.expectErr {
+				assert.Contains(t, err.Error(), test.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+
+}
+
 func TestSetupProducerForChannel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping test in short mode")
@@ -576,7 +732,7 @@ func TestCloseKafkaObjects(t *testing.T) {
 
 		assert.Len(t, errs, 0, "Expected zero errors")
 
-		assert.Panics(t, func() {
+		assert.NotPanics(t, func() {
 			channelConsumer.Close()
 		})
 
@@ -784,6 +940,80 @@ func TestProcessMessagesToBlocks(t *testing.T) {
 	assert.NoError(t, err, "Expected no error when setting up the mock partition consumer")
 
 	t.Run("TimeToCut", func(t *testing.T) {
+		t.Run("PendingMsgToCutProper", func(t *testing.T) {
+			errorChan := make(chan struct{})
+			close(errorChan)
+			haltChan := make(chan struct{})
+
+			lastCutBlockNumber := uint64(3)
+
+			mockSupport := &mockmultichannel.ConsenterSupport{
+				Blocks:          make(chan *cb.Block), // WriteBlock will post here
+				BlockCutterVal:  mockblockcutter.NewReceiver(),
+				ChainIDVal:      mockChannel.topic(),
+				HeightVal:       lastCutBlockNumber, // Incremented during the WriteBlock call
+				SharedConfigVal: &mockconfig.Orderer{BatchTimeoutVal: shortTimeout / 2},
+			}
+			defer close(mockSupport.BlockCutterVal.Block)
+
+			bareMinimumChain := &chainImpl{
+				producer:        producer,
+				parentConsumer:  mockParentConsumer,
+				channelConsumer: mockChannelConsumer,
+
+				channel:            mockChannel,
+				ConsenterSupport:   mockSupport,
+				lastCutBlockNumber: lastCutBlockNumber,
+
+				errorChan:                      errorChan,
+				haltChan:                       haltChan,
+				doneProcessingMessagesToBlocks: make(chan struct{}),
+			}
+
+			// We need the mock blockcutter to deliver a non-empty batch
+			go func() {
+				mockSupport.BlockCutterVal.Block <- struct{}{} // Let the `mockblockcutter.Ordered` call below return
+				logger.Debugf("Mock blockcutter's Ordered call has returned")
+			}()
+			// We are "planting" a message directly to the mock blockcutter
+			mockSupport.BlockCutterVal.Ordered(newMockEnvelope("fooMessage"))
+
+			done := make(chan struct{})
+
+			go func() {
+				bareMinimumChain.processMessagesToBlocks()
+				done <- struct{}{}
+			}()
+
+			// Cut ancestors
+			mockSupport.BlockCutterVal.CutAncestors = true
+
+			// This envelope will be added into pending list, waiting to be cut when timer fires
+			mpc.YieldMessage(newMockConsumerMessage(newRegularMessage(utils.MarshalOrPanic(newMockEnvelope("fooMessage")))))
+
+			go func() {
+				mockSupport.BlockCutterVal.Block <- struct{}{}
+				logger.Debugf("Mock blockcutter's Ordered call has returned")
+			}()
+
+			<-mockSupport.Blocks // Wait for the first block
+
+			logger.Debug("Closing haltChan to exit the infinite for-loop")
+			close(haltChan) // Identical to chain.Halt()
+			logger.Debug("haltChan closed")
+			<-done
+
+			if bareMinimumChain.timer != nil {
+				go func() {
+					<-bareMinimumChain.timer // Fire the timer for garbage collection
+				}()
+			}
+
+			assert.NotEmpty(t, mockSupport.BlockCutterVal.CurBatch, "Expected the blockCutter to be non-empty")
+			assert.NotNil(t, bareMinimumChain.timer, "Expected the cutTimer to be non-nil when there are pending envelopes")
+
+		})
+
 		t.Run("ReceiveTimeToCutProper", func(t *testing.T) {
 			errorChan := make(chan struct{})
 			close(errorChan)
@@ -2464,9 +2694,12 @@ func TestResubmission(t *testing.T) {
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
 
-			expectedKafkaMsg := &ab.KafkaMessage{}
+			expectedKafkaMsgCh := make(chan *ab.KafkaMessage, 1)
 			producer := mocks.NewSyncProducer(t, mockBrokerConfig)
 			producer.ExpectSendMessageWithCheckerFunctionAndSucceed(func(val []byte) error {
+				defer close(expectedKafkaMsgCh)
+
+				expectedKafkaMsg := &ab.KafkaMessage{}
 				if err := proto.Unmarshal(val, expectedKafkaMsg); err != nil {
 					return err
 				}
@@ -2484,6 +2717,7 @@ func TestResubmission(t *testing.T) {
 					return fmt.Errorf("Expect Original Offset to be non-zero if resubmission")
 				}
 
+				expectedKafkaMsgCh <- expectedKafkaMsg
 				return nil
 			})
 
@@ -2537,8 +2771,14 @@ func TestResubmission(t *testing.T) {
 			}
 
 			// Emits the kafka message produced by consenter
-			mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
-			mockSupport.BlockCutterVal.Block <- struct{}{}
+			select {
+			case expectedKafkaMsg := <-expectedKafkaMsgCh:
+				require.NotNil(t, expectedKafkaMsg)
+				mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
+				mockSupport.BlockCutterVal.Block <- struct{}{}
+			case <-time.After(shortTimeout):
+				t.Fatalf("Expected to receive kafka message")
+			}
 
 			select {
 			case <-mockSupport.Blocks:
@@ -2922,9 +3162,12 @@ func TestResubmission(t *testing.T) {
 			}
 			defer close(mockSupport.BlockCutterVal.Block)
 
-			expectedKafkaMsg := &ab.KafkaMessage{}
+			expectedKafkaMsgCh := make(chan *ab.KafkaMessage, 1)
 			producer := mocks.NewSyncProducer(t, mockBrokerConfig)
 			producer.ExpectSendMessageWithCheckerFunctionAndSucceed(func(val []byte) error {
+				defer close(expectedKafkaMsgCh)
+
+				expectedKafkaMsg := &ab.KafkaMessage{}
 				if err := proto.Unmarshal(val, expectedKafkaMsg); err != nil {
 					return err
 				}
@@ -2942,6 +3185,7 @@ func TestResubmission(t *testing.T) {
 					return fmt.Errorf("Expect Original Offset to be non-zero if resubmission")
 				}
 
+				expectedKafkaMsgCh <- expectedKafkaMsg
 				return nil
 			})
 
@@ -2986,8 +3230,14 @@ func TestResubmission(t *testing.T) {
 			// check that WaitReady is actually blocked because of in-flight reprocessed messages
 			blockIngressMsg(t, true, bareMinimumChain.WaitReady)
 
-			// Emits the kafka message produced by consenter
-			mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
+			select {
+			case expectedKafkaMsg := <-expectedKafkaMsgCh:
+				require.NotNil(t, expectedKafkaMsg)
+				// Emits the kafka message produced by consenter
+				mpc.YieldMessage(newMockConsumerMessage(expectedKafkaMsg))
+			case <-time.After(shortTimeout):
+				t.Fatalf("Expected to receive kafka message")
+			}
 
 			select {
 			case <-mockSupport.Blocks:

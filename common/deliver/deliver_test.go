@@ -7,9 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package deliver_test
 
 import (
+	"context"
 	"io"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/hyperledger/fabric/common/deliver"
 	"github.com/hyperledger/fabric/common/deliver/mock"
@@ -19,7 +21,6 @@ import (
 	ab "github.com/hyperledger/fabric/protos/orderer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -190,7 +191,7 @@ var _ = Describe("Deliver", func() {
 			Expect(fakeInspector.InspectCallCount()).To(Equal(1))
 			ctx, header := fakeInspector.InspectArgsForCall(0)
 			Expect(ctx).To(Equal(context.Background()))
-			Expect(header).To(Equal(channelHeader))
+			Expect(proto.Equal(header, channelHeader)).To(BeTrue())
 		})
 
 		Context("when channel header validation fails", func() {
@@ -230,7 +231,7 @@ var _ = Describe("Deliver", func() {
 
 			Expect(fakePolicyChecker.CheckPolicyCallCount()).To(BeNumerically(">=", 1))
 			e, cid := fakePolicyChecker.CheckPolicyArgsForCall(0)
-			Expect(e).To(Equal(envelope))
+			Expect(proto.Equal(e, envelope)).To(BeTrue())
 			Expect(cid).To(Equal("chain-id"))
 		})
 
@@ -240,7 +241,7 @@ var _ = Describe("Deliver", func() {
 
 			Expect(fakeBlockReader.IteratorCallCount()).To(Equal(1))
 			startPosition := fakeBlockReader.IteratorArgsForCall(0)
-			Expect(startPosition).To(Equal(seekInfo.Start))
+			Expect(proto.Equal(startPosition, seekInfo.Start)).To(BeTrue())
 		})
 
 		Context("when multiple blocks are requested", func() {

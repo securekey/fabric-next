@@ -1,41 +1,29 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-		 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 
 package ledgermgmt
 
 import (
-	"errors"
 	"sync"
 
-	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-
-	"fmt"
-
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
+	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("ledgermgmt")
 
 // ErrLedgerAlreadyOpened is thrown by a CreateLedger call if a ledger with the given id is already opened
-var ErrLedgerAlreadyOpened = errors.New("Ledger already opened")
+var ErrLedgerAlreadyOpened = errors.New("ledger already opened")
 
 // ErrLedgerMgmtNotInitialized is thrown when ledger mgmt is used before initializing this
 var ErrLedgerMgmtNotInitialized = errors.New("ledger mgmt should be initialized before using")
@@ -46,27 +34,40 @@ var lock sync.Mutex
 var initialized bool
 var once sync.Once
 
+// Initializer encapsulates all the external dependencies for the ledger module
+type Initializer struct {
+	CustomTxProcessors            customtx.Processors
+	PlatformRegistry              *platforms.Registry
+	DeployedChaincodeInfoProvider ledger.DeployedChaincodeInfoProvider
+	MembershipInfoProvider        ledger.MembershipInfoProvider
+}
+
 // Initialize initializes ledgermgmt
-func Initialize(customTxProcessors customtx.Processors) {
+func Initialize(initializer *Initializer) {
 	once.Do(func() {
-		initialize(customTxProcessors, nil)
+		initialize(initializer)
 	})
 }
 
-func initialize(customTxProcessors customtx.Processors, statelisteners []ledger.StateListener) {
+func initialize(initializer *Initializer) {
 	logger.Info("Initializing ledger mgmt")
 	lock.Lock()
 	defer lock.Unlock()
 	initialized = true
 	openedLedgers = make(map[string]ledger.PeerLedger)
-	customtx.Initialize(customTxProcessors)
-	cceventmgmt.Initialize()
-	finalStateListeners := addListenerForCCEventsHandler(statelisteners)
+	customtx.Initialize(initializer.CustomTxProcessors)
+	cceventmgmt.Initialize(initializer.PlatformRegistry)
+	finalStateListeners := addListenerForCCEventsHandler([]ledger.StateListener{})
 	provider, err := kvledger.NewProvider()
 	if err != nil {
-		panic(fmt.Errorf("Error in instantiating ledger provider: %s", err))
+		panic(errors.WithMessage(err, "Error in instantiating ledger provider"))
 	}
-	provider.Initialize(finalStateListeners)
+	provider.Initialize(&ledger.Initializer{
+		StateListeners:                finalStateListeners,
+		DeployedChaincodeInfoProvider: initializer.DeployedChaincodeInfoProvider,
+		MembershipInfoProvider:        initializer.MembershipInfoProvider,
+	})
+
 	ledgerProvider = provider
 	logger.Info("ledger mgmt initialized")
 }

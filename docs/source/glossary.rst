@@ -12,15 +12,28 @@ to read the entire thing in one sitting if you like; it's pretty enlightening!
 Anchor Peer
 -----------
 
-Used to initiate gossip communication between peers from different
-organizations. The anchor peer serves as the entry point for another
-organization's peer on the same channel to communicate with each of the peers
-in the anchor peer's organization. Cross-organization gossip is scoped to
-channels. In order for cross-org gossip to work, peers from one organization
-need to know the address of at least one peer from another organization in the
-channel. Each organization added to a channel should identify at least one of
-its peers as an anchor peer (there can be more than one). The anchor peer
-address is stored in the configuration block of the channel.
+Used by gossip to make sure peers in different organizations know about each other.
+
+When a configuration block that contains an update to the anchor peers is committed,
+peers reach out to the anchor peers and learn from them about all of the peers known
+to the anchor peer(s). Once at least one peer from each organization has contacted an
+anchor peer, the anchor peer learns about every peer in the channel. Since gossip
+communication is constant, and because peers always ask to be told about the existence
+of any peer they don't know about, a common view of membership can be established for
+a channel.
+
+For example, let's assume we have three organizations---`A`, `B`, `C`--- in the channel
+and a single anchor peer---`peer0.orgC`--- defined for organization `C`. When `peer1.orgA`
+(from organization `A`) contacts `peer0.orgC`, it will tell it about `peer0.orgA`. And
+when at a later time `peer1.orgB` contacts `peer0.orgC`, the latter would tell the
+former about `peer0.orgA`. From that point forward, organizations `A` and `B` would
+start exchanging membership information directly without any assistance from
+`peer0.orgC`.
+
+As communication across organizations depends on gossip in order to work, there must
+be at least one anchor peer defined in the channel configuration. It is strongly
+recommended that every organization provides its own set of anchor peers for high
+availability and redundancy.
 
 .. _glossary_ACL:
 
@@ -49,16 +62,41 @@ on a per profile basis in the "Profiles" section.
 
 .. _Block:
 
+
 Block
 -----
 
-An ordered set of transactions that is cryptographically linked to the
-preceding block(s) on a channel.
+.. figure:: ./glossary/glossary.block.png
+   :scale: 50 %
+   :align: right
+   :figwidth: 40 %
+   :alt: A Block
+
+   Block B1 is linked to block B0. Block B2 is linked to block B1.
+
+=======
+
+A block contains an ordered set of transactions. It is cryptographically linked
+to the preceding block, and in turn it is linked to be subsequent blocks. The
+first block in such a chain of blocks is called the **genesis block**. Blocks
+are created by the ordering system, and validated by peers.
+
 
 .. _Chain:
 
+
 Chain
 -----
+
+.. figure:: ./glossary/glossary.blockchain.png
+   :scale: 75 %
+   :align: right
+   :figwidth: 40 %
+   :alt: Blockchain
+
+   Blockchain B contains blocks 0, 1, 2.
+
+=======
 
 The ledger's chain is a transaction log structured as hash-linked blocks of
 transactions. Peers receive blocks of transactions from the ordering service, mark
@@ -75,8 +113,19 @@ See Smart-Contract_.
 
 .. _Channel:
 
+
 Channel
 -------
+
+.. figure:: ./glossary/glossary.channel.png
+   :scale: 30 %
+   :align: right
+   :figwidth: 40 %
+   :alt: A Channel
+
+   Channel C connects application A1, peer P2 and ordering service O1.
+
+=======
 
 A channel is a private blockchain overlay which allows for data
 isolation and confidentiality. A channel-specific ledger is shared across the
@@ -262,9 +311,18 @@ the same organization.
 
 .. _Ledger:
 
+
 Ledger
 ------
-THIS REQUIRES UPDATING
+
+.. figure:: ./glossary/glossary.ledger.png
+   :scale: 25 %
+   :align: right
+   :figwidth: 20 %
+   :alt: A Ledger
+
+   A Ledger, 'L'
+
 
 A ledger consists of two distinct, though related, parts -- a "blockchain" and
 the "state database", also known as "world state". Unlike other ledgers,
@@ -293,6 +351,15 @@ See Organization_.
 
 Membership Service Provider
 ---------------------------
+
+.. figure:: ./glossary/glossary.msp.png
+   :scale: 35 %
+   :align: right
+   :figwidth: 25 %
+   :alt: An MSP
+
+   An MSP, 'ORG.MSP'
+
 
 The Membership Service Provider (MSP) refers to an abstract component of the
 system that provides credentials to clients, and peers for them to participate
@@ -329,13 +396,26 @@ identity material tied to each Member_.
 .. _Organization:
 
 Organization
------------------
+------------
+
+=====
+
+
+.. figure:: ./glossary/glossary.organization.png
+   :scale: 25 %
+   :align: right
+   :figwidth: 20 %
+   :alt: An Organization
+
+   An organization, 'ORG'
+
+
 Also known as "members", organizations are invited to join the blockchain network
 by a blockchain service provider. An organization is joined to a network by adding its
 Membership Service Provider (MSP_) to the network. The MSP defines how other members of the
 network may verify that signatures (such as those over transactions) were generated by a valid
 identity, issued by that organization. The particular access rights of identities within an MSP
-are governed by policies which are are also agreed upon when the organization is joined to the
+are governed by policies which are also agreed upon when the organization is joined to the
 network. An organization can be as large as a multi-national corporation or as small as an
 individual. The transaction endpoint of an organization is a Peer_. A collection of organizations
 form a Consortium_. While all of the organizations on a network are members, not every organization
@@ -345,6 +425,14 @@ will be part of a consortium.
 
 Peer
 ----
+
+.. figure:: ./glossary/glossary.peer.png
+   :scale: 25 %
+   :align: right
+   :figwidth: 20 %
+   :alt: A Peer
+
+   A peer, 'P'
 
 A network entity that maintains a ledger and runs chaincode containers in order to perform
 read/write operations to the ledger.  Peers are owned and maintained by members.
@@ -467,6 +555,14 @@ channels relative to their aligned and varying business agendas.
 Transaction
 -----------
 
+.. figure:: ./glossary/glossary.transaction.png
+   :scale: 30 %
+   :align: right
+   :figwidth: 20 %
+   :alt: A Transaction
+
+   A transaction, 'T'
+
 Invoke or instantiate results that are submitted for ordering, validation, and commit.
 Invokes are requests to read/write data from the ledger. Instantiate is a request to
 start and initialize a chaincode on a channel. Application clients gather invoke or
@@ -477,6 +573,14 @@ into a transaction that is submitted for ordering, validation, and commit.
 
 World State
 -----------
+
+.. figure:: ./glossary/glossary.worldstate.png
+   :scale: 40 %
+   :align: right
+   :figwidth: 25 %
+   :alt: Current State
+
+   The World State, 'W'
 
 Also known as the “current state”, the world state is a component of the
 HyperLedger Fabric :ref:`Ledger`. The world state represents the latest values

@@ -9,6 +9,8 @@ package encoder
 import (
 	"testing"
 
+	"github.com/hyperledger/fabric/protos/orderer/etcdraft"
+
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/configtx"
 	"github.com/hyperledger/fabric/common/flogging"
@@ -17,10 +19,12 @@ import (
 	genesisconfig "github.com/hyperledger/fabric/common/tools/configtxgen/localconfig"
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	cb "github.com/hyperledger/fabric/protos/common"
+	ab "github.com/hyperledger/fabric/protos/orderer"
 	"github.com/hyperledger/fabric/protos/utils"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -69,26 +73,26 @@ func TestConfigParsing(t *testing.T) {
 }
 
 func TestGoodChannelCreateConfigUpdate(t *testing.T) {
-	config := configtxgentest.Load(genesisconfig.SampleDevModeSoloProfile)
-	systemChannel, err := NewChannelGroup(config)
-	assert.NoError(t, err)
-	assert.NotNil(t, systemChannel)
-
 	createConfig := configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile)
 
-	//ACLs does not marshal deterministically. Set it to nil is ok as its not
-	//updated anyway
-	createConfig.Application.ACLs = nil
+	configUpdate, err := NewChannelCreateConfigUpdate("channel.id", createConfig)
+	assert.NoError(t, err)
+	assert.NotNil(t, configUpdate)
+}
 
-	configUpdate, err := NewChannelCreateConfigUpdate("channel.id", nil, createConfig)
+func TestGoodChannelCreateNoAnchorPeers(t *testing.T) {
+	createConfig := configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile)
+	createConfig.Application.Organizations[0].AnchorPeers = nil
+
+	configUpdate, err := NewChannelCreateConfigUpdate("channel.id", createConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, configUpdate)
 
-	defaultConfigUpdate, err := NewChannelCreateConfigUpdate("channel.id", systemChannel, createConfig)
-	assert.NoError(t, err)
-	assert.NotNil(t, defaultConfigUpdate)
-
-	assert.True(t, proto.Equal(configUpdate, defaultConfigUpdate), "the config used has had no updates, so should equal default")
+	// Anchor peers should not be set
+	assert.True(t, proto.Equal(
+		configUpdate.WriteSet.Groups["Application"].Groups["SampleOrg"],
+		&cb.ConfigGroup{},
+	))
 }
 
 func TestChannelCreateWithResources(t *testing.T) {
@@ -96,42 +100,10 @@ func TestChannelCreateWithResources(t *testing.T) {
 		createConfig := configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile)
 		createConfig.Application.Capabilities = nil
 
-		configUpdate, err := NewChannelCreateConfigUpdate("channel.id", nil, createConfig)
+		configUpdate, err := NewChannelCreateConfigUpdate("channel.id", createConfig)
 		assert.NoError(t, err)
 		assert.NotNil(t, configUpdate)
 		assert.Nil(t, configUpdate.IsolatedData)
-	})
-}
-
-func TestNegativeChannelCreateConfigUpdate(t *testing.T) {
-	config := configtxgentest.Load(genesisconfig.SampleDevModeSoloProfile)
-	channelConfig := configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile)
-	group, err := NewChannelGroup(config)
-	assert.NoError(t, err)
-	assert.NotNil(t, group)
-
-	t.Run("NoGroups", func(t *testing.T) {
-		channelGroup := proto.Clone(group).(*cb.ConfigGroup)
-		channelGroup.Groups = nil
-		_, err := NewChannelCreateConfigUpdate("channel.id", &cb.ConfigGroup{}, channelConfig)
-		assert.Error(t, err)
-		assert.Regexp(t, "missing all channel groups", err.Error())
-	})
-
-	t.Run("NoConsortiumsGroup", func(t *testing.T) {
-		channelGroup := proto.Clone(group).(*cb.ConfigGroup)
-		delete(channelGroup.Groups, channelconfig.ConsortiumsGroupKey)
-		_, err := NewChannelCreateConfigUpdate("channel.id", channelGroup, channelConfig)
-		assert.Error(t, err)
-		assert.Regexp(t, "bad consortiums group", err.Error())
-	})
-
-	t.Run("NoConsortiums", func(t *testing.T) {
-		channelGroup := proto.Clone(group).(*cb.ConfigGroup)
-		delete(channelGroup.Groups[channelconfig.ConsortiumsGroupKey].Groups, genesisconfig.SampleConsortiumName)
-		_, err := NewChannelCreateConfigUpdate("channel.id", channelGroup, channelConfig)
-		assert.Error(t, err)
-		assert.Regexp(t, "bad consortium:", err.Error())
 	})
 }
 
@@ -141,7 +113,7 @@ func TestMakeChannelCreationTransactionWithSigner(t *testing.T) {
 	msptesttools.LoadDevMsp()
 	signer := localmsp.NewSigner()
 
-	cct, err := MakeChannelCreationTransaction(channelID, signer, nil, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile))
+	cct, err := MakeChannelCreationTransaction(channelID, signer, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile))
 	assert.NoError(t, err, "Making chain creation tx")
 
 	assert.NotEmpty(t, cct.Signature, "Should have signature")
@@ -161,7 +133,7 @@ func TestMakeChannelCreationTransactionWithSigner(t *testing.T) {
 
 func TestMakeChannelCreationTransactionNoSigner(t *testing.T) {
 	channelID := "foo"
-	cct, err := MakeChannelCreationTransaction(channelID, nil, nil, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile))
+	cct, err := MakeChannelCreationTransaction(channelID, nil, configtxgentest.Load(genesisconfig.SampleSingleMSPChannelProfile))
 	assert.NoError(t, err, "Making chain creation tx")
 
 	assert.Empty(t, cct.Signature, "Should have empty signature")
@@ -283,6 +255,23 @@ func TestNewOrdererGroup(t *testing.T) {
 		group, err := NewOrdererGroup(config.Orderer)
 		assert.Error(t, err)
 		assert.Nil(t, group)
+	})
+
+	t.Run("etcd/raft-based Orderer", func(t *testing.T) {
+		config := configtxgentest.Load(genesisconfig.SampleDevModeEtcdRaftProfile)
+		group, _ := NewOrdererGroup(config.Orderer)
+		consensusType := group.GetValues()[channelconfig.ConsensusTypeKey]
+		packedType := consensusType.GetValue()
+		unpackedType := new(ab.ConsensusType)
+		err := proto.Unmarshal(packedType, unpackedType)
+		require.NoError(t, err, "cannot extract %s config value from orderer group", channelconfig.ConsensusTypeKey)
+		unpackedMetadata := new(etcdraft.Metadata)
+		err = proto.Unmarshal(unpackedType.GetMetadata(), unpackedMetadata)
+		require.NoError(t, err, "cannot extract metadata value from %s consenters", etcdraft.TypeKey)
+		for _, v := range unpackedMetadata.GetConsenters() {
+			// Checking one field for a non-nil value should be enough.
+			require.NotNil(t, v.GetClientTlsCert(), "cannot extract PEM-encoded client certificate of consenter")
+		}
 	})
 }
 

@@ -31,7 +31,6 @@ import (
 	"github.com/hyperledger/fabric/bccsp/signer"
 	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/bccsp/utils"
-	"github.com/op/go-logging"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/sha3"
 )
@@ -46,12 +45,10 @@ type testConfig struct {
 	securityLevel int
 	hashFamily    string
 	softVerify    bool
+	immutable     bool
 }
 
 func TestMain(m *testing.M) {
-	// Activate DEBUG level to cover listAttrs function
-	logging.SetLevel(logging.DEBUG, "bccsp_p11")
-
 	ks, err := sw.NewFileBasedKeyStore(nil, os.TempDir(), false)
 	if err != nil {
 		fmt.Printf("Failed initiliazing KeyStore [%s]", err)
@@ -61,17 +58,17 @@ func TestMain(m *testing.M) {
 
 	lib, pin, label := FindPKCS11Lib()
 	tests := []testConfig{
-		{256, "SHA2", true},
-		{256, "SHA3", false},
-		{384, "SHA2", false},
-		{384, "SHA3", false},
-		{384, "SHA3", true},
+		{256, "SHA2", true, false},
+		{256, "SHA3", false, false},
+		{384, "SHA2", false, false},
+		{384, "SHA3", false, false},
+		{384, "SHA3", true, false},
 	}
 
 	if strings.Contains(lib, "softhsm") {
 		tests = append(tests, []testConfig{
-			{256, "SHA2", true},
-			{256, "SHA2", true},
+			{256, "SHA2", true, false},
+			{256, "SHA2", true, true},
 		}...)
 	}
 
@@ -87,6 +84,8 @@ func TestMain(m *testing.M) {
 		opts.HashFamily = config.hashFamily
 		opts.SecLevel = config.securityLevel
 		opts.SoftVerify = config.softVerify
+		opts.Immutable = config.immutable
+		fmt.Printf("Immutable = [%v]", opts.Immutable)
 		currentBCCSP, err = New(opts, currentKS)
 		if err != nil {
 			fmt.Printf("Failed initiliazing BCCSP at [%+v]: [%s]", opts, err)
@@ -107,7 +106,6 @@ func TestNew(t *testing.T) {
 		HashFamily: "SHA2",
 		SecLevel:   256,
 		SoftVerify: false,
-		Sensitive:  true,
 		Library:    "lib",
 		Label:      "ForFabric",
 		Pin:        "98765432",
@@ -164,7 +162,6 @@ func TestInvalidNewParameter(t *testing.T) {
 		Label:      label,
 		Pin:        pin,
 		SoftVerify: true,
-		Sensitive:  true,
 	}
 
 	opts.HashFamily = "SHA2"

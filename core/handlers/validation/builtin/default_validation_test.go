@@ -12,7 +12,8 @@ import (
 	commonerrors "github.com/hyperledger/fabric/common/errors"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	. "github.com/hyperledger/fabric/core/handlers/validation/api"
-	"github.com/hyperledger/fabric/core/handlers/validation/builtin/mocks"
+	vmocks "github.com/hyperledger/fabric/core/handlers/validation/builtin/mocks"
+	"github.com/hyperledger/fabric/core/handlers/validation/builtin/v12/mocks"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -38,9 +39,11 @@ func TestInit(t *testing.T) {
 }
 
 func TestErrorConversion(t *testing.T) {
-	validator := &mocks.TransactionValidator{}
+	validator := &vmocks.TransactionValidator{}
+	capabilities := &mocks.Capabilities{}
 	validation := &DefaultValidation{
-		TxValidator: validator,
+		TxValidatorV1_2: validator,
+		Capabilities:    capabilities,
 	}
 	block := &common.Block{
 		Header: &common.BlockHeader{},
@@ -49,32 +52,35 @@ func TestErrorConversion(t *testing.T) {
 		},
 	}
 
+	capabilities.On("V1_3Validation").Return(false)
+	capabilities.On("V1_2Validation").Return(true)
+
 	// Scenario I: An error that isn't *commonerrors.ExecutionFailureError or *commonerrors.VSCCEndorsementPolicyError
 	// should cause a panic
-	validator.On("Validate", mock.Anything, mock.Anything).Return(errors.New("bla bla")).Once()
+	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("bla bla")).Once()
 	assert.Panics(t, func() {
 		validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy"))
 	})
 
 	// Scenario II: Non execution errors are returned as is
-	validator.On("Validate", mock.Anything, mock.Anything).Return(&commonerrors.VSCCEndorsementPolicyError{Err: errors.New("foo")}).Once()
+	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&commonerrors.VSCCEndorsementPolicyError{Err: errors.New("foo")}).Once()
 	err := validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy"))
 	assert.Equal(t, (&commonerrors.VSCCEndorsementPolicyError{Err: errors.New("foo")}).Error(), err.Error())
 
 	// Scenario III: Execution errors are converted to the plugin error type
-	validator.On("Validate", mock.Anything, mock.Anything).Return(&commonerrors.VSCCExecutionFailureError{Err: errors.New("bar")}).Once()
+	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&commonerrors.VSCCExecutionFailureError{Err: errors.New("bar")}).Once()
 	err = validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy"))
 	assert.Equal(t, &ExecutionFailureError{Reason: "bar"}, err)
 
 	// Scenario IV: No errors are forwarded
-	validator.On("Validate", mock.Anything, mock.Anything).Return(nil).Once()
+	validator.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	assert.NoError(t, validation.Validate(block, "", 0, 0, txvalidator.SerializedPolicy("policy")))
 }
 
 func TestValidateBadInput(t *testing.T) {
-	validator := &mocks.TransactionValidator{}
+	validator := &vmocks.TransactionValidator{}
 	validation := &DefaultValidation{
-		TxValidator: validator,
+		TxValidatorV1_2: validator,
 	}
 
 	// Scenario I: Nil block

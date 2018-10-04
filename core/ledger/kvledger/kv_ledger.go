@@ -7,11 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package kvledger
 
 import (
-	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
@@ -26,8 +24,10 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("kvledger")
@@ -51,7 +51,8 @@ func newKVLedger(
 	historyDB historydb.HistoryDB,
 	configHistoryMgr confighistory.Mgr,
 	stateListeners []ledger.StateListener,
-	bookkeeperProvider bookkeeping.Provider) (*kvLedger, error) {
+	bookkeeperProvider bookkeeping.Provider,
+	ccInfoProvider ledger.DeployedChaincodeInfoProvider) (*kvLedger, error) {
 
 	logger.Debugf("Creating KVLedger ledgerID=%s: ", ledgerID)
 	stateListeners = append(stateListeners, configHistoryMgr)
@@ -74,7 +75,7 @@ func newKVLedger(
 	l.initBlockStore(btlPolicy)
 	//Recover both state DB and history DB if they are out of sync with block storage
 	if err := l.recoverDBs(); err != nil {
-		panic(fmt.Errorf(`Error during state DB recovery:%s`, err))
+		panic(errors.WithMessage(err, "error during state DB recovery"))
 	}
 	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
 	return l, nil
@@ -140,6 +141,7 @@ func (l *kvLedger) recoverDBs() error {
 //recommitLostBlocks retrieves blocks in specified range and commit the write set to either
 //state DB or history DB or both
 func (l *kvLedger) recommitLostBlocks(firstBlockNum uint64, lastBlockNum uint64, recoverables ...recoverable) error {
+	logger.Infof("Recommitting lost blocks - firstBlockNum=%d, lastBlockNum=%d, recoverables=%#v", firstBlockNum, lastBlockNum, recoverables)
 	var err error
 	var blockAndPvtdata *ledger.BlockAndPvtData
 	for blockNumber := firstBlockNum; blockNumber <= lastBlockNum; blockNumber++ {
@@ -152,6 +154,7 @@ func (l *kvLedger) recommitLostBlocks(firstBlockNum uint64, lastBlockNum uint64,
 			}
 		}
 	}
+	logger.Infof("Recommitted lost blocks - firstBlockNum=%d, lastBlockNum=%d, recoverables=%#v", firstBlockNum, lastBlockNum, recoverables)
 	return nil
 }
 
@@ -224,7 +227,7 @@ func (l *kvLedger) GetTxValidationCodeByTxID(txID string) (peer.TxValidationCode
 
 //Prune prunes the blocks/transactions that satisfy the given policy
 func (l *kvLedger) Prune(policy commonledger.PrunePolicy) error {
-	return errors.New("Not yet implemented")
+	return errors.New("not yet implemented")
 }
 
 // NewTxSimulator returns new `ledger.TxSimulator`
@@ -253,34 +256,52 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	block := pvtdataAndBlock.Block
 	blockNo := pvtdataAndBlock.Block.Header.Number
 
-	logger.Debugf("Channel [%s]: Validating state for block [%d]", l.ledgerID, blockNo)
+	startStateValidation := time.Now()
+	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
 	err = l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 	if err != nil {
 		return err
 	}
+	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
 
-	logger.Debugf("Channel [%s]: Committing block [%d] to storage", l.ledgerID, blockNo)
-
+	startCommitBlockStorage := time.Now()
+	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
 	l.blockAPIsRWLock.Lock()
 	defer l.blockAPIsRWLock.Unlock()
 	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
 		return err
 	}
-	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", l.ledgerID, block.Header.Number, len(block.Data.Data))
+	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 
-	logger.Debugf("Channel [%s]: Committing block [%d] transactions to state database", l.ledgerID, blockNo)
+	startCommitState := time.Now()
+	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
 	if err = l.txtmgmt.Commit(); err != nil {
-		panic(fmt.Errorf(`Error during commit to txmgr:%s`, err))
+		panic(errors.WithMessage(err, "error during commit to txmgr"))
 	}
+	elapsedCommitState := time.Since(startCommitState) / time.Millisecond // duration in ms
 
-	// History database could be written in parallel with state and/or async as a future optimization
+	// History database could be written in parallel with state and/or async as a future optimization,
+	// although it has not been a bottleneck...no need to clutter the log with elapsed duration.
 	if ledgerconfig.IsHistoryDBEnabled() {
-		logger.Debugf("Channel [%s]: Committing block [%d] transactions to history database", l.ledgerID, blockNo)
+		logger.Debugf("[%s] Committing block [%d] transactions to history database", l.ledgerID, blockNo)
 		if err := l.historyDB.Commit(block); err != nil {
-			panic(fmt.Errorf(`Error during commit to history db:%s`, err))
+			panic(errors.WithMessage(err, "Error during commit to history db"))
 		}
 	}
+
+	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
+
+	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
+		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
+		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
+
 	return nil
+}
+
+// GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
+// most recent `maxBlock` blocks which miss at least a private data of a eligible collection.
+func (l *kvLedger) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	return l.blockStore.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
 }
 
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
@@ -305,16 +326,24 @@ func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilte
 // a given maxBlockNumToRetain. In other words, Purge only retains private read-write sets
 // that were generated at block height of maxBlockNumToRetain or higher.
 func (l *kvLedger) PurgePrivateData(maxBlockNumToRetain uint64) error {
-	return fmt.Errorf("not yet implemented")
+	return errors.New("not yet implemented")
 }
 
 // PrivateDataMinBlockNum returns the lowest retained endorsement block height
 func (l *kvLedger) PrivateDataMinBlockNum() (uint64, error) {
-	return 0, fmt.Errorf("not yet implemented")
+	return 0, errors.New("not yet implemented")
 }
 
 func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, error) {
 	return l.configHistoryRetriever, nil
+}
+
+func (l *kvLedger) CommitPvtData(pvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error) {
+	return nil, fmt.Errorf("not yet implemented")
+}
+
+func (l *kvLedger) GetMissingPvtDataTracker() (ledger.MissingPvtDataTracker, error) {
+	return l, nil
 }
 
 // Close closes `KVLedger`

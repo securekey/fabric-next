@@ -52,11 +52,12 @@ func testValidationWithNTXes(t *testing.T, ledger ledger2.PeerLedger, gbHash []b
 		*mocktxvalidator.Support
 		*semaphore.Weighted
 	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
-	tValidator := &TxValidator{vcs, mockVsccValidator}
+	tValidator := &TxValidator{"", vcs, mockVsccValidator}
 
 	bcInfo, _ := ledger.GetBlockchainInfo()
-	testutil.AssertEquals(t, bcInfo, &common.BlockchainInfo{
-		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil})
+	assert.Equal(t, &common.BlockchainInfo{
+		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil,
+	}, bcInfo)
 
 	sr := [][]byte{}
 	for i := 0; i < nBlocks; i++ {
@@ -127,11 +128,12 @@ func TestBlockValidationDuplicateTXId(t *testing.T) {
 		*mocktxvalidator.Support
 		*semaphore.Weighted
 	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: acv}, semaphore.NewWeighted(10)}
-	tValidator := &TxValidator{vcs, mockVsccValidator}
+	tValidator := &TxValidator{"", vcs, mockVsccValidator}
 
 	bcInfo, _ := ledger.GetBlockchainInfo()
-	testutil.AssertEquals(t, bcInfo, &common.BlockchainInfo{
-		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil})
+	assert.Equal(t, &common.BlockchainInfo{
+		Height: 1, CurrentBlockHash: gbHash, PreviousBlockHash: nil,
+	}, bcInfo)
 
 	envs := []*common.Envelope{}
 	env, _, err := testutil.ConstructTransaction(t, pubSimulationResBytes, "", true)
@@ -214,7 +216,7 @@ func TestTxValidationFailure_InvalidTxid(t *testing.T) {
 		*mocktxvalidator.Support
 		*semaphore.Weighted
 	}{&mocktxvalidator.Support{LedgerVal: ledger, ACVal: &config.MockApplicationCapabilities{}}, semaphore.NewWeighted(10)}
-	tValidator := &TxValidator{vcs, &validator.MockVsccValidator{}}
+	tValidator := &TxValidator{"", vcs, &validator.MockVsccValidator{}}
 
 	mockSigner, err := mspmgmt.GetLocalMSP().GetDefaultSigningIdentity()
 	assert.NoError(t, err)
@@ -364,19 +366,19 @@ func TestGetTxCCInstance(t *testing.T) {
 
 func TestInvalidTXsForUpgradeCC(t *testing.T) {
 	txsChaincodeNames := map[int]*sysccprovider.ChaincodeInstance{
-		0: {"chain0", "cc0", "v0"}, // invoke cc0/chain0:v0, should not be affected by upgrade tx in other chain
-		1: {"chain1", "cc0", "v0"}, // invoke cc0/chain1:v0, should be invalided by cc1/chain1 upgrade tx
-		2: {"chain1", "lscc", ""},  // upgrade cc0/chain1 to v1, should be invalided by latter cc0/chain1 upgtade tx
-		3: {"chain1", "cc0", "v0"}, // invoke cc0/chain1:v0, should be invalided by cc1/chain1 upgrade tx
-		4: {"chain1", "cc0", "v1"}, // invoke cc0/chain1:v1, should be invalided by cc1/chain1 upgrade tx
-		5: {"chain1", "cc1", "v0"}, // invoke cc1/chain1:v0, should not be affected by other chaincode upgrade tx
-		6: {"chain1", "lscc", ""},  // upgrade cc0/chain1 to v2, should be invalided by latter cc0/chain1 upgtade tx
-		7: {"chain1", "lscc", ""},  // upgrade cc0/chain1 to v3
+		0: {ChainID: "chain0", ChaincodeName: "cc0", ChaincodeVersion: "v0"}, // invoke cc0/chain0:v0, should not be affected by upgrade tx in other chain
+		1: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v0"}, // invoke cc0/chain1:v0, should be invalided by cc1/chain1 upgrade tx
+		2: {ChainID: "chain1", ChaincodeName: "lscc", ChaincodeVersion: ""},  // upgrade cc0/chain1 to v1, should be invalided by latter cc0/chain1 upgtade tx
+		3: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v0"}, // invoke cc0/chain1:v0, should be invalided by cc1/chain1 upgrade tx
+		4: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v1"}, // invoke cc0/chain1:v1, should be invalided by cc1/chain1 upgrade tx
+		5: {ChainID: "chain1", ChaincodeName: "cc1", ChaincodeVersion: "v0"}, // invoke cc1/chain1:v0, should not be affected by other chaincode upgrade tx
+		6: {ChainID: "chain1", ChaincodeName: "lscc", ChaincodeVersion: ""},  // upgrade cc0/chain1 to v2, should be invalided by latter cc0/chain1 upgtade tx
+		7: {ChainID: "chain1", ChaincodeName: "lscc", ChaincodeVersion: ""},  // upgrade cc0/chain1 to v3
 	}
 	upgradedChaincodes := map[int]*sysccprovider.ChaincodeInstance{
-		2: {"chain1", "cc0", "v1"},
-		6: {"chain1", "cc0", "v2"},
-		7: {"chain1", "cc0", "v3"},
+		2: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v1"},
+		6: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v2"},
+		7: {ChainID: "chain1", ChaincodeName: "cc0", ChaincodeVersion: "v3"},
 	}
 
 	txsfltr := ledgerUtil.NewTxValidationFlags(8)

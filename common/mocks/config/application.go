@@ -44,6 +44,8 @@ type MockApplicationCapabilities struct {
 	V1_1ValidationRv             bool
 	V1_2ValidationRv             bool
 	MetadataLifecycleRv          bool
+	KeyLevelEndorsementRv        bool
+	V1_3ValidationRv             bool
 }
 
 func (mac *MockApplicationCapabilities) Supported() error {
@@ -76,4 +78,12 @@ func (mac *MockApplicationCapabilities) V1_2Validation() bool {
 
 func (mac *MockApplicationCapabilities) MetadataLifecycle() bool {
 	return mac.MetadataLifecycleRv
+}
+
+func (mac *MockApplicationCapabilities) KeyLevelEndorsement() bool {
+	return mac.KeyLevelEndorsementRv
+}
+
+func (mac *MockApplicationCapabilities) V1_3Validation() bool {
+	return mac.V1_3ValidationRv
 }

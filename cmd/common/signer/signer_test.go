@@ -41,7 +41,7 @@ func TestSignerBadConfig(t *testing.T) {
 	}
 
 	signer, err := NewSigner(conf)
-	assert.Contains(t, err.Error(), "open testdata/signer/non_existent_cert: no such file or directory")
+	assert.EqualError(t, err, "open testdata/signer/non_existent_cert: no such file or directory")
 	assert.Nil(t, signer)
 
 	conf = Config{
@@ -51,6 +51,26 @@ func TestSignerBadConfig(t *testing.T) {
 	}
 
 	signer, err = NewSigner(conf)
-	assert.Contains(t, err.Error(), "open testdata/signer/non_existent_cert: no such file or directory")
+	assert.EqualError(t, err, "open testdata/signer/non_existent_cert: no such file or directory")
+	assert.Nil(t, signer)
+
+	conf = Config{
+		MSPID:        "SampleOrg",
+		IdentityPath: filepath.Join("testdata", "signer", "cert.pem"),
+		KeyPath:      filepath.Join("testdata", "signer", "broken_private_key"),
+	}
+
+	signer, err = NewSigner(conf)
+	assert.EqualError(t, err, "failed to decode PEM block from testdata/signer/broken_private_key")
+	assert.Nil(t, signer)
+
+	conf = Config{
+		MSPID:        "SampleOrg",
+		IdentityPath: filepath.Join("testdata", "signer", "cert.pem"),
+		KeyPath:      filepath.Join("testdata", "signer", "empty_private_key"),
+	}
+
+	signer, err = NewSigner(conf)
+	assert.EqualError(t, err, "failed to parse private key from testdata/signer/empty_private_key: asn1: syntax error: sequence truncated")
 	assert.Nil(t, signer)
 }

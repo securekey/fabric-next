@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("confighistory")
@@ -58,9 +59,9 @@ func (m *mgr) StateCommitDone(ledgerID string) {
 // In this implementation, each collection configurations updates (in lscc namespace)
 // are persisted as a separate entry in a separate db. The composite key for the entry
 // is a tuple of <blockNum, namespace, key>
-func (m *mgr) HandleStateUpdates(ledgerID string, stateUpdates ledger.StateUpdates, commitHeight uint64) error {
-	batch := prepareDBBatch(stateUpdates, commitHeight)
-	dbHandle := m.dbProvider.getDB(ledgerID)
+func (m *mgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
+	batch := prepareDBBatch(trigger.StateUpdates, trigger.CommittingBlockNum)
+	dbHandle := m.dbProvider.getDB(trigger.LedgerID)
 	return dbHandle.writeBatch(batch, true)
 }
 
@@ -122,7 +123,7 @@ func prepareDBBatch(stateUpdates ledger.StateUpdates, committingBlock uint64) *b
 func compositeKVToCollectionConfig(compositeKV *compositeKV) (*ledger.CollectionConfigInfo, error) {
 	conf := &common.CollectionConfigPackage{}
 	if err := proto.Unmarshal(compositeKV.value, conf); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error unmarshalling compositeKV to collection config")
 	}
 	return &ledger.CollectionConfigInfo{CollectionConfig: conf, CommittingBlockNum: compositeKV.blockNum}, nil
 }

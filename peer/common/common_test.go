@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/config/configtest"
 	"github.com/hyperledger/fabric/msp"
@@ -61,7 +62,7 @@ func TestInitCryptoMissingDir(t *testing.T) {
 	dir := os.TempDir() + "/" + util.GenerateUUID()
 	err := common.InitCrypto(dir, "SampleOrg", msp.ProviderTypeToString(msp.FABRIC))
 	assert.Error(t, err, "Should be able to initialize crypto with non-existing directory")
-	assert.Contains(t, err.Error(), fmt.Sprintf("missing %s folder", dir))
+	assert.Contains(t, err.Error(), fmt.Sprintf("folder \"%s\" does not exist", dir))
 }
 
 func TestInitCrypto(t *testing.T) {
@@ -245,4 +246,20 @@ func TestGetDefaultSigner(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInitCmd(t *testing.T) {
+	defer viper.Reset()
+
+	// test that InitCmd doesn't remove existing loggers from the module levels map
+	flogging.MustGetLogger("test")
+	flogging.SetModuleLevel("test", "error")
+	assert.Equal(t, "error", flogging.Global.Level("test").String())
+	flogging.MustGetLogger("chaincode")
+	assert.Equal(t, flogging.Global.DefaultLevel().String(), flogging.Global.Level("chaincode").String())
+
+	viper.Set("logging_level", "chaincode=debug")
+	common.InitCmd(nil, nil)
+	assert.Equal(t, "debug", flogging.Global.Level("chaincode").String())
+	assert.Equal(t, "error", flogging.Global.Level("test").String())
 }

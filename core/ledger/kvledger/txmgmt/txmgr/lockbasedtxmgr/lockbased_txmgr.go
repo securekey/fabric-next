@@ -8,16 +8,16 @@ package lockbasedtxmgr
 import (
 	"sync"
 
-	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/pvtstatepurgemgmt"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/queryutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valimpl"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 )
@@ -114,7 +114,25 @@ func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
 			continue
 		}
 		txmgr.current.listeners = append(txmgr.current.listeners, listener)
-		if err := listener.HandleStateUpdates(txmgr.ledgerid, stateUpdatesForListener, txmgr.current.blockNum()); err != nil {
+
+		committedStateQueryExecuter := &queryutil.QECombiner{
+			QueryExecuters: []queryutil.QueryExecuter{txmgr.db}}
+
+		postCommitQueryExecuter := &queryutil.QECombiner{
+			QueryExecuters: []queryutil.QueryExecuter{
+				&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: txmgr.current.batch.PubUpdates.UpdateBatch},
+				txmgr.db,
+			},
+		}
+
+		trigger := &ledger.StateUpdateTrigger{
+			LedgerID:                    txmgr.ledgerid,
+			StateUpdates:                stateUpdatesForListener,
+			CommittingBlockNum:          txmgr.current.blockNum(),
+			CommittedStateQueryExecutor: committedStateQueryExecuter,
+			PostCommitQueryExecutor:     postCommitQueryExecuter,
+		}
+		if err := listener.HandleStateUpdates(trigger); err != nil {
 			return err
 		}
 		logger.Debugf("Invoking listener for state changes:%s", listener)
@@ -124,6 +142,9 @@ func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
 
 // Shutdown implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Shutdown() {
+	// wait for background go routine to finish else the timing issue causes a nil pointer inside goleveldb code
+	// see FAB-11974
+	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
 	txmgr.db.Close()
 }
 
@@ -203,7 +224,14 @@ func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvt
 	if err := txmgr.ValidateAndPrepare(blockAndPvtdata, false); err != nil {
 		return err
 	}
-	logger.Debugf("Committing block %d to state database", block.Header.Number)
+
+	// log every 1000th block at Info level so that statedb rebuild progress can be tracked in production envs.
+	if block.Header.Number%1000 == 0 {
+		logger.Infof("Recommitting block [%d] to state database", block.Header.Number)
+	} else {
+		logger.Debugf("Recommitting block [%d] to state database", block.Header.Number)
+	}
+
 	return txmgr.Commit()
 }
 

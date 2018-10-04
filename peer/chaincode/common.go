@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package chaincode
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,6 @@ import (
 	"github.com/hyperledger/fabric/common/localmsp"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/chaincode"
-	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/container"
 	"github.com/hyperledger/fabric/msp"
@@ -34,7 +34,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 // checkSpec to see if chaincode resides within current package capture for language.
@@ -44,12 +43,7 @@ func checkSpec(spec *pb.ChaincodeSpec) error {
 		return errors.New("expected chaincode specification, nil received")
 	}
 
-	platform, err := platforms.Find(spec.Type)
-	if err != nil {
-		return errors.WithMessage(err, "failed to determine platform type")
-	}
-
-	return platform.ValidateSpec(spec)
+	return platformRegistry.ValidateSpec(spec.CCType(), spec.Path())
 }
 
 // getChaincodeDeploymentSpec get chaincode deployment spec given the chaincode spec
@@ -61,7 +55,7 @@ func getChaincodeDeploymentSpec(spec *pb.ChaincodeSpec, crtPkg bool) (*pb.Chainc
 			return nil, err
 		}
 
-		codePackageBytes, err = container.GetChaincodePackageBytes(spec)
+		codePackageBytes, err = container.GetChaincodePackageBytes(platformRegistry, spec)
 		if err != nil {
 			err = errors.WithMessage(err, "error getting chaincode package bytes")
 			return nil, err
@@ -87,14 +81,6 @@ func getChaincodeSpec(cmd *cobra.Command) (*pb.ChaincodeSpec, error) {
 	}
 
 	chaincodeLang = strings.ToUpper(chaincodeLang)
-	if javaEnabled() {
-		logger.Debug("java chaincode enabled")
-	} else {
-		logger.Debug("java chaincode disabled")
-		if pb.ChaincodeSpec_Type_value[chaincodeLang] == int32(pb.ChaincodeSpec_JAVA) {
-			return nil, errors.New("java chaincode is work-in-progress and disabled")
-		}
-	}
 	spec = &pb.ChaincodeSpec{
 		Type:        pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value[chaincodeLang]),
 		ChaincodeId: &pb.ChaincodeID{Path: chaincodePath, Name: chaincodeName, Version: chaincodeVersion},

@@ -5,10 +5,15 @@
 required = [
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
-    "github.com/golang/protobuf/protoc-gen-go"
+    "github.com/golang/protobuf/protoc-gen-go",
+    "github.com/coreos/etcd/raft"
 ]
 
 ignored = [
+]
+
+noverify = [
+    "github.com/grpc-ecosystem/go-grpc-middleware"
 ]
 
 [[constraint]]
@@ -17,7 +22,7 @@ ignored = [
 
 [[constraint]]
   name = "github.com/Shopify/sarama"
-  version = "1.16.0"
+  version = "1.17.0"
 
 [[constraint]]
   name = "github.com/cactus/go-statsd-client"
@@ -32,12 +37,8 @@ ignored = [
   version = "1.2.0"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/golang/groupcache"
-
-[[constraint]]
   name = "github.com/golang/protobuf"
-  revision = "fec3b39b059c0f88fa6b20f5ed012b1aa203a8b4"
+  version = "1.1.0"
 
 [[constraint]]
   name = "github.com/gorilla/mux"
@@ -113,7 +114,7 @@ ignored = [
 
 [[constraint]]
   name = "google.golang.org/grpc"
-  version = "=1.11.3"
+  version = "=1.13.0"
 
 [[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
@@ -135,6 +136,11 @@ ignored = [
   name = "github.com/onsi/ginkgo"
   revision = "a3b6351eb1ff8e1bfa30b2f55d7e282186ed8fee"
 
+[[constraint]]
+  name = "github.com/coreos/etcd"
+  version = "3.3.8"
+
+
 [prune]
   go-tests = true
   unused-packages = true
@@ -147,3 +153,19 @@ ignored = [
   [[prune.project]]
       name = "github.com/onsi/gomega"
       unused-packages = false
+
+  [[prune.project]]
+      name = "github.com/coreos/etcd"
+      non-go = false
+
+[[constraint]]
+  name = "go.uber.org/zap"
+  version = "1.9.0"
+
+[[constraint]]
+  name = "github.com/grpc-ecosystem/go-grpc-middleware"
+  version = "1.0.0"
+
+[[constraint]]
+  name = "github.com/willf/bitset"
+  version = "1.1.8"

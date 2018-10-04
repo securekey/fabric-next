@@ -26,7 +26,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/policy"
-	"github.com/hyperledger/fabric/events/producer"
 	"github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
@@ -49,6 +48,14 @@ func New(ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodePro
 		aclProvider: aclProvider,
 	}
 }
+
+func (e *PeerConfiger) Name() string              { return "cscc" }
+func (e *PeerConfiger) Path() string              { return "github.com/hyperledger/fabric/core/scc/cscc" }
+func (e *PeerConfiger) InitArgs() [][]byte        { return nil }
+func (e *PeerConfiger) Chaincode() shim.Chaincode { return e }
+func (e *PeerConfiger) InvokableExternal() bool   { return true }
+func (e *PeerConfiger) InvokableCC2CC() bool      { return false }
+func (e *PeerConfiger) Enabled() bool             { return true }
 
 // PeerConfiger implements the configuration handler for the peer. For every
 // configuration transaction coming in from the ordering service, the
@@ -231,15 +238,6 @@ func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProv
 	}
 
 	peer.InitChain(chainID)
-
-	bevent, _, _, err := producer.CreateBlockEvents(block)
-	if err != nil {
-		cnflogger.Errorf("Error processing block events for block number [%d]: %s", block.Header.Number, err)
-	} else {
-		if err := producer.Send(bevent); err != nil {
-			cnflogger.Errorf("Channel [%s] Error sending block event for block number [%d]: %s", chainID, block.Header.Number, err)
-		}
-	}
 
 	return shim.Success(nil)
 }

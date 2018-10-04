@@ -8,6 +8,7 @@ package discovery
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/discovery"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -116,7 +116,6 @@ func (s *service) processQuery(query *discovery.Query, request *discovery.Signed
 		return accessDenied
 	}
 	return s.dispatch(query)
-
 }
 
 func (s *service) dispatch(q *discovery.Query) *discovery.QueryResult {
@@ -179,8 +178,11 @@ func wrapPeerResponse(peersByOrg map[string]*discovery.Peers) *discovery.QueryRe
 }
 
 func (s *service) channelMembershipResponse(q *discovery.Query) *discovery.QueryResult {
+	chanPeers, err := s.PeersAuthorizedByCriteria(common2.ChainID(q.Channel), q.GetPeerQuery().Filter)
+	if err != nil {
+		return wrapError(err)
+	}
 	membersByOrgs := make(map[string]*discovery.Peers)
-	chanPeers := s.PeersOfChannel(common2.ChainID(q.Channel))
 	chanPeerByID := discovery2.Members(chanPeers).ByID()
 	for org, ids2Peers := range s.computeMembership(q) {
 		membersByOrgs[org] = &discovery.Peers{}
@@ -209,7 +211,7 @@ func (s *service) localMembershipResponse(q *discovery.Query) *discovery.QueryRe
 	return wrapPeerResponse(membersByOrgs)
 }
 
-func (s *service) computeMembership(q *discovery.Query) map[string]peerMapping {
+func (s *service) computeMembership(_ *discovery.Query) map[string]peerMapping {
 	peersByOrg := make(map[string]peerMapping)
 	peerAliveInfo := discovery2.Members(s.Peers()).ByID()
 	for org, peerIdentities := range s.IdentityInfo().ByOrg() {

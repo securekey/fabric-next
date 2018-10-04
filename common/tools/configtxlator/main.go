@@ -23,19 +23,24 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/tools/configtxlator/metadata"
 	"github.com/hyperledger/fabric/common/tools/configtxlator/rest"
 	"github.com/hyperledger/fabric/common/tools/configtxlator/update"
 	"github.com/hyperledger/fabric/common/tools/protolator"
 	cb "github.com/hyperledger/fabric/protos/common"
 
+	// Import these to register the proto types
+	_ "github.com/hyperledger/fabric/protos/common"
+	_ "github.com/hyperledger/fabric/protos/msp"
+	_ "github.com/hyperledger/fabric/protos/orderer"
+	_ "github.com/hyperledger/fabric/protos/orderer/etcdraft"
+	_ "github.com/hyperledger/fabric/protos/peer"
+
 	"github.com/golang/protobuf/proto"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
-
-var logger = logging.MustGetLogger("configtxlator")
 
 // command line flags
 var (
@@ -63,6 +68,8 @@ var (
 
 	version = app.Command("version", "Show version information")
 )
+
+var logger = flogging.MustGetLogger("configtxlator")
 
 func main() {
 	kingpin.Version("0.0.1")

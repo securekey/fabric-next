@@ -76,10 +76,12 @@ type privateHandler struct {
 	support     Support
 	coordinator privdata2.Coordinator
 	distributor privdata2.PvtDataDistributor
+	reconciler  privdata2.Reconciler
 }
 
 func (p privateHandler) close() {
 	p.coordinator.Close()
+	p.reconciler.Stop()
 }
 
 type gossipServiceImpl struct {
@@ -235,6 +237,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 	fetcher := privdata2.NewPuller(support.Cs, g.gossipSvc, dataRetriever, collectionAccessFactory, chainID)
 
 	coordinator := privdata2.NewCoordinator(privdata2.Support{
+		ChainID:         chainID,
 		CollectionStore: support.Cs,
 		Validator:       support.Validator,
 		TransientStore:  support.Store,
@@ -246,7 +249,10 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 		support:     support,
 		coordinator: coordinator,
 		distributor: privdata2.NewDistributor(chainID, g, collectionAccessFactory),
+		reconciler:  &privdata2.NoOpReconciler{},
 	}
+	g.privateHandlers[chainID].reconciler.Start()
+
 	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator)
 	if g.deliveryService[chainID] == nil {
 		var err error

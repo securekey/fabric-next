@@ -1,5 +1,5 @@
 /*
-Copyright IBM Corp. 2017 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
 SPDX-License-Identifier: Apache-2.0
 */
@@ -294,29 +294,6 @@ func TestGetSignedProposal(t *testing.T) {
 	_, err = utils.GetSignedProposal(nil, signID)
 	assert.Error(t, err, "Expected error with nil proposal")
 	_, err = utils.GetSignedProposal(prop, nil)
-	assert.Error(t, err, "Expected error with nil signing identity")
-
-}
-
-func TestGetSignedEvent(t *testing.T) {
-	var signedEvt *pb.SignedEvent
-	var err error
-
-	signID, err := mockmsp.NewNoopMsp().GetDefaultSigningIdentity()
-	assert.NoError(t, err, "Unexpected error getting signing identity")
-
-	evt := &pb.Event{}
-	evtBytes, _ := proto.Marshal(evt)
-	signedEvt, err = utils.GetSignedEvent(evt, signID)
-	assert.NoError(t, err, "Unexpected error getting signed event")
-	assert.Equal(t, evtBytes, signedEvt.EventBytes,
-		"Event bytes did not match expected value")
-	assert.Equal(t, []byte("signature"), signedEvt.Signature,
-		"Signature did not match expected value")
-
-	_, err = utils.GetSignedEvent(nil, signID)
-	assert.Error(t, err, "Expected error with nil event")
-	_, err = utils.GetSignedEvent(evt, nil)
 	assert.Error(t, err, "Expected error with nil signing identity")
 
 }

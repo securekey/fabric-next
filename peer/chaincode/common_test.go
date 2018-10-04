@@ -8,6 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 package chaincode
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -34,7 +35,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestCheckChaincodeCmdParamsWithNewCallingSchema(t *testing.T) {
@@ -137,8 +137,6 @@ func TestCheckInvalidJSON(t *testing.T) {
 }
 
 func TestGetOrdererEndpointFromConfigTx(t *testing.T) {
-	initMSP()
-
 	signer, err := common.GetDefaultSigner()
 	assert.NoError(t, err)
 
@@ -162,8 +160,6 @@ func TestGetOrdererEndpointFromConfigTx(t *testing.T) {
 }
 
 func TestGetOrdererEndpointFail(t *testing.T) {
-	initMSP()
-
 	signer, err := common.GetDefaultSigner()
 	assert.NoError(t, err)
 
@@ -534,7 +530,6 @@ func TestChaincodeInvokeOrQuery_waitForEvent(t *testing.T) {
 	defer resetFlags()
 
 	// success - deliver client returns event with expected txid
-	InitMSP()
 	waitForEvent = true
 	mockCF, err := getMockChaincodeCmdFactory()
 	assert.NoError(t, err)

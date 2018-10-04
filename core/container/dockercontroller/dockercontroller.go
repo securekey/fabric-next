@@ -26,9 +26,7 @@ import (
 	"github.com/hyperledger/fabric/core/container"
 	"github.com/hyperledger/fabric/core/container/ccintf"
 	cutil "github.com/hyperledger/fabric/core/container/util"
-	"github.com/op/go-logging"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 // ContainerType is the string which the docker container type
@@ -173,7 +171,7 @@ func getDockerHostConfig() *docker.HostConfig {
 	return hostConfig
 }
 
-func (vm *DockerVM) createContainer(ctxt context.Context, client dockerClient,
+func (vm *DockerVM) createContainer(client dockerClient,
 	imageID string, containerID string, args []string,
 	env []string, attachStdout bool) error {
 	config := docker.Config{Cmd: args, Image: imageID, Env: env, AttachStdout: attachStdout, AttachStderr: attachStdout}
@@ -213,7 +211,7 @@ func (vm *DockerVM) deployImage(client dockerClient, ccid ccintf.CCID,
 }
 
 //Start starts a container using a previously created docker image
-func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
+func (vm *DockerVM) Start(ccid ccintf.CCID,
 	args []string, env []string, filesToUpload map[string][]byte, builder container.Builder) error {
 	imageName, err := vm.GetVMNameForDocker(ccid)
 	if err != nil {
@@ -232,10 +230,10 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 
 	//stop,force remove if necessary
 	dockerLogger.Debugf("Cleanup container %s", containerName)
-	vm.stopInternal(ctxt, client, containerName, 0, false, false)
+	vm.stopInternal(client, containerName, 0, false, false)
 
 	dockerLogger.Debugf("Start container %s", containerName)
-	err = vm.createContainer(ctxt, client, imageName, containerName, args, env, attachStdout)
+	err = vm.createContainer(client, imageName, containerName, args, env, attachStdout)
 	if err != nil {
 		//if image not found try to create image and retry
 		if err == docker.ErrNoSuchImage {
@@ -254,7 +252,7 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 				}
 
 				dockerLogger.Debug("start-recreated image successfully")
-				if err1 = vm.createContainer(ctxt, client, imageName, containerName, args, env, attachStdout); err1 != nil {
+				if err1 = vm.createContainer(client, imageName, containerName, args, env, attachStdout); err1 != nil {
 					dockerLogger.Errorf("start-could not recreate container post recreate image: %s", err1)
 					return err1
 				}
@@ -316,7 +314,7 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 
 			// Acquire a custom logger for our chaincode, inheriting the level from the peer
 			containerLogger := flogging.MustGetLogger(containerName)
-			logging.SetLevel(logging.GetLevel("peer"), containerName)
+			flogging.SetModuleLevel(flogging.GetModuleLevel("peer"), containerName)
 
 			for {
 				// Loop forever dumping lines of text into the containerLogger
@@ -381,7 +379,7 @@ func (vm *DockerVM) Start(ctxt context.Context, ccid ccintf.CCID,
 }
 
 //Stop stops a running chaincode
-func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
+func (vm *DockerVM) Stop(ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error {
 	id := vm.GetVMName(ccid)
 
 	client, err := vm.getClientFnc()
@@ -391,12 +389,12 @@ func (vm *DockerVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 	}
 	id = strings.Replace(id, ":", "_", -1)
 
-	err = vm.stopInternal(ctxt, client, id, timeout, dontkill, dontremove)
+	err = vm.stopInternal(client, id, timeout, dontkill, dontremove)
 
 	return err
 }
 
-func (vm *DockerVM) stopInternal(ctxt context.Context, client dockerClient,
+func (vm *DockerVM) stopInternal(client dockerClient,
 	id string, timeout uint, dontkill bool, dontremove bool) error {
 	err := client.StopContainer(id, timeout)
 	if err != nil {

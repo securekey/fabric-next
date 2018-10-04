@@ -21,7 +21,6 @@ import (
 	"github.com/hyperledger/fabric/core/deliverservice/mocks"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/common"
-	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/msp/mgmt/testtools"
 	"github.com/hyperledger/fabric/protos/orderer"
 	"github.com/spf13/viper"
@@ -92,7 +91,9 @@ func TestNewDeliverService(t *testing.T) {
 		return blocksDeliverer, nil
 	}
 	abcf := func(*grpc.ClientConn) orderer.AtomicBroadcastClient {
-		return &mocks.MockAtomicBroadcastClient{blocksDeliverer}
+		return &mocks.MockAtomicBroadcastClient{
+			BD: blocksDeliverer,
+		}
 	}
 
 	connFactory := func(_ string) func(string) (*grpc.ClientConn, error) {
@@ -110,10 +111,10 @@ func TestNewDeliverService(t *testing.T) {
 		ConnFactory: connFactory,
 	})
 	assert.NoError(t, err)
-	assert.NoError(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{0}, func() {}))
+	assert.NoError(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{Height: 0}, func() {}))
 
 	// Lets start deliver twice
-	assert.Error(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{0}, func() {}), "can't start delivery")
+	assert.Error(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{Height: 0}, func() {}), "can't start delivery")
 	// Lets stop deliver that not started
 	assert.Error(t, service.StopDeliverForChannel("TEST_CHAINID2"), "can't stop delivery")
 
@@ -124,10 +125,11 @@ func TestNewDeliverService(t *testing.T) {
 	// Make sure to stop all blocks providers
 	service.Stop()
 	time.Sleep(time.Duration(500) * time.Millisecond)
-	assert.Equal(t, 0, connNumber)
+	connWG.Wait()
+
 	assertBlockDissemination(0, gossipServiceAdapter.GossipBlockDisseminations, t)
 	assert.Equal(t, atomic.LoadInt32(&blocksDeliverer.RecvCnt), atomic.LoadInt32(&gossipServiceAdapter.AddPayloadsCnt))
-	assert.Error(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{0}, func() {}), "Delivery service is stopping")
+	assert.Error(t, service.StartDeliverForChannel("TEST_CHAINID", &mocks.MockLedgerInfo{Height: 0}, func() {}), "Delivery service is stopping")
 	assert.Error(t, service.StopDeliverForChannel("TEST_CHAINID"), "Delivery service is stopping")
 }
 
@@ -166,7 +168,7 @@ func TestDeliverServiceRestart(t *testing.T) {
 	os.Shutdown()
 	time.Sleep(time.Second * 3)
 	os = mocks.NewOrderer(5611, t)
-	li.Height = 103
+	atomic.StoreUint64(&li.Height, uint64(103))
 	os.SetNextExpectedSeek(uint64(103))
 	go os.SendBlock(uint64(103))
 	assertBlockDissemination(103, gossipServiceAdapter.GossipBlockDisseminations, t)
@@ -503,9 +505,7 @@ func TestDeliverServiceShutdownRespawn(t *testing.T) {
 	// Then, wait a few seconds, and don't send any blocks.
 	// Afterwards - start a new instance and shut down the old instance.
 	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second)
-	defer func() {
-		viper.Reset()
-	}()
+	defer viper.Reset()
 	defer ensureNoGoroutineLeak(t)()
 
 	osn1 := mocks.NewOrderer(5614, t)
@@ -557,11 +557,8 @@ func TestDeliverServiceDisconnectReconnect(t *testing.T) {
 	// (0.5s + 1s + 2s + 4s) > 2s.
 	// Send new block and check that delivery client got it.
 	// So, we can see that waiting on recv in empty channel do reset total time spend in reconnection.
-	orgReconnectTotalTimeThreshold := util.GetDurationOrDefault("peer.deliveryclient.reconnectTotalTimeThreshold", defaultReConnectTotalTimeThreshold)
 	viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", time.Second*2)
-	defer func() {
-		viper.Set("peer.deliveryclient.reconnectTotalTimeThreshold", orgReconnectTotalTimeThreshold)
-	}()
+	defer viper.Reset()
 	defer ensureNoGoroutineLeak(t)()
 
 	osn := mocks.NewOrderer(5614, t)

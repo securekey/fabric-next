@@ -9,15 +9,17 @@ package cceventmgmt
 import (
 	"fmt"
 
+	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 )
 
 // ChaincodeDefinition captures the info about chaincode
 type ChaincodeDefinition struct {
-	Name    string
-	Hash    []byte
-	Version string
+	Name              string
+	Hash              []byte
+	Version           string
+	CollectionConfigs []byte
 }
 
 func (cdef *ChaincodeDefinition) String() string {
@@ -50,6 +52,7 @@ type ChaincodeInfoProvider interface {
 }
 
 type chaincodeInfoProviderImpl struct {
+	PlatformRegistry *platforms.Registry
 }
 
 // IsChaincodeDeployed implements function in the interface ChaincodeInfoProvider
@@ -59,5 +62,5 @@ func (p *chaincodeInfoProviderImpl) IsChaincodeDeployed(chainid string, chaincod
 
 // RetrieveChaincodeArtifacts implements function in the interface ChaincodeInfoProvider
 func (p *chaincodeInfoProviderImpl) RetrieveChaincodeArtifacts(chaincodeDefinition *ChaincodeDefinition) (installed bool, dbArtifactsTar []byte, err error) {
-	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version)
+	return ccprovider.ExtractStatedbArtifactsForChaincode(chaincodeDefinition.Name, chaincodeDefinition.Version, p.PlatformRegistry)
 }

@@ -17,7 +17,7 @@ import (
 	"sync"
 
 	"github.com/miekg/pkcs11"
-	"github.com/op/go-logging"
+	"go.uber.org/zap/zapcore"
 )
 
 func loadLib(lib, pin, label string) (*pkcs11.Ctx, uint, *pkcs11.SessionHandle, error) {
@@ -316,7 +316,7 @@ func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (ski
 
 	pubGoKey := &ecdsa.PublicKey{Curve: nistCurve, X: x, Y: y}
 
-	if logger.IsEnabledFor(logging.DEBUG) {
+	if logger.IsEnabledFor(zapcore.DebugLevel) {
 		listAttrs(p11lib, session, prv)
 		listAttrs(p11lib, session, pub)
 	}
@@ -354,7 +354,7 @@ func (csp *impl) signP11ECDSA(ski []byte, msg []byte) (R, S *big.Int, err error)
 	return R, S, nil
 }
 
-func (csp *impl) verifyP11ECDSA(ski []byte, msg []byte, R, S *big.Int, byteSize int) (valid bool, err error) {
+func (csp *impl) verifyP11ECDSA(ski []byte, msg []byte, R, S *big.Int, byteSize int) (bool, error) {
 	p11lib := csp.ctx
 	session := csp.getSession()
 	defer csp.returnSession(session)
@@ -388,76 +388,6 @@ func (csp *impl) verifyP11ECDSA(ski []byte, msg []byte, R, S *big.Int, byteSize 
 	}
 
 	return true, nil
-}
-
-func (csp *impl) importECKey(curve asn1.ObjectIdentifier, privKey, ecPt []byte, ephemeral bool, keyType bool) (ski []byte, err error) {
-	p11lib := csp.ctx
-	session := csp.getSession()
-	defer csp.returnSession(session)
-
-	marshaledOID, err := asn1.Marshal(curve)
-	if err != nil {
-		return nil, fmt.Errorf("Could not marshal OID [%s]", err.Error())
-	}
-
-	var keyTemplate []*pkcs11.Attribute
-	if keyType == publicKeyFlag {
-		logger.Debug("Importing Public EC Key")
-
-		hash := sha256.Sum256(ecPt)
-		ski = hash[:]
-
-		publabel := hex.EncodeToString(ski)
-
-		// Add DER encoding for the CKA_EC_POINT
-		ecPt = append([]byte{0x04, byte(len(ecPt))}, ecPt...)
-
-		keyTemplate = []*pkcs11.Attribute{
-			pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
-			pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
-			pkcs11.NewAttribute(pkcs11.CKA_TOKEN, !ephemeral),
-			pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
-			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, marshaledOID),
-
-			pkcs11.NewAttribute(pkcs11.CKA_ID, ski),
-			pkcs11.NewAttribute(pkcs11.CKA_LABEL, publabel),
-			pkcs11.NewAttribute(pkcs11.CKA_EC_POINT, ecPt),
-			pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, false),
-		}
-	} else { // isPrivateKey
-		ski, err = csp.importECKey(curve, nil, ecPt, ephemeral, publicKeyFlag)
-		if err != nil {
-			return nil, fmt.Errorf("Failed importing private EC Key [%s]", err)
-		}
-
-		logger.Debugf("Importing Private EC Key [%d]\n%s\n", len(privKey)*8, hex.Dump(privKey))
-		prvlabel := hex.EncodeToString(ski)
-		keyTemplate = []*pkcs11.Attribute{
-			pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
-			pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
-			pkcs11.NewAttribute(pkcs11.CKA_TOKEN, !ephemeral),
-			pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, false),
-			pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
-			pkcs11.NewAttribute(pkcs11.CKA_EC_PARAMS, marshaledOID),
-
-			pkcs11.NewAttribute(pkcs11.CKA_ID, ski),
-			pkcs11.NewAttribute(pkcs11.CKA_LABEL, prvlabel),
-			pkcs11.NewAttribute(pkcs11.CKR_ATTRIBUTE_SENSITIVE, false),
-			pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, true),
-			pkcs11.NewAttribute(pkcs11.CKA_VALUE, privKey),
-		}
-	}
-
-	keyHandle, err := p11lib.CreateObject(session, keyTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("P11: keypair generate failed [%s]", err)
-	}
-
-	if logger.IsEnabledFor(logging.DEBUG) {
-		listAttrs(p11lib, session, keyHandle)
-	}
-
-	return ski, nil
 }
 
 const (
@@ -628,7 +558,7 @@ func (csp *impl) getSecretValue(ski []byte) []byte {
 		logger.Debugf("ListAttr: type %d/0x%x, length %d\n%s", a.Type, a.Type, len(a.Value), hex.Dump(a.Value))
 		return a.Value
 	}
-	logger.Warningf("No Key Value found!", err)
+	logger.Warningf("No Key Value found: %v", err)
 	return nil
 }
 

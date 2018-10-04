@@ -35,6 +35,8 @@ type DB interface {
 	GetKeyHashVersion(namespace, collection string, keyHash []byte) (*version.Height, error)
 	GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([]*statedb.VersionedValue, error)
 	GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error)
+	GetStateMetadata(namespace, key string) ([]byte, error)
+	GetPrivateDataMetadataByHash(namespace, collection string, keyHash []byte) ([]byte, error)
 	ExecuteQueryOnPrivateData(namespace, collection, query string) (statedb.ResultsIterator, error)
 	ApplyPrivacyAwareUpdates(updates *UpdateBatch, height *version.Height) error
 }
@@ -111,7 +113,12 @@ func (b UpdateMap) IsEmpty() bool {
 
 // Put sets the value in the batch for a given combination of namespace and collection name
 func (b UpdateMap) Put(ns, coll, key string, value []byte, version *version.Height) {
-	b.getOrCreateNsBatch(ns).Put(coll, key, value, version)
+	b.PutValAndMetadata(ns, coll, key, value, nil, version)
+}
+
+// PutValAndMetadata adds a key with value and metadata
+func (b UpdateMap) PutValAndMetadata(ns, coll, key string, value []byte, metadata []byte, version *version.Height) {
+	b.getOrCreateNsBatch(ns).PutValAndMetadata(coll, key, value, metadata, version)
 }
 
 // Delete adds a delete marker in the batch for a given combination of namespace and collection name
@@ -157,7 +164,13 @@ func (h HashedUpdateBatch) Contains(ns, coll string, keyHash []byte) bool {
 
 // Put overrides the function in UpdateMap for allowing the key to be a []byte instead of a string
 func (h HashedUpdateBatch) Put(ns, coll string, key []byte, value []byte, version *version.Height) {
-	h.UpdateMap.Put(ns, coll, string(key), value, version)
+	h.PutValHashAndMetadata(ns, coll, key, value, nil, version)
+}
+
+// PutValHashAndMetadata adds a key with value and metadata
+// TODO introducing a new function to limit the refactoring. Later in a separate CR, the 'Put' function above should be removed
+func (h HashedUpdateBatch) PutValHashAndMetadata(ns, coll string, key []byte, value []byte, metadata []byte, version *version.Height) {
+	h.UpdateMap.PutValAndMetadata(ns, coll, string(key), value, metadata, version)
 }
 
 // Delete overrides the function in UpdateMap for allowing the key to be a []byte instead of a string

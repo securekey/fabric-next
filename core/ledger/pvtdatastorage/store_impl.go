@@ -9,6 +9,7 @@ package pvtdatastorage
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
@@ -16,6 +17,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/willf/bitset"
 )
 
 var logger = flogging.MustGetLogger("pvtdatastorage")
@@ -52,10 +54,25 @@ type expiryKey struct {
 	committingBlk uint64
 }
 
-type dataKey struct {
-	blkNum   uint64
-	txNum    uint64
+type nsCollBlk struct {
 	ns, coll string
+	blkNum   uint64
+}
+
+type dataKey struct {
+	nsCollBlk
+	txNum uint64
+}
+
+type missingDataKey struct {
+	nsCollBlk
+	isEligible bool
+}
+
+type storeEntries struct {
+	dataEntries        []*dataEntry
+	expiryEntries      []*expiryEntry
+	missingDataEntries map[missingDataKey]*bitset.BitSet
 }
 
 //////// Provider functions  /////////////
@@ -96,6 +113,7 @@ func (s *store) initState() error {
 	if s.batchPending, err = s.hasPendingCommit(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -104,7 +122,7 @@ func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 }
 
 // Prepare implements the function in the interface `Store`
-func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingData *ledger.MissingPrivateDataList) error {
 	if s.batchPending {
 		return &ErrIllegalCall{`A pending batch exists as as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`}
@@ -117,24 +135,37 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	batch := leveldbhelper.NewUpdateBatch()
 	var err error
 	var keyBytes, valBytes []byte
-	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
+
+	storeEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy, missingData)
+
 	if err != nil {
 		return err
 	}
-	for _, dataEntry := range dataEntries {
+
+	for _, dataEntry := range storeEntries.dataEntries {
 		keyBytes = encodeDataKey(dataEntry.key)
 		if valBytes, err = encodeDataValue(dataEntry.value); err != nil {
 			return err
 		}
 		batch.Put(keyBytes, valBytes)
 	}
-	for _, expiryEntry := range expiryEntries {
+
+	for _, expiryEntry := range storeEntries.expiryEntries {
 		keyBytes = encodeExpiryKey(expiryEntry.key)
 		if valBytes, err = encodeExpiryValue(expiryEntry.value); err != nil {
 			return err
 		}
 		batch.Put(keyBytes, valBytes)
 	}
+
+	for missingDataKey, missingDataValue := range storeEntries.missingDataEntries {
+		keyBytes = encodeMissingDataKey(&missingDataKey)
+		if valBytes, err = encodeMissingDataValue(missingDataValue); err != nil {
+			return err
+		}
+		batch.Put(keyBytes, valBytes)
+	}
+
 	batch.Put(pendingCommitKey, emptyValue)
 	if err := s.db.WriteBatch(batch, true); err != nil {
 		return err
@@ -204,7 +235,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 		}
 		dataValueBytes := itr.Value()
 		dataKey := decodeDatakey(dataKeyBytes)
-		expired, err := isExpired(dataKey, s.btlPolicy, s.lastCommittedBlock)
+		expired, err := isExpired(dataKey.nsCollBlk, s.btlPolicy, s.lastCommittedBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -251,38 +282,112 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	return nil
 }
 
+// GetMissingPvtDataInfoForMostRecentBlocks implements the function in the interface `Store`
+func (s *store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	// we assume that this function would be called by the gossip only after processing the
+	// last retrieved missing pvtdata info and committing the same.
+	if maxBlock < 1 {
+		return nil, nil
+	}
+
+	missingPvtDataInfo := make(ledger.MissingPvtDataInfo)
+	numberOfBlockProcessed := 0
+	lastProcessedBlock := uint64(0)
+	isMaxBlockLimitReached := false
+	// as we are not acquiring a read lock, new blocks can get committed while we
+	// construct the MissingPvtDataInfo. As a result, lastCommittedBlock can get
+	// changed. To ensure consistency, we use the same lastCommittedBlock value
+	// throughout the execution of this function
+	lastCommittedBlock := atomic.LoadUint64(&s.lastCommittedBlock)
+
+	startKey, endKey := createRangeScanKeysForEligibleMissingDataEntries(lastCommittedBlock)
+	dbItr := s.db.GetIterator(startKey, endKey)
+	defer dbItr.Release()
+
+	for dbItr.Next() {
+		missingDataKeyBytes := dbItr.Key()
+		missingDataKey := decodeMissingDataKey(missingDataKeyBytes)
+
+		if isMaxBlockLimitReached && (missingDataKey.blkNum != lastProcessedBlock) {
+			// esnures that exactly maxBlock number
+			// of blocks' entries are processed
+			break
+		}
+
+		// check whether the entry is expired. If so, move to the next item
+		expired, err := isExpired(missingDataKey.nsCollBlk, s.btlPolicy, lastCommittedBlock)
+		if err != nil {
+			return nil, err
+		}
+		if expired {
+			continue
+		}
+
+		// check for an existing entry for the blkNum in the MissingPvtDataInfo.
+		// If no such entry exists, create one. Also, keep track of the number of
+		// processed block due to maxBlock limit.
+		if _, ok := missingPvtDataInfo[missingDataKey.blkNum]; !ok {
+			numberOfBlockProcessed++
+			if numberOfBlockProcessed == maxBlock {
+				isMaxBlockLimitReached = true
+				// as there can be more than one entry for this block,
+				// we cannot `break` here
+				lastProcessedBlock = missingDataKey.blkNum
+			}
+		}
+
+		valueBytes := dbItr.Value()
+		bitmap, err := decodeMissingDataValue(valueBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		// for each transaction which misses private data, make an entry in missingBlockPvtDataInfo
+		for index, isSet := bitmap.NextSet(0); isSet; index, isSet = bitmap.NextSet(index + 1) {
+			txNum := uint64(index)
+			missingPvtDataInfo.Add(missingDataKey.blkNum, txNum, missingDataKey.ns, missingDataKey.coll)
+		}
+	}
+
+	return missingPvtDataInfo, nil
+}
+
 func (s *store) performPurgeIfScheduled(latestCommittedBlk uint64) {
 	if latestCommittedBlk%ledgerconfig.GetPvtdataStorePurgeInterval() != 0 {
 		return
 	}
 	go func() {
 		s.purgerLock.Lock()
-		logger.Infof("Purger started: Purging expired private data till block number [%d]", latestCommittedBlk)
+		logger.Debugf("Purger started: Purging expired private data till block number [%d]", latestCommittedBlk)
 		defer s.purgerLock.Unlock()
 		err := s.purgeExpiredData(0, latestCommittedBlk)
 		if err != nil {
 			logger.Warningf("Could not purge data from pvtdata store:%s", err)
 		}
-		logger.Info("Purger finished")
+		logger.Debug("Purger finished")
 	}()
 }
 
 func (s *store) purgeExpiredData(minBlkNum, maxBlkNum uint64) error {
 	batch := leveldbhelper.NewUpdateBatch()
 	expiryEntries, err := s.retrieveExpiryEntries(minBlkNum, maxBlkNum)
-	if err != nil {
-		return nil
+	if err != nil || len(expiryEntries) == 0 {
+		return err
 	}
 	for _, expiryEntry := range expiryEntries {
 		// this encoding could have been saved if the function retrieveExpiryEntries also returns the encoded expiry keys.
 		// However, keeping it for better readability
 		batch.Delete(encodeExpiryKey(expiryEntry.key))
-		for _, dataKey := range deriveDataKeys(expiryEntry) {
+		dataKeys, missingDataKeys := deriveKeys(expiryEntry)
+		for _, dataKey := range dataKeys {
 			batch.Delete(encodeDataKey(dataKey))
+		}
+		for _, missingDataKey := range missingDataKeys {
+			batch.Delete(encodeMissingDataKey(missingDataKey))
 		}
 		s.db.WriteBatch(batch, false)
 	}
-	logger.Debugf("[%d] Entries purged from private data storage", len(expiryEntries))
+	logger.Infof("[%s] - [%d] Entries purged from private data storage till block number [%d]", s.ledgerid, len(expiryEntries), maxBlkNum)
 	return nil
 }
 

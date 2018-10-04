@@ -17,8 +17,8 @@ modularity and versatility for a broad set of industry use cases.
 
    whatis
    whatsnew
-   getting_started
    key_concepts
+   getting_started
    tutorials
    ops_guide
    command_ref

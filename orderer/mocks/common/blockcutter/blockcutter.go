@@ -19,16 +19,11 @@ package blockcutter
 import (
 	"github.com/hyperledger/fabric/common/flogging"
 	cb "github.com/hyperledger/fabric/protos/common"
-	"github.com/op/go-logging"
 )
 
 const pkgLogID = "orderer/mocks/common/blockcutter"
 
-var logger *logging.Logger
-
-func init() {
-	logger = flogging.MustGetLogger(pkgLogID)
-}
+var logger = flogging.MustGetLogger(pkgLogID)
 
 // Receiver mocks the blockcutter.Receiver interface
 type Receiver struct {
@@ -40,6 +35,9 @@ type Receiver struct {
 
 	// CutNext causes Ordered returns [][]{append(curBatch, newTx)}, false when set to true
 	CutNext bool
+
+	// SkipAppendCurBatch causes Ordered to skip appending to CurBatch
+	SkipAppendCurBatch bool
 
 	// CurBatch is the currently outstanding messages in the batch
 	CurBatch []*cb.Envelope
@@ -79,7 +77,9 @@ func (mbc *Receiver) Ordered(env *cb.Envelope) ([][]*cb.Envelope, bool) {
 		return res, true
 	}
 
-	mbc.CurBatch = append(mbc.CurBatch, env)
+	if !mbc.SkipAppendCurBatch {
+		mbc.CurBatch = append(mbc.CurBatch, env)
+	}
 
 	if mbc.CutNext {
 		logger.Debugf("Receiver: Returning regular batch")

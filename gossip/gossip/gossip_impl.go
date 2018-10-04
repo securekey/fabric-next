@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/fabric/gossip/identity"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
-	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -48,7 +47,7 @@ type gossipServiceImpl struct {
 	incTime               time.Time
 	selfOrg               api.OrgIdentityType
 	*comm.ChannelDeMultiplexer
-	logger            *logging.Logger
+	logger            util.Logger
 	stopSignal        *sync.WaitGroup
 	conf              *Config
 	toDieChan         chan struct{}
@@ -64,7 +63,7 @@ type gossipServiceImpl struct {
 }
 
 // NewGossipService creates a gossip instance attached to a gRPC server
-func NewGossipService(conf *Config, s *grpc.Server, secAdvisor api.SecurityAdvisor,
+func NewGossipService(conf *Config, s *grpc.Server, sa api.SecurityAdvisor,
 	mcs api.MessageCryptoService, selfIdentity api.PeerIdentityType,
 	secureDialOpts api.PeerSecureDialOpts) Gossip {
 	var err error
@@ -72,8 +71,8 @@ func NewGossipService(conf *Config, s *grpc.Server, secAdvisor api.SecurityAdvis
 	lgr := util.GetLogger(util.LoggingGossipModule, conf.ID)
 
 	g := &gossipServiceImpl{
-		selfOrg:               secAdvisor.OrgByPeerIdentity(selfIdentity),
-		secAdvisor:            secAdvisor,
+		selfOrg:               sa.OrgByPeerIdentity(selfIdentity),
+		secAdvisor:            sa,
 		selfIdentity:          selfIdentity,
 		presumedDead:          make(chan common.PKIidType, presumedDeadChanSize),
 		disc:                  nil,
@@ -91,12 +90,12 @@ func NewGossipService(conf *Config, s *grpc.Server, secAdvisor api.SecurityAdvis
 	g.idMapper = identity.NewIdentityMapper(mcs, selfIdentity, func(pkiID common.PKIidType, identity api.PeerIdentityType) {
 		g.comm.CloseConn(&comm.RemotePeer{PKIID: pkiID})
 		g.certPuller.Remove(string(pkiID))
-	}, secAdvisor)
+	}, sa)
 
 	if s == nil {
-		g.comm, err = createCommWithServer(conf.BindPort, g.idMapper, selfIdentity, secureDialOpts)
+		g.comm, err = createCommWithServer(conf.BindPort, g.idMapper, selfIdentity, secureDialOpts, sa)
 	} else {
-		g.comm, err = createCommWithoutServer(s, conf.TLSCerts, g.idMapper, selfIdentity, secureDialOpts)
+		g.comm, err = createCommWithoutServer(s, conf.TLSCerts, g.idMapper, selfIdentity, secureDialOpts, sa)
 	}
 
 	if err != nil {
@@ -159,8 +158,8 @@ func newChannelState(g *gossipServiceImpl) *channelState {
 }
 
 func createCommWithoutServer(s *grpc.Server, certs *common.TLSCertificates, idStore identity.Mapper,
-	identity api.PeerIdentityType, secureDialOpts api.PeerSecureDialOpts) (comm.Comm, error) {
-	return comm.NewCommInstance(s, certs, idStore, identity, secureDialOpts)
+	identity api.PeerIdentityType, secureDialOpts api.PeerSecureDialOpts, sa api.SecurityAdvisor) (comm.Comm, error) {
+	return comm.NewCommInstance(s, certs, idStore, identity, secureDialOpts, sa)
 }
 
 // NewGossipServiceWithServer creates a new gossip instance with a gRPC server
@@ -170,8 +169,8 @@ func NewGossipServiceWithServer(conf *Config, secAdvisor api.SecurityAdvisor, mc
 }
 
 func createCommWithServer(port int, idStore identity.Mapper, identity api.PeerIdentityType,
-	secureDialOpts api.PeerSecureDialOpts) (comm.Comm, error) {
-	return comm.NewCommInstanceWithServer(port, idStore, identity, secureDialOpts)
+	secureDialOpts api.PeerSecureDialOpts, sa api.SecurityAdvisor) (comm.Comm, error) {
+	return comm.NewCommInstanceWithServer(port, idStore, identity, secureDialOpts, sa)
 }
 
 func (g *gossipServiceImpl) toDie() bool {
@@ -417,7 +416,7 @@ func (g *gossipServiceImpl) forwardDiscoveryMsg(msg proto.ReceivedMessage) {
 // and also checks that the tag matches the message type
 func (g *gossipServiceImpl) validateMsg(msg proto.ReceivedMessage) bool {
 	if err := msg.GetGossipMessage().IsTagLegal(); err != nil {
-		g.logger.Warningf("Tag of %v isn't legal:", msg.GetGossipMessage(), errors.WithStack(err))
+		g.logger.Warningf("Tag of %v isn't legal: %v", msg.GetGossipMessage(), errors.WithStack(err))
 		return false
 	}
 
@@ -987,7 +986,7 @@ type discoverySecurityAdapter struct {
 	sa                    api.SecurityAdvisor
 	mcs                   api.MessageCryptoService
 	c                     comm.Comm
-	logger                *logging.Logger
+	logger                util.Logger
 }
 
 func (g *gossipServiceImpl) newDiscoverySecurityAdapter() *discoverySecurityAdapter {
@@ -1107,7 +1106,7 @@ func (g *gossipServiceImpl) createCertStorePuller() pull.Mediator {
 		if err != nil {
 			g.logger.Warningf("Failed associating PKI-ID with certificate: %+v", errors.WithStack(err))
 		}
-		g.logger.Info("Learned of a new certificate:", idMsg.Cert)
+		g.logger.Debug("Learned of a new certificate:", idMsg.Cert)
 	}
 	adapter := &pull.PullAdapter{
 		Sndr:            g.comm,
