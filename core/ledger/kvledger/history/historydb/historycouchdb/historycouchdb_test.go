@@ -74,7 +74,7 @@ func TestDbHandleCommitsWriteSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(
+	results, _, err := queryCouchDbById(
 		def, dbname, formatKey(namespace, key, blockNum, uint64(0)),
 	)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
@@ -114,7 +114,7 @@ func TestDbHandleCommitsBlockHeightAsSavePoint(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(def, dbname, heightDocIdKey)
+	results, _, err := queryCouchDbById(def, dbname, heightDocIdKey)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.NotEmpty(t, results, "block height must be saved to history couchdb")
 }
@@ -223,7 +223,7 @@ func TestDbHandleCommitsBlockHeightAsSavePointWhenNoWriteWriteSet(t *testing.T) 
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(def, dbname, "height")
+	results, _, err := queryCouchDbById(def, dbname, "height")
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.NotEmpty(t, results, "block height must be saved to history couchdb")
 }
@@ -263,7 +263,7 @@ func TestDbHandleDoesNotCommitNonEndorsementWriteSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(
+	results, _, err := queryCouchDbById(
 		def, dbname, formatKey(namespace, key, blockNum, uint64(0)),
 	)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
@@ -305,7 +305,7 @@ func TestDbHandleDoesNotCommitInvalidWriteSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(
+	results, _, err := queryCouchDbById(
 		def, dbname, formatKey(namespace, key, blockNum, uint64(0)),
 	)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
@@ -346,7 +346,7 @@ func TestDbHandleDoesNotCommitReadSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, err := queryCouchDbById(
+	results, _, err := queryCouchDbById(
 		def, dbname, formatKey(namespace, key, blockNum, trxNum),
 	)
 	require.NoError(t, err, "failed to query test CouchDB")
@@ -354,13 +354,11 @@ func TestDbHandleDoesNotCommitReadSet(t *testing.T) {
 }
 
 // Query CouchDB with the given def and dbname for documents matching the given id
-func queryCouchDbById(def *couchdb.CouchDBDef, dbname, id string) (*[]couchdb.QueryResult, error) {
+func queryCouchDbById(def *couchdb.CouchDBDef, dbname, id string) (*couchdb.CouchDoc, string, error) {
 	return newCouchDbClient(
 		def,
 		couchdb.ConstructBlockchainDBName(dbname, dbNameSuffix),
-	).QueryDocuments(
-		fmt.Sprintf(`{ "selector": { "_id": "%s" } }`, id),
-	)
+	).ReadDoc(id)
 }
 
 // Start a CouchDB test instance.
