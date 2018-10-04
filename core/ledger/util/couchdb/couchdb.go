@@ -27,10 +27,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	logging "github.com/op/go-logging"
-	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("couchdb")
@@ -259,45 +257,6 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
 
 //CreateDatabaseIfNotExist method provides function to create database
 func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
-	if ledgerconfig.IsCommitter() {
-		return dbclient.doCreateDatabaseIfNotExist()
-	}
-
-	// FIXME: Change to Debugf
-	logger.Infof("I am not a committer - Checking if DB [%s] exists...", dbclient.DBName)
-
-	// TODO: Make configurable
-	maxAttempts := 10
-
-	_, err := retry.Invoke(
-		func() (interface{}, error) {
-			dbInfo, couchDBReturn, err := dbclient.GetDatabaseInfo()
-			if err != nil {
-				if couchDBReturn == nil || couchDBReturn.StatusCode != 404 {
-					return nil, err
-				}
-			}
-
-			//If the dbInfo returns populated and status code is 200, then the database exists
-			if dbInfo != nil && couchDBReturn.StatusCode == 200 {
-				// DB exists
-				return nil, nil
-			}
-			return nil, errors.Errorf("DB not found: [%s]", dbclient.DBName)
-		},
-		retry.WithMaxAttempts(maxAttempts),
-		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
-			// FIXME: Change to Debugf
-			logger.Infof("Error getting DB info for [%s] on attempt %d: %s. Will retry in %s", dbclient, attempt, err, backoff)
-			return true
-		}),
-	)
-
-	return errors.Wrapf(err, "Unable to open DB [%s]", dbclient.DBName)
-}
-
-//CreateDatabaseIfNotExist method provides function to create database
-func (dbclient *CouchDatabase) doCreateDatabaseIfNotExist() error {
 
 	logger.Debugf("Entering CreateDatabaseIfNotExist()")
 
@@ -317,14 +276,14 @@ func (dbclient *CouchDatabase) doCreateDatabaseIfNotExist() error {
 			return errSecurity
 		}
 
-		logger.Debugf("Database %s already exists", dbclient.DBName)
+		logger.Infof("Database %s already exists", dbclient.DBName)
 
 		logger.Debugf("Exiting CreateDatabaseIfNotExist()")
 
 		return nil
 	}
 
-	logger.Debugf("Database %s does not exist.", dbclient.DBName)
+	logger.Infof("Database %s does not exist.", dbclient.DBName)
 
 	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 	if err != nil {
@@ -355,7 +314,7 @@ func (dbclient *CouchDatabase) doCreateDatabaseIfNotExist() error {
 				return errSecurity
 			}
 
-			logger.Infof("Created database %s", dbclient.DBName)
+			logger.Infof("Database [%s] was already created", dbclient.DBName)
 			logger.Debugf("Exiting CreateDatabaseIfNotExist()")
 			return nil
 		}
@@ -1227,13 +1186,6 @@ func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
 
 // CreateIndex method provides a function creating an index
 func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndexResponse, error) {
-	if !ledgerconfig.IsCommitter() {
-		// FIXME: Change to Debugf
-		logger.Infof("I am not a committer and will not create the index for DB [%s]", dbclient.DBName)
-		// FIXME: Return existing index instead of nil?
-		return nil, nil
-	}
-
 	logger.Debugf("Entering CreateIndex()  indexdefinition=%s", indexdefinition)
 
 	//Test to see if this is a valid JSON
