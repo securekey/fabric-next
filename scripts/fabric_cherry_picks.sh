@@ -21,27 +21,13 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Fabric 1.2.1 (September 27, 2018)
-git checkout 5017e4dae6d7a53e88e3c346f9a9f584870bc952
+# Fabric 1.3 (Oct 3, 2018)
+git checkout 3663e86a474a1a914d48ddeb7e39271c97975ce3
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
-
-# Cherry pick [FAB-11777] Expose LevelDB configuration
-#git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/29/25929/4 && git cherry-pick FETCH_HEAD
-
-# Cherry pick [FAB-11907] Data races in deliver client
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/70/26170/4 && git cherry-pick FETCH_HEAD
-
-# [FAB-11247] Add configuration to create _global_changes
-git am $MY_PATH/../patches/0001-FAB-11247-Add-configuration-to-create-_global_change.patch
-
-# [FAB-8622] Reduce exclusive lock duration during commit
-#git am $MY_PATH/../patches/0001-FAB-8622-Red.-exclusive-lock-dur.-during-commit.patch
-
-#git am $MY_PATH/../patches/0001-FAB-11779-Move-goleveldb-version.patch
 
 # **Temporary** metrics collection
 git am $MY_PATH/../patches/0001-Ledger-metrics.patch

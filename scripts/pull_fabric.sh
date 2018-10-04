@@ -20,7 +20,7 @@ declare -x BASE_VERSION=0.4.10
 declare -x BASE_NAMESPACE=securekey
 
 # This must match the version of fabric that is being cherry-picked
-declare -x BASE_OUTPUT_VERSION=0.4.10
+declare -x BASE_OUTPUT_VERSION=0.4.12
 declare -x ARCH=$(go env GOARCH)
 
 # Build base images to enable dynamic build
