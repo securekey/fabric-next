@@ -8,6 +8,7 @@ package state
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -32,30 +33,62 @@ type BlockPublisher interface {
 }
 
 type publisher struct {
-	channelID string
-	bp        BlockPublisher
+	channelID   string
+	bp          BlockPublisher
+	blockNumber uint64
+	mutex       sync.RWMutex
 }
 
-func newBlockPublisher(channelID string, bp BlockPublisher) *publisher {
+func newBlockPublisher(channelID string, bp BlockPublisher, ledgerHeight uint64) *publisher {
+	if ledgerHeight == 0 {
+		panic("Ledger height must be greater than 0")
+	}
+
+	logger.Infof("Initializing ledger height to %d for channel [%s]: %s", ledgerHeight, channelID)
+
 	return &publisher{
-		channelID: channelID,
-		bp:        bp,
+		channelID:   channelID,
+		bp:          bp,
+		blockNumber: ledgerHeight - 1,
 	}
 }
 
 // Publish notifies all interested consumers of the new block.
 // Note: This function should only be used for endorser-only peers.
 func (p *publisher) Publish(block *fabriccmn.Block) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if block.Header.Number != p.blockNumber+1 {
+		return errors.Errorf("expecting block %d for channel [%s] but got block %d", p.blockNumber+1, p.channelID, block.Header.Number)
+	}
+
 	for i := range block.Data.Data {
 		envelope, err := utils.ExtractEnvelope(block, i)
 		if err != nil {
 			return err
 		}
 		if err := p.checkEnvelope(envelope); err != nil {
-			logger.Warningf("Error checking envelope at index %d: %s", i, err)
+			logger.Warningf("Error checking envelope at index %d for channel [%s]: %s", i, p.channelID, err)
 		}
 	}
-	return p.bp.AddBlock(block)
+
+	err := p.bp.AddBlock(block)
+	if err != nil {
+		return err
+	}
+
+	p.blockNumber = block.Header.Number
+
+	logger.Infof("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
+
+	return nil
+}
+
+func (p *publisher) LedgerHeight() uint64 {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.blockNumber + 1
 }
 
 func (p *publisher) checkEnvelope(envelope *fabriccmn.Envelope) error {
