@@ -204,7 +204,7 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 
 	doc, _, err := s.blockStore.ReadDoc(id)
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block from couchDB failed [%d]", blockNum))
+		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block [%d] from couchDB [%s] failed", blockNum, s.ledgerID))
 	}
 	if doc == nil {
 		return nil, blkstorage.ErrNotFoundInIndex
@@ -212,7 +212,7 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 
 	block, err := couchDocToBlock(doc)
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("unmarshal of block from couchDB failed [%d]", blockNum))
+		return nil, errors.WithMessage(err, fmt.Sprintf("unmarshal of block [%d] from couchDB [%s] failed", blockNum, s.ledgerID))
 	}
 
 	return block, nil

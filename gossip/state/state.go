@@ -8,6 +8,7 @@ package state
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -625,12 +626,43 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 				logger.Error("Ledger reported block height of 0 but this should be impossible")
 				continue
 			}
-			maxHeight := s.maxAvailableLedgerHeight()
-			if ourHeight >= maxHeight {
-				continue
-			}
 
-			s.requestBlocksInRange(uint64(ourHeight), uint64(maxHeight)-1)
+			if ledgerconfig.IsCommitter() {
+				maxHeight := s.maxAvailableLedgerHeight()
+				if ourHeight >= maxHeight {
+					continue
+				}
+				// FIXME: Change to Debugf
+				logger.Infof("I am a committer. Requesting blocks in range [%d:%d] for channel [%s]...", ourHeight-1, uint64(maxHeight)-1, s.chainID)
+				s.requestBlocksInRange(uint64(ourHeight), uint64(maxHeight)-1)
+			} else {
+				// No need to request blocks from other peers since we just need to make sure that our in-memory
+				// block-height is caught up with the block height in the DB
+				ledgerHeight, err := s.ledger.LedgerHeight()
+				if err != nil {
+					logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+					continue
+				}
+
+				// FIXME: Change to Debugf
+				logger.Infof("Endorser height [%d], ledger height [%d] for channel [%s]", ourHeight, ledgerHeight, s.chainID)
+				if ourHeight >= ledgerHeight {
+					// FIXME: Change to Debugf
+					logger.Infof("Endorser height [%d], ledger height [%d] for channel [%s]. No need to load blocks from DB.", ourHeight, ledgerHeight, s.chainID)
+					continue
+				}
+
+				payloads, err := s.loadBlocksInRange(ourHeight, ledgerHeight-1)
+				if err != nil {
+					logger.Errorf("Error loading blocks for channel [%s]: %s", s.chainID, err)
+					continue
+				}
+
+				if err := s.addPayloads(payloads); err != nil {
+					logger.Errorf("Error adding payloads for channel [%s]: %s", s.chainID, err)
+					continue
+				}
+			}
 		}
 	}
 }
@@ -708,6 +740,38 @@ func (s *GossipStateProviderImpl) requestBlocksInRange(start uint64, end uint64)
 			}
 		}
 	}
+}
+
+func (s *GossipStateProviderImpl) loadBlocksInRange(fromBlock, toBlock uint64) ([]*proto.Payload, error) {
+	// FIXME: Change to Debugf
+	logger.Infof("Loading blocks in range %d to %d for channel [%s]", fromBlock, toBlock, s.chainID)
+
+	var payloads []*proto.Payload
+
+	for num := fromBlock; num <= toBlock; num++ {
+		// Don't need to load the private data since we don't actually do anything with it on the endorser.
+		// FIXME: Change to Debugf
+		logger.Infof("Getting block %d for channel [%s]...", num, s.chainID)
+		block, err := s.peerLedger.GetBlockByNumber(num)
+		if err != nil {
+			return nil, errors.WithMessage(err, fmt.Sprintf("Error reading block and private data for block %d", num))
+		}
+
+		blockBytes, err := pb.Marshal(block)
+		if err != nil {
+			logger.Errorf("Could not marshal block: %+v", errors.WithStack(err))
+			return nil, errors.WithMessage(err, fmt.Sprintf("Error marshalling block %d", num))
+		}
+
+		payloads = append(payloads,
+			&proto.Payload{
+				SeqNum: num,
+				Data:   blockBytes,
+			},
+		)
+	}
+
+	return payloads, nil
 }
 
 // Generate state request message for given blocks in range [beginSeq...endSeq]
@@ -799,6 +863,19 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	return nil
 }
 
+func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
+	for _, payload := range payloads {
+		// FIXME: Change to Debugf
+		logger.Infof("Adding payload for block %d and channel [%s]...", payload.SeqNum, s.chainID)
+		if err := s.AddPayload(payload); err != nil {
+			return errors.WithMessage(err, fmt.Sprintf("Error adding payload for block %d", payload.SeqNum))
+		}
+		// FIXME: Change to Debugf
+		logger.Infof("Payload for block %d in channel [%s] was successfully added", payload.SeqNum, s.chainID)
+	}
+	return nil
+}
+
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 
 	if ledgerconfig.IsCommitter() {
@@ -807,17 +884,23 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 			logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 			return err
 		}
-	} else if err := s.publishBlock(block); err != nil {
-		logger.Errorf("Error publishing block: %s", err)
-		return err
+		// Update ledger height
+		s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
+		logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
+			s.chainID, block.Header.Number, len(block.Data.Data))
+		return nil
 	}
 
-	// Update ledger height
+	err := s.publishBlock(block)
+	if err != nil {
+		logger.Errorf("Error publishing block: %s", err)
+		// Don't return the error since it will cause a panic
+		return nil
+	}
+
 	// FIXME: Change to Debugf
-	logger.Infof("Updating ledger height to %d", block.Header.Number+1)
+	logger.Infof("Updating ledger height for channel [%s] to %d", s.chainID, block.Header.Number+1)
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
-	logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
-		s.chainID, block.Header.Number, len(block.Data.Data))
 
 	return nil
 }
@@ -831,6 +914,14 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 		return errors.New("cannot publish block with nil header")
 	}
 
+	currentHeight := s.blockPublisher.LedgerHeight()
+	if block.Header.Number < currentHeight-1 {
+		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
+	}
+
+	// FIXME: Should examine the block to see if it was a committed block (i.e. already loaded from the ledger) or
+	// if it's an uncommitted block coming from the orderer. (The uncommitted block will have nil set the the TxValidationFlags.)
+	// This will save the extra call to the DB.
 	block, err := s.getBlockFromLedger(block.Header.Number)
 	if err != nil {
 		return errors.Wrapf(err, "unable to get block number %d from ledger: %s", block.Header.Number, err)
