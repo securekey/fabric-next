@@ -30,6 +30,7 @@ const (
 // consumers of the new block
 type BlockPublisher interface {
 	AddBlock(block *cb.Block) error
+	BroadcastCheckpoint()
 }
 
 type publisher struct {
@@ -79,6 +80,9 @@ func (p *publisher) Publish(block *fabriccmn.Block) error {
 	}
 
 	p.blockNumber = block.Header.Number
+
+	logger.Debugf("[%s] Broadcasting checkpoint for block [%d]", p.channelID, block.Header.Number)
+	p.bp.BroadcastCheckpoint()
 
 	logger.Infof("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
 

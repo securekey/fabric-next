@@ -195,6 +195,10 @@ func (l *kvLedger) AddBlock(block *common.Block) error {
 	return l.blockStore.AddBlock(block)
 }
 
+func (l *kvLedger) BroadcastCheckpoint() {
+	l.blockStore.BroadcastCheckpoint()
+}
+
 // GetBlocksIterator returns an iterator that starts from `startBlockNumber`(inclusive).
 // The iterator is a blocking iterator i.e., it blocks till the next block gets available in the ledger
 // ResultsIterator contains type BlockHolder
@@ -292,6 +296,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 			panic(fmt.Errorf(`Error during commit to history db:%s`, err))
 		}
 	}
+
+	// Broadcast the checkpoint info now that all of the data has been successfully committed
+	logger.Debugf("[%s] Broadcasting checkpoint for block [%d]", l.ledgerID, blockNo)
+	l.blockStore.BroadcastCheckpoint()
 
 	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
 

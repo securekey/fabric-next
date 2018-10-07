@@ -329,9 +329,13 @@ func (s *cdbBlockStore) Shutdown() {
 }
 
 func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
+	s.cpInfo = cpInfo
+}
+
+// BroadcastCheckpoint lets everyone know that a new block has been committed
+func (s *cdbBlockStore) BroadcastCheckpoint() {
 	s.cpInfoCond.L.Lock()
 	defer s.cpInfoCond.L.Unlock()
-	s.cpInfo = cpInfo
-	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
+	logger.Debugf("Broadcasting checkpointInfo: %s", s.cpInfo)
 	s.cpInfoCond.Broadcast()
 }

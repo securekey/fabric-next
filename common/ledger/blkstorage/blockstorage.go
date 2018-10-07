@@ -65,6 +65,7 @@ type BlockStoreProvider interface {
 // of type `IndexConfig` which configures the block store on what items should be indexed
 type BlockStore interface {
 	AddBlock(block *common.Block) error
+	BroadcastCheckpoint()
 	GetBlockchainInfo() (*common.BlockchainInfo, error)
 	RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error)
 	RetrieveBlockByHash(blockHash []byte) (*common.Block, error)

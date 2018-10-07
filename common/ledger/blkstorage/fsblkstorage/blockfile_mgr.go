@@ -428,10 +428,14 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
 }
 
 func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
+	mgr.cpInfo = cpInfo
+}
+
+// BroadcastCheckpoint lets everyone know that a new block has been committed
+func (mgr *blockfileMgr) BroadcastCheckpoint() {
 	mgr.cpInfoCond.L.Lock()
 	defer mgr.cpInfoCond.L.Unlock()
-	mgr.cpInfo = cpInfo
-	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
+	logger.Debugf("Broadcasting about update checkpointInfo: %s", mgr.cpInfo)
 	mgr.cpInfoCond.Broadcast()
 }
 

@@ -43,6 +43,11 @@ func (store *fsBlockStore) AddBlock(block *common.Block) error {
 	return store.fileMgr.addBlock(block)
 }
 
+// Broadcast the checkpoint
+func (store *fsBlockStore) BroadcastCheckpoint() {
+	store.fileMgr.BroadcastCheckpoint()
+}
+
 // GetBlockchainInfo returns the current info about blockchain
 func (store *fsBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
 	return store.fileMgr.getBlockchainInfo(), nil
