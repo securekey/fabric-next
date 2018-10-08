@@ -1,6 +1,6 @@
-From e8f7826d0270876b724ba0f12f1065eac04d48b6 Mon Sep 17 00:00:00 2001
+From f265f2819fb3e5f6662b4a4aa70ef002c0b94f50 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Sun, 7 Oct 2018 14:10:17 -0400
+Date: Mon, 8 Oct 2018 12:11:45 -0400
 Subject: [PATCH] [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -187,7 +187,7 @@ index d6a9da6c0..a172735da 100644
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil.")
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
-index a2d03d6e8..57bb1c741 100644
+index f2a1a522b..f781d3fba 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 +++ b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 @@ -29,6 +29,7 @@ import (
@@ -210,10 +210,10 @@ index a2d03d6e8..57bb1c741 100644
  	if block.Header.Number != mgr.getBlockchainInfo().Height {
  		return fmt.Errorf("Block number should have been %d but was %d", mgr.getBlockchainInfo().Height, block.Header.Number)
  	}
-@@ -433,6 +439,12 @@ func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
+@@ -428,6 +434,12 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
+ }
  
- // BroadcastCheckpoint lets everyone know that a new block has been committed
- func (mgr *blockfileMgr) BroadcastCheckpoint() {
+ func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
 +	if metrics.IsDebug() {
 +		// Measure the whole
 +		stopWatch := metrics.RootScope.Timer("fsblkstorage_updateCheckpoint_time_seconds").Start()
@@ -222,8 +222,8 @@ index a2d03d6e8..57bb1c741 100644
 +
  	mgr.cpInfoCond.L.Lock()
  	defer mgr.cpInfoCond.L.Unlock()
- 	logger.Debugf("Broadcasting about update checkpointInfo: %s", mgr.cpInfo)
-@@ -594,6 +606,10 @@ func (mgr *blockfileMgr) loadCurrentInfo() (*checkpointInfo, error) {
+ 	mgr.cpInfo = cpInfo
+@@ -595,6 +607,10 @@ func (mgr *blockfileMgr) loadCurrentInfo() (*checkpointInfo, error) {
  }
  
  func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
@@ -2176,7 +2176,7 @@ index 130a8ac59..a3fc89abe 100644
 \ No newline at end of file
 +}
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 4e4be7d66..686a13a31 100644
+index 85d80ad67..a9d833897 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -16,6 +16,7 @@ import (
@@ -2187,7 +2187,7 @@ index 4e4be7d66..686a13a31 100644
  	"github.com/hyperledger/fabric/common/util"
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-@@ -260,6 +261,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
+@@ -261,6 +262,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
@@ -2201,7 +2201,7 @@ index 4e4be7d66..686a13a31 100644
  	var err error
  	block := pvtdataAndBlock.Block
  	blockNo := pvtdataAndBlock.Block.Header.Number
-@@ -281,6 +289,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -282,6 +290,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  	}
  	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
  
@@ -2212,7 +2212,7 @@ index 4e4be7d66..686a13a31 100644
  	startCommitState := time.Now()
  	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
  	if err = l.txtmgmt.Commit(); err != nil {
-@@ -313,6 +325,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -315,6 +327,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2226,7 +2226,7 @@ index 4e4be7d66..686a13a31 100644
  	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
-@@ -322,6 +341,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+@@ -324,6 +343,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
  // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
