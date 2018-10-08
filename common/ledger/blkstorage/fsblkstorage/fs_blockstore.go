@@ -43,9 +43,9 @@ func (store *fsBlockStore) AddBlock(block *common.Block) error {
 	return store.fileMgr.addBlock(block)
 }
 
-// Broadcast the checkpoint
-func (store *fsBlockStore) BroadcastCheckpoint() {
-	store.fileMgr.BroadcastCheckpoint()
+// CheckpointBlock sets the given block as checkpoint
+func (store *fsBlockStore) CheckpointBlock(block *common.Block) error {
+	return store.fileMgr.CheckpointBlock(block)
 }
 
 // GetBlockchainInfo returns the current info about blockchain

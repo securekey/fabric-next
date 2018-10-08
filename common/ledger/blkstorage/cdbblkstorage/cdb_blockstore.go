@@ -64,20 +64,18 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 
 // AddBlock adds a new block
 func (s *cdbBlockStore) AddBlock(block *common.Block) error {
-	if ledgerconfig.IsCommitter() {
-		// FIXME: Change to Debugf
-		logger.Infof("Storing block %d", block.Header.Number)
-		err := s.storeBlock(block)
-		if err != nil {
-			return err
-		}
-
-		err = s.storeTransactions(block)
-		if err != nil {
-			return err
-		}
+	if !ledgerconfig.IsCommitter() {
+		// Nothing to do if not a committer
+		return nil
 	}
-	return s.checkpointBlock(block)
+
+	// FIXME: Change to Debugf
+	logger.Infof("Storing block %d", block.Header.Number)
+	err := s.storeBlock(block)
+	if err != nil {
+		return err
+	}
+	return s.storeTransactions(block)
 }
 
 func (s *cdbBlockStore) storeBlock(block *common.Block) error {
@@ -113,7 +111,9 @@ func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
 	return nil
 }
 
-func (s *cdbBlockStore) checkpointBlock(block *common.Block) error {
+func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
+	logger.Infof("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
+
 	//Update the checkpoint info with the results of adding the new block
 	newCPInfo := &checkpointInfo{
 		isChainEmpty:    false,
@@ -329,13 +329,9 @@ func (s *cdbBlockStore) Shutdown() {
 }
 
 func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
-	s.cpInfo = cpInfo
-}
-
-// BroadcastCheckpoint lets everyone know that a new block has been committed
-func (s *cdbBlockStore) BroadcastCheckpoint() {
 	s.cpInfoCond.L.Lock()
 	defer s.cpInfoCond.L.Unlock()
+	s.cpInfo = cpInfo
 	logger.Debugf("Broadcasting checkpointInfo: %s", s.cpInfo)
 	s.cpInfoCond.Broadcast()
 }
