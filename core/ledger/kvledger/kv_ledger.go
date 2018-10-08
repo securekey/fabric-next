@@ -195,8 +195,9 @@ func (l *kvLedger) AddBlock(block *common.Block) error {
 	return l.blockStore.AddBlock(block)
 }
 
-func (l *kvLedger) BroadcastCheckpoint() {
-	l.blockStore.BroadcastCheckpoint()
+// CheckpointBlock sets the given block as checkpoint
+func (l *kvLedger) CheckpointBlock(block *common.Block) error {
+	return l.blockStore.CheckpointBlock(block)
 }
 
 // GetBlocksIterator returns an iterator that starts from `startBlockNumber`(inclusive).
@@ -297,9 +298,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		}
 	}
 
-	// Broadcast the checkpoint info now that all of the data has been successfully committed
-	logger.Debugf("[%s] Broadcasting checkpoint for block [%d]", l.ledgerID, blockNo)
-	l.blockStore.BroadcastCheckpoint()
+	// Set the checkpoint now that all of the data has been successfully committed
+	if err := l.blockStore.CheckpointBlock(block); err != nil {
+		panic(fmt.Errorf(`Error during checkpoint:%s`, err))
+	}
 
 	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
 
