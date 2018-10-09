@@ -1064,6 +1064,7 @@ type Properties struct {
 	LedgerHeight uint64       `protobuf:"varint,1,opt,name=ledger_height,json=ledgerHeight" json:"ledger_height,omitempty"`
 	LeftChannel  bool         `protobuf:"varint,2,opt,name=left_channel,json=leftChannel" json:"left_channel,omitempty"`
 	Chaincodes   []*Chaincode `protobuf:"bytes,3,rep,name=chaincodes" json:"chaincodes,omitempty"`
+	Roles        []string     `protobuf:"bytes,4,rep,name=roles" json:"roles,omitempty"`
 }
 
 func (m *Properties) Reset()                    { *m = Properties{} }
@@ -1088,6 +1089,13 @@ func (m *Properties) GetLeftChannel() bool {
 func (m *Properties) GetChaincodes() []*Chaincode {
 	if m != nil {
 		return m.Chaincodes
+	}
+	return nil
+}
+
+func (m *Properties) GetRoles() []string {
+	if m != nil {
+		return m.Roles
 	}
 	return nil
 }

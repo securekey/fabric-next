@@ -291,6 +291,24 @@ func IsCommitter() bool {
 	return HasRole(CommitterRole)
 }
 
+// Roles returns the roles for the peer
+func Roles() []Role {
+	var ret []Role
+	for role := range roles {
+		ret = append(ret, role)
+	}
+	return ret
+}
+
+// RolesAsString returns the roles for the peer
+func RolesAsString() []string {
+	var ret []string
+	for role := range roles {
+		ret = append(ret, string(role))
+	}
+	return ret
+}
+
 func getRoles() map[Role]struct{} {
 	exists := struct{}{}
 	strRoles := viper.GetString(confRoles)
