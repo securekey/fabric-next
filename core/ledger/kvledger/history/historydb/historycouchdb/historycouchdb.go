@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 
@@ -36,6 +35,10 @@ const (
 	heightDocBlockNumKey = "block_number"
 	// Key of the block-height document that will hold the number of transactions in the last committed block
 	heightDocTrxNumKey = "trx_number"
+	// Name of CouchDB index for the writeset we will be storing
+	writesetIndexName = "writeset-index"
+	// Name of design document for our CouchDB index
+	writesetIndexDesignDoc = "historydb"
 )
 
 var logger = flogging.MustGetLogger("historycouchdb")
@@ -45,9 +48,54 @@ func GetProductionCouchDBDefinition() *couchdb.CouchDBDef {
 	return couchdb.GetCouchDBDefinition()
 }
 
-// historyDBProvider implements interface historydb.HistoryDBProvider
+// Implementation of the historydb.HistoryDBProvider interface
 type historyDBProvider struct {
 	couchDBInstance *couchdb.CouchInstance
+}
+
+// Implementation of the historydb.HistoryDB interface
+type historyDB struct {
+	// CouchDB client
+	couchDB *couchdb.CouchDatabase
+	// CouchDB document revision for the savepoint
+	savepointRev string
+}
+
+// Model for write-sets metadata.
+type writeSet struct {
+	// Namespace of the key written to
+	Namespace string
+	// Key
+	Key string
+	// Block number in which the transaction is recorded
+	BlockNum uint64
+	// Transaction number within the block
+	TrxNum uint64
+}
+
+// Array of writeSets
+type writeSets []writeSet
+
+// Export this writeSet as a CouchDB doc.
+func (ws writeSet) asCouchDoc() (*couchdb.CouchDoc, error) {
+	bytes, err := json.Marshal(ws)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to marshal writeSet with values: %+v", ws)
+	}
+	return &couchdb.CouchDoc{JSONValue: bytes}, nil
+}
+
+// Export these writeSets as CouchDB docs.
+func (sets writeSets) asCouchDbDocs() ([]*couchdb.CouchDoc, error) {
+	var docs []*couchdb.CouchDoc
+	for _, write := range sets {
+		doc, err := write.asCouchDoc()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to export this writeSet as a CouchDB doc: %+v", write)
+		}
+		docs = append(docs, doc)
+	}
+	return docs, nil
 }
 
 // NewHistoryDBProvider instantiates historyDBProvider
@@ -73,6 +121,9 @@ func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.History
 		return nil, errors.Wrapf(err, "failed to get CouchDB document revision for savepoint with _id [%s]", heightDocIdKey)
 	}
 	logger.Debugf("CouchDB document revision for savepoint: %s", rev)
+	if err := provider.createIndexes(database); err != nil {
+		return nil, err
+	}
 	return &historyDB{couchDB: database, savepointRev: rev}, nil
 }
 
@@ -81,12 +132,25 @@ func (provider *historyDBProvider) Close() {
 	panic("Not implemented")
 }
 
-// historyDB implements HistoryDB interface
-type historyDB struct {
-	// CouchDB client
-	couchDB *couchdb.CouchDatabase
-	// CouchDB document revision for the savepoint
-	savepointRev string
+// Creates indexes if they don't exist already.
+func (provider *historyDBProvider) createIndexes(couchDB *couchdb.CouchDatabase) error {
+	writesetIdx := fmt.Sprintf(`
+		{
+			"index": {
+				"fields": ["Namespace", "Key"]
+			},
+			"name": "%s",
+			"ddoc": "%s",
+			"type": "json"
+		}`, writesetIndexName, writesetIndexDesignDoc)
+	// CreateIndex() does not return an error when the index already exists. Instead,
+	// CreateIndexResponse.Result will have the value "exists".
+	// Therefore we assume that CouchDB is safely handling any race conditions with the
+	// creation of this index even if this API does not return an error.
+	if _, err := couchDB.CreateIndex(writesetIdx); err != nil {
+		return errors.Wrapf(err, "failed to create CouchDB index for HistoryDB")
+	}
+	return nil
 }
 
 // NewHistoryQueryExecutor implements method in HistoryDB interface
@@ -97,24 +161,24 @@ func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockS
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
 	// We're only interested in writes from valid and endorsed transactions
-	keys, err := getModifiedKeysFromEndorsedTrxs(historyDB.couchDB.DBName, block)
+	writes, err := getWriteSetsFromEndorsedTrxs(historyDB.couchDB.DBName, block)
 	if err != nil {
 		return err
 	}
-	docs, err := keysToCouchDocs(keys)
+	docs, err := writes.asCouchDbDocs()
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to convert write-sets to CouchDB documents")
 	}
 	// Create CouchDB doc savepoint
 	heightDoc, err := newSavepointDoc(newHeight(block), historyDB.savepointRev)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to construct a new savepoint for historycouchdb")
 	}
 	docs = append(docs, heightDoc)
-	// Save to CouchDB
+	// Save write-sets + savepoint to CouchDB
 	results, err := historyDB.couchDB.BatchUpdateDocuments(docs)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to save history batch to CouchDB")
 	}
 	// Save the savepoint's new revision for the next commit
 	for _, result := range results {
@@ -164,21 +228,6 @@ func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtD
 	return fmt.Errorf("Not implemented")
 }
 
-// Converts the given keys into CouchDB docs
-func keysToCouchDocs(keys []string) ([]*couchdb.CouchDoc, error) {
-	var docs []*couchdb.CouchDoc
-	for _, key := range keys {
-		doc := make(map[string]interface{})
-		doc["_id"] = key
-		bytes, err := json.Marshal(doc)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error marshalling write [%s] to json", key)
-		}
-		docs = append(docs, &couchdb.CouchDoc{JSONValue: bytes})
-	}
-	return docs, nil
-}
-
 // Returns a new CouchDB savepoint document for the new savepoint.
 // The document's revision will be set only if 'rev' is not empty.
 func newSavepointDoc(height *version.Height, rev string) (*couchdb.CouchDoc, error) {
@@ -204,9 +253,9 @@ func newHeight(block *common.Block) *version.Height {
 	)
 }
 
-// Returns the set of modified keys from valid and endorsed transactions.
-func getModifiedKeysFromEndorsedTrxs(channel string, block *common.Block) ([]string, error) {
-	keys := []string{}
+// Returns write-sets from valid and endorsed transactions.
+func getWriteSetsFromEndorsedTrxs(channel string, block *common.Block) (writeSets, error) {
+	writes := writeSets{}
 	var tranNo uint64
 	logger.Debugf(
 		"Channel [%s]: Updating history database for blockNo [%v] with [%d] transactions",
@@ -249,7 +298,7 @@ func getModifiedKeysFromEndorsedTrxs(channel string, block *common.Block) ([]str
 			}
 			for _, nsRWSet := range txRWSet.NsRwSets {
 				for _, kvWrite := range nsRWSet.KvRwSet.Writes {
-					keys = append(keys, composeKey(nsRWSet.NameSpace, kvWrite.Key, block.Header.Number, tranNo))
+					writes = append(writes, writeSet{nsRWSet.NameSpace, kvWrite.Key, block.Header.Number, tranNo})
 				}
 			}
 
@@ -258,32 +307,5 @@ func getModifiedKeysFromEndorsedTrxs(channel string, block *common.Block) ([]str
 		}
 		tranNo++
 	}
-	return keys, nil
-}
-
-// Builds a composite key of the form "namespace-key-blockNum-trxNum" for use as CouchDB _id.
-// This operation and decomposeKey() are symmetrical.
-// We choose to include the block number and transaction number in order to make the key unique and
-// create new CouchDB documents when saving modifications for the same namespace-key combination.
-// This avoids loss of data due to CouchDB compaction.
-func composeKey(namespace, key string, blockNum, trxNum uint64) string {
-	return fmt.Sprintf("%s-%s-%d-%d", namespace, key, blockNum, trxNum)
-}
-
-// Decomposes a key built using composeKey() into its ordered parts.
-// This operation and composeKey() are symmetrical.
-func decomposeKey(composite string) (namespace, key string, height *version.Height, err error) {
-	parts := strings.Split(composite, "-")
-	if len(parts) != 4 {
-		return "", "", nil, errors.New(fmt.Sprintf("[%s] does not match the expected format for composite keys: namespace-key-blockNum-trxNum", composite))
-	}
-	blockNum, err := strconv.ParseUint(parts[2], 10, 64)
-	if err != nil {
-		return "", "", nil, errors.Wrapf(err, "failed to parse block number from composite key [%s]", composite)
-	}
-	trxNum, err := strconv.ParseUint(parts[3], 10, 64)
-	if err != nil {
-		return "", "", nil, errors.Wrapf(err, "failed to parse transaction number from composite key [%s]", composite)
-	}
-	return parts[0], parts[1], version.NewHeight(blockNum, trxNum), nil
+	return writes, nil
 }
