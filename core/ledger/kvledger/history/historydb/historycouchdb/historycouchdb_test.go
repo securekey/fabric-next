@@ -74,9 +74,7 @@ func TestDbHandleCommitsWriteSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, _, err := queryCouchDbById(
-		def, dbname, formatKey(namespace, key, blockNum, uint64(0)),
-	)
+	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.NotEmpty(t, results, "write-sets must be saved to history couchdb")
 }
@@ -263,9 +261,7 @@ func TestDbHandleDoesNotCommitNonEndorsementWriteSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, _, err := queryCouchDbById(
-		def, dbname, formatKey(namespace, key, blockNum, uint64(0)),
-	)
+	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.Empty(t, results, "non-endorsement transactions must not be saved to history couchdb")
 }
@@ -305,9 +301,7 @@ func TestDbHandleDoesNotCommitInvalidWriteSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, _, err := queryCouchDbById(
-		def, dbname, formatKey(namespace, key, blockNum, uint64(0)),
-	)
+	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.Empty(t, results, "transactions that don't have peer.TxValidationCode_VALID set must not be saved to history couchdb")
 }
@@ -346,9 +340,7 @@ func TestDbHandleDoesNotCommitReadSet(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	results, _, err := queryCouchDbById(
-		def, dbname, formatKey(namespace, key, blockNum, trxNum),
-	)
+	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
 	require.NoError(t, err, "failed to query test CouchDB")
 	assert.Empty(t, results, "read-sets must not be saved to history couchdb")
 }
@@ -359,6 +351,21 @@ func queryCouchDbById(def *couchdb.CouchDBDef, dbname, id string) (*couchdb.Couc
 		def,
 		couchdb.ConstructBlockchainDBName(dbname, dbNameSuffix),
 	).ReadDoc(id)
+}
+
+// Query CouchDB for writesets for the given namespace and key.
+func queryCouchDbByNsAndKey(def *couchdb.CouchDBDef, dbname, namespace, key string) (*[]couchdb.QueryResult, error) {
+	return newCouchDbClient(
+		def,
+		couchdb.ConstructBlockchainDBName(dbname, dbNameSuffix),
+	).QueryDocuments(fmt.Sprintf(`
+		{
+			"selector": {
+				"Namespace": "%s",
+				"Key": "%s"
+			}
+		}
+	`, namespace, key))
 }
 
 // Start a CouchDB test instance.
