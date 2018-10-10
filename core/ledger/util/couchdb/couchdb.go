@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -1093,6 +1094,9 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) (*[]QueryResult, err
 			couchDoc, _, err := dbclient.ReadDoc(docMetadata.ID)
 			if err != nil {
 				return nil, err
+			}
+			if couchDoc == nil {
+				return nil, errors.Errorf("document not found [%s]", docMetadata.ID)
 			}
 			var addDocument = &QueryResult{ID: docMetadata.ID, Value: couchDoc.JSONValue, Attachments: couchDoc.Attachments}
 			results = append(results, *addDocument)
