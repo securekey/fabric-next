@@ -950,9 +950,9 @@ func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Blo
 				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
 				return nil, errors.WithMessage(err, "Unable to get block height from ledger")
 			}
-			if ledgerHeight < number {
+			if ledgerHeight-1 < number {
 				// FIXME: Change to Debugf
-				logger.Infof("Block %d for channel [%s] hasn't been committed yet. Ledger height in DB is %d", number, s.chainID, ledgerHeight)
+				logger.Infof("Block %d for channel [%s] hasn't been committed yet. Last block committed in DB is %d", number, s.chainID, ledgerHeight-1)
 				return nil, errors.Errorf("Block %d for channel [%s] hasn't been committed yet", number, s.chainID)
 			}
 
