@@ -69,8 +69,7 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 		return nil
 	}
 
-	// FIXME: Change to Debugf
-	logger.Infof("Storing block %d", block.Header.Number)
+	logger.Debugf("Storing block %d", block.Header.Number)
 	err := s.storeBlock(block)
 	if err != nil {
 		return err
@@ -112,8 +111,7 @@ func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
 }
 
 func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
-	// FIXME: Change to Debugf
-	logger.Infof("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
+	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
 
 	//Update the checkpoint info with the results of adding the new block
 	newCPInfo := &checkpointInfo{
@@ -121,16 +119,14 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 		lastBlockNumber: block.Header.Number}
 
 	if ledgerconfig.IsCommitter() {
-		// FIXME: Change to Debugf
-		logger.Infof("Saving checkpoint info for block %d", block.Header.Number)
+		logger.Debugf("Saving checkpoint info for block %d", block.Header.Number)
 		//save the checkpoint information in the database
 		err := s.cp.saveCurrentInfo(newCPInfo)
 		if err != nil {
 			return errors.WithMessage(err, "adding cpInfo to couchDB failed")
 		}
 	} else {
-		// FIXME: Change to Debugf
-		logger.Infof("Not saving checkpoint info for block %d since I'm not a committer. Just publishing the block.", block.Header.Number)
+		logger.Debugf("Not saving checkpoint info for block %d since I'm not a committer. Just publishing the block.", block.Header.Number)
 	}
 
 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager

@@ -341,8 +341,7 @@ func (gc *gossipChannel) GetPeers() []discovery.NetworkMember {
 		member.Envelope = stateInf.Envelope
 		members = append(members, member)
 
-		// FIXME: Change to Debugf
-		gc.logger.Infof("[%s] Adding member [%s] - Height: %d, Roles: %s", gc.chainID, member.Endpoint, member.Properties.LedgerHeight, member.Properties.Roles)
+		gc.logger.Debugf("[%s] Adding member [%s] - Height: %d, Roles: %s", gc.chainID, member.Endpoint, member.Properties.LedgerHeight, member.Properties.Roles)
 	}
 	return members
 }
