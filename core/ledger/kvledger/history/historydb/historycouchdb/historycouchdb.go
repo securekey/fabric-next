@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 
 	"github.com/hyperledger/fabric/common/flogging"
@@ -218,12 +220,22 @@ func (historyDB *historyDB) GetLastSavepoint() (*version.Height, error) {
 	return version.NewHeight(blockNum, trxNum), nil
 }
 
-// ShouldRecover implements method in interface kvledger.Recoverer
+// ShouldRecover implements method in interface historydb.HistoryDB
 func (historyDB *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error) {
-	return false, 0, fmt.Errorf("Not implemented")
+	if !ledgerconfig.IsHistoryDBEnabled() {
+		return false, 0, nil
+	}
+	savepoint, err := historyDB.GetLastSavepoint()
+	if err != nil {
+		return false, 0, err
+	}
+	if savepoint == nil {
+		return true, 0, nil
+	}
+	return savepoint.BlockNum != lastAvailableBlock, savepoint.BlockNum + 1, nil
 }
 
-// CommitLostBlock implements method in interface kvledger.Recoverer
+// CommitLostBlock implements method in interface historydb.HistoryDB
 func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	return fmt.Errorf("Not implemented")
 }
