@@ -231,8 +231,7 @@ func validateConfigBlock(block *common.Block) error {
 func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider) pb.Response {
 	if ledgerconfig.IsCommitter() {
 		// Only a committer can create a new channel in the DB
-		// FIXME: Change to Debugf
-		cnflogger.Infof("Creating channel [%s]", chainID)
+		cnflogger.Debugf("Creating channel [%s]", chainID)
 		if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
 			return shim.Error(err.Error())
 		}

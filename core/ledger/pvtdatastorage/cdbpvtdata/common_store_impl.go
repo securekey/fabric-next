@@ -133,39 +133,32 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 }
 
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-	// FIXME: Change to Debugf
-	logger.Infof("Get private data for block [%d] from DB [%s], filter=%#v", blockNum, s.db.DBName, filter)
+	logger.Debugf("Get private data for block [%d] from DB [%s], filter=%#v", blockNum, s.db.DBName, filter)
 	if s.isEmpty {
 		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 	}
 	lastCommittedBlock, err := s.getLastCommittedBlock()
 	if err != nil {
-		// FIXME: Change to Debugf
-		logger.Infof("Error getting last committed block from DB [%s]: %s", s.db.DBName, err)
+		logger.Debugf("Error getting last committed block from DB [%s]: %s", s.db.DBName, err)
 		return nil, errors.Wrap(err, "unable to get last committed block")
 	}
 	if blockNum > lastCommittedBlock {
-		// FIXME: Change to Debugf
-		logger.Infof("Block %d is greater than last committed block %d in DB [%s]", blockNum, lastCommittedBlock, s.db.DBName)
+		logger.Debugf("Block %d is greater than last committed block %d in DB [%s]", blockNum, lastCommittedBlock, s.db.DBName)
 		return nil, pvtdatastorage.NewErrOutOfRange(fmt.Sprintf("Last committed block=%d, block requested=%d", lastCommittedBlock, blockNum))
 	}
-	// FIXME: Change to Debugf
-	logger.Infof("Querying private data storage for write sets using blockNum=%d in DB [%s]", blockNum, s.db.DBName)
+	logger.Debugf("Querying private data storage for write sets using blockNum=%d in DB [%s]", blockNum, s.db.DBName)
 
 	results, err := s.getPvtDataByBlockNumDB(blockNum)
 	if err != nil {
 		if _, ok := err.(*NotFoundInIndexErr); ok {
-			// FIXME: Change to Debugf
-			logger.Infof("No private data for block %d in DB [%s]: %s", blockNum, s.db.DBName)
+			logger.Debugf("No private data for block %d in DB [%s]: %s", blockNum, s.db.DBName)
 			return nil, nil
 		}
-		// FIXME: Change to Debugf
-		logger.Infof("Error getting private data for block %d in DB [%s]: %s", blockNum, s.db.DBName, err)
+		logger.Debugf("Error getting private data for block %d in DB [%s]: %s", blockNum, s.db.DBName, err)
 		return nil, err
 	}
 
-	// FIXME: Change to Debugf
-	logger.Infof("Got private data results for block %d in DB [%s]: %#v", blockNum, s.db.DBName, results)
+	logger.Debugf("Got private data results for block %d in DB [%s]: %#v", blockNum, s.db.DBName, results)
 
 	var blockPvtdata []*ledger.TxPvtData
 	var currentTxNum uint64
@@ -208,8 +201,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 		blockPvtdata = append(blockPvtdata, currentTxWsetAssember.getTxPvtdata())
 	}
 
-	// FIXME: Change to Debugf
-	logger.Infof("Successfully retrieved private data for block %d in DB [%s]: %#v", blockNum, s.db.DBName, blockPvtdata)
+	logger.Debugf("Successfully retrieved private data for block %d in DB [%s]: %#v", blockNum, s.db.DBName, blockPvtdata)
 	return blockPvtdata, nil
 
 }
@@ -296,8 +288,7 @@ func (s *store) getLastCommittedBlock() (uint64, error) {
 	if ledgerconfig.IsCommitter() {
 		return s.lastCommittedBlock, nil
 	}
-	// FIXME: Change to Debugf
-	logger.Infof("I am not a committer so looking up last committed block from meta data for [%s]", s.db.DBName)
+	logger.Debugf("I am not a committer so looking up last committed block from meta data for [%s]", s.db.DBName)
 	return s.getLastCommittedBlockFromMetaData()
 }
 
@@ -308,11 +299,9 @@ func (s *store) getLastCommittedBlockFromMetaData() (uint64, error) {
 		return 0, err
 	}
 	if !ok {
-		// FIXME: Change to Debugf
-		logger.Infof("Meta data for [%s] is empty", s.db.DBName)
+		logger.Debugf("Meta data for [%s] is empty", s.db.DBName)
 		return 0, nil
 	}
-	// FIXME: Change to Debugf
-	logger.Infof("Returning lastCommittedBlock %d from meta data for [%s]", m.lastCommitedBlock, s.db.DBName)
+	logger.Debugf("Returning lastCommittedBlock %d from meta data for [%s]", m.lastCommitedBlock, s.db.DBName)
 	return m.lastCommitedBlock, nil
 }

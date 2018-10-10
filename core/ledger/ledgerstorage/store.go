@@ -218,8 +218,7 @@ func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsC
 // to follow the normal course
 func (s *Store) init() error {
 	if !ledgerconfig.IsCommitter() {
-		// FIXME: Change to Debugf
-		logger.Infof("Will not init pvt data since I am not a committer")
+		logger.Debugf("Will not init pvt data since I am not a committer")
 		return nil
 	}
 
