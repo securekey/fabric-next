@@ -940,18 +940,40 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 
 func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Block, error) {
 	// TODO: Make configurable
-	maxAttempts := 10
+	maxAttempts := 20
 	block, err := retry.Invoke(
 		func() (interface{}, error) {
+			// Get the height from the ledger to see if the committer has finished committing. The ledger height is retrieved
+			// from the checkpoint info, and checkpoint info is committed after the block, state, and pvt data.
+			ledgerHeight, err := s.ledger.LedgerHeight()
+			if err != nil {
+				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+				return nil, errors.WithMessage(err, "Unable to get block height from ledger")
+			}
+			if ledgerHeight < number {
+				// FIXME: Change to Debugf
+				logger.Infof("Block %d for channel [%s] hasn't been committed yet. Ledger height in DB is %d", number, s.chainID, ledgerHeight)
+				return nil, errors.Errorf("Block %d for channel [%s] hasn't been committed yet", number, s.chainID)
+			}
+
+			// FIXME: Change to Debugf
+			logger.Infof("Getting block %d for channel [%s] from ledger", number, s.chainID)
 			return s.peerLedger.GetBlockByNumber(number)
 		},
 		retry.WithMaxAttempts(maxAttempts),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			// FIXME: Change to Debugf
+			logger.Infof("Got error on attempt #%d: %s. Retrying in %s.", attempt, err, backoff)
+			return true
+		}),
 	)
 	if err != nil {
+		logger.Errorf("Unable to get block number %d from ledger after %d attempts: %s", number, maxAttempts, err)
 		return nil, errors.Wrapf(err, "Unable to get block number %d from ledger", number)
 	}
 
 	if block == nil {
+		logger.Errorf("Got nil block for number %d from ledger after %d attempts", number, maxAttempts)
 		return nil, errors.Errorf("Got nil block for number %d", number)
 	}
 
