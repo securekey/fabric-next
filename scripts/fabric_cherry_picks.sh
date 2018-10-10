@@ -22,7 +22,7 @@ git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
 # Fabric 1.3 (Oct 3, 2018)
-git checkout 3663e86a474a1a914d48ddeb7e39271c97975ce3
+git checkout v1.3.0
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
