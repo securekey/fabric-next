@@ -914,16 +914,16 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 	// FIXME: Should examine the block to see if it was a committed block (i.e. already loaded from the ledger) or
 	// if it's an uncommitted block coming from the orderer. (The uncommitted block will have nil set the the TxValidationFlags.)
 	// This will save the extra call to the DB.
-	block, err := s.getBlockFromLedger(block.Header.Number)
+	committedBlock, err := s.getBlockFromLedger(block.Header.Number)
 	if err != nil {
 		return errors.Wrapf(err, "unable to get block number %d from ledger: %s", block.Header.Number, err)
 	}
 
-	if block == nil {
+	if committedBlock == nil {
 		return errors.Errorf("nil block retrieved from ledger for block number %d", block.Header.Number)
 	}
 
-	if err := s.blockPublisher.Publish(block); err != nil {
+	if err := s.blockPublisher.Publish(committedBlock); err != nil {
 		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
 
