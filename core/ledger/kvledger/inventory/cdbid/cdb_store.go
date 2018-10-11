@@ -35,9 +35,16 @@ func OpenStore() (*Store, error) {
 		return nil, err
 	}
 
-	err = createIndices(db)
+	indicesExist, err := indicesCreated(db)
 	if err != nil {
 		return nil, err
+	}
+
+	if !indicesExist {
+		err = createIndices(db)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s := Store {db}
@@ -45,12 +52,28 @@ func OpenStore() (*Store, error) {
 }
 
 func createIndices(db *couchdb.CouchDatabase) error {
-	// TODO: only create index if it doesn't exist
 	_, err := db.CreateIndex(inventoryTypeIndexDef)
 	if err != nil {
 		return errors.WithMessage(err, "creation of inventory metadata index failed")
 	}
 	return nil
+}
+
+func indicesCreated(db *couchdb.CouchDatabase) (bool, error) {
+	var inventoryTypeIndexExists bool
+
+	indices, err := db.ListIndex()
+	if err != nil {
+		return false, errors.WithMessage(err, "retrieval of DB index list failed")
+	}
+
+	for _, i := range indices {
+		if i.DesignDocument == inventoryTypeIndexDoc {
+			inventoryTypeIndexExists = true
+		}
+	}
+
+	return inventoryTypeIndexExists, nil
 }
 
 func createCouchInstance() (*couchdb.CouchInstance, error) {
