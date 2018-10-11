@@ -9,6 +9,8 @@ package cdbid
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/util/retry"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
@@ -30,26 +32,104 @@ func OpenStore() (*Store, error) {
 	}
 
 	inventoryDBName := couchdb.ConstructBlockchainDBName(systemID, inventoryName)
-	db, err := couchdb.CreateCouchDatabase(couchInstance, inventoryDBName)
+
+	if ledgerconfig.IsCommitter() {
+		return newCommitterStore(couchInstance, inventoryDBName)
+	}
+
+	return newStore(couchInstance, inventoryDBName)
+}
+
+func newStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, error) {
+	// TODO: Make configurable
+	maxAttempts := 10
+
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	indicesExist, err := indicesCreated(db)
+	_, err = retry.Invoke(
+		func() (interface{}, error) {
+			dbInfo, couchDBReturn, err := db.GetDatabaseInfo()
+			if err != nil {
+				return nil, err
+			}
+
+			//If the dbInfo returns populated and status code is 200, then the database exists
+			if dbInfo == nil || couchDBReturn.StatusCode != 200 {
+				return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+			}
+
+			indicesExist, err := indicesCreated(db)
+			if err != nil {
+				return nil, err
+			}
+			if !indicesExist {
+				return nil, errors.Errorf("DB indices not found: [%s]", db.DBName)
+			}
+
+			// DB and indices exists
+			return nil, nil
+		},
+		retry.WithMaxAttempts(maxAttempts),
+	)
+
 	if err != nil {
 		return nil, err
-	}
-
-	if !indicesExist {
-		err = createIndices(db)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	s := Store {db}
 	return &s, nil
 }
+
+
+func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, error) {
+	// TODO: Make configurable
+	const maxAttempts = 10
+
+	dbUT, err := retry.Invoke(
+		func() (interface{}, error) {
+			db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+			if err != nil {
+				return nil, err
+			}
+
+			err = createIndicesIfNotExist(db)
+			if err != nil {
+				return nil, err
+			}
+			return db, nil
+		},
+		retry.WithMaxAttempts(maxAttempts),
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbUT.(*couchdb.CouchDatabase)
+
+	s := Store {db}
+	return &s, nil
+}
+
+func createIndicesIfNotExist(db *couchdb.CouchDatabase) error {
+	indicesExist, err := indicesCreated(db)
+	if err != nil {
+		return err
+	}
+
+	if !indicesExist {
+		err = createIndices(db)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 
 func createIndices(db *couchdb.CouchDatabase) error {
 	_, err := db.CreateIndex(inventoryTypeIndexDef)
