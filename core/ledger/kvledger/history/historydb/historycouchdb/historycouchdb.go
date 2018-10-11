@@ -39,6 +39,8 @@ const (
 	heightDocTrxNumKey = "trx_number"
 	// Name of CouchDB index for the writeset we will be storing
 	writesetIndexName = "writeset-index"
+	// Name of CouchDB index for sorting the writesets
+	sortIndexName = "writeset-sort-index"
 	// Name of design document for our CouchDB index
 	writesetIndexDesignDoc = "historydb"
 )
@@ -191,19 +193,34 @@ func createIndexes(couchDB *couchdb.CouchDatabase) error {
 			"ddoc": "%s",
 			"type": "json"
 		}`, writesetIndexName, writesetIndexDesignDoc)
-	// CreateIndex() does not return an error when the index already exists. Instead,
-	// CreateIndexResponse.Result will have the value "exists".
-	// Therefore we assume that CouchDB is safely handling any race conditions with the
-	// creation of this index even if this API does not return an error.
-	if _, err := couchDB.CreateNewIndexWithRetry(writesetIdx, writesetIndexDesignDoc); err != nil {
-		return errors.Wrapf(err, "failed to create CouchDB index for HistoryDB")
+	sortIdx := fmt.Sprintf(`
+		{
+			"index": {
+				"fields": ["BlockNum", "TrxNum"]
+			},
+			"name": "%s",
+			"ddoc": "%s",
+			"type": "json"
+		}
+	`, sortIndexName, writesetIndexDesignDoc)
+	for _, index := range []string{writesetIdx, sortIdx} {
+		// CreateIndex() does not return an error when the index already exists. Instead,
+		// CreateIndexResponse.Result will have the value "exists".
+		// Therefore we assume that CouchDB is safely handling any race conditions with the
+		// creation of this index even if this API does not return an error.
+		if _, err := couchDB.CreateIndex(index); err != nil {
+			return errors.Wrapf(err, "failed to create this CouchDB index for HistoryDB: [%s]", index)
+		}
 	}
 	return nil
 }
 
 // NewHistoryQueryExecutor implements method in HistoryDB interface
 func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockStore) (ledger.HistoryQueryExecutor, error) {
-	return nil, fmt.Errorf("Not implemented")
+	return &queryExecutor{
+		blockStore: blockStore,
+		couchDB:    historyDB.couchDB,
+	}, nil
 }
 
 // Commit implements method in HistoryDB interface

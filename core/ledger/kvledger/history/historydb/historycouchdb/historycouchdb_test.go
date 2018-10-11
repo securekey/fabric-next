@@ -8,8 +8,11 @@ package historycouchdb
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/mocks"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb/mocks"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/integration/runner"
@@ -19,8 +22,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 // Can create a new HistoryDBProvider
@@ -144,7 +145,7 @@ func TestGetLastSavePointReturnsBlockHeight(t *testing.T) {
 				&rwsetutil.NsRwSet{
 					NameSpace: "namespace",
 					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum1, TxNum: uint64(5)}}},
+						Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum1, TxNum: uint64(5)}}},
 						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
 					},
 				},
@@ -165,7 +166,7 @@ func TestGetLastSavePointReturnsBlockHeight(t *testing.T) {
 				&rwsetutil.NsRwSet{
 					NameSpace: "namespace",
 					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
+						Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
 						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
 					},
 				},
@@ -174,7 +175,7 @@ func TestGetLastSavePointReturnsBlockHeight(t *testing.T) {
 				&rwsetutil.NsRwSet{
 					NameSpace: "namespace",
 					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
+						Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
 						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_other_value")}},
 					},
 				},
