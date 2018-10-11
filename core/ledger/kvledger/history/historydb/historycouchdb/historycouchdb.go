@@ -114,7 +114,7 @@ func NewHistoryDBProvider(couchDBDef *couchdb.CouchDBDef) (historydb.HistoryDBPr
 
 // GetDBHandle gets the handle to a named database
 func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.HistoryDB, error) {
-	database, err := couchdb.CreateCouchDatabase(provider.couchDBInstance, couchdb.ConstructBlockchainDBName(dbName, dbNameSuffix))
+	database, err := createCouchDatabase(provider.couchDBInstance, couchdb.ConstructBlockchainDBName(dbName, dbNameSuffix))
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining handle on CouchDB HistoryDB failed")
 	}
@@ -123,10 +123,56 @@ func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.History
 		return nil, errors.Wrapf(err, "failed to get CouchDB document revision for savepoint with _id [%s]", heightDocIdKey)
 	}
 	logger.Debugf("CouchDB document revision for savepoint: %s", rev)
-	if err := provider.createIndexes(database); err != nil {
+	return &historyDB{couchDB: database, savepointRev: rev}, nil
+}
+
+
+func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	if ledgerconfig.IsCommitter() {
+		return createCouchDatabaseCommitter(couchInstance, dbName)
+	}
+
+	return createCouchDatabaseEndorser(couchInstance, dbName)
+}
+
+func createCouchDatabaseCommitter(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+	if err != nil {
 		return nil, err
 	}
-	return &historyDB{couchDB: database, savepointRev: rev}, nil
+
+	err = createIndexes(db)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+
+	if !dbExists {
+		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+	}
+
+	indexExists, err := db.IndexDesignDocExistsWithRetry(writesetIndexDesignDoc)
+	if err != nil {
+		return nil, err
+	}
+	if !indexExists {
+		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
+	}
+
+	return db, nil
 }
 
 // Close closes the underlying db
@@ -135,7 +181,7 @@ func (provider *historyDBProvider) Close() {
 }
 
 // Creates indexes if they don't exist already.
-func (provider *historyDBProvider) createIndexes(couchDB *couchdb.CouchDatabase) error {
+func createIndexes(couchDB *couchdb.CouchDatabase) error {
 	writesetIdx := fmt.Sprintf(`
 		{
 			"index": {
@@ -149,7 +195,7 @@ func (provider *historyDBProvider) createIndexes(couchDB *couchdb.CouchDatabase)
 	// CreateIndexResponse.Result will have the value "exists".
 	// Therefore we assume that CouchDB is safely handling any race conditions with the
 	// creation of this index even if this API does not return an error.
-	if _, err := couchDB.CreateIndex(writesetIdx); err != nil {
+	if _, err := couchDB.CreateNewIndexWithRetry(writesetIdx, writesetIndexDesignDoc); err != nil {
 		return errors.Wrapf(err, "failed to create CouchDB index for HistoryDB")
 	}
 	return nil

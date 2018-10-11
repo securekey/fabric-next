@@ -29,7 +29,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-	logging "github.com/op/go-logging"
+	"github.com/op/go-logging"
 )
 
 var logger = flogging.MustGetLogger("couchdb")

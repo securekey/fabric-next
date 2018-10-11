@@ -9,6 +9,7 @@ package cdbid
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
@@ -30,21 +31,50 @@ func OpenStore() (*Store, error) {
 	}
 
 	inventoryDBName := couchdb.ConstructBlockchainDBName(systemID, inventoryName)
-	db, err := couchdb.CreateCouchDatabase(couchInstance, inventoryDBName)
+
+	if ledgerconfig.IsCommitter() {
+		return newCommitterStore(couchInstance, inventoryDBName)
+	}
+
+	return newStore(couchInstance, inventoryDBName)
+}
+
+func newStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	indicesExist, err := indicesCreated(db)
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+	if !dbExists {
+		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+	}
+
+	indexExists, err := db.IndexDesignDocExistsWithRetry(inventoryTypeIndexDoc)
+	if err != nil {
+		return nil, err
+	}
+	if !indexExists {
+		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
+	}
+
+	s := Store {db}
+	return &s, nil
+}
+
+
+func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, error) {
+	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	if !indicesExist {
-		err = createIndices(db)
-		if err != nil {
-			return nil, err
-		}
+	err = createIndices(db)
+	if err != nil {
+		return nil, err
 	}
 
 	s := Store {db}
@@ -52,28 +82,11 @@ func OpenStore() (*Store, error) {
 }
 
 func createIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateIndex(inventoryTypeIndexDef)
+	_, err := db.CreateNewIndexWithRetry(inventoryTypeIndexDef, inventoryTypeIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of inventory metadata index failed")
 	}
 	return nil
-}
-
-func indicesCreated(db *couchdb.CouchDatabase) (bool, error) {
-	var inventoryTypeIndexExists bool
-
-	indices, err := db.ListIndex()
-	if err != nil {
-		return false, errors.WithMessage(err, "retrieval of DB index list failed")
-	}
-
-	for _, i := range indices {
-		if i.DesignDocument == inventoryTypeIndexDoc {
-			inventoryTypeIndexExists = true
-		}
-	}
-
-	return inventoryTypeIndexExists, nil
 }
 
 func createCouchInstance() (*couchdb.CouchInstance, error) {
