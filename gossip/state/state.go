@@ -632,8 +632,7 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 				if ourHeight >= maxHeight {
 					continue
 				}
-				// FIXME: Change to Debugf
-				logger.Infof("I am a committer. Requesting blocks in range [%d:%d] for channel [%s]...", ourHeight-1, uint64(maxHeight)-1, s.chainID)
+				logger.Debugf("I am a committer. Requesting blocks in range [%d:%d] for channel [%s]...", ourHeight-1, uint64(maxHeight)-1, s.chainID)
 				s.requestBlocksInRange(uint64(ourHeight), uint64(maxHeight)-1)
 			} else {
 				// No need to request blocks from other peers since we just need to make sure that our in-memory
@@ -644,11 +643,9 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 					continue
 				}
 
-				// FIXME: Change to Debugf
-				logger.Infof("Endorser height [%d], ledger height [%d] for channel [%s]", ourHeight, ledgerHeight, s.chainID)
+				logger.Debugf("Endorser height [%d], ledger height [%d] for channel [%s]", ourHeight, ledgerHeight, s.chainID)
 				if ourHeight >= ledgerHeight {
-					// FIXME: Change to Debugf
-					logger.Infof("Endorser height [%d], ledger height [%d] for channel [%s]. No need to load blocks from DB.", ourHeight, ledgerHeight, s.chainID)
+					logger.Debugf("Endorser height [%d], ledger height [%d] for channel [%s]. No need to load blocks from DB.", ourHeight, ledgerHeight, s.chainID)
 					continue
 				}
 
@@ -743,15 +740,13 @@ func (s *GossipStateProviderImpl) requestBlocksInRange(start uint64, end uint64)
 }
 
 func (s *GossipStateProviderImpl) loadBlocksInRange(fromBlock, toBlock uint64) ([]*proto.Payload, error) {
-	// FIXME: Change to Debugf
-	logger.Infof("Loading blocks in range %d to %d for channel [%s]", fromBlock, toBlock, s.chainID)
+	logger.Debugf("Loading blocks in range %d to %d for channel [%s]", fromBlock, toBlock, s.chainID)
 
 	var payloads []*proto.Payload
 
 	for num := fromBlock; num <= toBlock; num++ {
 		// Don't need to load the private data since we don't actually do anything with it on the endorser.
-		// FIXME: Change to Debugf
-		logger.Infof("Getting block %d for channel [%s]...", num, s.chainID)
+		logger.Debugf("Getting block %d for channel [%s]...", num, s.chainID)
 		block, err := s.peerLedger.GetBlockByNumber(num)
 		if err != nil {
 			return nil, errors.WithMessage(err, fmt.Sprintf("Error reading block and private data for block %d", num))
@@ -865,13 +860,11 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 
 func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
 	for _, payload := range payloads {
-		// FIXME: Change to Debugf
-		logger.Infof("Adding payload for block %d and channel [%s]...", payload.SeqNum, s.chainID)
+		logger.Debugf("Adding payload for block %d and channel [%s]...", payload.SeqNum, s.chainID)
 		if err := s.AddPayload(payload); err != nil {
 			return errors.WithMessage(err, fmt.Sprintf("Error adding payload for block %d", payload.SeqNum))
 		}
-		// FIXME: Change to Debugf
-		logger.Infof("Payload for block %d in channel [%s] was successfully added", payload.SeqNum, s.chainID)
+		logger.Debugf("Payload for block %d in channel [%s] was successfully added", payload.SeqNum, s.chainID)
 	}
 	return nil
 }
@@ -898,8 +891,7 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 		return nil
 	}
 
-	// FIXME: Change to Debugf
-	logger.Infof("Updating ledger height for channel [%s] to %d", s.chainID, block.Header.Number+1)
+	logger.Debugf("Updating ledger height for channel [%s] to %d", s.chainID, block.Header.Number+1)
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
 
 	return nil
@@ -951,19 +943,16 @@ func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Blo
 				return nil, errors.WithMessage(err, "Unable to get block height from ledger")
 			}
 			if ledgerHeight-1 < number {
-				// FIXME: Change to Debugf
-				logger.Infof("Block %d for channel [%s] hasn't been committed yet. Last block committed in DB is %d", number, s.chainID, ledgerHeight-1)
+				logger.Debugf("Block %d for channel [%s] hasn't been committed yet. Last block committed in DB is %d", number, s.chainID, ledgerHeight-1)
 				return nil, errors.Errorf("Block %d for channel [%s] hasn't been committed yet", number, s.chainID)
 			}
 
-			// FIXME: Change to Debugf
-			logger.Infof("Getting block %d for channel [%s] from ledger", number, s.chainID)
+			logger.Debugf("Getting block %d for channel [%s] from ledger", number, s.chainID)
 			return s.peerLedger.GetBlockByNumber(number)
 		},
 		retry.WithMaxAttempts(maxAttempts),
 		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
-			// FIXME: Change to Debugf
-			logger.Infof("Got error on attempt #%d: %s. Retrying in %s.", attempt, err, backoff)
+			logger.Debugf("Got error on attempt #%d: %s. Retrying in %s.", attempt, err, backoff)
 			return true
 		}),
 	)
