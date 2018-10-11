@@ -86,8 +86,8 @@ func checkCouchDBVersion(version string) error {
 	return nil
 }
 
-//CreateCouchDatabase creates a CouchDB database object, as well as the underlying database if it does not exist
-func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
+// NewCouchDatabase creates a CouchDB database object, but not the underlying database if it does not exist
+func NewCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
 
 	databaseName, err := mapAndValidateDatabaseName(dbName)
 	if err != nil {
@@ -96,6 +96,16 @@ func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDat
 	}
 
 	couchDBDatabase := CouchDatabase{CouchInstance: couchInstance, DBName: databaseName, IndexWarmCounter: 1}
+	return &couchDBDatabase, nil
+}
+
+//CreateCouchDatabase creates a CouchDB database object, as well as the underlying database if it does not exist
+func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
+
+	couchDBDatabase, err := NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create CouchDB database upon ledger startup, if it doesn't already exist
 	err = couchDBDatabase.CreateDatabaseIfNotExist()
@@ -104,7 +114,7 @@ func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDat
 		return nil, err
 	}
 
-	return &couchDBDatabase, nil
+	return couchDBDatabase, nil
 }
 
 //CreateSystemDatabasesIfNotExist - creates the system databases if they do not exist
