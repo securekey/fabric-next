@@ -8,6 +8,7 @@ package cdbtransientdata
 
 import (
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/pkg/errors"
@@ -39,27 +40,46 @@ func NewProvider() (*Provider, error) {
 // OpenStore creates a handle to the transient data store for the given ledger ID
 func (p *Provider) OpenStore(ledgerid string) (transientstore.Store, error) {
 	transientDataStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, transientDataStoreName)
-	pvtStoreDB, err := couchdb.CreateCouchDatabase(p.couchInstance, transientDataStoreDBName)
-	if err != nil {
-		return nil, err
+
+	if ledgerconfig.IsCommitter() {
+		return createCommitterTransientStore(p.couchInstance, transientDataStoreDBName)
 	}
 
-	indicesExist, err := transientStoreIndicesCreated(pvtStoreDB)
-	if err != nil {
-		return nil, err
-	}
-
-	if !indicesExist {
-		err = p.createTransientStoreIndices(pvtStoreDB)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return newStore(pvtStoreDB)
+	return createTransientStore(p.couchInstance, transientDataStoreDBName)
 }
 
-func (p *Provider) createTransientStoreIndices(db *couchdb.CouchDatabase) error {
-	// TODO: only create index if it doesn't exist
+func createTransientStore(couchInstance *couchdb.CouchInstance, dbName string) (transientstore.Store, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+	if !dbExists {
+		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+	}
+
+	return newStore(db)
+}
+
+func createCommitterTransientStore(couchInstance *couchdb.CouchInstance, dbName string) (transientstore.Store, error) {
+	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	err = createTransientStoreIndices(db)
+	if err != nil {
+		return nil, err
+	}
+	return newStore(db)
+}
+
+func createTransientStoreIndices(db *couchdb.CouchDatabase) error {
 	return nil
 }
 

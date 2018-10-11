@@ -9,6 +9,7 @@ package cdbblkstorage
 import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
 )
@@ -44,58 +45,117 @@ func (p *CDBBlockstoreProvider) CreateBlockStore(ledgerid string) (blkstorage.Bl
 }
 
 // OpenBlockStore opens the block store for the given ledger ID
-func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.BlockStore, error) {
-	blockStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, blockStoreName)
-	blockStoreDB, err := couchdb.CreateCouchDatabase(p.couchInstance, blockStoreDBName)
+func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerID string) (blkstorage.BlockStore, error) {
+	blockStoreDBName := couchdb.ConstructBlockchainDBName(ledgerID, blockStoreName)
+	txnStoreDBName := couchdb.ConstructBlockchainDBName(ledgerID, txnStoreName)
+
+	if ledgerconfig.IsCommitter() {
+		return createCommitterBlockStore(p.couchInstance, ledgerID, blockStoreDBName, txnStoreDBName, p.indexConfig)
+	}
+
+	return createBlockStore(p.couchInstance, ledgerID, blockStoreDBName, txnStoreDBName, p.indexConfig)
+}
+
+
+func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, tnxStoreDBName string, indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStore, error) {
+	blockStoreDB, err := createCommitterBlockStoreDB(couchInstance, blockStoreDBName)
 	if err != nil {
 		return nil, err
 	}
 
-	txnStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, txnStoreName)
-	txnStoreDB, err := couchdb.CreateCouchDatabase(p.couchInstance, txnStoreDBName)
+	txnStoreDB, err := createCommitterTxnStoreDB(couchInstance, tnxStoreDBName)
 	if err != nil {
 		return nil, err
 	}
 
-	indicesExist, err := blockStoreIndicesCreated(blockStoreDB)
+	return newCDBBlockStore(blockStoreDB, txnStoreDB, ledgerID, indexConfig), nil
+}
+
+func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	if !indicesExist {
-		err = createBlockStoreIndices(blockStoreDB)
-		if err != nil {
-			return nil, err
-		}
+	err = createBlockStoreIndices(db)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func createCommitterTxnStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
 	}
 
-	return newCDBBlockStore(blockStoreDB, txnStoreDB, ledgerid, p.indexConfig), nil
+	return db, nil
+}
+
+func createBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, tnxStoreDBName string, indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStore, error) {
+	blockStoreDB, err := createBlockStoreDB(couchInstance, blockStoreDBName)
+	if err != nil {
+		return nil, err
+	}
+
+	txnStoreDB, err := createTxnStoreDB(couchInstance, tnxStoreDBName)
+	if err != nil {
+		return nil, err
+	}
+
+	return newCDBBlockStore(blockStoreDB, txnStoreDB, ledgerID, indexConfig), nil
+}
+
+func createBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+	if !dbExists {
+		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+	}
+
+	indexExists, err := db.IndexDesignDocExistsWithRetry(blockHashIndexDoc)
+	if err != nil {
+		return nil, err
+	}
+	if !indexExists {
+		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
+	}
+
+	return db, nil
+}
+
+func createTxnStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+	if !dbExists {
+		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+	}
+
+	return db, nil
 }
 
 func createBlockStoreIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateIndex(blockHashIndexDef)
+	_, err := db.CreateNewIndexWithRetry(blockHashIndexDef, blockHashIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block hash index failed")
 	}
 
 	return nil
-}
-
-func blockStoreIndicesCreated(db *couchdb.CouchDatabase) (bool, error) {
-	var blockHashIndexExists bool
-
-	indices, err := db.ListIndex()
-	if err != nil {
-		return false, errors.WithMessage(err, "retrieval of DB index list failed")
-	}
-
-	for _, i := range indices {
-		if i.DesignDocument == blockHashIndexDoc {
-			blockHashIndexExists = true
-		}
-	}
-
-	return blockHashIndexExists, nil
 }
 
 // Exists returns whether or not the given ledger ID exists

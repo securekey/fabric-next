@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
@@ -83,13 +84,39 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 	chainName := dbName
 	dbName = couchdb.ConstructMetadataDBName(dbName)
 
-	metadataDB, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+	metadataDB, err := createCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
 	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
 		committedDataCache: newVersionCache(), mux: sync.RWMutex{}}, nil
+}
+
+func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	if ledgerconfig.IsCommitter() {
+		return couchdb.CreateCouchDatabase(couchInstance, dbName)
+	}
+
+	return createCouchDatabaseEndorser(couchInstance, dbName)
+}
+
+func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+
+	if !dbExists {
+		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+	}
+
+	return db, nil
 }
 
 // getNamespaceDBHandle gets the handle to a named chaincode database
@@ -106,7 +133,7 @@ func (vdb *VersionedDB) getNamespaceDBHandle(namespace string) (*couchdb.CouchDa
 	db = vdb.namespaceDBs[namespace]
 	if db == nil {
 		var err error
-		db, err = couchdb.CreateCouchDatabase(vdb.couchInstance, namespaceDBName)
+		db, err = createCouchDatabase(vdb.couchInstance, namespaceDBName)
 		if err != nil {
 			return nil, err
 		}
