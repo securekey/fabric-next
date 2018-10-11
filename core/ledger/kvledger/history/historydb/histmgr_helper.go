@@ -19,13 +19,17 @@ package historydb
 import (
 	"bytes"
 
-	"github.com/hyperledger/fabric/common/ledger/util"
-	coreledgerutil "github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/protos/ledger/queryresult"
+	"github.com/pkg/errors"
+
 	"github.com/hyperledger/fabric/common/flogging"
-	putils "github.com/hyperledger/fabric/protos/utils"
+	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	coreledgerutil "github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/protos/common"
+	putils "github.com/hyperledger/fabric/protos/utils"
 )
 
 var logger = flogging.MustGetLogger("historydb")
@@ -162,4 +166,57 @@ func ConstructHistoryBatch(channel string, block *common.Block) ([][]byte, *vers
 
 func SavePointKey() []byte {
 	return savePointKey
+}
+
+// GetKeyModificationFromTran inspects a transaction for writes to a given key
+func GetKeyModificationFromTran(tranEnvelope *common.Envelope, namespace string, key string) (ledger.QueryResult, error) {
+	logger.Debugf("Entering getKeyModificationFromTran()\n", namespace, key)
+
+	// extract action from the envelope
+	payload, err := putils.GetPayload(tranEnvelope)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := putils.GetTransaction(payload.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	_, respPayload, err := putils.GetPayloads(tx.Actions[0])
+	if err != nil {
+		return nil, err
+	}
+
+	chdr, err := putils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	txID := chdr.TxId
+	timestamp := chdr.Timestamp
+
+	txRWSet := &rwsetutil.TxRwSet{}
+
+	// Get the Result from the Action and then Unmarshal
+	// it into a TxReadWriteSet using custom unmarshalling
+	if err = txRWSet.FromProtoBytes(respPayload.Results); err != nil {
+		return nil, err
+	}
+
+	// look for the namespace and key by looping through the transaction's ReadWriteSets
+	for _, nsRWSet := range txRWSet.NsRwSets {
+		if nsRWSet.NameSpace == namespace {
+			// got the correct namespace, now find the key write
+			for _, kvWrite := range nsRWSet.KvRwSet.Writes {
+				if kvWrite.Key == key {
+					return &queryresult.KeyModification{TxId: txID, Value: kvWrite.Value,
+						Timestamp: timestamp, IsDelete: kvWrite.IsDelete}, nil
+				}
+			} // end keys loop
+			return nil, errors.New("Key not found in namespace's writeset")
+		} // end if
+	} //end namespaces loop
+
+	return nil, errors.New("Namespace not found in transaction's ReadWriteSets")
 }

@@ -17,7 +17,7 @@ import (
 func NewBlock(blockNum uint64, channelHeader *common.ChannelHeader, trxValidationCodes []peer.TxValidationCode, transactions ...*peer.Transaction) *common.Block {
 	var data [][]byte
 	for _, trx := range transactions {
-		envBytes, err := proto.Marshal(newEnvelope(channelHeader, trx))
+		envBytes, err := proto.Marshal(NewEnvelope(channelHeader, trx))
 		if err != nil {
 			panic(err)
 		}
@@ -70,7 +70,8 @@ func NewTransaction(rwSets ...*rwsetutil.NsRwSet) *peer.Transaction {
 	}
 }
 
-func newEnvelope(channelHeader *common.ChannelHeader, trx *peer.Transaction) *common.Envelope {
+// Creates a new mock transaction envelope.
+func NewEnvelope(channelHeader *common.ChannelHeader, trx *peer.Transaction) *common.Envelope {
 	txBytes, err := proto.Marshal(trx)
 	panicIfErr(err)
 	channelHeaderBytes, err := proto.Marshal(channelHeader)
