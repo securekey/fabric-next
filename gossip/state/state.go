@@ -592,7 +592,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
 	if !ledgerconfig.IsCommitter() {
 		ourHeight := s.blockPublisher.LedgerHeight()
-		logger.Infof("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
+		logger.Debugf("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
 		return ourHeight, nil
 	}
 
@@ -602,7 +602,7 @@ func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
 		return 0, err
 	}
 
-	logger.Infof("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
+	logger.Debugf("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
 	return ourHeight, nil
 }
 
