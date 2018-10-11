@@ -57,22 +57,45 @@ func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.Bloc
 		return nil, err
 	}
 
-	err = p.createBlockStoreIndices(blockStoreDB)
+	indicesExist, err := blockStoreIndicesCreated(blockStoreDB)
 	if err != nil {
 		return nil, err
+	}
+
+	if !indicesExist {
+		err = createBlockStoreIndices(blockStoreDB)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return newCDBBlockStore(blockStoreDB, txnStoreDB, ledgerid, p.indexConfig), nil
 }
 
-func (p *CDBBlockstoreProvider) createBlockStoreIndices(db *couchdb.CouchDatabase) error {
-	// TODO: only create index if it doesn't exist
+func createBlockStoreIndices(db *couchdb.CouchDatabase) error {
 	_, err := db.CreateIndex(blockHashIndexDef)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block hash index failed")
 	}
 
 	return nil
+}
+
+func blockStoreIndicesCreated(db *couchdb.CouchDatabase) (bool, error) {
+	var blockHashIndexExists bool
+
+	indices, err := db.ListIndex()
+	if err != nil {
+		return false, errors.WithMessage(err, "retrieval of DB index list failed")
+	}
+
+	for _, i := range indices {
+		if i.DesignDocument == blockHashIndexDoc {
+			blockHashIndexExists = true
+		}
+	}
+
+	return blockHashIndexExists, nil
 }
 
 // Exists returns whether or not the given ledger ID exists

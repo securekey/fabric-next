@@ -43,16 +43,22 @@ func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = p.createPvtStoreIndices(pvtStoreDB)
+
+	indexExists, err := pvtStoreIndicesCreated(pvtStoreDB)
 	if err != nil {
 		return nil, err
 	}
 
+	if !indexExists {
+		err = createPvtStoreIndices(pvtStoreDB)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return newStore(pvtStoreDB)
 }
 
-func (p *Provider) createPvtStoreIndices(db *couchdb.CouchDatabase) error {
-	// TODO: only create index if it doesn't exist
+func createPvtStoreIndices(db *couchdb.CouchDatabase) error {
 	_, err := db.CreateIndex(blockNumberIndexDef)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
@@ -62,6 +68,27 @@ func (p *Provider) createPvtStoreIndices(db *couchdb.CouchDatabase) error {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}
 	return nil
+}
+
+func pvtStoreIndicesCreated(db *couchdb.CouchDatabase) (bool, error) {
+	var blockNumberIndexExists, blockNumberExpiryIndexExists bool
+
+	indices, err := db.ListIndex()
+	if err != nil {
+		return false, errors.WithMessage(err, "retrieval of DB index list failed")
+	}
+
+	for _, i := range indices {
+		if i.DesignDocument == blockNumberIndexDoc {
+			blockNumberIndexExists = true
+		}
+		if i.DesignDocument == blockNumberExpiryIndexDoc {
+			blockNumberExpiryIndexExists = true
+		}
+	}
+
+	exists := blockNumberIndexExists && blockNumberExpiryIndexExists
+	return exists, nil
 }
 
 // Close cleans up the provider

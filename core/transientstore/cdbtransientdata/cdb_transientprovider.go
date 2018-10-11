@@ -43,17 +43,28 @@ func (p *Provider) OpenStore(ledgerid string) (transientstore.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = p.createTransientStoreIndices(pvtStoreDB)
+
+	indicesExist, err := transientStoreIndicesCreated(pvtStoreDB)
 	if err != nil {
 		return nil, err
 	}
 
+	if !indicesExist {
+		err = p.createTransientStoreIndices(pvtStoreDB)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return newStore(pvtStoreDB)
 }
 
 func (p *Provider) createTransientStoreIndices(db *couchdb.CouchDatabase) error {
 	// TODO: only create index if it doesn't exist
 	return nil
+}
+
+func transientStoreIndicesCreated(db *couchdb.CouchDatabase) (bool, error) {
+	return false, nil
 }
 
 // Close cleans up the provider
