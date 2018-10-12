@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ba52c1e5_b9fc4b18",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 263,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-12T14:52:34Z",
+      "side": 1,
+      "message": "Where did you remove the retries for private data?",
+      "range": {
+        "startLine": 263,
+        "startChar": 12,
+        "endLine": 263,
+        "endChar": 36
+      },
+      "revId": "2d06f777dedeb8d26210869f5294d040c3b18674",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
