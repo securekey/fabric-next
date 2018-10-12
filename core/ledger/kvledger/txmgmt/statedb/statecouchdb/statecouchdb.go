@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
@@ -101,6 +100,26 @@ func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*
 	return createCouchDatabaseEndorser(couchInstance, dbName)
 }
 
+type dbNotFoundError struct {
+	name string
+}
+
+func newDBNotFoundError(name string) dbNotFoundError {
+	return dbNotFoundError{name: name}
+}
+
+func (e dbNotFoundError) Error() string {
+	return fmt.Sprintf("DB not found: [%s]", e.name)
+}
+
+func isDBNotFoundForEndorser(err error) bool {
+	if ledgerconfig.IsCommitter() {
+		return false
+	}
+	_, ok := err.(dbNotFoundError)
+	return ok
+}
+
 func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
 	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
 	if err != nil {
@@ -113,7 +132,7 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 	}
 
 	if !dbExists {
-		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
+		return nil, newDBNotFoundError(db.DBName)
 	}
 
 	return db, nil
@@ -243,6 +262,10 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
+		if isDBNotFoundForEndorser(err) {
+			logger.Debugf("DB [%s] Not Found. Returning nil since I'm an endorser.", namespace)
+			return nil, nil
+		}
 		return nil, err
 	}
 	couchDoc, _, err := db.ReadDoc(key)
@@ -280,6 +303,10 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 	queryLimit := ledgerconfig.GetQueryLimit()
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
+		if isDBNotFoundForEndorser(err) {
+			logger.Debugf("DB [%s] Not Found. Returning empty range scanner since I'm an endorser.", namespace)
+			return newQueryScanner(namespace, nil), nil
+		}
 		return nil, err
 	}
 	queryResult, err := db.ReadDocRange(startKey, endKey, queryLimit, querySkip)
@@ -304,6 +331,10 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 	}
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
+		if isDBNotFoundForEndorser(err) {
+			logger.Debugf("DB [%s] Not Found. Returning empty range scanner since I'm an endorser.", namespace)
+			return newQueryScanner(namespace, nil), nil
+		}
 		return nil, err
 	}
 	queryResult, err := db.QueryDocuments(queryString)
