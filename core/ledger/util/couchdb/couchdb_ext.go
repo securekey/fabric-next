@@ -6,6 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 package couchdb
 
 import (
+	"strings"
+	"time"
+
 	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/pkg/errors"
 )
@@ -62,15 +65,29 @@ func (dbclient *CouchDatabase) CreateNewIndexWithRetry(indexdefinition string, d
 func (dbclient *CouchDatabase) Exists() (bool, error) {
 	dbInfo, couchDBReturn, err := dbclient.GetDatabaseInfo()
 	if err != nil {
+		if dbInfo == nil && couchDBReturn != nil && couchDBReturn.StatusCode == 404 {
+			return false, nil
+		}
 		return false, err
 	}
 
 	//If the dbInfo returns populated and status code is 200, then the database exists
 	if dbInfo == nil || couchDBReturn.StatusCode != 200 {
+		// FIXME: Not sure if we should assume that the DB wasn't found in this case
 		return false, errors.Errorf("DB not found: [%s]", dbclient.DBName)
 	}
 
 	return true, nil
+}
+
+var errDBNotFound = errors.Errorf("DB not found")
+
+func isPvtDataDB(dbName string) bool {
+	return strings.Contains(dbName, "$$h") || strings.Contains(dbName, "$$p")
+}
+
+func (dbclient *CouchDatabase) shouldRetry(err error) bool {
+	return err == errDBNotFound && !isPvtDataDB(dbclient.DBName)
 }
 
 // ExistsWithRetry determines if the database exists, but retries until it does
@@ -85,16 +102,27 @@ func (dbclient *CouchDatabase) ExistsWithRetry() (bool, error) {
 				return nil, err
 			}
 			if !dbExists {
-				return nil, errors.Errorf("DB not found: [%s]", dbclient.DBName)
+				return nil, errDBNotFound
 			}
 
 			// DB exists
 			return nil, nil
 		},
 		retry.WithMaxAttempts(maxAttempts),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			if dbclient.shouldRetry(err) {
+				logger.Debugf("Got error [%s] checking if DB [%s] exists on attempt #%d. Will retry in %s.", err, dbclient.DBName, attempt, backoff)
+				return true
+			}
+			logger.Debugf("Got error [%s] checking if DB [%s] exists on attempt #%d. Will NOT retry", err, dbclient.DBName, attempt)
+			return false
+		}),
 	)
 
 	if err != nil {
+		if err == errDBNotFound {
+			return false, nil
+		}
 		return false, err
 	}
 
