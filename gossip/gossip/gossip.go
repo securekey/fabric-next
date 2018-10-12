@@ -100,6 +100,7 @@ type SendCriteria struct {
 	IsEligible filter.RoutingFilter // IsEligible defines whether a specific peer is eligible of receiving the message
 	Channel    common.ChainID       // Channel specifies a channel to send this message on. \
 	// Only peers that joined the channel would receive this message
+	PreferCommitter bool // If true then peers with the committer role are preferred over other peers
 }
 
 // String returns a string representation of this SendCriteria
