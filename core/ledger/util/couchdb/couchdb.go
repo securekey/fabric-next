@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -30,6 +29,7 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/op/go-logging"
+	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("couchdb")
@@ -157,7 +157,6 @@ type CreateIndexResponse struct {
 type AttachmentInfo struct {
 	Name            string
 	ContentType     string
-	Length          uint64
 	AttachmentBytes []byte
 }
 
@@ -598,7 +597,8 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 
 		//If there is a zero length attachment, do not keep the connection open
 		for _, attach := range couchDoc.Attachments {
-			if attach.Length < 1 {
+			if len(attach.AttachmentBytes) == 0 {
+				logger.Debugf("Attachment zero length and therefore connection will not be kept open. Attach: %+v", attach)
 				keepConnectionOpen = false
 			}
 		}
@@ -1693,6 +1693,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 		//Current CouchDB has a problem with zero length attachments, do not allow the connection to be reused.
 		//Apache JIRA item for CouchDB   https://issues.apache.org/jira/browse/COUCHDB-3394
 		if !keepConnectionOpen {
+			logger.Warningf("CouchDB connection will not be re-used.")
 			req.Close = true
 		}
 
