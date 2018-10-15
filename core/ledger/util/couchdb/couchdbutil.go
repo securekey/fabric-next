@@ -8,6 +8,8 @@ package couchdb
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/pkg/errors"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -40,14 +42,20 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 		return nil, err
 	}
 
+	// Create the HTTP transport.
+	// We override the default transport to enable configurable connection pooling.
+	transport, err := createHTTPTransport()
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the http client once
 	// Clients and Transports are safe for concurrent use by multiple goroutines
 	// and for efficiency should only be created once and re-used.
-	client := &http.Client{Timeout: couchConf.RequestTimeout}
-
-	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
-	transport.DisableCompression = false
-	client.Transport = transport
+	client := &http.Client{
+		Transport: transport,
+		Timeout: couchConf.RequestTimeout,
+	}
 
 	//Create the CouchDB instance
 	couchInstance := &CouchInstance{conf: *couchConf, client: client}
@@ -69,6 +77,24 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 	}
 
 	return couchInstance, nil
+}
+
+func createHTTPTransport() (*http.Transport, error) {
+	// TODO - should we copy the default struct code instead?
+	defaultTransportUT := http.DefaultTransport
+	defaultTransport, ok := defaultTransportUT.(*http.Transport)
+	if !ok {
+		return nil, errors.New("HTTP default transport type is unknown")
+	}
+
+	// copy the default transport so we can override.
+	transport := *defaultTransport
+
+	// TODO - should we pass these instead of grabbing directly.
+	transport.MaxIdleConns = ledgerconfig.GetCouchDBMaxIdleConns()
+	transport.MaxIdleConnsPerHost = ledgerconfig.GetCouchDBMaxIdleConnsPerHost()
+
+	return &transport, nil
 }
 
 //checkCouchDBVersion verifies CouchDB is at least 2.0.0

@@ -45,6 +45,11 @@ const confTransientStorage = "ledger.blockchain.transientStorage"
 const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
 const confRoles = "ledger.roles"
 
+// TODO: couchDB config should be in a common section rather than being under state.
+const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
+const confCouchDBMaxIdleConnsPerHost = "ledger.state.couchDBConfig.maxIdleConnsPerHost"
+
+
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
 
@@ -160,6 +165,28 @@ func GetPvtdataStorePurgeInterval() uint64 {
 		purgeInterval = 100
 	}
 	return uint64(purgeInterval)
+}
+
+// GetCouchDBMaxIdleConns returns the number of idle connections to hold in the connection pool for couchDB.
+func GetCouchDBMaxIdleConns() int {
+	// TODO: this probably be the default golang version (100)
+	const defaultMaxIdleConns = 1000
+	if !viper.IsSet(confCouchDBMaxIdleConns) {
+		return defaultMaxIdleConns
+	}
+
+	return viper.GetInt(confCouchDBMaxIdleConns)
+}
+
+// GetCouchDBMaxIdleConnsPerHost returns the number of idle connections to allow per host in the connection pool for couchDB.
+func GetCouchDBMaxIdleConnsPerHost() int {
+	// TODO: this probably be the default golang version (http.DefaultMaxIdleConnsPerHost)
+	const defaultMaxIdleConnsPerHost = 100
+	if !viper.IsSet(confCouchDBMaxIdleConnsPerHost) {
+		return defaultMaxIdleConnsPerHost
+	}
+
+	return viper.GetInt(confCouchDBMaxIdleConnsPerHost)
 }
 
 //IsHistoryDBEnabled exposes the historyDatabase variable
