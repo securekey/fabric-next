@@ -43,6 +43,7 @@ const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
+const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
 const confRoles = "ledger.roles"
 
@@ -92,6 +93,16 @@ const (
 	LevelDBTransientStorage TransientStorageProvider = iota
 	// CouchDBTransientStorage stores transient data in CouchDB
 	CouchDBTransientStorage
+)
+
+// ConfigHistoryStorageProvider holds the configuration names of the available config history storage providers
+type ConfigHistoryStorageProvider int
+
+const (
+	// LevelDBConfigHistoryStorage stores config history data in LevelDB (default)
+	LevelDBConfigHistoryStorage ConfigHistoryStorageProvider = iota
+	// CouchDBConfigHistoryStorage stores config history data in CouchDB
+	CouchDBConfigHistoryStorage
 )
 
 // GetRootPath returns the filesystem path.
@@ -278,6 +289,20 @@ func GetTransientStoreProvider() TransientStorageProvider {
 		fallthrough
 	case "goleveldb":
 		return LevelDBTransientStorage
+	}
+}
+
+// GetConfigHistoryStoreProvider returns the config history storage provider specified in the configuration
+func GetConfigHistoryStoreProvider() ConfigHistoryStorageProvider {
+	configHistoryStorageConfig := viper.GetString(confConfigHistoryStorage)
+
+	switch configHistoryStorageConfig {
+	case "CouchDB":
+		return CouchDBConfigHistoryStorage
+	default:
+		fallthrough
+	case "goleveldb":
+		return LevelDBConfigHistoryStorage
 	}
 }
 
