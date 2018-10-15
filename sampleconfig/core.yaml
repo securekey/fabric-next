@@ -661,8 +661,12 @@ ledger:
        warmIndexesAfterNBlocks: 1
        # Limit on the number of idle connections to hold in the pool
        maxIdleConns: 1000
-        # Limit on the number of idle connections to hold in the pool (per host)
+       # Limit on the number of idle connections to hold in the pool (per host)
        maxIdleConnsPerHost: 100
+       # Duration before closing an idle connection
+       idleConnTimeout: 90s
+       # Duration for keep-alive
+       keepAliveTimeout: 30s
 
   history:
     # enableHistoryDatabase - options are true or false

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
@@ -48,7 +49,8 @@ const confRoles = "ledger.roles"
 // TODO: couchDB config should be in a common section rather than being under state.
 const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
 const confCouchDBMaxIdleConnsPerHost = "ledger.state.couchDBConfig.maxIdleConnsPerHost"
-
+const confCouchDBIdleConnTimeout = "ledger.state.couchDBConfig.idleConnTimeout"
+const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout"
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
@@ -187,6 +189,28 @@ func GetCouchDBMaxIdleConnsPerHost() int {
 	}
 
 	return viper.GetInt(confCouchDBMaxIdleConnsPerHost)
+}
+
+// GetCouchDBIdleConnTimeout returns the duration before closing an idle connection.
+func GetCouchDBIdleConnTimeout() time.Duration {
+	const defaultIdleConnTimeout = 90 * time.Second
+
+	if !viper.IsSet(confCouchDBIdleConnTimeout) {
+		return defaultIdleConnTimeout
+	}
+
+	return viper.GetDuration(confCouchDBIdleConnTimeout)
+}
+
+// GetCouchDBKeepAliveTimeout returns the duration for keep alive.
+func GetCouchDBKeepAliveTimeout() time.Duration {
+	const defaultKeepAliveTimeout= 30 * time.Second
+
+	if !viper.IsSet(confCouchDBKeepAliveTimeout) {
+		return defaultKeepAliveTimeout
+	}
+
+	return viper.GetDuration(confCouchDBKeepAliveTimeout)
 }
 
 //IsHistoryDBEnabled exposes the historyDatabase variable

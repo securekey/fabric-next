@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-	"github.com/pkg/errors"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -80,21 +80,20 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 }
 
 func createHTTPTransport() (*http.Transport, error) {
-	// TODO - should we copy the default struct code instead?
-	defaultTransportUT := http.DefaultTransport
-	defaultTransport, ok := defaultTransportUT.(*http.Transport)
-	if !ok {
-		return nil, errors.New("HTTP default transport type is unknown")
-	}
-
-	// copy the default transport so we can override.
-	transport := *defaultTransport
-
-	// TODO - should we pass these instead of grabbing directly.
-	transport.MaxIdleConns = ledgerconfig.GetCouchDBMaxIdleConns()
-	transport.MaxIdleConnsPerHost = ledgerconfig.GetCouchDBMaxIdleConnsPerHost()
-
-	return &transport, nil
+	// Copy of http.DefaultTransport with overrides.
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: ledgerconfig.GetCouchDBKeepAliveTimeout(),
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          ledgerconfig.GetCouchDBMaxIdleConns(),
+		MaxIdleConnsPerHost:   ledgerconfig.GetCouchDBMaxIdleConnsPerHost(),
+		IdleConnTimeout:       ledgerconfig.GetCouchDBIdleConnTimeout(),
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}, nil
 }
 
 //checkCouchDBVersion verifies CouchDB is at least 2.0.0
