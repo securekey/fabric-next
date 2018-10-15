@@ -659,6 +659,10 @@ ledger:
        # Increasing the value may improve write efficiency of peer and CouchDB,
        # but may degrade query response time.
        warmIndexesAfterNBlocks: 1
+       # Limit on the number of idle connections to hold in the pool
+       maxIdleConns: 1000
+        # Limit on the number of idle connections to hold in the pool (per host)
+       maxIdleConnsPerHost: 100
 
   history:
     # enableHistoryDatabase - options are true or false
