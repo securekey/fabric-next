@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hyperledger/fabric/core/ledger/confighistory"
+	"github.com/hyperledger/fabric/core/ledger/confighistory/cdbconfighistory"
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
@@ -19,6 +20,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
 
 var (
@@ -71,8 +73,19 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	}
 
 	bookkeepingProvider := bookkeeping.NewProvider()
-	// Initialize config history mgr
-	configHistoryMgr := confighistory.NewMgr()
+
+	configHistoryStorageConfig := ledgerconfig.GetConfigHistoryStoreProvider()
+	var configHistoryMgr confighistory.Mgr
+	switch configHistoryStorageConfig {
+	case ledgerconfig.LevelDBConfigHistoryStorage:
+		configHistoryMgr = confighistory.NewMgr()
+	case ledgerconfig.CouchDBConfigHistoryStorage:
+		configHistoryMgr,err =cdbconfighistory.NewMgr()
+		if err!=nil{
+			return nil,err
+		}
+	}
+
 	logger.Info("ledger provider Initialized")
 	provider := &Provider{idStore, ledgerStoreProvider, vdbProvider, historydbProvider, configHistoryMgr, nil, bookkeepingProvider}
 	provider.recoverUnderConstructionLedger()
