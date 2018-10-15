@@ -1,6 +1,6 @@
-From 68aeb1741bbf7c0671c78da93cc69b06b8e92a9c Mon Sep 17 00:00:00 2001
+From 55404163069898cad91eb8ffd9944a98b7efb45b Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 15 Oct 2018 11:51:40 -0400
+Date: Mon, 15 Oct 2018 17:33:47 -0400
 Subject: [PATCH] Add configuration to create _global_changes
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -379,7 +379,7 @@ index 994dc3f07..7a8bbb505 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
 diff --git a/core/ledger/util/couchdb/couchdbutil.go b/core/ledger/util/couchdb/couchdbutil.go
-index 20ed11457..8ff8bb5ed 100644
+index d2be66e43..46290da62 100644
 --- a/core/ledger/util/couchdb/couchdbutil.go
 +++ b/core/ledger/util/couchdb/couchdbutil.go
 @@ -33,10 +33,10 @@ var collectionNameAllowedLength = 50
@@ -403,7 +403,7 @@ index 20ed11457..8ff8bb5ed 100644
  	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
  	if verifyErr != nil {
  		return nil, verifyErr
-@@ -161,15 +160,15 @@ func CreateSystemDatabasesIfNotExist(couchInstance *CouchInstance) error {
+@@ -160,15 +159,15 @@ func CreateSystemDatabasesIfNotExist(couchInstance *CouchInstance) error {
  		logger.Errorf("Error during CouchDB CreateDatabaseIfNotExist() for system dbName: %s  error: %s\n", dbName, err.Error())
  		return err
  	}
@@ -503,13 +503,13 @@ index 501f39115..da8aea457 100644
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
 diff --git a/sampleconfig/core.yaml b/sampleconfig/core.yaml
-index 75586f99c..1cee23a48 100644
+index 729f202b3..3d45bd40f 100644
 --- a/sampleconfig/core.yaml
 +++ b/sampleconfig/core.yaml
-@@ -663,6 +663,8 @@ ledger:
-        maxIdleConns: 1000
-         # Limit on the number of idle connections to hold in the pool (per host)
-        maxIdleConnsPerHost: 100
+@@ -667,6 +667,8 @@ ledger:
+        idleConnTimeout: 90s
+        # Duration for keep-alive
+        keepAliveTimeout: 30s
 +       # enable or disable create global changes db
 +       createGlobalChangesDB: true
  
