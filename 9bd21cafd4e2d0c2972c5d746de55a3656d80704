@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f47ae91b_d83b2847",
+        "filename": "core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-10-15T16:58:33Z",
+      "side": 1,
+      "message": "Does this need a mutex?",
+      "range": {
+        "startLine": 75,
+        "startChar": 3,
+        "endLine": 75,
+        "endChar": 6
+      },
+      "revId": "9bd21cafd4e2d0c2972c5d746de55a3656d80704",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
