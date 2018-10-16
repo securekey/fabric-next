@@ -1636,6 +1636,10 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 		resp, couchDBReturn, errResp = dbclient.CouchInstance.handleRequest(method, connectURL.String(),
 			data, rev, multipartBoundary, maxRetries, keepConnectionOpen)
 
+		if errResp != nil {
+			continue
+		}
+
 		//If there was a 409 conflict error during the save/delete, log it and retry it.
 		//Otherwise, break out of the retry loop
 		if couchDBReturn != nil && couchDBReturn.StatusCode == 409 {
@@ -1643,6 +1647,10 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 			revisionConflictDetected = true
 		} else {
 			break
+		}
+
+		if attempts <= maxRetries {
+			closeResponseBody(resp)
 		}
 	}
 
@@ -1739,8 +1747,10 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 		//Execute http request
 		resp, errResp = couchInstance.client.Do(req)
 
+		// TODO: This can't happen: should remove this code -- see the HTTP client documentation.
 		//check to see if the return from CouchDB is valid
 		if invalidCouchDBReturn(resp, errResp) {
+			logger.Warning("CouchDB HTTP client returned a response that cannot happen after calling Do")
 			continue
 		}
 
@@ -1751,14 +1761,15 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				//Read the response body and close it for next attempt
 				jsonError, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
+					closeResponseBody(resp)
 					return nil, nil, err
 				}
-				defer closeResponseBody(resp)
 
 				errorBytes := []byte(jsonError)
 				//Unmarshal the response
 				err = json.Unmarshal(errorBytes, &couchDBReturn)
 				if err != nil {
+					closeResponseBody(resp)
 					return nil, nil, err
 				}
 			}
@@ -1766,6 +1777,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 			break
 		}
 
+		// TODO: the log message is misleading when we are on the last attempt.
 		// If the maxRetries is greater than 0, then log the retry info
 		if maxRetries > 0 {
 
@@ -1780,8 +1792,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 			} else {
 				//Read the response body and close it for next attempt
 				jsonError, err := ioutil.ReadAll(resp.Body)
-				defer closeResponseBody(resp)
 				if err != nil {
+					closeResponseBody(resp)
 					return nil, nil, err
 				}
 
@@ -1789,14 +1801,23 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				//Unmarshal the response
 				err = json.Unmarshal(errorBytes, &couchDBReturn)
 				if err != nil {
+					closeResponseBody(resp)
 					return nil, nil, err
 				}
 
 				//Log the 500 error with the retry count and continue
 				logger.Warningf("Retrying couchdb request in %s. Attempt:%v  Couch DB Error:%s,  Status Code:%v  Reason:%v",
 					waitDuration.String(), attempts+1, couchDBReturn.Error, resp.Status, couchDBReturn.Reason)
-
 			}
+		}
+
+		// TODO: This should be refactored. Close is being called here because Success has a break earlier
+		// TODO: in the logic.
+		closeResponseBody(resp)
+
+		// TODO: This needs to be refactored.
+		if maxRetries > 0 && attempts <= maxRetries {
+
 			//sleep for specified sleep time, then retry
 			time.Sleep(waitDuration)
 
@@ -1809,14 +1830,17 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 
 	//if a golang http error is still present after retries are exhausted, return the error
 	if errResp != nil {
+		closeResponseBody(resp)
 		return nil, couchDBReturn, errResp
 	}
 
+	// TODO: This can't happen: should remove this code -- see the HTTP client documentation.
 	//This situation should not occur according to the golang spec.
 	//if this error returned (errResp) from an http call, then the resp should be not nil,
 	//this is a structure and StatusCode is an int
 	//This is meant to provide a more graceful error if this should occur
 	if invalidCouchDBReturn(resp, errResp) {
+		logger.Warning("CouchDB HTTP client returned a response that cannot happen after retry loop")
 		return nil, nil, fmt.Errorf("Unable to connect to CouchDB, check the hostname and port.")
 	}
 
@@ -1832,6 +1856,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 		logger.Debugf("Couch DB Error:%s,  Status Code:%v,  Reason:%s",
 			couchDBReturn.Error, resp.StatusCode, couchDBReturn.Reason)
 
+		closeResponseBody(resp)
 		return nil, couchDBReturn, fmt.Errorf("Couch DB Error:%s,  Status Code:%v,  Reason:%s",
 			couchDBReturn.Error, resp.StatusCode, couchDBReturn.Reason)
 
