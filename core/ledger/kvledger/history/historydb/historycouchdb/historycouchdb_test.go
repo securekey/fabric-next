@@ -83,6 +83,44 @@ func TestDbHandleCommitsWriteSet(t *testing.T) {
 	assert.NotEmpty(t, results, "write-sets must be saved to history couchdb")
 }
 
+// DBHandle.Commit() only saves write sets to database for valid transactions that are endorsed.
+func TestHistoryDB_Commit_NoDuplicateCommits(t *testing.T) {
+	const namespace = "test_namespace"
+	const key = "test_key"
+	const dbname = "historydb"
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle(dbname)
+	require.NoError(t, err)
+	block := mocks.NewBlock(
+		uint64(123),
+		&common.ChannelHeader{
+			ChannelId: "",
+			TxId:      "12345",
+			Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+		},
+		[]peer.TxValidationCode{peer.TxValidationCode_VALID},
+		mocks.NewTransaction(
+			&rwsetutil.NsRwSet{
+				NameSpace: namespace,
+				KvRwSet: &kvrwset.KVRWSet{
+					Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+				},
+			},
+		),
+	)
+	err = handle.Commit(block)
+	require.NoError(t, err)
+	err = handle.Commit(block)
+	require.NoError(t, err)
+	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
+	require.NoErrorf(t, err, "failed to query test CouchDB")
+	assert.NotEmpty(t, results, "write-sets must be saved to history couchdb")
+	assert.Len(t, *results, 1, "write-sets are being duplicated to HistoryCouchDB when calling Commit() with the same block")
+}
+
 // DBHandle.Commit() saves the block height document as a save point.
 func TestDbHandleCommitsBlockHeightAsSavePoint(t *testing.T) {
 	const namespace = "test_namespace"
