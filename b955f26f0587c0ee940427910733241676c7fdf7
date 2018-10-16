@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "45ebc9d4_256f0af3",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 112,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-16T23:58:34Z",
+      "side": 1,
+      "message": "I think we need bigger padding on block number.",
+      "range": {
+        "startLine": 112,
+        "startChar": 69,
+        "endLine": 112,
+        "endChar": 74
+      },
+      "revId": "b955f26f0587c0ee940427910733241676c7fdf7",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
