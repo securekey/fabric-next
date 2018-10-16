@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0e828cb2_5fc7d02f",
+        "filename": "core/ledger/util/couchdb/httptrace.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 149,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-16T18:49:10Z",
+      "side": 1,
+      "message": "future todo: cancellable ;)",
+      "range": {
+        "startLine": 149,
+        "startChar": 5,
+        "endLine": 149,
+        "endChar": 23
+      },
+      "revId": "e86c67807da4cefb91fff2051f340db39244f36f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
