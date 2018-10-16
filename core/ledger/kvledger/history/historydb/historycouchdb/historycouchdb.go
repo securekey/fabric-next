@@ -178,7 +178,7 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 
 // Close closes the underlying db
 func (provider *historyDBProvider) Close() {
-	panic("Not implemented")
+	// do nothing
 }
 
 // Creates indexes if they don't exist already.
