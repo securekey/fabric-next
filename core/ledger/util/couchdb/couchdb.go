@@ -860,9 +860,6 @@ func createCouchDocFromMultipartReader(multipartReader *multipart.Reader) (*Couc
 	for {
 		err := func() error {
 			p, err := multipartReader.NextPart()
-			if err == io.EOF {
-				return nil // processed all parts
-			}
 			if err != nil {
 				return err
 			}
@@ -920,6 +917,9 @@ func createCouchDocFromMultipartReader(multipartReader *multipart.Reader) (*Couc
 			} // end content-type switch
 			return nil
 		}()
+		if err == io.EOF {
+			break // processed all parts
+		}
 		if err != nil {
 			return nil, err
 		}
