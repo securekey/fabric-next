@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "27386646_f8ed8f1b",
+        "filename": "core/ledger/util/couchdb/couchdb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 1756,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-10-16T15:03:17Z",
+      "side": 0,
+      "message": "if we move this defer after if resp.StatusCode \u003e\u003d 400, it would do the same job that you want?",
+      "revId": "696efe61ca5735e231b4decdc25c6c2763142ecf",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}

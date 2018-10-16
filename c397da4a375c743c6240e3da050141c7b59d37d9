@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d732bbf6_7a93b457",
+        "filename": "core/ledger/util/couchdb/couchdb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 1656,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-10-16T15:03:17Z",
+      "side": 1,
+      "message": "Isn\u0027t that better we move this into if at line 1646? (it would be easier to understand)",
+      "revId": "c397da4a375c743c6240e3da050141c7b59d37d9",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "517e027b_3df463ac",
+        "filename": "core/ledger/util/couchdb/couchdb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 1822,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-10-16T15:03:17Z",
+      "side": 1,
+      "message": "If maxRetries \u003d\u003d 0 we are not going to enter the loop. Do we need this check?",
+      "revId": "c397da4a375c743c6240e3da050141c7b59d37d9",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
