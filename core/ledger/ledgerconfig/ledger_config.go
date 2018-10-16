@@ -52,6 +52,8 @@ const confCouchDBMaxIdleConnsPerHost = "ledger.state.couchDBConfig.maxIdleConnsP
 const confCouchDBIdleConnTimeout = "ledger.state.couchDBConfig.idleConnTimeout"
 const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout"
 
+const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
+
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
 
@@ -204,7 +206,7 @@ func GetCouchDBIdleConnTimeout() time.Duration {
 
 // GetCouchDBKeepAliveTimeout returns the duration for keep alive.
 func GetCouchDBKeepAliveTimeout() time.Duration {
-	const defaultKeepAliveTimeout= 30 * time.Second
+	const defaultKeepAliveTimeout = 30 * time.Second
 
 	if !viper.IsSet(confCouchDBKeepAliveTimeout) {
 		return defaultKeepAliveTimeout
@@ -376,4 +378,9 @@ func getRoles() map[Role]struct{} {
 		roles[Role(r)] = exists
 	}
 	return roles
+}
+
+// CouchDBHTTPTraceEnabled returns true if HTTP tracing is enabled for Couch DB
+func CouchDBHTTPTraceEnabled() bool {
+	return viper.GetBool(confCouchDBHTTPTraceEnabled)
 }

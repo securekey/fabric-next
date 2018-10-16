@@ -8,6 +8,7 @@ package couchdb
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptrace"
 	"net/http/httputil"
 	"net/textproto"
 	"net/url"
@@ -223,6 +225,9 @@ type DatabaseSecurity struct {
 // connection pool
 func closeResponseBody(resp *http.Response) {
 	if resp != nil {
+		if ledgerconfig.CouchDBHTTPTraceEnabled() {
+			httpTraceClose(resp)
+		}
 		io.Copy(ioutil.Discard, resp.Body) // discard whatever is remaining of body
 		resp.Body.Close()
 	}
@@ -1695,7 +1700,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 		payloadData.ReadFrom(bytes.NewReader(data))
 
 		//Create request based on URL for couchdb operation
-		req, err := http.NewRequest(method, connectURL, payloadData)
+		req, err := newHTTPRequest(method, connectURL, payloadData)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1920,4 +1925,19 @@ func printDocumentIds(documentPointers []*CouchDoc) (string, error) {
 		documentIds = append(documentIds, docMetadata.ID)
 	}
 	return strings.Join(documentIds, ","), nil
+}
+
+func newHTTPRequest(method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ledgerconfig.CouchDBHTTPTraceEnabled() {
+		return req, nil
+	}
+
+	trace := newHTTPTrace()
+	req = req.WithContext(context.WithValue(req.Context(), httpTraceContextKey{}, trace))
+	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace.Trace())), nil
 }
