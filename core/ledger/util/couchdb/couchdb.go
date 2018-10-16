@@ -1765,6 +1765,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				jsonError, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
 					closeResponseBody(resp)
+					// TODO: should this be a retry?
 					return nil, nil, err
 				}
 
@@ -1773,6 +1774,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				err = json.Unmarshal(errorBytes, &couchDBReturn)
 				if err != nil {
 					closeResponseBody(resp)
+					// TODO: should this be a retry?
 					return nil, nil, err
 				}
 			}
@@ -1780,10 +1782,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 			break
 		}
 
-		// TODO: the log message is misleading when we are on the last attempt.
-		// If the maxRetries is greater than 0, then log the retry info
-		if maxRetries > 0 {
-
+		// Log and cleanup between retry attempts
+		if attempts < maxRetries {
 			//if this is an unexpected golang http error, log the error and retry
 			if errResp != nil {
 
@@ -1795,8 +1795,8 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 			} else {
 				//Read the response body and close it for next attempt
 				jsonError, err := ioutil.ReadAll(resp.Body)
+				closeResponseBody(resp)
 				if err != nil {
-					closeResponseBody(resp)
 					return nil, nil, err
 				}
 
@@ -1804,7 +1804,6 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				//Unmarshal the response
 				err = json.Unmarshal(errorBytes, &couchDBReturn)
 				if err != nil {
-					closeResponseBody(resp)
 					return nil, nil, err
 				}
 
@@ -1813,27 +1812,16 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 					waitDuration.String(), attempts+1, couchDBReturn.Error, resp.Status, couchDBReturn.Reason)
 			}
 
-			// TODO: This needs to be refactored.
-			if attempts < maxRetries {
-				// TODO: This should be refactored. Close is being called here because Success has a break earlier
-				// TODO: in the logic. We need to close between attempts to avoid leaks.
-				if errResp == nil {
-					closeResponseBody(resp)
-				}
+			//sleep for specified sleep time, then retry
+			time.Sleep(waitDuration)
 
-				//sleep for specified sleep time, then retry
-				time.Sleep(waitDuration)
-
-				//backoff, doubling the retry time for next attempt
-				waitDuration *= 2
-
-			}
+			//backoff, doubling the retry time for next attempt
+			waitDuration *= 2
 		}
 	} // end retry loop
 
 	//if a golang http error is still present after retries are exhausted, return the error
 	if errResp != nil {
-		closeResponseBody(resp)
 		return nil, couchDBReturn, errResp
 	}
 
