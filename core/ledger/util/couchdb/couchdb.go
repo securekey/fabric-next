@@ -817,115 +817,114 @@ func (dbclient *CouchDatabase) ReadDoc(id string) (*CouchDoc, string, error) {
 	}
 	defer closeResponseBody(resp)
 
-	//Get the media type from the Content-Type header
-	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if err != nil {
-		logger.Errorf("couchdb returned an invalid content type [%s]", err)
-		return nil, "", err
-	}
-
 	//Get the revision from header
 	revision, err := getRevisionHeader(resp)
 	if err != nil {
 		return nil, "", err
 	}
 
-	//check to see if the is multipart,  handle as attachment if multipart is detected
-	if strings.HasPrefix(mediaType, "multipart/") {
-		//Set up the multipart reader based on the boundary
-		multipartReader := multipart.NewReader(resp.Body, params["boundary"])
-
-		couchDoc, err := createCouchDocFromMultipartReader(multipartReader)
-		if err != nil {
-			return nil, "", err
-		}
-		return couchDoc, revision, nil
-	}
-
-	//handle as JSON document
-	var couchDoc CouchDoc
-	couchDoc.JSONValue, err = ioutil.ReadAll(resp.Body)
+	couchDoc, err := createCouchDocFromResponse(resp)
 	if err != nil {
 		return nil, "", err
 	}
 
-	logger.Debugf("Exiting ReadDoc()")
-	return &couchDoc, revision, nil
+	return couchDoc, revision, nil
 }
 
-func createCouchDocFromMultipartReader(multipartReader *multipart.Reader) (*CouchDoc, error) {
+func createCouchDocFromResponse(resp *http.Response) (*CouchDoc, error) {
+	//Get the media type from the Content-Type header
+	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil {
+		logger.Errorf("couchdb returned an invalid content type [%s]", err)
+		return nil, err
+	}
+
+	//check to see if the is multipart,  handle as attachment if multipart is detected
 	var couchDoc CouchDoc
-	var attachments []*AttachmentInfo
+	if strings.HasPrefix(mediaType, "multipart/") {
+		//Set up the multipart reader based on the boundary
+		multipartReader := multipart.NewReader(resp.Body, params["boundary"])
 
-	for {
-		err := func() error {
-			p, err := multipartReader.NextPart()
-			if err != nil {
-				return err
+		for {
+			err := populateCouchDocFromMultipartReader(multipartReader, &couchDoc)
+			if err == io.EOF {
+				break // processed all parts
 			}
+			if err != nil {
+				return nil, err
+			}
+		}
 
-			defer p.Close()
+		return &couchDoc, nil
+	}
 
-			logger.Debugf("part header=%s", p.Header)
-			switch p.Header.Get("Content-Type") {
-			case "application/json":
+	//handle as JSON document
+	couchDoc.JSONValue, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Debugf("Exiting ReadDoc()")
+	return &couchDoc, nil
+}
+
+func populateCouchDocFromMultipartReader(multipartReader *multipart.Reader, couchDoc *CouchDoc) error {
+	p, err := multipartReader.NextPart()
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+
+	logger.Debugf("part header=%s", p.Header)
+	switch p.Header.Get("Content-Type") {
+	case "application/json":
+		partdata, err := ioutil.ReadAll(p)
+		if err != nil {
+			return err
+		}
+		couchDoc.JSONValue = partdata
+	default:
+
+		//Create an attachment structure and load it
+		attachment := &AttachmentInfo{}
+		attachment.ContentType = p.Header.Get("Content-Type")
+		contentDispositionParts := strings.Split(p.Header.Get("Content-Disposition"), ";")
+		if strings.TrimSpace(contentDispositionParts[0]) == "attachment" {
+			switch p.Header.Get("Content-Encoding") {
+			case "gzip": //See if the part is gzip encoded
+
+				var respBody []byte
+
+				gr, err := gzip.NewReader(p)
+				if err != nil {
+					return err
+				}
+				respBody, err = ioutil.ReadAll(gr)
+				if err != nil {
+					return err
+				}
+
+				logger.Debugf("Retrieved attachment data")
+				attachment.AttachmentBytes = respBody
+				attachment.Name = p.FileName()
+				couchDoc.Attachments = append(couchDoc.Attachments, attachment)
+
+			default:
+
+				//retrieve the data,  this is not gzip
 				partdata, err := ioutil.ReadAll(p)
 				if err != nil {
 					return err
 				}
-				couchDoc.JSONValue = partdata
-			default:
+				logger.Debugf("Retrieved attachment data")
+				attachment.AttachmentBytes = partdata
+				attachment.Name = p.FileName()
+				couchDoc.Attachments = append(couchDoc.Attachments, attachment)
 
-				//Create an attachment structure and load it
-				attachment := &AttachmentInfo{}
-				attachment.ContentType = p.Header.Get("Content-Type")
-				contentDispositionParts := strings.Split(p.Header.Get("Content-Disposition"), ";")
-				if strings.TrimSpace(contentDispositionParts[0]) == "attachment" {
-					switch p.Header.Get("Content-Encoding") {
-					case "gzip": //See if the part is gzip encoded
-
-						var respBody []byte
-
-						gr, err := gzip.NewReader(p)
-						if err != nil {
-							return err
-						}
-						respBody, err = ioutil.ReadAll(gr)
-						if err != nil {
-							return err
-						}
-
-						logger.Debugf("Retrieved attachment data")
-						attachment.AttachmentBytes = respBody
-						attachment.Name = p.FileName()
-						attachments = append(attachments, attachment)
-
-					default:
-
-						//retrieve the data,  this is not gzip
-						partdata, err := ioutil.ReadAll(p)
-						if err != nil {
-							return err
-						}
-						logger.Debugf("Retrieved attachment data")
-						attachment.AttachmentBytes = partdata
-						attachment.Name = p.FileName()
-						attachments = append(attachments, attachment)
-
-					} // end content-encoding switch
-				} // end if attachment
-			} // end content-type switch
-			return nil
-		}()
-		if err == io.EOF {
-			break // processed all parts
-		}
-		if err != nil {
-			return nil, err
-		}
-	} // for all multiparts
-
-	return &couchDoc, nil
+			} // end content-encoding switch
+		} // end if attachment
+	} // end content-type switch
+	return nil
 }
 
 //ReadDocRange method provides function to a range of documents based on the start and end keys
