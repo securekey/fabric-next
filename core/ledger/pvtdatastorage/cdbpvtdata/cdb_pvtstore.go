@@ -11,8 +11,6 @@ import (
 
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
-	"strconv"
-
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
@@ -111,7 +109,7 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 		},
 		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
 	}`
-	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, strconv.FormatUint(blockNum, blockNumberBase)))
+	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%06d", blockNum)))
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
@@ -124,7 +122,7 @@ func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
 		},
 		"use_index": ["_design/` + blockNumberExpiryIndexDoc + `", "` + blockNumberExpiryIndexName + `"]
 	}`
-	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, strconv.FormatUint(blockNum, blockNumberBase)))
+	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%06d", blockNum)))
 	if _, ok := err.(*NotFoundInIndexErr); ok {
 		return nil, nil
 	}

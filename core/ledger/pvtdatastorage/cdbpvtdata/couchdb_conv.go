@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"fmt"
+
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
 )
@@ -25,7 +27,6 @@ const (
 	blockNumberExpiryField     = "block_number_expiry"
 	blockNumberExpiryIndexName = "by_block_number_expiry"
 	blockNumberExpiryIndexDoc  = "indexBlockNumberExpiry"
-	blockNumberBase            = 10
 	metadataKey                = "metadata"
 	commitField                = "commit"
 	pendingCommitField         = "pending"
@@ -66,7 +67,7 @@ func dataEntriesToCouchDocs(dataEntries []*dataEntry, blockNumber uint64) ([]*co
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberField: strconv.FormatUint(blockNumber, blockNumberBase)}
+		indices := map[string]string{blockNumberField: fmt.Sprintf("%06d", blockNumber)}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
@@ -85,7 +86,7 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry, blockNumber uint64) 
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberExpiryField: strconv.FormatUint(blockNumber, blockNumberBase)}
+		indices := map[string]string{blockNumberExpiryField: fmt.Sprintf("%06d", blockNumber)}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
