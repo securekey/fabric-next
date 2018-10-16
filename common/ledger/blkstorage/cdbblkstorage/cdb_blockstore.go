@@ -47,8 +47,12 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 	}
 
 	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
-	cpInfo := cdbBlockStore.cp.getCheckpointInfo()
-	err := cdbBlockStore.cp.saveCurrentInfo(cpInfo)
+	cpInfo, err := cdbBlockStore.cp.getCheckpointInfo()
+	if err != nil {
+		panic(fmt.Sprintf("Could not get block file info for current block file from db: %s", err))
+	}
+
+	err = cdbBlockStore.cp.saveCurrentInfo(cpInfo)
 	if err != nil {
 		panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
 	}
@@ -136,7 +140,11 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	cpInfo := s.cp.getCheckpointInfo()
+	cpInfo, err := s.cp.getCheckpointInfo()
+	if err != nil {
+		return nil, err
+	}
+
 	s.cpInfo = cpInfo
 	bcInfo := &common.BlockchainInfo{
 		Height: 0,

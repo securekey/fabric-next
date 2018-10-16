@@ -31,10 +31,10 @@ func newCheckpoint(db *couchdb.CouchDatabase) *checkpoint {
 	return &checkpoint{db: db}
 }
 
-func (cp *checkpoint) getCheckpointInfo() *checkpointInfo {
+func (cp *checkpoint) getCheckpointInfo() (*checkpointInfo, error) {
 	cpInfo, err := cp.loadCurrentInfo()
 	if err != nil {
-		panic(fmt.Sprintf("Could not get block file info for current block file from db: %s", err))
+		return nil, err
 	}
 	if cpInfo == nil {
 		cpInfo = &checkpointInfo{
@@ -42,7 +42,7 @@ func (cp *checkpoint) getCheckpointInfo() *checkpointInfo {
 			lastBlockNumber: 0,
 		}
 	}
-	return cpInfo
+	return cpInfo, nil
 }
 
 //Get the current checkpoint information that is stored in the database
