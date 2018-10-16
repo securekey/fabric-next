@@ -128,7 +128,6 @@ func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.History
 	return &historyDB{couchDB: database, savepointRev: rev}, nil
 }
 
-
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
 	if ledgerconfig.IsCommitter() {
 		return createCouchDatabaseCommitter(couchInstance, dbName)
@@ -300,7 +299,7 @@ func (historyDB *historyDB) ShouldRecover(lastAvailableBlock uint64) (bool, uint
 
 // CommitLostBlock implements method in interface historydb.HistoryDB
 func (historyDB *historyDB) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
-	return fmt.Errorf("Not implemented")
+	return historyDB.Commit(blockAndPvtdata.Block)
 }
 
 // Returns a new CouchDB savepoint document for the new savepoint.

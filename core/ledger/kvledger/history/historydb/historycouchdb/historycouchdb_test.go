@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hyperledger/fabric/core/ledger"
+
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/mocks"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -465,6 +467,46 @@ func TestShouldRecoverIfNoSavepoint(t *testing.T) {
 	assert.True(t, recover, "recovery should always be signalled if there is no savepoint")
 	assert.Equal(t, uint64(0), recoveryBlockNum, "recovery should indicate 0 as the recovery block number when there is no savepoint")
 	assert.NoError(t, err, "recovery should not throw an error")
+}
+
+// Test of CommitLostBlock()
+func TestHistoryDB_CommitLostBlock(t *testing.T) {
+	const namespace = "test_namespace"
+	const key = "test_key"
+	const dbname = "historydb"
+	def, cleanup := startCouchDB()
+	defer cleanup()
+	provider, err := NewHistoryDBProvider(def)
+	require.NoError(t, err)
+	handle, err := provider.GetDBHandle(dbname)
+	require.NoError(t, err)
+	block := mocks.NewBlock(
+		uint64(1),
+		&common.ChannelHeader{
+			ChannelId: "",
+			TxId:      "12345",
+			Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+		},
+		[]peer.TxValidationCode{peer.TxValidationCode_VALID},
+		mocks.NewTransaction(
+			&rwsetutil.NsRwSet{
+				NameSpace: namespace,
+				KvRwSet: &kvrwset.KVRWSet{
+					Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+				},
+			},
+		),
+	)
+	err = handle.CommitLostBlock(
+		&ledger.BlockAndPvtData{Block: block},
+	)
+	require.NoError(t, err)
+	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
+	require.NoErrorf(t, err, "failed to query test CouchDB")
+	assert.NotEmpty(t, results, "write-sets must be saved to history couchdb when committing a lost block")
+	savepoint, err := handle.GetLastSavepoint()
+	require.NoError(t, err)
+	assert.Equal(t, block.GetHeader().GetNumber(), savepoint.BlockNum, "savepoint not updated after CommitLostBlock()")
 }
 
 // Query CouchDB with the given def and dbname for documents matching the given id
