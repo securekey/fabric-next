@@ -224,37 +224,44 @@ func (historyDB *historyDB) NewHistoryQueryExecutor(blockStore blkstorage.BlockS
 
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
-	// We're only interested in writes from valid and endorsed transactions
-	writes, err := getWriteSetsFromEndorsedTrxs(historyDB.couchDB.DBName, block)
+	savepoint, err := historyDB.GetLastSavepoint()
 	if err != nil {
 		return err
 	}
-	docs, err := writes.asCouchDbDocs()
-	if err != nil {
-		return errors.Wrapf(err, "failed to convert write-sets to CouchDB documents")
-	}
-	// Create CouchDB doc savepoint
-	heightDoc, err := newSavepointDoc(newHeight(block), historyDB.savepointRev)
-	if err != nil {
-		return errors.Wrapf(err, "failed to construct a new savepoint for historycouchdb")
-	}
-	docs = append(docs, heightDoc)
-	// Save write-sets + savepoint to CouchDB
-	results, err := historyDB.couchDB.BatchUpdateDocuments(docs)
-	if err != nil {
-		return errors.Wrapf(err, "failed to save history batch to CouchDB")
-	}
-	// Save the savepoint's new revision for the next commit
-	for _, result := range results {
-		if heightDocIdKey == result.ID {
-			historyDB.savepointRev = result.Rev
-			break
+	// Only save blocks with greater height than the last savepoint
+	if savepoint == nil || savepoint.BlockNum < block.GetHeader().GetNumber() {
+		// We're only interested in writes from valid and endorsed transactions
+		writes, err := getWriteSetsFromEndorsedTrxs(historyDB.couchDB.DBName, block)
+		if err != nil {
+			return err
 		}
+		docs, err := writes.asCouchDbDocs()
+		if err != nil {
+			return errors.Wrapf(err, "failed to convert write-sets to CouchDB documents")
+		}
+		// Create CouchDB doc savepoint
+		heightDoc, err := newSavepointDoc(newHeight(block), historyDB.savepointRev)
+		if err != nil {
+			return errors.Wrapf(err, "failed to construct a new savepoint for historycouchdb")
+		}
+		docs = append(docs, heightDoc)
+		// Save write-sets + savepoint to CouchDB
+		results, err := historyDB.couchDB.BatchUpdateDocuments(docs)
+		if err != nil {
+			return errors.Wrapf(err, "failed to save history batch to CouchDB")
+		}
+		// Save the savepoint's new revision for the next commit
+		for _, result := range results {
+			if heightDocIdKey == result.ID {
+				historyDB.savepointRev = result.Rev
+				break
+			}
+		}
+		logger.Debugf(
+			"Channel [%s]: Updates committed to history database for blockNo [%v]",
+			historyDB.couchDB.DBName, block.Header.Number,
+		)
 	}
-	logger.Debugf(
-		"Channel [%s]: Updates committed to history database for blockNo [%v]",
-		historyDB.couchDB.DBName, block.Header.Number,
-	)
 	return nil
 }
 
