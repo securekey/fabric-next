@@ -54,6 +54,7 @@ func TestMethods(t *testing.T) {
 		&RemoteStateResponse{},
 		&LeadershipMessage{},
 		&PeerIdentity{},
+		&ValidatedTx{},
 	}
 
 	for _, msg := range msgs {
@@ -82,6 +83,7 @@ func TestMethods(t *testing.T) {
 		&GossipMessage_StateResponse{},
 		&GossipMessage_LeadershipMsg{},
 		&GossipMessage_PeerIdentity{},
+		&GossipMessage_ValidatedTx{},
 	}
 
 	for _, ct := range contentTypes {
@@ -110,7 +112,7 @@ func TestMethods(t *testing.T) {
 			Content: ct,
 		}
 
-		for i := 5; i < 22; i++ {
+		for i := 5; i < 26; i++ {
 			_GossipMessage_OneofUnmarshaler(gMsg, i, 2, &proto.Buffer{})
 		}
 	}
