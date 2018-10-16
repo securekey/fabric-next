@@ -16,6 +16,24 @@
       "revId": "696efe61ca5735e231b4decdc25c6c2763142ecf",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "2db13b85_a37ce1e1",
+        "filename": "core/ledger/util/couchdb/couchdb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 1756,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-16T15:26:41Z",
+      "side": 0,
+      "message": "No - needs to be called on each iteration of the loop.",
+      "parentUuid": "27386646_f8ed8f1b",
+      "revId": "696efe61ca5735e231b4decdc25c6c2763142ecf",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
