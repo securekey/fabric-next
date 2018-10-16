@@ -1812,23 +1812,23 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				logger.Warningf("Retrying couchdb request in %s. Attempt:%v  Couch DB Error:%s,  Status Code:%v  Reason:%v",
 					waitDuration.String(), attempts+1, couchDBReturn.Error, resp.Status, couchDBReturn.Reason)
 			}
+
+			// TODO: This needs to be refactored.
+			if attempts < maxRetries {
+				// TODO: This should be refactored. Close is being called here because Success has a break earlier
+				// TODO: in the logic. We need to close between attempts to avoid leaks.
+				if errResp != nil {
+					closeResponseBody(resp)
+				}
+
+				//sleep for specified sleep time, then retry
+				time.Sleep(waitDuration)
+
+				//backoff, doubling the retry time for next attempt
+				waitDuration *= 2
+
+			}
 		}
-
-		// TODO: This should be refactored. Close is being called here because Success has a break earlier
-		// TODO: in the logic.
-		closeResponseBody(resp)
-
-		// TODO: This needs to be refactored.
-		if maxRetries > 0 && attempts < maxRetries {
-
-			//sleep for specified sleep time, then retry
-			time.Sleep(waitDuration)
-
-			//backoff, doubling the retry time for next attempt
-			waitDuration *= 2
-
-		}
-
 	} // end retry loop
 
 	//if a golang http error is still present after retries are exhausted, return the error
