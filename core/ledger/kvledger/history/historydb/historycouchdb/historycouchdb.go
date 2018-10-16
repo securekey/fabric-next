@@ -128,7 +128,6 @@ func (provider *historyDBProvider) GetDBHandle(dbName string) (historydb.History
 	return &historyDB{couchDB: database, savepointRev: rev}, nil
 }
 
-
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
 	if ledgerconfig.IsCommitter() {
 		return createCouchDatabaseCommitter(couchInstance, dbName)
@@ -179,7 +178,7 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 
 // Close closes the underlying db
 func (provider *historyDBProvider) Close() {
-	panic("Not implemented")
+	// do nothing
 }
 
 // Creates indexes if they don't exist already.
