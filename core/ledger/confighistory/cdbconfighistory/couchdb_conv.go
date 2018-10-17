@@ -21,6 +21,7 @@ const (
 	blockNumberCCNameIndexName = "by_block_number_cc_name"
 	blockNumberCCNameIndexDoc  = "indexBlockNumberCCName"
 	ccNameField                = "cc_name"
+	blockNumberBase            = 10
 )
 
 const blockNumberCCNameIndexDef = `

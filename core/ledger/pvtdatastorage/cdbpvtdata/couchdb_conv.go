@@ -30,6 +30,7 @@ const (
 	metadataKey                = "metadata"
 	commitField                = "commit"
 	pendingCommitField         = "pending"
+	blockNumberBase            = 10
 )
 
 const blockNumberIndexDef = `
@@ -67,7 +68,7 @@ func dataEntriesToCouchDocs(dataEntries []*dataEntry, blockNumber uint64) ([]*co
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberField: fmt.Sprintf("%06d", blockNumber)}
+		indices := map[string]string{blockNumberField: fmt.Sprintf("%064s", strconv.FormatUint(blockNumber, blockNumberBase))}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
@@ -86,7 +87,7 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry, blockNumber uint64) 
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberExpiryField: fmt.Sprintf("%06d", blockNumber)}
+		indices := map[string]string{blockNumberExpiryField: fmt.Sprintf("%064s", strconv.FormatUint(blockNumber, blockNumberBase))}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err

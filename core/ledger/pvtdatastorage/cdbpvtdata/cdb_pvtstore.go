@@ -8,6 +8,7 @@ package cdbpvtdata
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
@@ -109,7 +110,8 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 		},
 		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
 	}`
-	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%06d", blockNum)))
+
+	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))))
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
@@ -122,7 +124,7 @@ func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
 		},
 		"use_index": ["_design/` + blockNumberExpiryIndexDoc + `", "` + blockNumberExpiryIndexName + `"]
 	}`
-	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%06d", blockNum)))
+	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))))
 	if _, ok := err.(*NotFoundInIndexErr); ok {
 		return nil, nil
 	}

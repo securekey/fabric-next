@@ -18,6 +18,8 @@ import (
 
 	"strings"
 
+	"strconv"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -139,7 +141,8 @@ func (c *ConfigHistoryMgr) prepareDBBatch(stateUpdates ledger.StateUpdates, comm
 		}
 		ccName := strings.Split(string(kv.Key), "~")[0]
 		key := encodeCompositeKey(lsccNamespace, kv.Key, committingBlock)
-		indices := map[string]string{blockNumberField: fmt.Sprintf("%06d", committingBlock),
+
+		indices := map[string]string{blockNumberField: fmt.Sprintf("%064s", strconv.FormatUint(committingBlock, blockNumberBase)),
 			ccNameField: ccName}
 
 		doc, err := keyValueToCouchDoc(key, kv.Value, indices)
@@ -194,7 +197,7 @@ func (r *retriever) mostRecentEntryBelow(blockNum uint64, ns, key, ccName string
    ]
 }`
 
-	resultsP, err := r.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%06d", blockNum), ccName))
+	resultsP, err := r.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase)), ccName))
 	if err != nil {
 		return nil, err
 	}
