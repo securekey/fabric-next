@@ -1,4 +1,4 @@
-From 55404163069898cad91eb8ffd9944a98b7efb45b Mon Sep 17 00:00:00 2001
+From f845eba788e83dadcf3e6303d887d12485f86c0b Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Mon, 15 Oct 2018 17:33:47 -0400
 Subject: [PATCH] Add configuration to create _global_changes
@@ -7,6 +7,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
  .../cdbblkstorage/cdb_blockstore_provider.go  |  2 +-
  core/chaincode/exectransaction_test.go        |  3 +-
+ .../cdbconfighistory/cdb_confighistorymgr.go  |  2 +-
  .../statedb/statecouchdb/statecouchdb.go      |  2 +-
  .../statecouchdb/statecouchdb_test_export.go  |  2 +-
  core/ledger/util/couchdb/config.go            | 16 +++---
@@ -16,7 +17,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/util/couchdb/couchdbutil_test.go  | 30 ++++++++++-
  .../cdbtransientdata/cdb_transientprovider.go |  2 +-
  sampleconfig/core.yaml                        |  2 +
- 11 files changed, 90 insertions(+), 58 deletions(-)
+ 12 files changed, 91 insertions(+), 59 deletions(-)
 
 diff --git a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go
 index dc1fdcd92..649d4512c 100644
@@ -46,6 +47,19 @@ index 3701986b4..61b320df8 100644
  		db := couchdb.CouchDatabase{CouchInstance: couchInstance, DBName: chainID}
  		//drop the test database
  		db.DropDatabase()
+diff --git a/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go b/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
+index e7be531ee..e78490202 100644
+--- a/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
++++ b/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
+@@ -52,7 +52,7 @@ func NewMgr() (confighistory.Mgr, error) {
+ 	logger.Warningf("constructing CouchDB config history data storage provider")
+ 	couchDBDef := couchdb.GetCouchDBDefinition()
+ 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
+-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
++		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+ 	if err != nil {
+ 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
+ 	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 index d67395b1e..77f441339 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
@@ -106,10 +120,10 @@ index 6da645f6c..281fdbe50 100644
 +	return &CouchDBDef{couchDBAddress, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}
  }
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 0cb33a26e..b24306cf0 100644
+index 63c40f8b4..0cca28b4b 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -118,12 +118,13 @@ type QueryResult struct {
+@@ -120,12 +120,13 @@ type QueryResult struct {
  
  //CouchConnectionDef contains parameters
  type CouchConnectionDef struct {
@@ -129,7 +143,7 @@ index 0cb33a26e..b24306cf0 100644
  }
  
  //CouchInstance represents a CouchDB instance
-@@ -230,7 +231,7 @@ func closeResponseBody(resp *http.Response) {
+@@ -235,7 +236,7 @@ func closeResponseBody(resp *http.Response) {
  
  //CreateConnectionDefinition for a new client connection
  func CreateConnectionDefinition(couchDBAddress, username, password string, maxRetries,
@@ -138,7 +152,7 @@ index 0cb33a26e..b24306cf0 100644
  
  	logger.Debugf("Entering CreateConnectionDefinition()")
  
-@@ -251,7 +252,7 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
+@@ -256,7 +257,7 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
  
  	//return an object containing the connection information
  	return &CouchConnectionDef{finalURL.String(), username, password, maxRetries,
