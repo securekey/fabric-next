@@ -51,10 +51,11 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.Couch
 	if err != nil {
 		panic(fmt.Sprintf("Could not get block file info for current block file from db: %s", err))
 	}
-
-	err = cdbBlockStore.cp.saveCurrentInfo(cpInfo)
-	if err != nil {
-		panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
+	if ledgerconfig.IsCommitter() {
+		err = cdbBlockStore.cp.saveCurrentInfo(cpInfo)
+		if err != nil {
+			panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
+		}
 	}
 	// Update the manager with the checkpoint info and the file writer
 	cdbBlockStore.cpInfo = cpInfo
