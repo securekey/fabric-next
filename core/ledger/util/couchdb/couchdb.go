@@ -31,7 +31,6 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/op/go-logging"
-	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("couchdb")
@@ -162,6 +161,15 @@ type AttachmentInfo struct {
 	AttachmentBytes []byte
 }
 
+//AttachmentResponse contains the definition for an attached inline file for couchdb
+type AttachmentResponse struct {
+	ContentType string `json:"content_type"`
+	RevPos      int    `json:"revpos"`
+	Digest      string `json:"digest"`
+	Data        string `json:"data"`
+	Stub        bool   `json:"stub"`
+}
+
 //FileDetails defines the structure needed to send an attachment to couchdb
 type FileDetails struct {
 	Follows     bool   `json:"follows"`
@@ -175,14 +183,21 @@ type CouchDoc struct {
 	Attachments []*AttachmentInfo
 }
 
-//BatchRetrieveDocMetadataResponse is used for processing REST batch responses from CouchDB
-type BatchRetrieveDocMetadataResponse struct {
+//NamedCouchDoc defines the structure for a JSON document value with its ID
+type NamedCouchDoc struct {
+	ID  string
+	Doc *CouchDoc
+}
+
+//BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
+type BatchRetrieveDocResponse struct {
 	Rows []struct {
 		ID          string `json:"id"`
-		DocMetadata struct {
+		Doc struct {
 			ID      string `json:"_id"`
 			Rev     string `json:"_rev"`
 			Version string `json:"~version"`
+			AttachmentsInfo json.RawMessage `json:"_attachments"`
 		} `json:"doc"`
 	} `json:"rows"`
 }
@@ -931,11 +946,11 @@ func populateCouchDocFromMultipartReader(multipartReader *multipart.Reader, couc
 //startKey and endKey can also be empty strings.  If startKey and endKey are empty, all documents are returned
 //This function provides a limit option to specify the max number of entries and is supplied by config.
 //Skip is reserved for possible future future use.
-func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip int) (*[]QueryResult, error) {
+func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip int) ([]*QueryResult, error) {
 
 	logger.Debugf("Entering ReadDocRange()  startKey=%s, endKey=%s", startKey, endKey)
 
-	var results []QueryResult
+	var results []*QueryResult
 
 	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
 	if err != nil {
@@ -959,15 +974,15 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 				return nil, err
 			}
 
-			var addDocument = &QueryResult{docMetadata.ID, couchDoc.JSONValue, couchDoc.Attachments}
-			results = append(results, *addDocument)
+			var addDocument = QueryResult{docMetadata.ID, couchDoc.JSONValue, couchDoc.Attachments}
+			results = append(results, &addDocument)
 
 		} else {
 
 			logger.Debugf("Adding json docment for id: %s", docMetadata.ID)
 
-			var addDocument = &QueryResult{docMetadata.ID, row.Doc, nil}
-			results = append(results, *addDocument)
+			var addDocument = QueryResult{docMetadata.ID, row.Doc, nil}
+			results = append(results, &addDocument)
 
 		}
 
@@ -975,7 +990,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 
 	logger.Debugf("Exiting ReadDocRange()")
 
-	return &results, nil
+	return results, nil
 
 }
 
@@ -1086,11 +1101,12 @@ func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 }
 
 //QueryDocuments method provides function for processing a query
-func (dbclient *CouchDatabase) QueryDocuments(query string) (*[]QueryResult, error) {
+func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, error) {
 
 	logger.Debugf("Entering QueryDocuments()  query=%s", query)
 
-	var results []QueryResult
+	var results []*QueryResult
+	var bulkQueryIDs []string
 
 	jsonResponse, err := dbclient.query(query)
 	if err != nil {
@@ -1100,37 +1116,38 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) (*[]QueryResult, err
 	for _, row := range jsonResponse.Docs {
 
 		var docMetadata = &DocMetadata{}
-		err3 := json.Unmarshal(row, &docMetadata)
-		if err3 != nil {
-			return nil, err3
+		err := json.Unmarshal(row, &docMetadata)
+		if err != nil {
+			return nil, err
 		}
 
 		if docMetadata.AttachmentsInfo != nil {
-
-			logger.Debugf("Adding JSON docment and attachments for id: %s", docMetadata.ID)
-
-			couchDoc, _, err := dbclient.ReadDoc(docMetadata.ID)
-			if err != nil {
-				return nil, err
-			}
-			if couchDoc == nil {
-				return nil, errors.Errorf("document not found [%s]", docMetadata.ID)
-			}
-			var addDocument = &QueryResult{ID: docMetadata.ID, Value: couchDoc.JSONValue, Attachments: couchDoc.Attachments}
-			results = append(results, *addDocument)
-
+			// Delay appending this document until we retrieve attachments using a bulk query.
+			bulkQueryIDs = append(bulkQueryIDs, docMetadata.ID)
 		} else {
 			logger.Debugf("Adding json docment for id: %s", docMetadata.ID)
 			var addDocument = &QueryResult{ID: docMetadata.ID, Value: row, Attachments: nil}
 
-			results = append(results, *addDocument)
+			results = append(results, addDocument)
 
 		}
 	}
+
+	if len(bulkQueryIDs) > 0 {
+		logger.Debugf("Adding bulk JSON document and attachments [%+v]", bulkQueryIDs)
+		docs, err := dbclient.BatchRetrieveDocument(bulkQueryIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, namedDoc := range docs {
+			addDocument := QueryResult{ID: namedDoc.ID, Attachments: namedDoc.Doc.Attachments}
+			results = append(results, &addDocument)
+		}
+
+	}
 	logger.Debugf("Exiting QueryDocuments()")
 
-	return &results, nil
-
+	return results, nil
 }
 
 func (dbclient *CouchDatabase) query(query string) (*QueryResponse, error) {
@@ -1178,6 +1195,20 @@ func (dbclient *CouchDatabase) query(query string) (*QueryResponse, error) {
 
 	return jsonResponse, nil
 }
+
+/*
+func (dbclient *CouchDatabase) createQueryResultWithExternalAttachment(docMetadata *DocMetadata) (*QueryResult, error) {
+	couchDoc, _, err := dbclient.ReadDoc(docMetadata.ID)
+	if err != nil {
+		return nil, err
+	}
+	if couchDoc == nil {
+		return nil, errors.Errorf("document not found [%s]", docMetadata.ID)
+	}
+	doc := QueryResult{ID: docMetadata.ID, Value: couchDoc.JSONValue, Attachments: couchDoc.Attachments}
+	return &doc, nil
+}
+*/
 
 // ListIndex method lists the defined indexes for a database
 func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
@@ -1500,6 +1531,116 @@ func (dbclient *CouchDatabase) ApplyDatabaseSecurity(databaseSecurity *DatabaseS
 
 }
 
+//BatchRetrieveDocument - batch method to retrieve document  for  a set of keys,
+// including ID, couchdb revision number, ledger version, and attachments
+func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCouchDoc, error) {
+
+	logger.Debugf("Entering BatchRetrieveDocumentMetadata()  keys=%s", keys)
+
+	batchRetrieveURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
+	if err != nil {
+		logger.Errorf("URL parse error: %s", err.Error())
+		return nil, err
+	}
+	batchRetrieveURL.Path = dbclient.DBName + "/_all_docs"
+
+	queryParms := batchRetrieveURL.Query()
+
+	queryParms.Add("include_docs", "true")
+	queryParms.Add("attachments", "true")
+
+	batchRetrieveURL.RawQuery = queryParms.Encode()
+
+	keymap := make(map[string]interface{})
+
+	keymap["keys"] = keys
+
+	jsonKeys, err := json.Marshal(keymap)
+	if err != nil {
+		return nil, err
+	}
+
+	//get the number of retries
+	maxRetries := dbclient.CouchInstance.conf.MaxRetries
+
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
+	if err != nil {
+		return nil, err
+	}
+	defer closeResponseBody(resp)
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		dump, _ := httputil.DumpResponse(resp, false)
+		// compact debug log by replacing carriage return / line feed with dashes to separate http headers
+		logger.Debugf("HTTP Response: %s", bytes.Replace(dump, []byte{0x0d, 0x0a}, []byte{0x20, 0x7c, 0x20}, -1))
+	}
+
+	//handle as JSON document
+	jsonResponseRaw, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var jsonResponse = &BatchRetrieveDocResponse{}
+	err2 := json.Unmarshal(jsonResponseRaw, &jsonResponse)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	var docs []*NamedCouchDoc
+	for _, row := range jsonResponse.Rows {
+		attachments, err := createAttachmentsFromBatchResponse(row.Doc.AttachmentsInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: should remove the attachment bytes from JSONValue
+		doc := CouchDoc{JSONValue:jsonResponseRaw, Attachments: attachments}
+		namedDoc := NamedCouchDoc{ID: row.ID, Doc: &doc}
+		docs = append(docs, &namedDoc)
+	}
+
+	logger.Debugf("Exiting BatchRetrieveDocumentMetadata()")
+	return docs, nil
+}
+
+func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*AttachmentInfo, error) {
+	if len(attachmentsInfo) == 0 {
+		// TODO: prefer to return zero-value but there seems to be code checking for nil rather than length.
+		return nil, nil
+	}
+
+	var attachMap map[string]json.RawMessage
+	err := json.Unmarshal(attachmentsInfo, &attachMap)
+	if err != nil {
+		return nil, err
+	}
+
+	var attachments []*AttachmentInfo
+
+	for name, attachRaw := range attachMap {
+		var attachmentResponse AttachmentResponse
+		err := json.Unmarshal(attachRaw, &attachmentResponse)
+		if err != nil {
+			return nil, err
+		}
+
+		bytes, err := base64.StdEncoding.DecodeString(attachmentResponse.Data)
+		if err != nil {
+			return nil, err
+		}
+
+		attachment := AttachmentInfo{
+			Name: name,
+			ContentType: attachmentResponse.ContentType,
+			AttachmentBytes: bytes,
+		}
+		attachments = append(attachments, &attachment)
+	}
+
+	return attachments, nil
+}
+
 //BatchRetrieveDocumentMetadata - batch method to retrieve document metadata for  a set of keys,
 // including ID, couchdb revision number, and ledger version
 func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*DocMetadata, error) {
@@ -1522,6 +1663,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	// (the second time BatchRetrieveDocumentMetadata is called during block processing),
 	// we could set include_docs to false to optimize the response.
 	queryParms.Add("include_docs", "true")
+
 	batchRetrieveURL.RawQuery = queryParms.Encode()
 
 	keymap := make(map[string]interface{})
@@ -1536,7 +1678,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1554,7 +1696,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 		return nil, err
 	}
 
-	var jsonResponse = &BatchRetrieveDocMetadataResponse{}
+	var jsonResponse = &BatchRetrieveDocResponse{}
 
 	err2 := json.Unmarshal(jsonResponseRaw, &jsonResponse)
 	if err2 != nil {
@@ -1564,7 +1706,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	docMetadataArray := []*DocMetadata{}
 
 	for _, row := range jsonResponse.Rows {
-		docMetadata := &DocMetadata{ID: row.ID, Rev: row.DocMetadata.Rev, Version: row.DocMetadata.Version}
+		docMetadata := &DocMetadata{ID: row.ID, Rev: row.Doc.Rev, Version: row.Doc.Version}
 		docMetadataArray = append(docMetadataArray, docMetadata)
 	}
 

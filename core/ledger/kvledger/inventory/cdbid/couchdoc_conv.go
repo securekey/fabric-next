@@ -124,7 +124,7 @@ func couchValueToJSON(value []byte) (jsonValue, error) {
 	return jsonResult, nil
 }
 
-func queryInventory(db *couchdb.CouchDatabase, inventoryType string) ([]couchdb.QueryResult, error) {
+func queryInventory(db *couchdb.CouchDatabase, inventoryType string) ([]*couchdb.QueryResult, error) {
 	const queryFmt = `
 	{
 		"selector": {
@@ -135,11 +135,9 @@ func queryInventory(db *couchdb.CouchDatabase, inventoryType string) ([]couchdb.
 		"use_index": ["_design/` + inventoryTypeIndexDoc + `", "` + inventoryTypeIndexName + `"]
 	}`
 
-	resultsP, err := db.QueryDocuments(fmt.Sprintf(queryFmt, inventoryType))
+	results, err := db.QueryDocuments(fmt.Sprintf(queryFmt, inventoryType))
 	if err != nil {
 		return nil, err
 	}
-	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
-
 	return results, nil
 }

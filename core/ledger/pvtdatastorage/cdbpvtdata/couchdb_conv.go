@@ -256,11 +256,10 @@ func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
 }
 
 func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string) (map[string][]byte, error) {
-	resultsP, err := db.QueryDocuments(query)
+	results, err := db.QueryDocuments(query)
 	if err != nil {
 		return nil, err
 	}
-	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
 
 	if len(results) == 0 {
 		return nil, NewErrNotFoundInIndex()
