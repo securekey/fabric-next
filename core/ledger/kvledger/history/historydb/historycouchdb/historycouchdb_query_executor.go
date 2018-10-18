@@ -104,7 +104,7 @@ func (iter *resultsIter) loadNextPage() error {
 		return errors.Wrapf(err, "failed to query HistoryDB on CouchDB; query: [%s]", query)
 	}
 	var writesets writeSets
-	for _, result := range *results {
+	for _, result := range results {
 		ws := writeSet{}
 		if err := json.Unmarshal(result.Value, &ws); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal this HistoryDB writeset document from CouchDB: [%s]", string(result.Value))

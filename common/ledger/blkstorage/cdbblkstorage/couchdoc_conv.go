@@ -335,11 +335,10 @@ func blockNumberToKey(blockNum uint64) string {
 }
 
 func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block, error) {
-	resultsP, err := db.QueryDocuments(query)
+	results, err := db.QueryDocuments(query)
 	if err != nil {
 		return nil, err
 	}
-	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
 
 	if len(results) == 0 {
 		return nil, blkstorage.ErrNotFoundInIndex

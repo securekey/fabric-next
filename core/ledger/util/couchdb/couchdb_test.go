@@ -711,10 +711,8 @@ func TestPrefixScan(t *testing.T) {
 	_, _, geterr := db.ReadDoc(endKey)
 	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to get lastkey"))
 
-	resultsPtr, geterr := db.ReadDocRange(startKey, endKey, 1000, 0)
+	results, geterr := db.ReadDocRange(startKey, endKey, 1000, 0)
 	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to perform a range scan"))
-	testutil.AssertNotNil(t, resultsPtr)
-	results := *resultsPtr
 	testutil.AssertEquals(t, len(results), 3)
 	testutil.AssertEquals(t, results[0].ID, string(0)+string(10)+string(0))
 	testutil.AssertEquals(t, results[1].ID, string(0)+string(10)+string(1))
@@ -1190,7 +1188,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 3 results for owner="jerry"
-	testutil.AssertEquals(t, len(*queryResult), 3)
+	testutil.AssertEquals(t, len(queryResult), 3)
 
 	//Test query with implicit operator   --------------------------------------------------------------
 	queryString = `{"selector":{"owner":"jerry"}}`
@@ -1199,7 +1197,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 3 results for owner="jerry"
-	testutil.AssertEquals(t, len(*queryResult), 3)
+	testutil.AssertEquals(t, len(queryResult), 3)
 
 	//Test query with specified fields   -------------------------------------------------------------------
 	queryString = `{"selector":{"owner":{"$eq":"jerry"}},"fields": ["owner","asset_name","color","size"]}`
@@ -1208,7 +1206,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 3 results for owner="jerry"
-	testutil.AssertEquals(t, len(*queryResult), 3)
+	testutil.AssertEquals(t, len(queryResult), 3)
 
 	//Test query with a leading operator   -------------------------------------------------------------------
 	queryString = `{"selector":{"$or":[{"owner":{"$eq":"jerry"}},{"owner": {"$eq": "frank"}}]}}`
@@ -1217,7 +1215,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 4 results for owner="jerry" or owner="frank"
-	testutil.AssertEquals(t, len(*queryResult), 4)
+	testutil.AssertEquals(t, len(queryResult), 4)
 
 	//Test query implicit and explicit operator   ------------------------------------------------------------------
 	queryString = `{"selector":{"color":"green","$or":[{"owner":"tom"},{"owner":"frank"}]}}`
@@ -1226,7 +1224,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 2 results for color="green" and (owner="jerry" or owner="frank")
-	testutil.AssertEquals(t, len(*queryResult), 2)
+	testutil.AssertEquals(t, len(queryResult), 2)
 
 	//Test query with a leading operator  -------------------------------------------------------------------------
 	queryString = `{"selector":{"$and":[{"size":{"$gte":2}},{"size":{"$lte":5}}]}}`
@@ -1235,7 +1233,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 4 results for size >= 2 and size <= 5
-	testutil.AssertEquals(t, len(*queryResult), 4)
+	testutil.AssertEquals(t, len(queryResult), 4)
 
 	//Test query with leading and embedded operator  -------------------------------------------------------------
 	queryString = `{"selector":{"$and":[{"size":{"$gte":3}},{"size":{"$lte":10}},{"$not":{"size":7}}]}}`
@@ -1244,7 +1242,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 7 results for size >= 3 and size <= 10 and not 7
-	testutil.AssertEquals(t, len(*queryResult), 7)
+	testutil.AssertEquals(t, len(queryResult), 7)
 
 	//Test query with leading operator and array of objects ----------------------------------------------------------
 	queryString = `{"selector":{"$and":[{"size":{"$gte":2}},{"size":{"$lte":10}},{"$nor":[{"size":3},{"size":5},{"size":7}]}]}}`
@@ -1253,14 +1251,14 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 6 results for size >= 2 and size <= 10 and not 3,5 or 7
-	testutil.AssertEquals(t, len(*queryResult), 6)
+	testutil.AssertEquals(t, len(queryResult), 6)
 
 	//Test a range query ---------------------------------------------------------------------------------------------
 	queryResult, err = db.ReadDocRange("marble02", "marble06", 10000, 0)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a range query"))
 
 	//There should be 4 results
-	testutil.AssertEquals(t, len(*queryResult), 4)
+	testutil.AssertEquals(t, len(queryResult), 4)
 
 	//Test query with for tom  -------------------------------------------------------------------
 	queryString = `{"selector":{"owner":{"$eq":"tom"}}}`
@@ -1269,7 +1267,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 8 results for owner="tom"
-	testutil.AssertEquals(t, len(*queryResult), 8)
+	testutil.AssertEquals(t, len(queryResult), 8)
 
 	//Test query with for tom with limit  -------------------------------------------------------------------
 	queryString = `{"selector":{"owner":{"$eq":"tom"}},"limit":2}`
@@ -1278,7 +1276,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a query"))
 
 	//There should be 2 results for owner="tom" with a limit of 2
-	testutil.AssertEquals(t, len(*queryResult), 2)
+	testutil.AssertEquals(t, len(queryResult), 2)
 
 	//Test query with invalid index  -------------------------------------------------------------------
 	queryString = `{"selector":{"owner":"tom"}, "use_index":["indexOwnerDoc","indexOwner"]}`

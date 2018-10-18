@@ -556,7 +556,7 @@ func queryCouchDbById(def *couchdb.CouchDBDef, dbname, id string) (*couchdb.Couc
 }
 
 // Query CouchDB for writesets for the given namespace and key.
-func queryCouchDbByNsAndKey(def *couchdb.CouchDBDef, dbname, namespace, key string) (*[]couchdb.QueryResult, error) {
+func queryCouchDbByNsAndKey(def *couchdb.CouchDBDef, dbname, namespace, key string) ([]*couchdb.QueryResult, error) {
 	return newCouchDbClient(
 		def,
 		couchdb.ConstructBlockchainDBName(dbname, dbNameSuffix),

@@ -197,11 +197,10 @@ func (r *retriever) mostRecentEntryBelow(blockNum uint64, ns, key, ccName string
    ]
 }`
 
-	resultsP, err := r.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase)), ccName))
+	results, err := r.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase)), ccName))
 	if err != nil {
 		return nil, err
 	}
-	results := *resultsP // remove unnecessary pointer (todo: should fix in source package)
 	if len(results) == 0 {
 		logger.Debugf("QueryDocuments return nil for blockNum %d ccName %s", blockNum, ccName)
 		return nil, nil

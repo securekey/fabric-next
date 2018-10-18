@@ -315,7 +315,7 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 		return nil, err
 	}
 	logger.Debugf("Exiting GetStateRangeScanIterator")
-	return newQueryScanner(namespace, *queryResult), nil
+	return newQueryScanner(namespace, queryResult), nil
 }
 
 // ExecuteQuery implements method in VersionedDB interface
@@ -343,7 +343,7 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 		return nil, err
 	}
 	logger.Debugf("Exiting ExecuteQuery")
-	return newQueryScanner(namespace, *queryResult), nil
+	return newQueryScanner(namespace, queryResult), nil
 }
 
 // ApplyUpdates implements method in VersionedDB interface
@@ -492,10 +492,10 @@ func applyAdditionalQueryOptions(queryString string, queryLimit, querySkip int) 
 type queryScanner struct {
 	cursor    int
 	namespace string
-	results   []couchdb.QueryResult
+	results   []*couchdb.QueryResult
 }
 
-func newQueryScanner(namespace string, queryResults []couchdb.QueryResult) *queryScanner {
+func newQueryScanner(namespace string, queryResults []*couchdb.QueryResult) *queryScanner {
 	return &queryScanner{-1, namespace, queryResults}
 }
 
