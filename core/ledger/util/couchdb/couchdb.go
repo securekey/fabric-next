@@ -959,9 +959,9 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 	logger.Debugf("Entering ReadDocRange()  startKey=%s, endKey=%s", startKey, endKey)
 
 	var results []*QueryResult
-	var resultsMap map[string]*QueryResult
 	var orderedDocs []*DocMetadata
 	var bulkQueryIDs []string
+	resultsMap := make(map[string]*QueryResult)
 
 	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
 	if err != nil {
@@ -991,7 +991,6 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 	}
 
 	if len(bulkQueryIDs) > 0 {
-		logger.Debugf("Adding bulk JSON document and attachments [%+v]", bulkQueryIDs)
 		docs, err := dbclient.BatchRetrieveDocument(bulkQueryIDs)
 		if err != nil {
 			return nil, err
@@ -1129,9 +1128,9 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
 	logger.Debugf("Entering QueryDocuments()  query=%s", query)
 
 	var results []*QueryResult
-	var resultsMap map[string]*QueryResult
 	var orderedDocs []*DocMetadata
 	var bulkQueryIDs []string
+	resultsMap := make(map[string]*QueryResult)
 
 	jsonResponse, err := dbclient.query(query)
 	if err != nil {
