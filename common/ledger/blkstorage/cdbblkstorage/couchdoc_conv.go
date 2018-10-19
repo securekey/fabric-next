@@ -26,15 +26,17 @@ import (
 
 // block document
 const (
-	idField             = "_id"
-	blockHashField      = "hash"
-	blockTxnsField      = "transactions"
-	blockTxnIDField     = "id"
-	blockHashIndexName  = "by_hash"
-	blockHashIndexDoc   = "indexHash"
-	blockAttachmentName = "block"
-	blockKeyPrefix      = ""
-	blockHeaderField    = "header"
+	idField              = "_id"
+	lastBlockNumberField = "lastBlockNumber"
+	isChainEmptyField    = "chainEmpty"
+	blockHashField       = "hash"
+	blockTxnsField       = "transactions"
+	blockTxnIDField      = "id"
+	blockHashIndexName   = "by_hash"
+	blockHashIndexDoc    = "indexHash"
+	blockAttachmentName  = "block"
+	blockKeyPrefix       = ""
+	blockHeaderField     = "header"
 )
 
 // txn document
@@ -65,6 +67,11 @@ type jsonValue map[string]interface{}
 
 func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
+}
+
+func (v jsonValue) unmarshal(bytes []byte) error {
+	err := json.Unmarshal(bytes, &v)
+	return err
 }
 
 func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
@@ -173,35 +180,14 @@ func checkpointInfoToCouchDoc(i *checkpointInfo) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 
 	jsonMap[idField] = blkMgrInfoKey
-
+	jsonMap[lastBlockNumberField] = strconv.FormatUint(i.lastBlockNumber, 10)
+	jsonMap[isChainEmptyField] = strconv.FormatBool(i.isChainEmpty)
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
 		return nil, err
 	}
 	couchDoc := &couchdb.CouchDoc{JSONValue: jsonBytes}
-
-	attachment, err := checkpointInfoToAttachment(i)
-	if err != nil {
-		return nil, err
-	}
-
-	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
-	couchDoc.Attachments = attachments
 	return couchDoc, nil
-}
-
-func checkpointInfoToAttachment(i *checkpointInfo) (*couchdb.AttachmentInfo, error) {
-	checkpointInfoBytes, err := i.marshal()
-	if err != nil {
-		return nil, errors.Wrapf(err, "marshaling checkpointInfo failed")
-	}
-
-	attachment := &couchdb.AttachmentInfo{}
-	attachment.AttachmentBytes = checkpointInfoBytes
-	attachment.ContentType = "application/octet-stream"
-	attachment.Name = cpiAttachmentName
-
-	return attachment, nil
 }
 
 func blockToTransactionsField(block *common.Block) ([]jsonValue, error) {
@@ -308,26 +294,16 @@ func couchAttachmentsToTxnEnvelope(attachments []*couchdb.AttachmentInfo) (*comm
 }
 
 func couchDocToCheckpointInfo(doc *couchdb.CouchDoc) (*checkpointInfo, error) {
-	return couchAttachmentsToCheckpointInfo(doc.Attachments)
-}
-
-func couchAttachmentsToCheckpointInfo(attachments []*couchdb.AttachmentInfo) (*checkpointInfo, error) {
-	var checkpointInfoBytes []byte
-	checkpointInfo := checkpointInfo{}
-	// get binary data from attachment
-	for _, a := range attachments {
-		if a.Name == cpiAttachmentName {
-			checkpointInfoBytes = a.AttachmentBytes
-		}
-	}
-	if len(checkpointInfoBytes) == 0 {
-		return nil, errors.New("checkpointInfo is not within couchDB document")
-	}
-	err := checkpointInfo.unmarshal(checkpointInfoBytes)
+	v, err := couchDocToJSON(doc)
 	if err != nil {
-		return nil, errors.Wrapf(err, "checkpointInfo from couchDB document could not be unmarshaled")
+		return nil, errors.Wrapf(err, "couchDocToJSON return error")
 	}
-	return &checkpointInfo, nil
+	isChainEmptyValue, _ := v[isChainEmptyField].(string)
+	lastBlockNumberValue, _ := v[lastBlockNumberField].(string)
+	isChainEmpty, _ := strconv.ParseBool(isChainEmptyValue)
+	lastBlockNumber, _ := strconv.ParseUint(lastBlockNumberValue, 10, 64)
+	return &checkpointInfo{isChainEmpty, lastBlockNumber}, nil
+
 }
 
 func blockNumberToKey(blockNum uint64) string {
