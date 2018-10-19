@@ -8,7 +8,6 @@ package cdbblkstorage
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
 )
@@ -71,37 +70,5 @@ func (cp *checkpoint) saveCurrentInfo(i *checkpointInfo) error {
 	if err != nil {
 		return errors.WithMessage(err, "adding checkpointInfo to couchDB failed")
 	}
-	return nil
-}
-
-func (i *checkpointInfo) marshal() ([]byte, error) {
-	buffer := proto.NewBuffer([]byte{})
-	var err error
-	if err = buffer.EncodeVarint(i.lastBlockNumber); err != nil {
-		return nil, err
-	}
-	var chainEmptyMarker uint64
-	if i.isChainEmpty {
-		chainEmptyMarker = 1
-	}
-	if err = buffer.EncodeVarint(chainEmptyMarker); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
-}
-
-func (i *checkpointInfo) unmarshal(b []byte) error {
-	buffer := proto.NewBuffer(b)
-	var val uint64
-	var chainEmptyMarker uint64
-	var err error
-	if val, err = buffer.DecodeVarint(); err != nil {
-		return err
-	}
-	i.lastBlockNumber = val
-	if chainEmptyMarker, err = buffer.DecodeVarint(); err != nil {
-		return err
-	}
-	i.isChainEmpty = chainEmptyMarker == 1
 	return nil
 }
