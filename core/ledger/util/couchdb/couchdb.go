@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -958,6 +959,8 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 	logger.Debugf("Entering ReadDocRange()  startKey=%s, endKey=%s", startKey, endKey)
 
 	var results []*QueryResult
+	var resultsMap map[string]*QueryResult
+	var orderedDocs []*DocMetadata
 	var bulkQueryIDs []string
 
 	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
@@ -973,16 +976,16 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 			return nil, err3
 		}
 
+		orderedDocs = append(orderedDocs, docMetadata)
+
 		if docMetadata.AttachmentsInfo != nil {
 			// Delay appending this document until we retrieve attachments using a bulk query.
+			logger.Debugf("Adding json document and attachments for id: %s", docMetadata.ID)
 			bulkQueryIDs = append(bulkQueryIDs, docMetadata.ID)
 		} else {
-
-			logger.Debugf("Adding json docment for id: %s", docMetadata.ID)
-
+			logger.Debugf("Adding json document for id: %s", docMetadata.ID)
 			var addDocument = QueryResult{docMetadata.ID, row.Doc, nil}
-			results = append(results, &addDocument)
-
+			resultsMap[docMetadata.ID] = &addDocument
 		}
 
 	}
@@ -995,10 +998,19 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 		}
 		for _, namedDoc := range docs {
 			addDocument := QueryResult{ID: namedDoc.ID, Value: namedDoc.Doc.JSONValue, Attachments: namedDoc.Doc.Attachments}
-			results = append(results, &addDocument)
+			resultsMap[namedDoc.ID] = &addDocument
 		}
 
 	}
+
+	for _, doc := range orderedDocs {
+		addDocument, ok := resultsMap[doc.ID]
+		if !ok {
+			return nil, errors.Errorf("Missing document during bulk retrieval [%s]", doc.ID)
+		}
+		results = append(results, addDocument)
+	}
+
 	logger.Debugf("Exiting ReadDocRange()")
 
 	return results, nil
@@ -1117,6 +1129,8 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
 	logger.Debugf("Entering QueryDocuments()  query=%s", query)
 
 	var results []*QueryResult
+	var resultsMap map[string]*QueryResult
+	var orderedDocs []*DocMetadata
 	var bulkQueryIDs []string
 
 	jsonResponse, err := dbclient.query(query)
@@ -1132,30 +1146,39 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
 			return nil, err
 		}
 
+		orderedDocs = append(orderedDocs, docMetadata)
+
 		if docMetadata.AttachmentsInfo != nil {
 			// Delay appending this document until we retrieve attachments using a bulk query.
+			logger.Debugf("Adding json document and attachments for id: %s", docMetadata.ID)
 			bulkQueryIDs = append(bulkQueryIDs, docMetadata.ID)
 		} else {
-			logger.Debugf("Adding json docment for id: %s", docMetadata.ID)
-			var addDocument = &QueryResult{ID: docMetadata.ID, Value: row, Attachments: nil}
-
-			results = append(results, addDocument)
-
+			logger.Debugf("Adding json document for id: %s", docMetadata.ID)
+			addDocument := QueryResult{ID: docMetadata.ID, Value: row, Attachments: nil}
+			resultsMap[docMetadata.ID] = &addDocument
 		}
 	}
 
 	if len(bulkQueryIDs) > 0 {
-		logger.Debugf("Adding bulk JSON document and attachments [%+v]", bulkQueryIDs)
 		docs, err := dbclient.BatchRetrieveDocument(bulkQueryIDs)
 		if err != nil {
 			return nil, err
 		}
 		for _, namedDoc := range docs {
 			addDocument := QueryResult{ID: namedDoc.ID, Value: namedDoc.Doc.JSONValue, Attachments: namedDoc.Doc.Attachments}
-			results = append(results, &addDocument)
+			resultsMap[namedDoc.ID] = &addDocument
 		}
 
 	}
+
+	for _, doc := range orderedDocs {
+		addDocument, ok := resultsMap[doc.ID]
+		if !ok {
+			return nil, errors.Errorf("Missing document during bulk retrieval [%s]", doc.ID)
+		}
+		results = append(results, addDocument)
+	}
+
 	logger.Debugf("Exiting QueryDocuments()")
 
 	return results, nil
