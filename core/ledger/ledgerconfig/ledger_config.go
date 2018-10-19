@@ -364,9 +364,14 @@ func HasRole(role Role) bool {
 	return ok
 }
 
-//IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
+// IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
 func IsCommitter() bool {
 	return HasRole(CommitterRole)
+}
+
+// IsEndorser returns true if the peer is an endorser
+func IsEndorser() bool {
+	return HasRole(EndorserRole)
 }
 
 // Roles returns the roles for the peer

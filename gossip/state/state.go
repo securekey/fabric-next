@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/comm"
 	common2 "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
+	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -399,6 +400,11 @@ func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) 
 		return
 	}
 	request := msg.GetGossipMessage().GetStateRequest()
+
+	if !ledgerconfig.IsEndorser() {
+		logger.Warningf("I'm not an endorser so ignoring state request for blocks in range [%d,%d]", request.StartSeqNum, request.EndSeqNum)
+		return
+	}
 
 	batchSize := request.EndSeqNum - request.StartSeqNum
 	if batchSize > defAntiEntropyBatchSize {
@@ -803,7 +809,15 @@ func (s *GossipStateProviderImpl) filterPeers(predicate func(peer discovery.Netw
 	var peers []*comm.RemotePeer
 
 	for _, member := range s.mediator.PeersOfChannel(common2.ChainID(s.chainID)) {
+		if member.Properties != nil {
+			roles := gossipimpl.Roles(member.Properties.Roles)
+			if !roles.HasRole(ledgerconfig.EndorserRole) {
+				logger.Warningf("Not choosing [%s] since it's not an endorser", member.Endpoint)
+				continue
+			}
+		}
 		if predicate(member) {
+			logger.Warningf("Choosing [%s] since it's an endorser", member.Endpoint)
 			peers = append(peers, &comm.RemotePeer{Endpoint: member.PreferredEndpoint(), PKIID: member.PKIid})
 		}
 	}
