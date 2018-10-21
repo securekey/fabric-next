@@ -1,12 +1,13 @@
-From f265f2819fb3e5f6662b4a4aa70ef002c0b94f50 Mon Sep 17 00:00:00 2001
+From 0e093b81c46554aa54b2937b11c48d887571e68e Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Mon, 8 Oct 2018 12:11:45 -0400
-Subject: [PATCH] [PATCH] Ledger metrics
+Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
  bccsp/pkcs11/impl.go                          |  21 +
  bccsp/sw/impl.go                              |  25 +
+ .../cdbblkstorage/cdb_blockstore.go           |  59 +++
  .../blkstorage/fsblkstorage/blockfile_mgr.go  |  16 +
  .../blkstorage/fsblkstorage/blockindex.go     |   7 +
  .../blkstorage/fsblkstorage/blocks_itr.go     |   8 +
@@ -31,12 +32,13 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  11 +
  core/ledger/ledgerstorage/store.go            |  28 ++
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
+ .../cdbpvtdata/common_store_impl.go           |  24 +
  core/ledger/util/couchdb/couchdb.go           |  21 +
  gossip/privdata/coordinator.go                |  11 +
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 31 files changed, 552 insertions(+), 1208 deletions(-)
+ 33 files changed, 635 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -186,6 +188,144 @@ index d6a9da6c0..a172735da 100644
  	// Validate arguments
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil.")
+diff --git a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
+index 6dfb4a7ab..f365649e2 100644
+--- a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
++++ b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
+@@ -18,6 +18,7 @@ import (
+ 
+ 	"github.com/hyperledger/fabric/common/ledger"
+ 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+ 	"github.com/hyperledger/fabric/protos/common"
+@@ -73,6 +74,11 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
+ 		// Nothing to do if not a committer
+ 		return nil
+ 	}
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_addBlock_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 
+ 	logger.Debugf("Storing block %d", block.Header.Number)
+ 	err := s.storeBlock(block)
+@@ -118,6 +124,12 @@ func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
+ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
+ 	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_checkpointBlock_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	//Update the checkpoint info with the results of adding the new block
+ 	newCPInfo := &checkpointInfo{
+ 		isChainEmpty:    false,
+@@ -141,6 +153,12 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
+ 
+ // GetBlockchainInfo returns the current info about blockchain
+ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_getBlockchainInfo_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	cpInfo, err := s.cp.getCheckpointInfo()
+ 	if err != nil {
+ 		return nil, err
+@@ -171,11 +189,22 @@ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
+ 
+ // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
+ func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlocks_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	return newBlockItr(s, startNum), nil
+ }
+ 
+ // RetrieveBlockByHash returns the block for given block-hash
+ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByHash_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	blockHashHex := hex.EncodeToString(blockHash)
+ 	const queryFmt = `
+ 	{
+@@ -197,6 +226,12 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
+ 
+ // RetrieveBlockByNumber returns the block at a given blockchain height
+ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByNumber_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	// interpret math.MaxUint64 as a request for last block
+ 	if blockNum == math.MaxUint64 {
+ 		bcinfo, err := s.GetBlockchainInfo()
+@@ -226,6 +261,12 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
+ 
+ // RetrieveTxByID returns a transaction for given transaction id
+ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByID_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	doc, _, err := s.txnStore.ReadDoc(txID)
+ 	if err != nil {
+ 		// note: allow ErrNotFoundInIndex to pass through
+@@ -257,6 +298,12 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+ 
+ // RetrieveTxByBlockNumTranNum returns a transaction for given block ID and transaction ID
+ func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByBlockNumTranNum_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	block, err := s.RetrieveBlockByNumber(blockNum)
+ 	if err != nil {
+ 		// note: allow ErrNotFoundInIndex to pass through
+@@ -269,6 +316,12 @@ func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uin
+ 
+ // RetrieveBlockByTxID returns a block for a given transaction ID
+ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByTxID_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	blockHash, err := s.retrieveBlockHashByTxID(txID)
+ 	if err != nil {
+ 		// note: allow ErrNotFoundInIndex to pass through
+@@ -305,6 +358,12 @@ func (s *cdbBlockStore) retrieveBlockHashByTxID(txID string) ([]byte, error) {
+ 
+ // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
+ func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxValidationCodeByTxID_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	jsonResult, err := retrieveJSONQuery(s.txnStore, txID)
+ 	if err != nil {
+ 		// note: allow ErrNotFoundInIndex to pass through
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 index f2a1a522b..f781d3fba 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
@@ -2101,10 +2241,10 @@ index 4a7441c58..6cc295487 100644
  			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)
  			if !b.isDone() {
 diff --git a/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go b/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
-index 69a2724d6..fa299331e 100644
+index 146c48562..21aa6b06a 100644
 --- a/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
 +++ b/core/ledger/kvledger/history/historydb/historycouchdb/historycouchdb.go
-@@ -55,7 +55,7 @@ type historyDBProvider struct {
+@@ -107,7 +107,7 @@ func (sets writeSets) asCouchDbDocs() ([]*couchdb.CouchDoc, error) {
  func NewHistoryDBProvider(couchDBDef *couchdb.CouchDBDef) (historydb.HistoryDBProvider, error) {
  	logger.Debugf("constructing CouchDB historyDB storage provider")
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -2139,7 +2279,7 @@ index 7b029648e..b6423c123 100644
  	keys, height, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
  	if err != nil {
 diff --git a/core/ledger/kvledger/inventory/cdbid/cdb_store.go b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
-index 130a8ac59..a3fc89abe 100644
+index 5dea87fdc..837de6a22 100644
 --- a/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 +++ b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 @@ -8,6 +8,7 @@ package cdbid
@@ -2148,9 +2288,9 @@ index 130a8ac59..a3fc89abe 100644
  	"fmt"
 +
  	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
- 	"github.com/hyperledger/fabric/protos/common"
-@@ -40,7 +41,7 @@ func OpenStore() (*Store, error) {
+@@ -77,7 +78,7 @@ func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*St
  		return nil, err
  	}
  
@@ -2159,7 +2299,7 @@ index 130a8ac59..a3fc89abe 100644
  	return &s, nil
  }
  
-@@ -57,7 +58,7 @@ func createCouchInstance() (*couchdb.CouchInstance, error) {
+@@ -93,7 +94,7 @@ func createCouchInstance() (*couchdb.CouchInstance, error) {
  	logger.Debugf("constructing CouchDB block storage provider")
  	couchDBDef := couchdb.GetCouchDBDefinition()
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -2168,7 +2308,7 @@ index 130a8ac59..a3fc89abe 100644
  	if err != nil {
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
-@@ -188,4 +189,4 @@ func (s *Store) GetAllLedgerIds() ([]string, error) {
+@@ -224,4 +225,4 @@ func (s *Store) GetAllLedgerIds() ([]string, error) {
  }
  
  func (s *Store) Close() {
@@ -2357,7 +2497,7 @@ index 240667a73..e328658dd 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index b10b1d229..fc06e3558 100644
+index 999b91a72..b26d6f25b 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2368,7 +2508,7 @@ index b10b1d229..fc06e3558 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-@@ -290,6 +291,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+@@ -348,6 +349,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
  
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
@@ -2443,7 +2583,7 @@ index d03bd0535..aba0c264e 100644
  		l.StateCommitDone(txmgr.ledgerid)
  	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index f9b2d8847..cefb5e044 100644
+index 33629096e..f5e397cb3 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
 @@ -30,6 +30,7 @@ import (
@@ -2517,10 +2657,10 @@ index f9b2d8847..cefb5e044 100644
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
 diff --git a/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go b/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
-index e470dfcdb..23a6a1222 100644
+index bd1f059e2..37adf4347 100644
 --- a/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
 +++ b/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
-@@ -28,7 +28,7 @@ func NewProvider() (*Provider, error) {
+@@ -29,7 +29,7 @@ func NewProvider() (*Provider, error) {
  	logger.Debugf("constructing CouchDB private data storage provider")
  	couchDBDef := couchdb.GetCouchDBDefinition()
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -2529,19 +2669,82 @@ index e470dfcdb..23a6a1222 100644
  	if err != nil {
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
+diff --git a/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go b/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
+index ef673f9d4..f5784d31b 100644
+--- a/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
++++ b/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
+@@ -12,6 +12,7 @@ import (
+ 
+ 	"encoding/hex"
+ 
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+@@ -72,6 +73,12 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+ 		panic("calling Prepare on a peer that is not a committer")
+ 	}
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_prepare_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	if s.batchPending {
+ 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
+ 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
+@@ -97,6 +104,12 @@ func (s *store) Commit() error {
+ 		panic("calling Commit on a peer that is not a committer")
+ 	}
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_commit_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	if !s.batchPending {
+ 		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
+ 	}
+@@ -117,6 +130,11 @@ func (s *store) Commit() error {
+ }
+ 
+ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_initLastCommittedBlock_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	if !(s.isEmpty && !s.batchPending) {
+ 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
+ 	}
+@@ -133,6 +151,12 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
+ }
+ 
+ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_getPvtDataByBlockNum_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	logger.Debugf("Get private data for block [%d] from DB [%s], filter=%#v", blockNum, s.db.DBName, filter)
+ 	if s.isEmpty {
+ 		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index a72cb6683..7f2b65768 100644
+index 519843e05..05531e5a1 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -27,6 +27,7 @@ import (
+@@ -30,6 +30,7 @@ import (
  	"unicode/utf8"
  
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
- 	logging "github.com/op/go-logging"
+ 	"github.com/op/go-logging"
  )
-@@ -491,6 +492,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+@@ -540,6 +541,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
  
@@ -2551,8 +2754,8 @@ index a72cb6683..7f2b65768 100644
 +	}
  	logger.Debugf("Entering EnsureFullCommit()")
  
- 	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
-@@ -549,6 +554,11 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error)
+ 	dbResponse, err := dbclient.dbOperation("/_ensure_full_commit")
+@@ -606,6 +611,11 @@ func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, err
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2564,7 +2767,7 @@ index a72cb6683..7f2b65768 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1283,6 +1293,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1416,6 +1426,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2577,7 +2780,7 @@ index a72cb6683..7f2b65768 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1653,6 +1669,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1913,6 +1929,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
@@ -2675,7 +2878,7 @@ index e7fbf5b18..232485341 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index d51b16823..1882ca731 100644
+index 55f51d255..50c046027 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -15,6 +15,7 @@ import (
@@ -2686,7 +2889,7 @@ index d51b16823..1882ca731 100644
  	"github.com/hyperledger/fabric/common/util/retry"
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-@@ -488,6 +489,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
+@@ -494,6 +495,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
  		return uint64(0), errors.New("Received state transfer response without payload")
  	}
  	for _, payload := range response.GetPayloads() {
@@ -2697,7 +2900,7 @@ index d51b16823..1882ca731 100644
  		logger.Debugf("Received payload with sequence number %d.", payload.SeqNum)
  		if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), payload.SeqNum, payload.Data); err != nil {
  			err = errors.WithStack(err)
-@@ -532,6 +537,11 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
+@@ -538,6 +543,11 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
  
  	dataMsg := msg.GetDataMsg()
  	if dataMsg != nil {
@@ -2709,7 +2912,7 @@ index d51b16823..1882ca731 100644
  		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
  			logger.Warningf("Block [%d] received from gossip wasn't added to payload buffer: %v", dataMsg.Payload.SeqNum, err)
  			return
-@@ -549,6 +559,9 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
+@@ -555,6 +565,9 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
  		select {
  		// Wait for notification that next seq has arrived
  		case <-s.payloads.Ready():
@@ -2719,7 +2922,7 @@ index d51b16823..1882ca731 100644
  			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
  			// Collect all subsequent payloads
  			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
-@@ -845,6 +858,9 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+@@ -854,6 +867,9 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  	if payload == nil {
  		return errors.New("Given payload is nil")
  	}
@@ -2729,7 +2932,7 @@ index d51b16823..1882ca731 100644
  	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
  	height, err := s.ledger.LedgerHeight()
  	if err != nil {
-@@ -859,7 +875,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+@@ -868,7 +884,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  		time.Sleep(enqueueRetryInterval)
  	}
  
@@ -2741,7 +2944,7 @@ index d51b16823..1882ca731 100644
  	return nil
  }
  
-@@ -877,6 +896,9 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
+@@ -884,6 +903,9 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
  }
  
  func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
