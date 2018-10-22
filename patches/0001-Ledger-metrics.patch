@@ -1,4 +1,4 @@
-From 44fca6f088fc15ac071dbc2b16697513dd5ba1c8 Mon Sep 17 00:00:00 2001
+From af03e21d6331971ae6265a91c52886f626532067 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Mon, 22 Oct 2018 11:03:59 -0400
 Subject: [PATCH] Ledger metrics
@@ -29,8 +29,8 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../statedb/statecouchdb/commit_handling.go   |   7 +
  .../statedb/statecouchdb/statecouchdb.go      |   7 +
  .../statedb/stateleveldb/stateleveldb.go      |   7 +
- .../txmgmt/txmgr/lockbasedtxmgr/helper.go     |   2 +
- .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  40 ++
+ .../txmgmt/txmgr/lockbasedtxmgr/helper.go     |   8 +
+ .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  58 ++-
  core/ledger/ledgerstorage/store.go            |  28 ++
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
@@ -39,7 +39,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 34 files changed, 677 insertions(+), 1220 deletions(-)
+ 34 files changed, 694 insertions(+), 1227 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2548,20 +2548,26 @@ index ba3be0ea3..6adaf3bd5 100644
  	namespaces := batch.GetUpdatedNamespaces()
  	for _, ns := range namespaces {
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
-index f13febb53..7682e231f 100644
+index f13febb53..a9aeff37a 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/helper.go
-@@ -185,6 +185,8 @@ func (h *queryHelper) done() {
+@@ -185,6 +185,14 @@ func (h *queryHelper) done() {
  
  	defer func() {
  		h.txmgr.commitRWLock.RUnlock()
-+		h.txmgr.StopWatch.Stop()
-+		h.txmgr.StopWatch1.Stop()
++		if h.txmgr.StopWatchAccess != "" {
++			h.txmgr.StopWatch.Stop()
++			h.txmgr.StopWatchAccess = ""
++		}
++		if h.txmgr.StopWatch1Access != "" {
++			h.txmgr.StopWatch1.Stop()
++			h.txmgr.StopWatch1Access = ""
++		}
  		h.doneInvoked = true
  		for _, itr := range h.itrs {
  			itr.Close()
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd0535..b524fe4c9 100644
+index d03bd0535..88891bb21 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2580,16 +2586,32 @@ index d03bd0535..b524fe4c9 100644
  )
  
  var logger = flogging.MustGetLogger("lockbasedtxmgr")
-@@ -34,6 +36,8 @@ type LockBasedTxMgr struct {
- 	stateListeners  []ledger.StateListener
- 	commitRWLock    sync.RWMutex
- 	current         *current
-+	StopWatch       tally.Stopwatch
-+	StopWatch1      tally.Stopwatch
+@@ -27,13 +29,17 @@ var logger = flogging.MustGetLogger("lockbasedtxmgr")
+ // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
+ // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
+ type LockBasedTxMgr struct {
+-	ledgerid        string
+-	db              privacyenabledstate.DB
+-	pvtdataPurgeMgr *pvtdataPurgeMgr
+-	validator       validator.Validator
+-	stateListeners  []ledger.StateListener
+-	commitRWLock    sync.RWMutex
+-	current         *current
++	ledgerid         string
++	db               privacyenabledstate.DB
++	pvtdataPurgeMgr  *pvtdataPurgeMgr
++	validator        validator.Validator
++	stateListeners   []ledger.StateListener
++	commitRWLock     sync.RWMutex
++	current          *current
++	StopWatch        tally.Stopwatch
++	StopWatchAccess  string
++	StopWatch1       tally.Stopwatch
++	StopWatch1Access string
  }
  
  type current struct {
-@@ -73,7 +77,10 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
+@@ -73,7 +79,11 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
  // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
  func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
  	qe := newQueryExecutor(txmgr, txid)
@@ -2597,10 +2619,11 @@ index d03bd0535..b524fe4c9 100644
  	txmgr.commitRWLock.RLock()
 +	stopWatch.Stop()
 +	txmgr.StopWatch = metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_time_seconds").Start()
++	txmgr.StopWatchAccess = "1"
  	return qe, nil
  }
  
-@@ -84,7 +91,10 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
+@@ -84,7 +94,11 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
  	if err != nil {
  		return nil, err
  	}
@@ -2608,10 +2631,11 @@ index d03bd0535..b524fe4c9 100644
  	txmgr.commitRWLock.RLock()
 +	stopWatch.Stop()
 +	txmgr.StopWatch1 = metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_time_seconds").Start()
++	txmgr.StopWatch1Access = "1"
  	return s, nil
  }
  
-@@ -129,18 +139,29 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
+@@ -129,18 +143,29 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
  
  // Commit implements method in interface `txmgmt.TxMgr`
  func (txmgr *LockBasedTxMgr) Commit() error {
@@ -2641,7 +2665,7 @@ index d03bd0535..b524fe4c9 100644
  	}()
  
  	logger.Debugf("Committing updates to state database")
-@@ -148,27 +169,42 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+@@ -148,27 +173,42 @@ func (txmgr *LockBasedTxMgr) Commit() error {
  		panic("validateAndPrepare() method should have been called before calling commit()")
  	}
  
@@ -2684,7 +2708,7 @@ index d03bd0535..b524fe4c9 100644
  	return nil
  }
  
-@@ -223,6 +259,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
+@@ -223,6 +263,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
  }
  
  func (txmgr *LockBasedTxMgr) updateStateListeners() {
