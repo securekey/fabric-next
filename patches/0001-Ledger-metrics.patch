@@ -1,4 +1,4 @@
-From 0e093b81c46554aa54b2937b11c48d887571e68e Mon Sep 17 00:00:00 2001
+From 7ff88f04c21648f0da47694d95eace9b446b8a45 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Mon, 8 Oct 2018 12:11:45 -0400
 Subject: [PATCH] Ledger metrics
@@ -29,7 +29,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../statedb/statecouchdb/commit_handling.go   |   7 +
  .../statedb/statecouchdb/statecouchdb.go      |   7 +
  .../statedb/stateleveldb/stateleveldb.go      |   7 +
- .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  11 +
+ .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  31 ++
  core/ledger/ledgerstorage/store.go            |  28 ++
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
@@ -38,7 +38,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 33 files changed, 635 insertions(+), 1208 deletions(-)
+ 33 files changed, 655 insertions(+), 1208 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2547,7 +2547,7 @@ index ba3be0ea3..6adaf3bd5 100644
  	namespaces := batch.GetUpdatedNamespaces()
  	for _, ns := range namespaces {
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd0535..aba0c264e 100644
+index d03bd0535..c9ab9b58f 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2558,7 +2558,7 @@ index d03bd0535..aba0c264e 100644
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
-@@ -129,6 +130,12 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
+@@ -129,18 +130,29 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
  
  // Commit implements method in interface `txmgmt.TxMgr`
  func (txmgr *LockBasedTxMgr) Commit() error {
@@ -2571,7 +2571,67 @@ index d03bd0535..aba0c264e 100644
  	// When using the purge manager for the first block commit after peer start, the asynchronous function
  	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
  	// in advance for the next block
-@@ -223,6 +230,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
+ 	if !txmgr.pvtdataPurgeMgr.usedOnce {
++		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_PrepareForExpiringKeys_time_seconds").Start()
+ 		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum())
+ 		txmgr.pvtdataPurgeMgr.usedOnce = true
++		stopWatch.Stop()
+ 	}
+ 	defer func() {
++		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_defer_time_seconds").Start()
+ 		txmgr.clearCache()
+ 		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum() + 1)
+ 		logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
+ 		txmgr.reset()
++		stopWatch.Stop()
++
+ 	}()
+ 
+ 	logger.Debugf("Committing updates to state database")
+@@ -148,27 +160,42 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+ 		panic("validateAndPrepare() method should have been called before calling commit()")
+ 	}
+ 
++	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_time_seconds").Start()
+ 	if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
+ 		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
++		stopWatch.Stop()
+ 		return err
+ 	}
++	stopWatch.Stop()
+ 
++	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_commitRWLock_time_seconds").Start()
+ 	txmgr.commitRWLock.Lock()
++	stopWatch.Stop()
+ 	defer txmgr.commitRWLock.Unlock()
+ 	logger.Debugf("Write lock acquired for committing updates to state database")
+ 	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
++	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_ApplyPrivacyAwareUpdates_time_seconds").Start()
+ 	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
++		stopWatch.Stop()
+ 		return err
+ 	}
++	stopWatch.Stop()
++
+ 	logger.Debugf("Updates committed to state database")
+ 
++	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_BlockCommitDone_time_seconds").Start()
+ 	// purge manager should be called (in this call the purge mgr removes the expiry entries from schedules) after committing to statedb
+ 	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
++		stopWatch.Stop()
+ 		return err
+ 	}
++	stopWatch.Stop()
++
++	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_updateStateListeners_time_seconds").Start()
+ 	// In the case of error state listeners will not recieve this call - instead a peer panic is caused by the ledger upon receiveing
+ 	// an error from this function
+ 	txmgr.updateStateListeners()
++	stopWatch.Stop()
+ 	return nil
+ }
+ 
+@@ -223,6 +250,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
  }
  
  func (txmgr *LockBasedTxMgr) updateStateListeners() {
