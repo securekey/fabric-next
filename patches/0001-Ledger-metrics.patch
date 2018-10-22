@@ -1,6 +1,6 @@
-From af03e21d6331971ae6265a91c52886f626532067 Mon Sep 17 00:00:00 2001
+From ef071af927b9f046a8a61fb009871278365ea6e0 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 22 Oct 2018 11:03:59 -0400
+Date: Mon, 22 Oct 2018 16:59:54 -0400
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -34,12 +34,12 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/ledgerstorage/store.go            |  28 ++
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
- core/ledger/util/couchdb/couchdb.go           |  44 +-
+ core/ledger/util/couchdb/couchdb.go           |  45 +-
  gossip/privdata/coordinator.go                |  11 +
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 34 files changed, 694 insertions(+), 1227 deletions(-)
+ 34 files changed, 695 insertions(+), 1227 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2870,7 +2870,7 @@ index ef673f9d4..f5784d31b 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 81cbaaef9..c8ed26d7e 100644
+index 519843e05..73bc62d7e 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -12,7 +12,6 @@ import (
@@ -2966,19 +2966,20 @@ index 81cbaaef9..c8ed26d7e 100644
  	}
  
  	for _, row := range jsonResponse.Docs {
-@@ -1424,6 +1434,11 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
- 	if err != nil {
- 		return err
- 	}
+@@ -1416,6 +1426,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+ 	//URL to execute the view function associated with the index
+ 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
+ 
 +	if metrics.IsDebug() {
 +		timer := metrics.RootScope.Timer("couchdb_WarmIndex")
 +		stopWatch := timer.Start()
 +		defer stopWatch.Stop()
 +	}
- 
++
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
-@@ -1644,7 +1659,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
+ 	//The update_after will cause the index update to run after the URL returns
+@@ -1635,7 +1651,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
  			return nil, err
  		}
  
@@ -2987,7 +2988,7 @@ index 81cbaaef9..c8ed26d7e 100644
  		namedDoc := NamedCouchDoc{ID: row.ID, Doc: &doc}
  		docs = append(docs, &namedDoc)
  	}
-@@ -1680,8 +1695,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
+@@ -1671,8 +1687,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
  		}
  
  		attachment := AttachmentInfo{
@@ -2998,7 +2999,7 @@ index 81cbaaef9..c8ed26d7e 100644
  			AttachmentBytes: bytes,
  		}
  		attachments = append(attachments, &attachment)
-@@ -1922,6 +1937,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1913,6 +1929,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
