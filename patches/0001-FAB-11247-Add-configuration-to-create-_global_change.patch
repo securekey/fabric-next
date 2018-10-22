@@ -1,6 +1,6 @@
-From f845eba788e83dadcf3e6303d887d12485f86c0b Mon Sep 17 00:00:00 2001
+From 6e095f94cc57e18f755c8df888487275f1a5824e Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 15 Oct 2018 17:33:47 -0400
+Date: Mon, 22 Oct 2018 18:13:56 -0400
 Subject: [PATCH] Add configuration to create _global_changes
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -13,11 +13,11 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/util/couchdb/config.go            | 16 +++---
  core/ledger/util/couchdb/couchdb.go           | 17 ++++---
  core/ledger/util/couchdb/couchdb_test.go      | 51 ++++++++++---------
- core/ledger/util/couchdb/couchdbutil.go       | 21 ++++----
+ core/ledger/util/couchdb/couchdbutil.go       | 20 ++++----
  core/ledger/util/couchdb/couchdbutil_test.go  | 30 ++++++++++-
  .../cdbtransientdata/cdb_transientprovider.go |  2 +-
  sampleconfig/core.yaml                        |  2 +
- 12 files changed, 91 insertions(+), 59 deletions(-)
+ 12 files changed, 91 insertions(+), 58 deletions(-)
 
 diff --git a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go
 index dc1fdcd92..649d4512c 100644
@@ -48,10 +48,10 @@ index 3701986b4..61b320df8 100644
  		//drop the test database
  		db.DropDatabase()
 diff --git a/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go b/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
-index e7be531ee..e78490202 100644
+index 4ff0fa5f3..2f88951ea 100644
 --- a/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
 +++ b/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
-@@ -52,7 +52,7 @@ func NewMgr() (confighistory.Mgr, error) {
+@@ -54,7 +54,7 @@ func NewMgr() (confighistory.Mgr, error) {
  	logger.Warningf("constructing CouchDB config history data storage provider")
  	couchDBDef := couchdb.GetCouchDBDefinition()
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -61,7 +61,7 @@ index e7be531ee..e78490202 100644
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index d67395b1e..77f441339 100644
+index bf82f6106..999b91a72 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -38,7 +38,7 @@ func NewVersionedDBProvider() (*VersionedDBProvider, error) {
@@ -120,7 +120,7 @@ index 6da645f6c..281fdbe50 100644
 +	return &CouchDBDef{couchDBAddress, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}
  }
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 63c40f8b4..0cca28b4b 100644
+index 667599316..519843e05 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -120,12 +120,13 @@ type QueryResult struct {
@@ -143,7 +143,7 @@ index 63c40f8b4..0cca28b4b 100644
  }
  
  //CouchInstance represents a CouchDB instance
-@@ -235,7 +236,7 @@ func closeResponseBody(resp *http.Response) {
+@@ -258,7 +259,7 @@ func closeResponseBody(resp *http.Response) {
  
  //CreateConnectionDefinition for a new client connection
  func CreateConnectionDefinition(couchDBAddress, username, password string, maxRetries,
@@ -152,7 +152,7 @@ index 63c40f8b4..0cca28b4b 100644
  
  	logger.Debugf("Entering CreateConnectionDefinition()")
  
-@@ -256,7 +257,7 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
+@@ -279,7 +280,7 @@ func CreateConnectionDefinition(couchDBAddress, username, password string, maxRe
  
  	//return an object containing the connection information
  	return &CouchConnectionDef{finalURL.String(), username, password, maxRetries,
@@ -162,7 +162,7 @@ index 63c40f8b4..0cca28b4b 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb_test.go b/core/ledger/util/couchdb/couchdb_test.go
-index 994dc3f07..7a8bbb505 100644
+index cb47b3a38..f7e0162f0 100644
 --- a/core/ledger/util/couchdb/couchdb_test.go
 +++ b/core/ledger/util/couchdb/couchdb_test.go
 @@ -33,7 +33,7 @@ var couchDBDef *CouchDBDef
@@ -329,7 +329,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -749,7 +750,7 @@ func TestDBSaveAttachment(t *testing.T) {
+@@ -747,7 +748,7 @@ func TestDBSaveAttachment(t *testing.T) {
  
  	//create a new instance and database object
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -338,7 +338,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -778,7 +779,7 @@ func TestDBDeleteDocument(t *testing.T) {
+@@ -776,7 +777,7 @@ func TestDBDeleteDocument(t *testing.T) {
  
  	//create a new instance and database object
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -347,7 +347,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -813,7 +814,7 @@ func TestDBDeleteNonExistingDocument(t *testing.T) {
+@@ -811,7 +812,7 @@ func TestDBDeleteNonExistingDocument(t *testing.T) {
  
  	//create a new instance and database object
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -356,7 +356,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -862,7 +863,7 @@ func TestIndexOperations(t *testing.T) {
+@@ -860,7 +861,7 @@ func TestIndexOperations(t *testing.T) {
  
  	//create a new instance and database object   --------------------------------------------------------
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -365,7 +365,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -1121,7 +1122,7 @@ func TestRichQuery(t *testing.T) {
+@@ -1119,7 +1120,7 @@ func TestRichQuery(t *testing.T) {
  
  	//create a new instance and database object   --------------------------------------------------------
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -374,7 +374,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -1378,7 +1379,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
+@@ -1376,7 +1377,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
  
  	//create a new instance and database object   --------------------------------------------------------
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -383,7 +383,7 @@ index 994dc3f07..7a8bbb505 100644
  	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to create couch instance"))
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
-@@ -1579,7 +1580,7 @@ func TestDatabaseSecuritySettings(t *testing.T) {
+@@ -1577,7 +1578,7 @@ func TestDatabaseSecuritySettings(t *testing.T) {
  
  	//create a new instance and database object   --------------------------------------------------------
  	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -393,31 +393,24 @@ index 994dc3f07..7a8bbb505 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
 diff --git a/core/ledger/util/couchdb/couchdbutil.go b/core/ledger/util/couchdb/couchdbutil.go
-index d2be66e43..46290da62 100644
+index d44e5a6c3..a8131d5a2 100644
 --- a/core/ledger/util/couchdb/couchdbutil.go
 +++ b/core/ledger/util/couchdb/couchdbutil.go
-@@ -33,10 +33,10 @@ var collectionNameAllowedLength = 50
+@@ -37,11 +37,11 @@ var once sync.Once
  
  //CreateCouchInstance creates a CouchDB instance
  func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 -	maxRetriesOnStartup int, connectionTimeout time.Duration) (*CouchInstance, error) {
 +	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool) (*CouchInstance, error) {
  
- 	couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
--		id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout)
-+		id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout, createGlobalChangesDB)
- 	if err != nil {
- 		logger.Errorf("Error during CouchDB CreateConnectionDefinition(): %s\n", err.Error())
- 		return nil, err
-@@ -59,7 +59,6 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
- 
- 	//Create the CouchDB instance
- 	couchInstance := &CouchInstance{conf: *couchConf, client: client}
--
- 	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
- 	if verifyErr != nil {
- 		return nil, verifyErr
-@@ -160,15 +159,15 @@ func CreateSystemDatabasesIfNotExist(couchInstance *CouchInstance) error {
+ 	once.Do(func() {
+ 		couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
+-			id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout)
++			id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout, createGlobalChangesDB)
+ 		if err != nil {
+ 			panic(fmt.Sprintf("Error during CouchDB CreateConnectionDefinition(): %s\n", err.Error()))
+ 		}
+@@ -165,15 +165,15 @@ func CreateSystemDatabasesIfNotExist(couchInstance *CouchInstance) error {
  		logger.Errorf("Error during CouchDB CreateDatabaseIfNotExist() for system dbName: %s  error: %s\n", dbName, err.Error())
  		return err
  	}
