@@ -1415,6 +1415,15 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 	//URL to execute the view function associated with the index
 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
 
+
+	keymap := make(map[string]interface{})
+	keymap["keys"] = []string{}
+
+	jsonKeys, err := json.Marshal(keymap)
+	if err != nil {
+		return nil, err
+	}
+
 	queryParms := indexURL.Query()
 	//Query parameter that allows the execution of the URL to return immediately
 	//The update_after will cause the index update to run after the URL returns
@@ -1424,7 +1433,7 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, indexURL.String(), nil, "", "", maxRetries, true)
+	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, indexURL.String(), jsonKeys, "", "", maxRetries, true)
 	if err != nil {
 		return err
 	}
