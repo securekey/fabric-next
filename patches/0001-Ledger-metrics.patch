@@ -1,6 +1,6 @@
-From 7ff88f04c21648f0da47694d95eace9b446b8a45 Mon Sep 17 00:00:00 2001
+From 65916f3e65028bc963f4c1dcc45a8d9c8f72fd84 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 8 Oct 2018 12:11:45 -0400
+Date: Mon, 22 Oct 2018 11:03:59 -0400
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -33,12 +33,12 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/ledgerstorage/store.go            |  28 ++
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
- core/ledger/util/couchdb/couchdb.go           |  21 +
+ core/ledger/util/couchdb/couchdb.go           |  44 +-
  gossip/privdata/coordinator.go                |  11 +
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 33 files changed, 655 insertions(+), 1208 deletions(-)
+ 33 files changed, 666 insertions(+), 1220 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2793,17 +2793,61 @@ index ef673f9d4..f5784d31b 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 519843e05..05531e5a1 100644
+index 81cbaaef9..c8ed26d7e 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -30,6 +30,7 @@ import (
+@@ -12,7 +12,6 @@ import (
+ 	"encoding/base64"
+ 	"encoding/json"
+ 	"fmt"
+-	"github.com/pkg/errors"
+ 	"io"
+ 	"io/ioutil"
+ 	"log"
+@@ -29,7 +28,10 @@ import (
+ 	"time"
  	"unicode/utf8"
  
++	"github.com/pkg/errors"
++
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/op/go-logging"
  )
+@@ -194,11 +196,11 @@ type NamedCouchDoc struct {
+ //BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
+ type BatchRetrieveDocResponse struct {
+ 	Rows []struct {
+-		ID          string `json:"id"`
++		ID  string `json:"id"`
+ 		Doc struct {
+-			ID      string `json:"_id"`
+-			Rev     string `json:"_rev"`
+-			Version string `json:"~version"`
++			ID              string          `json:"_id"`
++			Rev             string          `json:"_rev"`
++			Version         string          `json:"~version"`
+ 			AttachmentsInfo json.RawMessage `json:"_attachments"`
+ 		} `json:"doc"`
+ 	} `json:"rows"`
+@@ -206,7 +208,7 @@ type BatchRetrieveDocResponse struct {
+ 
+ type BatchRetreiveDocValueResponse struct {
+ 	Rows []struct {
+-		ID          string `json:"id"`
++		ID  string                     `json:"id"`
+ 		Doc map[string]json.RawMessage `json:"doc"`
+ 	} `json:"rows"`
+ }
+@@ -439,7 +441,6 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBRet
+ 	logger.Debugf("Entering VerifyCouchConfig()")
+ 	defer logger.Debugf("Exiting VerifyCouchConfig()")
+ 
+-
+ 	dbResponse, couchDBReturn, err := couchInstance.getConnectionInfo()
+ 	if err != nil {
+ 		return nil, couchDBReturn, err
 @@ -540,6 +541,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
@@ -2827,20 +2871,57 @@ index 519843e05..05531e5a1 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1416,6 +1426,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
- 	//URL to execute the view function associated with the index
- 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
+@@ -966,7 +976,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
  
+ 	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
+ 	if err != nil {
+-		return nil ,err
++		return nil, err
+ 	}
+ 
+ 	for _, row := range jsonResponse.Rows {
+@@ -1135,7 +1145,7 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
+ 
+ 	jsonResponse, err := dbclient.query(query)
+ 	if err != nil {
+-		return nil ,err
++		return nil, err
+ 	}
+ 
+ 	for _, row := range jsonResponse.Docs {
+@@ -1424,6 +1434,11 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+ 	if err != nil {
+ 		return err
+ 	}
 +	if metrics.IsDebug() {
 +		timer := metrics.RootScope.Timer("couchdb_WarmIndex")
 +		stopWatch := timer.Start()
 +		defer stopWatch.Stop()
 +	}
-+
+ 
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
- 	//The update_after will cause the index update to run after the URL returns
-@@ -1913,6 +1929,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1644,7 +1659,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
+ 			return nil, err
+ 		}
+ 
+-		doc := CouchDoc{JSONValue:jsonValue, Attachments: attachments}
++		doc := CouchDoc{JSONValue: jsonValue, Attachments: attachments}
+ 		namedDoc := NamedCouchDoc{ID: row.ID, Doc: &doc}
+ 		docs = append(docs, &namedDoc)
+ 	}
+@@ -1680,8 +1695,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
+ 		}
+ 
+ 		attachment := AttachmentInfo{
+-			Name: name,
+-			ContentType: attachmentResponse.ContentType,
++			Name:            name,
++			ContentType:     attachmentResponse.ContentType,
+ 			AttachmentBytes: bytes,
+ 		}
+ 		attachments = append(attachments, &attachment)
+@@ -1922,6 +1937,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
