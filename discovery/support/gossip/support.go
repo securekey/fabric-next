@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package gossip
 
 import (
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
@@ -41,7 +42,7 @@ func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Member
 		PKIid:      stateInf.PkiId,
 		Envelope:   msg.Envelope,
 	}
-	return append(s.Gossip.PeersOfChannel(chain), selfMember)
+	return endorsersOnly(append(s.Gossip.PeersOfChannel(chain), selfMember))
 }
 
 // Peers returns the NetworkMembers considered alive
@@ -50,4 +51,18 @@ func (s *DiscoverySupport) Peers() discovery.Members {
 	peers = append(peers, s.Gossip.SelfMembershipInfo())
 	// Return only the peers that have an external endpoint.
 	return discovery.Members(peers).Filter(discovery.HasExternalEndpoint)
+}
+
+// endorsersOnly filters out any peer that is NOT an endorser
+func endorsersOnly(members discovery.Members) discovery.Members {
+	var ret discovery.Members
+	for _, member := range members {
+		if member.Properties != nil {
+			roles := gossip2.Roles(member.Properties.Roles)
+			if roles.HasRole(ledgerconfig.EndorserRole) {
+				ret = append(ret, member)
+			}
+		}
+	}
+	return ret
 }
