@@ -1881,25 +1881,19 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 		resp, couchDBReturn, errResp = dbclient.CouchInstance.handleRequest(method, connectURL.String(),
 			data, rev, multipartBoundary, maxRetries, keepConnectionOpen)
 
-		// Retries were already attempted inside handleRequest on an errResp.
 		if errResp != nil {
-			return resp, couchDBReturn, errResp
+			//If there was a 409 conflict error during the save/delete, log it and retry it.
+			//Otherwise, break out of the retry loop
+			if couchDBReturn != nil && couchDBReturn.StatusCode == 409 {
+				logger.Warningf("CouchDB document revision conflict detected, retrying. Attempt:%v", attempts+1)
+				revisionConflictDetected = true
+				continue
+			} else {
+				// Retries were already attempted inside handleRequest on an errResp.
+				return resp, couchDBReturn, errResp
+			}
 		}
-
-		//If there was a 409 conflict error during the save/delete, log it and retry it.
-		//Otherwise, break out of the retry loop
-		if couchDBReturn != nil && couchDBReturn.StatusCode == 409 {
-			logger.Warningf("CouchDB document revision conflict detected, retrying. Attempt:%v", attempts+1)
-			revisionConflictDetected = true
-		} else {
-			break
-		}
-
-		// Calling functions close the response body on nil errResp. However, we are retrying here so we
-		// need to close until the second last attempt.
-		if attempts < maxRetries {
-			closeResponseBody(resp)
-		}
+		break
 	}
 
 	// return the handleRequest results
