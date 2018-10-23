@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
@@ -1905,212 +1906,163 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 	return resp, couchDBReturn, errResp
 }
 
+type dbResponseError struct {
+	*DBReturn
+}
+func (err *dbResponseError) Error() string {
+	return fmt.Sprintf("HTTP response contains unsuccesful status [%d, %s]", err.StatusCode, err.Reason)
+}
+
 //handleRequest method is a generic http request handler.
 // If it returns an error, it ensures that the response body is closed, else it is the
 // callee's responsibility to close response correctly.
 // Any http error or CouchDB error (4XX or 500) will result in a golang error getting returned
+// TODO: Refactor *DBReturn to be an error type.
 func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
 
 	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
 
-	//create the return objects for couchDB
-	var resp *http.Response
-	var errResp error
-	couchDBReturn := &DBReturn{}
-
-	//set initial wait duration for retries
-	waitDuration := retryWaitTime * time.Millisecond
-
 	if maxRetries < 0 {
-		return nil, nil, fmt.Errorf("Number of retries must be zero or greater.")
+		return nil, nil, errors.New("Number of retries must be zero or greater.")
 	}
 
-	//attempt the http request for the max number of retries
-	// if maxRetries is 0, the database creation will be attempted once and will
-	//    return an error if unsuccessful
-	// if maxRetries is 3 (default), a maximum of 4 attempts (one attempt with 3 retries)
-	//    will be made with warning entries for unsuccessful attempts
-	for attempts := 0; attempts <= maxRetries; attempts++ {
+	respUT, err := retry.Invoke(
+		func() (interface{}, error) {
+			req, err := createCouchHTTPRequest(&couchInstance.conf, method, connectURL, data, rev, multipartBoundary, keepConnectionOpen)
+			if err != nil {
+				return nil, err
+			}
 
-		//Set up a buffer for the payload data
-		payloadData := new(bytes.Buffer)
+			//Execute http request
+			resp, err := couchInstance.client.Do(req)
+			if err != nil {
+				return nil, err
+			}
 
-		payloadData.ReadFrom(bytes.NewReader(data))
+			if resp.StatusCode >= 400 {
+				defer closeResponseBody(resp)
+				dbReturn, err := newDBReturn(resp)
+				if err != nil {
+					return nil, err
+				}
+				return resp, &dbResponseError{dbReturn}
+			}
 
-		//Create request based on URL for couchdb operation
-		req, err := newHTTPRequest(method, connectURL, payloadData)
-		if err != nil {
+			return resp, nil
+		},
+		retry.WithMaxAttempts(maxRetries+1),
+		retry.WithBackoffFactor(2),
+		retry.WithInitialBackoff(retryWaitTime * time.Millisecond),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			dbErr, ok := err.(*dbResponseError)
+			if ok && dbErr.StatusCode != http.StatusInternalServerError {
+				return false
+			}
+
+			//Log the error with the retry count and continue
+			logger.Warningf("retrying couchdb request [attempt:%v, wait: %s, error: %s]", attempt, backoff.String(), err.Error())
+			return true
+		}),
+	)
+
+	if err != nil {
+		logger.Warningf("couchdb request failed [%s]", err.Error())
+		dbReturn, ok := err.(*dbResponseError)
+		if !ok {
 			return nil, nil, err
 		}
-
-		//set the request to close on completion if shared connections are not allowSharedConnection
-		//Current CouchDB has a problem with zero length attachments, do not allow the connection to be reused.
-		//Apache JIRA item for CouchDB   https://issues.apache.org/jira/browse/COUCHDB-3394
-		if !keepConnectionOpen {
-			logger.Warningf("CouchDB connection will not be re-used.")
-			req.Close = true
-		}
-
-		//add content header for PUT
-		if method == http.MethodPut || method == http.MethodPost || method == http.MethodDelete {
-
-			//If the multipartBoundary is not set, then this is a JSON and content-type should be set
-			//to application/json.   Else, this is contains an attachment and needs to be multipart
-			if multipartBoundary == "" {
-				req.Header.Set("Content-Type", "application/json")
-			} else {
-				req.Header.Set("Content-Type", "multipart/related;boundary=\""+multipartBoundary+"\"")
-			}
-
-			//check to see if the revision is set,  if so, pass as a header
-			if rev != "" {
-				req.Header.Set("If-Match", rev)
-			}
-		}
-
-		//add content header for PUT
-		if method == http.MethodPut || method == http.MethodPost {
-			req.Header.Set("Accept", "application/json")
-		}
-
-		//add content header for GET
-		if method == http.MethodGet {
-			req.Header.Set("Accept", "multipart/related")
-		}
-
-		//If username and password are set the use basic auth
-		if couchInstance.conf.Username != "" && couchInstance.conf.Password != "" {
-			//req.Header.Set("Authorization", "Basic YWRtaW46YWRtaW5w")
-			req.SetBasicAuth(couchInstance.conf.Username, couchInstance.conf.Password)
-		}
-
-		if logger.IsEnabledFor(logging.DEBUG) {
-			dump, _ := httputil.DumpRequestOut(req, false)
-			// compact debug log by replacing carriage return / line feed with dashes to separate http headers
-			logger.Debugf("HTTP Request: %s", bytes.Replace(dump, []byte{0x0d, 0x0a}, []byte{0x20, 0x7c, 0x20}, -1))
-		}
-
-		//Execute http request
-		resp, errResp = couchInstance.client.Do(req)
-
-		// TODO: This can't happen: should remove this code -- see the HTTP client documentation.
-		//check to see if the return from CouchDB is valid
-		if invalidCouchDBReturn(resp, errResp) {
-			logger.Warning("CouchDB HTTP client returned a response that cannot happen after calling Do")
-			continue
-		}
-
-		//if there is no golang http error and no CouchDB 500 error, then drop out of the retry
-		if errResp == nil && resp != nil && resp.StatusCode < 500 {
-			// if this is an error, then populate the couchDBReturn
-			if resp.StatusCode >= 400 {
-				//Read the response body and close it for next attempt
-				jsonError, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					closeResponseBody(resp)
-					// TODO: should this be a retry?
-					return nil, nil, err
-				}
-
-				errorBytes := []byte(jsonError)
-				//Unmarshal the response
-				err = json.Unmarshal(errorBytes, &couchDBReturn)
-				if err != nil {
-					closeResponseBody(resp)
-					// TODO: should this be a retry?
-					return nil, nil, err
-				}
-			}
-
-			break
-		}
-
-		// Log and cleanup between retry attempts
-		if attempts < maxRetries {
-			//if this is an unexpected golang http error, log the error and retry
-			if errResp != nil {
-
-				//Log the error with the retry count and continue
-				logger.Warningf("Retrying couchdb request in %s. Attempt:%v  Error:%v",
-					waitDuration.String(), attempts+1, errResp.Error())
-
-				//otherwise this is an unexpected 500 error from CouchDB. Log the error and retry.
-			} else {
-				//Read the response body and close it for next attempt
-				jsonError, err := ioutil.ReadAll(resp.Body)
-				closeResponseBody(resp)
-				if err != nil {
-					// TODO: should this be a retry?
-					return nil, nil, err
-				}
-
-				errorBytes := []byte(jsonError)
-				//Unmarshal the response
-				err = json.Unmarshal(errorBytes, &couchDBReturn)
-				if err != nil {
-					// TODO: should this be a retry?
-					return nil, nil, err
-				}
-
-				//Log the 500 error with the retry count and continue
-				logger.Warningf("Retrying couchdb request in %s. Attempt:%v  Couch DB Error:%s,  Status Code:%v  Reason:%v",
-					waitDuration.String(), attempts+1, couchDBReturn.Error, resp.Status, couchDBReturn.Reason)
-			}
-
-			//sleep for specified sleep time, then retry
-			time.Sleep(waitDuration)
-
-			//backoff, doubling the retry time for next attempt
-			waitDuration *= 2
-		}
-	} // end retry loop
-
-	//if a golang http error is still present after retries are exhausted, return the error
-	if errResp != nil {
-		return nil, couchDBReturn, errResp
+		return nil, dbReturn.DBReturn, err
 	}
 
-	// TODO: This can't happen: should remove this code -- see the HTTP client documentation.
-	//This situation should not occur according to the golang spec.
-	//if this error returned (errResp) from an http call, then the resp should be not nil,
-	//this is a structure and StatusCode is an int
-	//This is meant to provide a more graceful error if this should occur
-	if invalidCouchDBReturn(resp, errResp) {
-		logger.Warning("CouchDB HTTP client returned a response that cannot happen after retry loop")
-		return nil, nil, fmt.Errorf("Unable to connect to CouchDB, check the hostname and port.")
-	}
-
-	//set the return code for the couchDB request
-	couchDBReturn.StatusCode = resp.StatusCode
-
-	// check to see if the status code from couchdb is 400 or higher
-	// response codes 4XX and 500 will be treated as errors -
-	// golang error will be created from the couchDBReturn contents and both will be returned
-	if resp.StatusCode >= 400 {
-
-		// if the status code is 400 or greater, log and return an error
-		logger.Debugf("Couch DB Error:%s,  Status Code:%v,  Reason:%s",
-			couchDBReturn.Error, resp.StatusCode, couchDBReturn.Reason)
-
-		closeResponseBody(resp)
-		return nil, couchDBReturn, fmt.Errorf("Couch DB Error:%s,  Status Code:%v,  Reason:%s",
-			couchDBReturn.Error, resp.StatusCode, couchDBReturn.Reason)
-
-	}
+	resp := respUT.(*http.Response)
+	dbReturn := DBReturn{StatusCode: resp.StatusCode}
 
 	logger.Debugf("Exiting handleRequest()")
 
 	//If no errors, then return the http response and the couchdb return object
-	return resp, couchDBReturn, nil
+	return resp, &dbReturn, nil
 }
 
-//invalidCouchDBResponse checks to make sure either a valid response or error is returned
-func invalidCouchDBReturn(resp *http.Response, errResp error) bool {
-	if resp == nil && errResp == nil {
-		return true
+func createCouchHTTPRequest(conf *CouchConnectionDef, method, connectURL string, data []byte, rev string, multipartBoundary string, keepConnectionOpen bool) (*http.Request, error) {
+	//Set up a buffer for the payload data
+	payloadData := new(bytes.Buffer)
+
+	payloadData.ReadFrom(bytes.NewReader(data))
+
+	//Create request based on URL for couchdb operation
+	req, err := newHTTPRequest(method, connectURL, payloadData)
+	if err != nil {
+		return nil, err
 	}
-	return false
+
+	//set the request to close on completion if shared connections are not allowSharedConnection
+	//Current CouchDB has a problem with zero length attachments, do not allow the connection to be reused.
+	//Apache JIRA item for CouchDB   https://issues.apache.org/jira/browse/COUCHDB-3394
+	if !keepConnectionOpen {
+		logger.Warningf("CouchDB connection will not be re-used.")
+		req.Close = true
+	}
+
+	//add content header for PUT
+	if method == http.MethodPut || method == http.MethodPost || method == http.MethodDelete {
+
+		//If the multipartBoundary is not set, then this is a JSON and content-type should be set
+		//to application/json.   Else, this is contains an attachment and needs to be multipart
+		if multipartBoundary == "" {
+			req.Header.Set("Content-Type", "application/json")
+		} else {
+			req.Header.Set("Content-Type", "multipart/related;boundary=\""+multipartBoundary+"\"")
+		}
+
+		//check to see if the revision is set,  if so, pass as a header
+		if rev != "" {
+			req.Header.Set("If-Match", rev)
+		}
+	}
+
+	//add content header for PUT
+	if method == http.MethodPut || method == http.MethodPost {
+		req.Header.Set("Accept", "application/json")
+	}
+
+	//add content header for GET
+	if method == http.MethodGet {
+		req.Header.Set("Accept", "multipart/related")
+	}
+
+	//If username and password are set the use basic auth
+	if conf.Username != "" && conf.Password != "" {
+		//req.Header.Set("Authorization", "Basic YWRtaW46YWRtaW5w")
+		req.SetBasicAuth(conf.Username, conf.Password)
+	}
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		dump, _ := httputil.DumpRequestOut(req, false)
+		// compact debug log by replacing carriage return / line feed with dashes to separate http headers
+		logger.Debugf("HTTP Request: %s", bytes.Replace(dump, []byte{0x0d, 0x0a}, []byte{0x20, 0x7c, 0x20}, -1))
+	}
+
+	return req, nil
+}
+
+func newDBReturn(resp *http.Response) (*DBReturn, error) {
+	var couchDBReturn DBReturn
+
+	jsonError, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	errorBytes := []byte(jsonError)
+	//Unmarshal the response
+	err = json.Unmarshal(errorBytes, &couchDBReturn)
+	if err != nil {
+		return nil, err
+	}
+	couchDBReturn.StatusCode = resp.StatusCode
+
+	return &couchDBReturn, nil
 }
 
 //IsJSON tests a string to determine if a valid JSON
