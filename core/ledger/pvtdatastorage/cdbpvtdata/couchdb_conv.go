@@ -8,6 +8,7 @@ package cdbpvtdata
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
@@ -20,7 +21,7 @@ import (
 
 const (
 	idField                    = "_id"
-	binaryWrapper              = "valueBytes"
+	pvtDataField               = "pvtData"
 	blockNumberField           = "block_number"
 	blockNumberIndexName       = "by_block_number"
 	blockNumberIndexDoc        = "indexBlockNumber"
@@ -105,6 +106,7 @@ func keyValueToCouchDoc(key []byte, value []byte, indices map[string]string) (*c
 	for key, val := range indices {
 		jsonMap[key] = val
 	}
+	jsonMap[pvtDataField] = value
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
@@ -113,24 +115,7 @@ func keyValueToCouchDoc(key []byte, value []byte, indices map[string]string) (*c
 
 	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
 
-	attachment, err := valueToAttachment(value)
-	if err != nil {
-		return nil, err
-	}
-
-	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
-	couchDoc.Attachments = attachments
-
 	return &couchDoc, nil
-}
-
-func valueToAttachment(v []byte) (*couchdb.AttachmentInfo, error) {
-	attachment := &couchdb.AttachmentInfo{}
-	attachment.AttachmentBytes = v
-	attachment.ContentType = "application/octet-stream"
-	attachment.Name = binaryWrapper
-
-	return attachment, nil
 }
 
 func createMetadataDoc(pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
@@ -271,30 +256,23 @@ func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string) (map[string][
 		if err != nil {
 			return nil, err
 		}
-		value, err := couchAttachmentsToPvtDataBytes(val.Attachments)
+
+		jsonResult := make(map[string]interface{})
+		decoder := json.NewDecoder(bytes.NewBuffer(val.Value))
+		decoder.UseNumber()
+
+		err = decoder.Decode(&jsonResult)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
 		}
-		m[string(key)] = value
+
+		valueBytes, err := base64.StdEncoding.DecodeString(jsonResult[pvtDataField].(string))
+		if err != nil {
+			return nil, errors.Wrapf(err, "error from DecodeString for pvtDataField")
+		}
+		m[string(key)] = valueBytes
 	}
 	return m, nil
-}
-
-func couchAttachmentsToPvtDataBytes(attachments []*couchdb.AttachmentInfo) ([]byte, error) {
-	var pvtDataBytes []byte
-
-	// get binary data from attachment
-	for _, a := range attachments {
-		if a.Name == binaryWrapper {
-			pvtDataBytes = a.AttachmentBytes
-		}
-	}
-
-	if len(pvtDataBytes) == 0 {
-		return nil, errors.New("pvt data is not within couchDB document")
-	}
-
-	return pvtDataBytes, nil
 }
 
 // NotFoundInIndexErr is used to indicate missing entry in the index
