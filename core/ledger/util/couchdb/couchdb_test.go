@@ -311,7 +311,7 @@ func TestDBBadDatabaseName(t *testing.T) {
 }
 
 func TestDBBadConnection(t *testing.T) {
-
+	couchInstanceInitalized = 0
 	//create a new instance and database object
 	//Limit the maxRetriesOnStartup to 3 in order to reduce time for the failure
 	_, err := CreateCouchInstance(badConnectURL, couchDBDef.Username, couchDBDef.Password,
@@ -320,12 +320,13 @@ func TestDBBadConnection(t *testing.T) {
 }
 
 func TestBadDBCredentials(t *testing.T) {
-
+	couchInstanceInitalized = 0
 	database := "testdbbadcredentials"
 	err := cleanup(database)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
 	defer cleanup(database)
 
+	couchInstanceInitalized = 0
 	//create a new instance and database object
 	_, err = CreateCouchInstance(couchDBDef.URL, "fred", "fred",
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
@@ -565,7 +566,6 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 }
 
 func TestDBRequestTimeout(t *testing.T) {
-
 	database := "testdbrequesttimeout"
 	err := cleanup(database)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
@@ -574,11 +574,15 @@ func TestDBRequestTimeout(t *testing.T) {
 	//create an impossibly short timeout
 	impossibleTimeout := time.Microsecond * 1
 
+	couchInstanceInitalized = 0
+
 	//create a new instance and database object with a timeout that will fail
 	//Also use a maxRetriesOnStartup=3 to reduce the number of retries
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, 3, impossibleTimeout)
 	testutil.AssertError(t, err, fmt.Sprintf("Error should have been thown while trying to create a couchdb instance with a connection timeout"))
+
+	couchInstanceInitalized = 0
 
 	//create a new instance and database object
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -628,11 +632,14 @@ func TestDBTimeoutConflictRetry(t *testing.T) {
 }
 
 func TestDBBadNumberOfRetries(t *testing.T) {
+	couchInstanceInitalized = 0
 
 	database := "testdbbadretries"
 	err := cleanup(database)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when trying to cleanup  Error: %s", err))
 	defer cleanup(database)
+
+	couchInstanceInitalized = 0
 
 	//create a new instance and database object
 	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,

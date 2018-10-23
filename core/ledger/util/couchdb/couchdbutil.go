@@ -18,6 +18,8 @@ import (
 
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
+	"sync/atomic"
+
 	"github.com/hyperledger/fabric/common/util"
 )
 
@@ -33,55 +35,67 @@ var chainNameAllowedLength = 50
 var namespaceNameAllowedLength = 50
 var collectionNameAllowedLength = 50
 var couchInstance *CouchInstance
-var once sync.Once
+var couchInstanceInitalized int32
+var couchInstanceMutex sync.Mutex
 
 //CreateCouchInstance creates a CouchDB instance
 func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 	maxRetriesOnStartup int, connectionTimeout time.Duration) (*CouchInstance, error) {
 
-	once.Do(func() {
-		couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
-			id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout)
-		if err != nil {
-			panic(fmt.Sprintf("Error during CouchDB CreateConnectionDefinition(): %s\n", err.Error()))
-		}
+	if couchInstanceInitalized == 1 {
+		return couchInstance, nil
+	}
 
-		// Create the HTTP transport.
-		// We override the default transport to enable configurable connection pooling.
-		transport, err := createHTTPTransport()
-		if err != nil {
-			panic(err.Error())
-		}
+	couchInstanceMutex.Lock()
+	defer couchInstanceMutex.Unlock()
 
-		// Create the http client once
-		// Clients and Transports are safe for concurrent use by multiple goroutines
-		// and for efficiency should only be created once and re-used.
-		client := &http.Client{
-			Transport: transport,
-			Timeout:   couchConf.RequestTimeout,
-		}
+	if couchInstanceInitalized == 1 {
+		return couchInstance, nil
+	}
 
-		//Create the CouchDB instance
-		couchInstance = &CouchInstance{conf: *couchConf, client: client}
+	couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
+		id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout)
+	if err != nil {
+		logger.Errorf("Error during CouchDB CreateConnectionDefinition(): %s\n", err.Error())
+		return nil, err
+	}
 
-		connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
-		if verifyErr != nil {
-			panic(verifyErr)
-		}
+	// Create the HTTP transport.
+	// We override the default transport to enable configurable connection pooling.
+	transport, err := createHTTPTransport()
+	if err != nil {
+		return nil, err
+	}
 
-		//return an error if the http return value is not 200
-		if retVal.StatusCode != 200 {
-			panic(fmt.Sprintf("CouchDB connection error, expecting return code of 200, received %v", retVal.StatusCode))
-		}
+	// Create the http client once
+	// Clients and Transports are safe for concurrent use by multiple goroutines
+	// and for efficiency should only be created once and re-used.
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   couchConf.RequestTimeout,
+	}
 
-		//check the CouchDB version number, return an error if the version is not at least 2.0.0
-		errVersion := checkCouchDBVersion(connectInfo.Version)
-		if errVersion != nil {
-			panic(errVersion)
-		}
-	})
+	//Create the CouchDB instance
+	couchInstance = &CouchInstance{conf: *couchConf, client: client}
 
+	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
+	if verifyErr != nil {
+		return nil, verifyErr
+	}
+
+	//return an error if the http return value is not 200
+	if retVal.StatusCode != 200 {
+		return nil, fmt.Errorf("CouchDB connection error, expecting return code of 200, received %v", retVal.StatusCode)
+	}
+
+	//check the CouchDB version number, return an error if the version is not at least 2.0.0
+	errVersion := checkCouchDBVersion(connectInfo.Version)
+	if errVersion != nil {
+		return nil, errVersion
+	}
+	atomic.StoreInt32(&couchInstanceInitalized, 1)
 	return couchInstance, nil
+
 }
 
 func createHTTPTransport() (*http.Transport, error) {
