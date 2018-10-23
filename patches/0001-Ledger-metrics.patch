@@ -1,6 +1,6 @@
-From ef071af927b9f046a8a61fb009871278365ea6e0 Mon Sep 17 00:00:00 2001
+From 08dfd8b6e2a2c1e7b2cc3240f92d852126e8c089 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 22 Oct 2018 16:59:54 -0400
+Date: Tue, 23 Oct 2018 12:47:10 -0400
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -34,12 +34,12 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/ledgerstorage/store.go            |  28 ++
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
- core/ledger/util/couchdb/couchdb.go           |  45 +-
+ core/ledger/util/couchdb/couchdb.go           |  49 +-
  gossip/privdata/coordinator.go                |  11 +
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 34 files changed, 695 insertions(+), 1227 deletions(-)
+ 34 files changed, 697 insertions(+), 1229 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2870,29 +2870,31 @@ index ef673f9d4..f5784d31b 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 519843e05..73bc62d7e 100644
+index a993e4a62..cf660389f 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
-@@ -12,7 +12,6 @@ import (
+@@ -12,8 +12,6 @@ import (
  	"encoding/base64"
  	"encoding/json"
  	"fmt"
+-	"github.com/hyperledger/fabric/common/util/retry"
 -	"github.com/pkg/errors"
  	"io"
  	"io/ioutil"
  	"log"
-@@ -29,7 +28,10 @@ import (
- 	"time"
+@@ -31,8 +29,11 @@ import (
  	"unicode/utf8"
  
-+	"github.com/pkg/errors"
-+
  	"github.com/hyperledger/fabric/common/flogging"
 +	"github.com/hyperledger/fabric/common/metrics"
++	"github.com/hyperledger/fabric/common/util/retry"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/op/go-logging"
++	"github.com/pkg/errors"
  )
-@@ -194,11 +196,11 @@ type NamedCouchDoc struct {
+ 
+ var logger = flogging.MustGetLogger("couchdb")
+@@ -195,11 +196,11 @@ type NamedCouchDoc struct {
  //BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
  type BatchRetrieveDocResponse struct {
  	Rows []struct {
@@ -2908,7 +2910,7 @@ index 519843e05..73bc62d7e 100644
  			AttachmentsInfo json.RawMessage `json:"_attachments"`
  		} `json:"doc"`
  	} `json:"rows"`
-@@ -206,7 +208,7 @@ type BatchRetrieveDocResponse struct {
+@@ -207,7 +208,7 @@ type BatchRetrieveDocResponse struct {
  
  type BatchRetreiveDocValueResponse struct {
  	Rows []struct {
@@ -2917,7 +2919,7 @@ index 519843e05..73bc62d7e 100644
  		Doc map[string]json.RawMessage `json:"doc"`
  	} `json:"rows"`
  }
-@@ -439,7 +441,6 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBRet
+@@ -440,7 +441,6 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBRet
  	logger.Debugf("Entering VerifyCouchConfig()")
  	defer logger.Debugf("Exiting VerifyCouchConfig()")
  
@@ -2925,7 +2927,7 @@ index 519843e05..73bc62d7e 100644
  	dbResponse, couchDBReturn, err := couchInstance.getConnectionInfo()
  	if err != nil {
  		return nil, couchDBReturn, err
-@@ -540,6 +541,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+@@ -541,6 +541,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
  
@@ -2936,7 +2938,7 @@ index 519843e05..73bc62d7e 100644
  	logger.Debugf("Entering EnsureFullCommit()")
  
  	dbResponse, err := dbclient.dbOperation("/_ensure_full_commit")
-@@ -606,6 +611,11 @@ func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, err
+@@ -607,6 +611,11 @@ func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, err
  //SaveDoc method provides a function to save a document, id and byte array
  func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -2948,7 +2950,7 @@ index 519843e05..73bc62d7e 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -966,7 +976,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
+@@ -967,7 +976,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
  
  	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
  	if err != nil {
@@ -2957,7 +2959,7 @@ index 519843e05..73bc62d7e 100644
  	}
  
  	for _, row := range jsonResponse.Rows {
-@@ -1135,7 +1145,7 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
+@@ -1136,7 +1145,7 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
  
  	jsonResponse, err := dbclient.query(query)
  	if err != nil {
@@ -2966,7 +2968,7 @@ index 519843e05..73bc62d7e 100644
  	}
  
  	for _, row := range jsonResponse.Docs {
-@@ -1416,6 +1426,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1417,6 +1426,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2979,7 +2981,7 @@ index 519843e05..73bc62d7e 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1635,7 +1651,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
+@@ -1636,7 +1651,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
  			return nil, err
  		}
  
@@ -2988,7 +2990,7 @@ index 519843e05..73bc62d7e 100644
  		namedDoc := NamedCouchDoc{ID: row.ID, Doc: &doc}
  		docs = append(docs, &namedDoc)
  	}
-@@ -1671,8 +1687,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
+@@ -1672,8 +1687,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
  		}
  
  		attachment := AttachmentInfo{
@@ -2999,7 +3001,15 @@ index 519843e05..73bc62d7e 100644
  			AttachmentBytes: bytes,
  		}
  		attachments = append(attachments, &attachment)
-@@ -1913,6 +1929,11 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1910,6 +1925,7 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+ type dbResponseError struct {
+ 	*DBReturn
+ }
++
+ func (err *dbResponseError) Error() string {
+ 	return fmt.Sprintf("HTTP response contains unsuccesful status [%d, %s]", err.StatusCode, err.Reason)
+ }
+@@ -1922,6 +1938,11 @@ func (err *dbResponseError) Error() string {
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
  
@@ -3010,7 +3020,16 @@ index 519843e05..73bc62d7e 100644
 +
  	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
  
- 	//create the return objects for couchDB
+ 	if maxRetries < 0 {
+@@ -1954,7 +1975,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
+ 		},
+ 		retry.WithMaxAttempts(maxRetries+1),
+ 		retry.WithBackoffFactor(2),
+-		retry.WithInitialBackoff(retryWaitTime * time.Millisecond),
++		retry.WithInitialBackoff(retryWaitTime*time.Millisecond),
+ 		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+ 			dbErr, ok := err.(*dbResponseError)
+ 			if ok && dbErr.StatusCode != http.StatusInternalServerError {
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
 index 39cb9c1a2..3f4a13ed8 100644
 --- a/gossip/privdata/coordinator.go
