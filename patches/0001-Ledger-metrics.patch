@@ -1,4 +1,4 @@
-From 08dfd8b6e2a2c1e7b2cc3240f92d852126e8c089 Mon Sep 17 00:00:00 2001
+From 3a4b3c3b8fb3e02e10d9766913382be881f441f1 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Tue, 23 Oct 2018 12:47:10 -0400
 Subject: [PATCH] Ledger metrics
@@ -427,7 +427,7 @@ index 3e06887b6..28d00d944 100644
  	defer itr.mgr.cpInfoCond.L.Unlock()
  	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 diff --git a/common/ledger/util/leveldbhelper/leveldb_helper.go b/common/ledger/util/leveldbhelper/leveldb_helper.go
-index 9e2ab17df..0a65722ef 100644
+index 5086d7e82..1a69b35ee 100644
 --- a/common/ledger/util/leveldbhelper/leveldb_helper.go
 +++ b/common/ledger/util/leveldbhelper/leveldb_helper.go
 @@ -20,8 +20,15 @@ import (
@@ -446,7 +446,7 @@ index 9e2ab17df..0a65722ef 100644
  	"github.com/syndtr/goleveldb/leveldb"
  	"github.com/syndtr/goleveldb/leveldb/iterator"
  	"github.com/syndtr/goleveldb/leveldb/opt"
-@@ -88,6 +95,9 @@ func (dbInst *DB) Open() {
+@@ -99,6 +106,9 @@ func (dbInst *DB) Open() {
  		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
  	}
  	dbInst.dbState = opened
@@ -456,7 +456,7 @@ index 9e2ab17df..0a65722ef 100644
  }
  
  // Close closes the underlying db
-@@ -105,6 +115,18 @@ func (dbInst *DB) Close() {
+@@ -116,6 +126,18 @@ func (dbInst *DB) Close() {
  
  // Get returns the value for the given key
  func (dbInst *DB) Get(key []byte) ([]byte, error) {
@@ -475,7 +475,7 @@ index 9e2ab17df..0a65722ef 100644
  	value, err := dbInst.db.Get(key, dbInst.readOpts)
  	if err == leveldb.ErrNotFound {
  		value = nil
-@@ -119,6 +141,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
+@@ -130,6 +152,17 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
  
  // Put saves the key/value
  func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
@@ -493,7 +493,7 @@ index 9e2ab17df..0a65722ef 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -133,6 +166,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
+@@ -144,6 +177,17 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
  
  // Delete deletes the given key
  func (dbInst *DB) Delete(key []byte, sync bool) error {
@@ -511,7 +511,7 @@ index 9e2ab17df..0a65722ef 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -154,6 +198,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
+@@ -165,6 +209,10 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator
  
  // WriteBatch writes a batch
  func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
@@ -522,7 +522,7 @@ index 9e2ab17df..0a65722ef 100644
  	wo := dbInst.writeOptsNoSync
  	if sync {
  		wo = dbInst.writeOptsSync
-@@ -163,3 +211,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
+@@ -174,3 +222,24 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
  	}
  	return nil
  }
@@ -2870,7 +2870,7 @@ index ef673f9d4..f5784d31b 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index a993e4a62..cf660389f 100644
+index 00ad2ebb1..9673bb952 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -12,8 +12,6 @@ import (
@@ -3029,7 +3029,7 @@ index a993e4a62..cf660389f 100644
 +		retry.WithInitialBackoff(retryWaitTime*time.Millisecond),
  		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
  			dbErr, ok := err.(*dbResponseError)
- 			if ok && dbErr.StatusCode != http.StatusInternalServerError {
+ 			if ok && dbErr.StatusCode < http.StatusInternalServerError {
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
 index 39cb9c1a2..3f4a13ed8 100644
 --- a/gossip/privdata/coordinator.go
