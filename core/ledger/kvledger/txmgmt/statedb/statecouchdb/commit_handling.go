@@ -71,7 +71,8 @@ func (builder *nsCommittersBuilder) execute() error {
 		if err != nil {
 			return err
 		}
-		batchUpdateMap[key] = &batchableDocument{CouchDoc: *couchDoc, Deleted: vv.Value == nil}
+		// TODO: I removed the copy of the couch document here. (It isn't clear why a copy is needed).
+		batchUpdateMap[key] = &batchableDocument{CouchDoc: couchDoc, Deleted: vv.Value == nil}
 		if len(batchUpdateMap) == maxBacthSize {
 			builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.db, batchUpdateMap})
 			batchUpdateMap = make(map[string]*batchableDocument)
@@ -89,12 +90,13 @@ func (committer *subNsCommitter) execute() error {
 }
 
 // commitUpdates commits the given updates to couchdb
+// TODO: this should be refactored to use a common commit function in the CouchDB package.
 func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchableDocument) error {
 	//Add the documents to the batch update array
 	batchUpdateDocs := []*couchdb.CouchDoc{}
 	for _, updateDocument := range batchUpdateMap {
 		batchUpdateDocument := updateDocument
-		batchUpdateDocs = append(batchUpdateDocs, &batchUpdateDocument.CouchDoc)
+		batchUpdateDocs = append(batchUpdateDocs, batchUpdateDocument.CouchDoc)
 	}
 
 	// Do the bulk update into couchdb. Note that this will do retries if the entire bulk update fails or times out
@@ -129,7 +131,7 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				logger.Warningf("CouchDB batch document update encountered an problem. Retrying update for document ID:%s", respDoc.ID)
 				// Save the individual document to couchdb
 				// Note that this will do retries as needed
-				_, err = db.SaveDoc(respDoc.ID, "", &batchUpdateDocument.CouchDoc)
+				_, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
 			}
 
 			// If the single document update or delete returns an error, then throw the error
@@ -188,6 +190,6 @@ func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDa
 
 //batchableDocument defines a document for a batch
 type batchableDocument struct {
-	CouchDoc couchdb.CouchDoc
+	CouchDoc *couchdb.CouchDoc
 	Deleted  bool
 }

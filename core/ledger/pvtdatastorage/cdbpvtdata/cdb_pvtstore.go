@@ -72,7 +72,7 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	docs = append(docs, expiryEntryDocs...)
 
 	if len(docs) > 0 {
-		_, err = s.db.BatchUpdateDocuments(docs)
+		_, err = s.db.CommitDocuments(docs)
 		if err != nil {
 			return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
 		}
