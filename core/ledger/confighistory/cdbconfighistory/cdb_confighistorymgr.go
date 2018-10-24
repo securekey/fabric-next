@@ -208,7 +208,7 @@ func (r *retriever) mostRecentEntryBelow(blockNum uint64, ns, key, ccName string
 
 	compositeKey := encodeCompositeKey(ns, key, blockNum)
 
-	value, err := couchAttachmentsValue(results[0].Attachments)
+	value, err := docValueToConfigHistoryValue(results[0].Value)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (r *retriever) entryAt(blockNum uint64, ns, key string) (*compositeKV, erro
 	if err != nil {
 		return nil, err
 	}
-	value, err := couchAttachmentsValue(doc.Attachments)
+	value, err := docValueToConfigHistoryValue(doc.JSONValue)
 	if err != nil {
 		return nil, err
 	}
