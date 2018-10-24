@@ -78,14 +78,9 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 	//Create the CouchDB instance
 	couchInstance = &CouchInstance{conf: *couchConf, client: client}
 
-	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
+	connectInfo, verifyErr := couchInstance.VerifyCouchConfig()
 	if verifyErr != nil {
 		return nil, verifyErr
-	}
-
-	//return an error if the http return value is not 200
-	if retVal.StatusCode != 200 {
-		return nil, fmt.Errorf("CouchDB connection error, expecting return code of 200, received %v", retVal.StatusCode)
 	}
 
 	//check the CouchDB version number, return an error if the version is not at least 2.0.0

@@ -169,11 +169,11 @@ func TestBadCouchDBInstance(t *testing.T) {
 	testutil.AssertError(t, err, "Error should have been thrown with CreateDatabaseIfNotExist and invalid connection")
 
 	//Test GetDatabaseInfo with bad connection
-	_, _, err = badDB.GetDatabaseInfo()
+	_, err = badDB.GetDatabaseInfo()
 	testutil.AssertError(t, err, "Error should have been thrown with GetDatabaseInfo and invalid connection")
 
 	//Test VerifyCouchConfig with bad connection
-	_, _, err = badCouchDBInstance.VerifyCouchConfig()
+	_, err = badCouchDBInstance.VerifyCouchConfig()
 	testutil.AssertError(t, err, "Error should have been thrown with VerifyCouchConfig and invalid connection")
 
 	//Test EnsureFullCommit with bad connection
@@ -368,7 +368,7 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb := db.GetDatabaseInfo()
+	dbResp, errdb := db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
 	testutil.AssertEquals(t, dbResp.DbName, database)
 
@@ -552,7 +552,7 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
 	testutil.AssertNoError(t, errdbdrop, fmt.Sprintf("Error dropping database"))
 
 	//Make sure an error is thrown for getting info for a missing database
-	_, _, errdbinfo := db.GetDatabaseInfo()
+	_, errdbinfo := db.GetDatabaseInfo()
 	testutil.AssertError(t, errdbinfo, fmt.Sprintf("Error should have been thrown for missing database"))
 
 	//Attempt to save a document to a deleted database
@@ -609,7 +609,7 @@ func TestDBTimeoutConflictRetry(t *testing.T) {
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb := db.GetDatabaseInfo()
+	dbResp, errdb := db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
 	testutil.AssertEquals(t, dbResp.DbName, database)
 
@@ -666,7 +666,7 @@ func TestDBBadJSON(t *testing.T) {
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb := db.GetDatabaseInfo()
+	dbResp, errdb := db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
 	testutil.AssertEquals(t, dbResp.DbName, database)
 
@@ -696,7 +696,7 @@ func TestPrefixScan(t *testing.T) {
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to create database"))
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb := db.GetDatabaseInfo()
+	dbResp, errdb := db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve database information"))
 	testutil.AssertEquals(t, dbResp.DbName, database)
 
@@ -730,7 +730,7 @@ func TestPrefixScan(t *testing.T) {
 	testutil.AssertNoError(t, errdbdrop, fmt.Sprintf("Error dropping database"))
 
 	//Retrieve the info for the new database and make sure the name matches
-	_, _, errdbinfo := db.GetDatabaseInfo()
+	_, errdbinfo := db.GetDatabaseInfo()
 	testutil.AssertError(t, errdbinfo, fmt.Sprintf("Error should have been thrown for missing database"))
 
 }

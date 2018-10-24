@@ -289,15 +289,18 @@ func (dbclient *CouchDatabase) CreateDatabaseIfNotExist() error {
 
 	logger.Debugf("Entering CreateDatabaseIfNotExist()")
 
-	dbInfo, couchDBReturn, err := dbclient.GetDatabaseInfo()
+	exists := true
+
+	_, err := dbclient.GetDatabaseInfo()
 	if err != nil {
-		if couchDBReturn == nil || couchDBReturn.StatusCode != 404 {
+		dbErr, ok := err.(*dbResponseError)
+		if !ok || dbErr.StatusCode != http.StatusNotFound {
 			return err
 		}
+		exists = false
 	}
 
-	//If the dbInfo returns populated and status code is 200, then the database exists
-	if dbInfo != nil && couchDBReturn.StatusCode == 200 {
+	if exists {
 
 		//Apply database security if needed
 		errSecurity := dbclient.applyDatabasePermissions()
@@ -344,7 +347,7 @@ func (dbclient *CouchDatabase) createDatabase() error {
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
 	//process the URL with a PUT, creates the database
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPut, connectURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPut, connectURL.String(), nil, "", "", maxRetries, true)
 
 	if err != nil {
 
@@ -353,9 +356,9 @@ func (dbclient *CouchDatabase) createDatabase() error {
 		// database may have been created and a false error
 		// returned due to a timeout or race condition.
 		// Do a final check to see if the database really got created.
-		dbInfo, couchDBReturn, errDbInfo := dbclient.GetDatabaseInfo()
+		_, errDbInfo := dbclient.GetDatabaseInfo()
 		//If there is no error, then the database exists,  return without an error
-		if errDbInfo == nil && dbInfo != nil && couchDBReturn.StatusCode == 200 {
+		if errDbInfo == nil {
 
 			errSecurity := dbclient.applyDatabasePermissions()
 			if errSecurity != nil {
@@ -397,28 +400,32 @@ func (dbclient *CouchDatabase) applyDatabasePermissions() error {
 }
 
 //GetDatabaseInfo method provides function to retrieve database information
-func (dbclient *CouchDatabase) GetDatabaseInfo() (*DBInfo, *DBReturn, error) {
+func (dbclient *CouchDatabase) GetDatabaseInfo() (*DBInfo, error) {
 
 	connectURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err.Error())
-		return nil, nil, err
+		return nil, err
 	}
 	connectURL.Path = dbclient.DBName
 
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, couchDBReturn, err := dbclient.CouchInstance.handleRequest(http.MethodGet, connectURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodGet, connectURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
-		return nil, couchDBReturn, err
+		return nil, err
 	}
 	defer closeResponseBody(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("CouchDB error, expecting return code of 200, received %v", resp.StatusCode)
+	}
 
 	dbResponse := &DBInfo{}
 	decodeErr := json.NewDecoder(resp.Body).Decode(&dbResponse)
 	if decodeErr != nil {
-		return nil, nil, decodeErr
+		return nil, decodeErr
 	}
 
 	// trace the database info response
@@ -429,20 +436,20 @@ func (dbclient *CouchDatabase) GetDatabaseInfo() (*DBInfo, *DBReturn, error) {
 		}
 	}
 
-	return dbResponse, couchDBReturn, nil
+	return dbResponse, nil
 
 }
 
 //VerifyCouchConfig method provides function to verify the connection information
-func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBReturn, error) {
+func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, error) {
 
 	logger.Debugf("Entering VerifyCouchConfig()")
 	defer logger.Debugf("Exiting VerifyCouchConfig()")
 
 
-	dbResponse, couchDBReturn, err := couchInstance.getConnectionInfo()
+	dbResponse, err := couchInstance.getConnectionInfo()
 	if err != nil {
-		return nil, couchDBReturn, err
+		return nil, err
 	}
 
 	//check to see if the system databases exist
@@ -452,35 +459,39 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, *DBRet
 	err = CreateSystemDatabasesIfNotExist(couchInstance)
 	if err != nil {
 		logger.Errorf("Unable to connect to CouchDB,  error: %s   Check the admin username and password.\n", err.Error())
-		return nil, nil, fmt.Errorf("Unable to connect to CouchDB,  error: %s   Check the admin username and password.\n", err.Error())
+		return nil, fmt.Errorf("Unable to connect to CouchDB,  error: %s   Check the admin username and password.\n", err.Error())
 	}
 
-	return dbResponse, couchDBReturn, nil
+	return dbResponse, nil
 }
 
-func (couchInstance *CouchInstance) getConnectionInfo() (*ConnectionInfo, *DBReturn, error) {
+func (couchInstance *CouchInstance) getConnectionInfo() (*ConnectionInfo, error) {
 	connectURL, err := url.Parse(couchInstance.conf.URL)
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err.Error())
-		return nil, nil, err
+		return nil, err
 	}
 	connectURL.Path = "/"
 
 	//get the number of retries for startup
 	maxRetriesOnStartup := couchInstance.conf.MaxRetriesOnStartup
 
-	resp, couchDBReturn, err := couchInstance.handleRequest(http.MethodGet, connectURL.String(), nil,
+	resp, err := couchInstance.handleRequest(http.MethodGet, connectURL.String(), nil,
 		couchInstance.conf.Username, couchInstance.conf.Password, maxRetriesOnStartup, true)
 
 	if err != nil {
-		return nil, couchDBReturn, fmt.Errorf("Unable to connect to CouchDB, check the hostname and port: %s", err.Error())
+		return nil, fmt.Errorf("Unable to connect to CouchDB, check the hostname and port: %s", err.Error())
 	}
 	defer closeResponseBody(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("CouchDB connection error, expecting return code of 200, received %v", resp.StatusCode)
+	}
 
 	dbResponse := &ConnectionInfo{}
 	decodeErr := json.NewDecoder(resp.Body).Decode(&dbResponse)
 	if decodeErr != nil {
-		return nil, nil, decodeErr
+		return nil, decodeErr
 	}
 
 	// trace the database info response
@@ -491,7 +502,7 @@ func (couchInstance *CouchInstance) getConnectionInfo() (*ConnectionInfo, *DBRet
 		}
 	}
 
-	return dbResponse, couchDBReturn, nil
+	return dbResponse, nil
 }
 
 //DropDatabase provides method to drop an existing database
@@ -509,7 +520,7 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodDelete, connectURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodDelete, connectURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -588,7 +599,7 @@ func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, err
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, connectURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPost, connectURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
 		logger.Errorf("Failed to invoke %s Error: %s\n", op, err.Error())
 		return nil, err
@@ -672,7 +683,7 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
 	//handle the request for saving document with a retry if there is a revision conflict
-	resp, _, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodPut,
+	resp, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodPut,
 		*saveURL, data, rev, defaultBoundary, maxRetries, keepConnectionOpen)
 
 	if err != nil {
@@ -828,15 +839,15 @@ func (dbclient *CouchDatabase) ReadDoc(id string) (*CouchDoc, string, error) {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, couchDBReturn, err := dbclient.CouchInstance.handleRequest(http.MethodGet, readURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodGet, readURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
-		if couchDBReturn != nil && couchDBReturn.StatusCode == 404 {
+		dbErr, ok := err.(*dbResponseError)
+		if ok && dbErr.StatusCode == http.StatusNotFound {
 			logger.Debug("Document not found (404), returning nil value instead of 404 error")
 			// non-existent document should return nil value instead of a 404 error
 			// for details see https://github.com/hyperledger-archives/fabric/issues/936
 			return nil, "", nil
 		}
-		logger.Debugf("couchDBReturn=%v\n", couchDBReturn)
 		return nil, "", err
 	}
 	defer closeResponseBody(resp)
@@ -1054,7 +1065,7 @@ func (dbclient *CouchDatabase) rangeQuery(startKey, endKey string, limit, skip i
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, rangeURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodGet, rangeURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1103,11 +1114,13 @@ func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
 	//handle the request for saving document with a retry if there is a revision conflict
-	resp, couchDBReturn, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodDelete,
+	resp, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodDelete,
 		*deleteURL, nil, "", "", maxRetries, true)
 
 	if err != nil {
-		if couchDBReturn != nil && couchDBReturn.StatusCode == 404 {
+		dbErr, ok := err.(*dbResponseError)
+
+		if ok && dbErr.StatusCode == http.StatusNotFound {
 			logger.Debug("Document not found (404), returning nil value instead of 404 error")
 			// non-existent document should return nil value instead of a 404 error
 			// for details see https://github.com/hyperledger-archives/fabric/issues/936
@@ -1196,7 +1209,7 @@ func (dbclient *CouchDatabase) query(query string) (*QueryResponse, error) {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, queryURL.String(), []byte(query), "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPost, queryURL.String(), []byte(query), "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1274,7 +1287,7 @@ func (dbclient *CouchDatabase) ListIndex() ([]*IndexResult, error) {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, indexURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodGet, indexURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1337,7 +1350,7 @@ func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndex
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, indexURL.String(), []byte(indexdefinition), "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPost, indexURL.String(), []byte(indexdefinition), "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1392,7 +1405,7 @@ func (dbclient *CouchDatabase) DeleteIndex(designdoc, indexname string) error {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodDelete, indexURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodDelete, indexURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
 		return err
 	}
@@ -1425,7 +1438,7 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, indexURL.String(), nil, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodGet, indexURL.String(), nil, "", "", maxRetries, true)
 	if err != nil {
 		return err
 	}
@@ -1488,7 +1501,7 @@ func (dbclient *CouchDatabase) GetDatabaseSecurity() (*DatabaseSecurity, error) 
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodGet, securityURL.String(),
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodGet, securityURL.String(),
 		nil, "", "", maxRetries, true)
 
 	if err != nil {
@@ -1552,7 +1565,7 @@ func (dbclient *CouchDatabase) ApplyDatabaseSecurity(databaseSecurity *DatabaseS
 
 	logger.Debugf("Applying security to database [%s]: %s", dbclient.DBName, string(databaseSecurityJSON))
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPut, securityURL.String(), databaseSecurityJSON, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPut, securityURL.String(), databaseSecurityJSON, "", "", maxRetries, true)
 
 	if err != nil {
 		return err
@@ -1597,7 +1610,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1717,7 +1730,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchRetrieveURL.String(), jsonKeys, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1823,7 +1836,7 @@ func (dbclient *CouchDatabase) BatchUpdateDocuments(documents []*CouchDoc) ([]*B
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
-	resp, _, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchUpdateURL.String(), bulkDocsJSON, "", "", maxRetries, true)
+	resp, err := dbclient.CouchInstance.handleRequest(http.MethodPost, batchUpdateURL.String(), bulkDocsJSON, "", "", maxRetries, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1858,12 +1871,11 @@ func (dbclient *CouchDatabase) BatchUpdateDocuments(documents []*CouchDoc) ([]*B
 //which may be detected during saves or deletes that timed out from client http perspective,
 //but which eventually succeeded in couchdb
 func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string, connectURL url.URL, data []byte, rev string,
-	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
+	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
 
 	//Initialize a flag for the revision conflict
 	revisionConflictDetected := false
 	var resp *http.Response
-	var couchDBReturn *DBReturn
 	var errResp error
 
 	//attempt the http request for the max number of retries
@@ -1879,26 +1891,28 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 		}
 
 		//handle the request for saving/deleting the couchdb data
-		resp, couchDBReturn, errResp = dbclient.CouchInstance.handleRequest(method, connectURL.String(),
+		resp, errResp = dbclient.CouchInstance.handleRequest(method, connectURL.String(),
 			data, rev, multipartBoundary, maxRetries, keepConnectionOpen)
 
 		if errResp != nil {
+
 			//If there was a 409 conflict error during the save/delete, log it and retry it.
 			//Otherwise, break out of the retry loop
-			if couchDBReturn != nil && couchDBReturn.StatusCode == 409 {
+			dbErr, ok := errResp.(*dbResponseError)
+			if ok && dbErr.StatusCode == 409 {
 				logger.Warningf("CouchDB document revision conflict detected, retrying. Attempt:%v", attempts+1)
 				revisionConflictDetected = true
 				continue
 			} else {
 				// Retries were already attempted inside handleRequest on an errResp.
-				return resp, couchDBReturn, errResp
+				return resp, errResp
 			}
 		}
 		break
 	}
 
 	// return the handleRequest results
-	return resp, couchDBReturn, errResp
+	return resp, errResp
 }
 
 type dbResponseError struct {
@@ -1912,14 +1926,13 @@ func (err *dbResponseError) Error() string {
 // If it returns an error, it ensures that the response body is closed, else it is the
 // callee's responsibility to close response correctly.
 // Any http error or CouchDB error (4XX or 500) will result in a golang error getting returned
-// TODO: Refactor *DBReturn to be an error type.
 func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
-	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, *DBReturn, error) {
+	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
 
 	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
 
 	if maxRetries < 0 {
-		return nil, nil, errors.New("Number of retries must be zero or greater.")
+		return nil, errors.New("Number of retries must be zero or greater.")
 	}
 
 	respUT, err := retry.Invoke(
@@ -1962,22 +1975,18 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 	)
 
 	if err != nil {
-		dbReturn, ok := err.(*dbResponseError)
+		_, ok := err.(*dbResponseError)
 		if !ok {
 			logger.Warningf("couchdb request failed [%s]", err.Error())
-			return nil, nil, err
+		} else {
+			logger.Debugf("couchdb request failed [%s]", err.Error())
 		}
-		logger.Debugf("couchdb request failed [%s]", err.Error())
-		return nil, dbReturn.DBReturn, err
+		return nil, err
 	}
 
 	resp := respUT.(*http.Response)
-	dbReturn := DBReturn{StatusCode: resp.StatusCode}
-
 	logger.Debugf("Exiting handleRequest()")
-
-	//If no errors, then return the http response and the couchdb return object
-	return resp, &dbReturn, nil
+	return resp, nil
 }
 
 func createCouchHTTPRequest(conf *CouchConnectionDef, method, connectURL string, data []byte, rev string, multipartBoundary string, keepConnectionOpen bool) (*http.Request, error) {

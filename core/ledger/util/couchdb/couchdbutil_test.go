@@ -49,21 +49,21 @@ func TestCreateCouchDBSystemDBs(t *testing.T) {
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: "_users"}
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb := db.GetDatabaseInfo()
+	dbResp, errdb := db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve _users database information"))
 	testutil.AssertEquals(t, dbResp.DbName, "_users")
 
 	db = CouchDatabase{CouchInstance: couchInstance, DBName: "_replicator"}
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb = db.GetDatabaseInfo()
+	dbResp, errdb = db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve _replicator database information"))
 	testutil.AssertEquals(t, dbResp.DbName, "_replicator")
 
 	db = CouchDatabase{CouchInstance: couchInstance, DBName: "_global_changes"}
 
 	//Retrieve the info for the new database and make sure the name matches
-	dbResp, _, errdb = db.GetDatabaseInfo()
+	dbResp, errdb = db.GetDatabaseInfo()
 	testutil.AssertNoError(t, errdb, fmt.Sprintf("Error when trying to retrieve _global_changes database information"))
 	testutil.AssertEquals(t, dbResp.DbName, "_global_changes")
 
