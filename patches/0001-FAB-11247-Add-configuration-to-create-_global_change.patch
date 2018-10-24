@@ -1,7 +1,7 @@
-From 50c18ff55a3c5c27c738d90bdf5f962491800519 Mon Sep 17 00:00:00 2001
+From 0e941c53c148147def59132e8eba4e21a364541c Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Tue, 23 Oct 2018 18:22:02 -0400
-Subject: [PATCH] Add configuration to create _global_changes
+Date: Wed, 24 Oct 2018 12:16:16 -0400
+Subject: [PATCH] [FAB-11247] Add configuration to create _global_changes
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
@@ -13,11 +13,11 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/util/couchdb/config.go            | 16 +++---
  core/ledger/util/couchdb/couchdb.go           | 17 ++++---
  core/ledger/util/couchdb/couchdb_test.go      | 51 ++++++++++---------
- core/ledger/util/couchdb/couchdbutil.go       | 30 ++++-------
+ core/ledger/util/couchdb/couchdbutil.go       | 27 ++++------
  core/ledger/util/couchdb/couchdbutil_test.go  | 30 ++++++++++-
  .../cdbtransientdata/cdb_transientprovider.go |  2 +-
  sampleconfig/core.yaml                        |  2 +
- 12 files changed, 91 insertions(+), 68 deletions(-)
+ 12 files changed, 91 insertions(+), 65 deletions(-)
 
 diff --git a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go
 index dc1fdcd92..649d4512c 100644
@@ -48,7 +48,7 @@ index 3701986b4..61b320df8 100644
  		//drop the test database
  		db.DropDatabase()
 diff --git a/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go b/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
-index 4ff0fa5f3..2f88951ea 100644
+index 5ebc51db6..426ec1e8c 100644
 --- a/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
 +++ b/core/ledger/confighistory/cdbconfighistory/cdb_confighistorymgr.go
 @@ -54,7 +54,7 @@ func NewMgr() (confighistory.Mgr, error) {
@@ -120,7 +120,7 @@ index 6da645f6c..281fdbe50 100644
 +	return &CouchDBDef{couchDBAddress, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}
  }
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 68dbc60af..6b9b1a0b9 100644
+index 90f26fa1b..72db05efe 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -121,12 +121,13 @@ type QueryResult struct {
@@ -162,7 +162,7 @@ index 68dbc60af..6b9b1a0b9 100644
  }
  
 diff --git a/core/ledger/util/couchdb/couchdb_test.go b/core/ledger/util/couchdb/couchdb_test.go
-index 38ab9a2af..306f5b640 100644
+index 55f7280e8..8c64aae27 100644
 --- a/core/ledger/util/couchdb/couchdb_test.go
 +++ b/core/ledger/util/couchdb/couchdb_test.go
 @@ -33,7 +33,7 @@ var couchDBDef *CouchDBDef
@@ -395,7 +395,7 @@ index 38ab9a2af..306f5b640 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
  
 diff --git a/core/ledger/util/couchdb/couchdbutil.go b/core/ledger/util/couchdb/couchdbutil.go
-index 242eedb6e..4095c58c1 100644
+index 5d0258923..919cb8343 100644
 --- a/core/ledger/util/couchdb/couchdbutil.go
 +++ b/core/ledger/util/couchdb/couchdbutil.go
 @@ -40,33 +40,28 @@ var couchInstanceMutex sync.Mutex
@@ -434,28 +434,15 @@ index 242eedb6e..4095c58c1 100644
  	// Create the http client once
  	// Clients and Transports are safe for concurrent use by multiple goroutines
  	// and for efficiency should only be created once and re-used.
-@@ -74,20 +69,16 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
+@@ -74,7 +69,6 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
  		Transport: transport,
  		Timeout:   couchConf.RequestTimeout,
  	}
 -
  	//Create the CouchDB instance
  	couchInstance = &CouchInstance{conf: *couchConf, client: client}
--
- 	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
- 	if verifyErr != nil {
- 		return nil, verifyErr
- 	}
--
- 	//return an error if the http return value is not 200
- 	if retVal.StatusCode != 200 {
- 		return nil, fmt.Errorf("CouchDB connection error, expecting return code of 200, received %v", retVal.StatusCode)
- 	}
--
- 	//check the CouchDB version number, return an error if the version is not at least 2.0.0
- 	errVersion := checkCouchDBVersion(connectInfo.Version)
- 	if errVersion != nil {
-@@ -95,7 +86,6 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
+ 
+@@ -90,7 +84,6 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
  	}
  	atomic.StoreInt32(&couchInstanceInitalized, 1)
  	return couchInstance, nil
@@ -463,7 +450,7 @@ index 242eedb6e..4095c58c1 100644
  }
  
  func createHTTPTransport() (*http.Transport, error) {
-@@ -179,15 +169,15 @@ func CreateSystemDatabasesIfNotExist(couchInstance *CouchInstance) error {
+@@ -174,15 +167,15 @@ func CreateSystemDatabasesIfNotExist(couchInstance *CouchInstance) error {
  		logger.Errorf("Error during CouchDB CreateDatabaseIfNotExist() for system dbName: %s  error: %s\n", dbName, err.Error())
  		return err
  	}
@@ -488,7 +475,7 @@ index 242eedb6e..4095c58c1 100644
  
  }
 diff --git a/core/ledger/util/couchdb/couchdbutil_test.go b/core/ledger/util/couchdb/couchdbutil_test.go
-index d27328e6d..f05cab940 100644
+index f30e98afb..b4400fad1 100644
 --- a/core/ledger/util/couchdb/couchdbutil_test.go
 +++ b/core/ledger/util/couchdb/couchdbutil_test.go
 @@ -22,7 +22,7 @@ func TestCreateCouchDBConnectionAndDB(t *testing.T) {
