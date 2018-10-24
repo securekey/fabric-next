@@ -1,5 +1,5 @@
 /*
-Copyright IBM Corp. All Rights Reserved.
+Copyright IBM Corp, SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
@@ -1873,7 +1873,7 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 
 		//if the revision was not passed in, or if a revision conflict is detected on prior attempt,
 		//query CouchDB for the document revision
-		if rev == "" || revisionConflictDetected {
+		if revisionConflictDetected {
 			rev = dbclient.getDocumentRevision(id)
 		}
 

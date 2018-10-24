@@ -107,7 +107,7 @@ func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
 		return nil
 	}
 
-	_, err = s.txnStore.BatchUpdateDocuments(docs)
+	_, err = s.txnStore.CommitDocuments(docs)
 	if err != nil {
 		return errors.WithMessage(err, "adding block to couchDB failed")
 	}
