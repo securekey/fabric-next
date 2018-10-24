@@ -246,17 +246,17 @@ func (historyDB *historyDB) Commit(block *common.Block) error {
 		}
 		docs = append(docs, heightDoc)
 		// Save write-sets + savepoint to CouchDB
-		results, err := historyDB.couchDB.BatchUpdateDocuments(docs)
+		results, err := historyDB.couchDB.CommitDocuments(docs)
 		if err != nil {
 			return errors.Wrapf(err, "failed to save history batch to CouchDB")
 		}
-		// Save the savepoint's new revision for the next commit
-		for _, result := range results {
-			if heightDocIdKey == result.ID {
-				historyDB.savepointRev = result.Rev
-				break
-			}
+
+		savepointRev, ok := results[heightDocIdKey]
+		if !ok {
+			return errors.New("save point revision was not found")
 		}
+		historyDB.savepointRev = savepointRev
+
 		logger.Debugf(
 			"Channel [%s]: Updates committed to history database for blockNo [%v]",
 			historyDB.couchDB.DBName, block.Header.Number,

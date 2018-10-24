@@ -156,7 +156,7 @@ func (c *ConfigHistoryMgr) prepareDBBatch(stateUpdates ledger.StateUpdates, comm
 		if err != nil {
 			return err
 		}
-		_, err = db.BatchUpdateDocuments(docs)
+		_, err = db.CommitDocuments(docs)
 		if err != nil {
 			return errors.WithMessage(err, fmt.Sprintf("writing config history data to CouchDB failed [%d]", committingBlock))
 		}
