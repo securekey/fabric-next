@@ -669,6 +669,8 @@ ledger:
        idleConnTimeout: 90s
        # Duration for keep-alive
        keepAliveTimeout: 30s
+       # enable or disable create global changes db
+       createGlobalChangesDB: true
 
   history:
     # enableHistoryDatabase - options are true or false
