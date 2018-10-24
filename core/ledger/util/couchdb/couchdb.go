@@ -1873,46 +1873,38 @@ func (dbclient *CouchDatabase) BatchUpdateDocuments(documents []*CouchDoc) ([]*B
 func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string, connectURL url.URL, data []byte, rev string,
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
 
-	//Initialize a flag for the revision conflict
-	revisionConflictDetected := false
-	var resp *http.Response
-	var errResp error
-
-	//attempt the http request for the max number of retries
-	//In this case, the retry is to catch problems where a client timeout may miss a
-	//successful CouchDB update and cause a document revision conflict on a retry in handleRequest
-	for attempts := 0; attempts <= maxRetries; attempts++ {
-
-		//if the revision was not passed in, or if a revision conflict is detected on prior attempt,
-		//query CouchDB for the document revision
-		// TODO: rev is not needed for new documents.
-		if rev == "" || revisionConflictDetected {
-			rev = dbclient.getDocumentRevision(id)
-		}
-
-		//handle the request for saving/deleting the couchdb data
-		resp, errResp = dbclient.CouchInstance.handleRequest(method, connectURL.String(),
-			data, rev, multipartBoundary, maxRetries, keepConnectionOpen)
-
-		if errResp != nil {
-
-			//If there was a 409 conflict error during the save/delete, log it and retry it.
-			//Otherwise, break out of the retry loop
-			dbErr, ok := errResp.(*dbResponseError)
-			if ok && dbErr.StatusCode == 409 {
-				logger.Warningf("CouchDB document revision conflict detected, retrying. Attempt:%v", attempts+1)
-				revisionConflictDetected = true
-				continue
-			} else {
-				// Retries were already attempted inside handleRequest on an errResp.
-				return resp, errResp
-			}
-		}
-		break
+	// TODO: rev is only needed for updated documents.
+	if rev == "" {
+		rev = dbclient.getDocumentRevision(id)
 	}
 
-	// return the handleRequest results
-	return resp, errResp
+	respUT, err := retry.Invoke(
+		func() (interface{}, error) {
+			return dbclient.CouchInstance.handleRequest(method, connectURL.String(), data, rev, multipartBoundary, maxRetries, keepConnectionOpen)
+		},
+		retry.WithMaxAttempts(maxRetries+1), // TODO: does it make sense to have the same maxRetries as is passed-in to handleRequest?
+		retry.WithBackoffFactor(1),
+		retry.WithInitialBackoff(0),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+
+			dbErr, ok := err.(*dbResponseError)
+			if ok && dbErr.StatusCode == http.StatusConflict {
+				logger.Warningf("couchdb document revision conflict detected, retrying. [attempt:%v, wait: %s]", attempt, backoff.String())
+				rev = dbclient.getDocumentRevision(id)
+				return true
+			}
+
+			// Retries were already attempted inside handleRequest on an errResp.
+			return false
+		}),
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	resp := respUT.(*http.Response)
+	return resp, nil
 }
 
 type dbResponseError struct {
