@@ -170,7 +170,7 @@ func (s *Store) CreateLedgerID(ledgerID string, gb *common.Block) error {
 	}
 
 	id := ledgerIDToKey(ledgerID)
-	rev, err := s.db.SaveDoc(id, "", doc)
+	rev, err := s.db.UpdateDoc(id, "", doc)
 	if err != nil {
 		return errors.WithMessage(err, fmt.Sprintf("creation of ledger failed [%s]", ledgerID))
 	}
