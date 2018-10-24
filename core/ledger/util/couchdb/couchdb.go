@@ -614,8 +614,18 @@ func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, err
 	return dbResponse, nil
 }
 
-//SaveDoc method provides a function to save a document, id and byte array
+//SaveDoc method provides a function to save a document, id and byte array. The revision is populated if not provided.
+// TODO: Remove explicit rev argument.
 func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
+	if rev == "" {
+		rev = dbclient.getDocumentRevision(id)
+	}
+	return dbclient.UpdateDoc(id, rev, couchDoc)
+}
+
+//UpdateDoc method provides a function to update or create a document, id and byte array. The revision must be provided
+//for document updates.
+func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
 
 	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
 
@@ -1112,6 +1122,11 @@ func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
+
+	// Document deletion requires the revision.
+	if rev == "" {
+		rev = dbclient.getDocumentRevision(id)
+	}
 
 	//handle the request for saving document with a retry if there is a revision conflict
 	resp, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodDelete,
@@ -1872,11 +1887,6 @@ func (dbclient *CouchDatabase) BatchUpdateDocuments(documents []*CouchDoc) ([]*B
 //but which eventually succeeded in couchdb
 func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string, connectURL url.URL, data []byte, rev string,
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
-
-	// TODO: rev is only needed for updated documents.
-	if rev == "" {
-		rev = dbclient.getDocumentRevision(id)
-	}
 
 	respUT, err := retry.Invoke(
 		func() (interface{}, error) {

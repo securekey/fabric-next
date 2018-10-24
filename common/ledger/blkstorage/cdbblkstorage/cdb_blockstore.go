@@ -89,7 +89,7 @@ func (s *cdbBlockStore) storeBlock(block *common.Block) error {
 	}
 
 	id := blockNumberToKey(block.GetHeader().GetNumber())
-	rev, err := s.blockStore.SaveDoc(id, "", doc)
+	rev, err := s.blockStore.UpdateDoc(id, "", doc)
 	if err != nil {
 		return errors.WithMessage(err, "adding block to couchDB failed")
 	}

@@ -77,7 +77,7 @@ func (dbclient *CouchDatabase) CommitDocuments(documents []*CouchDoc) (map[strin
 				// If this is a deleted document, then retry the delete
 				// If the delete fails due to a document not being found (404 error),
 				// the document has already been deleted and the DeleteDoc will not return an error
-				err = dbclient.DeleteDoc(respDoc.ID, "")
+				err = dbclient.DeleteDoc(respDoc.ID, rev)
 			} else {
 				logger.Warningf("CouchDB batch document update encountered an problem. Retrying update for document ID:%s", respDoc.ID)
 				// Save the individual document to couchdb
