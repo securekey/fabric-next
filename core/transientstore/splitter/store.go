@@ -10,6 +10,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 	pb "github.com/hyperledger/fabric/protos/transientstore"
 )
 
@@ -28,9 +29,9 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimula
 	return s.sa.PersistWithConfig(txid, blockHeight, privateSimulationResultsWithConfig)
 }
 
-func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error) {
-	s.sb.GetTxPvtRWSetByTxid(txid, filter)
-	return s.sa.GetTxPvtRWSetByTxid(txid, filter)
+func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
+	s.sb.GetTxPvtRWSetByTxid(txid, filter, endorsers)
+	return s.sa.GetTxPvtRWSetByTxid(txid, filter, endorsers)
 }
 
 func (s *store) PurgeByTxids(txids []string) error {

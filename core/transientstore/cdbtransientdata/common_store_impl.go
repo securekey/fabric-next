@@ -7,9 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package cdbtransientdata
 
 import (
+	"fmt"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 	pb "github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/pkg/errors"
 )
@@ -24,7 +27,9 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimula
 	return errors.New("not implemented")
 }
 
-func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error) {
+func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
+	fmt.Printf("*** endorsers %v\n", endorsers)
+	panic("yeah")
 	return nil, errors.New("not implemented")
 }
 
