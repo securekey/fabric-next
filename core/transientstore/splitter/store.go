@@ -10,6 +10,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 	pb "github.com/hyperledger/fabric/protos/transientstore"
 )
 
@@ -19,18 +20,23 @@ type store struct {
 }
 
 func (s *store) Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error {
-	s.sb.Persist(txid, blockHeight, privateSimulationResults)
+	err := s.sb.Persist(txid, blockHeight, privateSimulationResults)
+	if err != nil {
+		return err
+	}
 	return s.sa.Persist(txid, blockHeight, privateSimulationResults)
 }
 
 func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *pb.TxPvtReadWriteSetWithConfigInfo) error {
-	s.sb.PersistWithConfig(txid, blockHeight, privateSimulationResultsWithConfig)
+	err := s.sb.PersistWithConfig(txid, blockHeight, privateSimulationResultsWithConfig)
+	if err != nil {
+		return err
+	}
 	return s.sa.PersistWithConfig(txid, blockHeight, privateSimulationResultsWithConfig)
 }
 
-func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error) {
-	s.sb.GetTxPvtRWSetByTxid(txid, filter)
-	return s.sa.GetTxPvtRWSetByTxid(txid, filter)
+func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
+	return s.sb.GetTxPvtRWSetByTxid(txid, filter, endorsers)
 }
 
 func (s *store) PurgeByTxids(txids []string) error {
@@ -44,8 +50,7 @@ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
 }
 
 func (s *store) GetMinTransientBlkHt() (uint64, error) {
-	s.sb.GetMinTransientBlkHt()
-	return s.sa.GetMinTransientBlkHt()
+	return s.sb.GetMinTransientBlkHt()
 }
 
 func (s *store) Shutdown() {

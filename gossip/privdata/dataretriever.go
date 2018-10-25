@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	gossip2 "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 )
 
 // StorageDataRetriever defines an API to retrieve private date from the storage
@@ -30,7 +31,7 @@ type StorageDataRetriever interface {
 type DataStore interface {
 	// GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 	// RWSets persisted from different endorsers (via Gossip)
-	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error)
+	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error)
 
 	// GetPvtDataByNum returns a slice of the private data from the ledger
 	// for given block and based on the filter which indicates a map of
@@ -125,7 +126,7 @@ func (dr *dataRetriever) fromLedger(dig *gossip2.PvtDataDigest, filter map[strin
 
 func (dr *dataRetriever) fromTransientStore(dig *gossip2.PvtDataDigest, filter map[string]ledger.PvtCollFilter) (*util.PrivateRWSetWithConfig, error) {
 	results := &util.PrivateRWSetWithConfig{}
-	it, err := dr.store.GetTxPvtRWSetByTxid(dig.TxId, filter)
+	it, err := dr.store.GetTxPvtRWSetByTxid(dig.TxId, filter, nil)
 	if err != nil {
 		return nil, errors.New(fmt.Sprint("was not able to retrieve private data from transient store, namespace", dig.Namespace,
 			", collection name", dig.Collection, ", txID", dig.TxId, ", due to", err))
