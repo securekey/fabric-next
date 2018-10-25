@@ -55,7 +55,7 @@ type TransientStore interface {
 	Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error
 	// GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 	// write sets persisted from different endorsers (via Gossip)
-	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error)
+	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error)
 
 	// PurgeByTxids removes private read-write sets for a given set of transactions from the
 	// transient store
@@ -318,15 +318,26 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 	}
 }
 
-func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte) {
+func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte, sources map[rwSetKey][]*peer.Endorsement) error {
 	// Check transient store
 	for txAndSeq, filter := range missing.FiltersByTxIDs() {
-		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets)
+		var endorsers []*peer.Endorsement
+		for key, value := range sources {
+			if key.txID == txAndSeq.txID && key.seqInBlock == txAndSeq.seqInBlock {
+				endorsers = value
+				break
+			}
+		}
+		if endorsers == nil {
+			return errors.New("fetchMissingFromTransientStore didn't find endorsers")
+		}
+		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets, endorsers)
 	}
+	return nil
 }
 
-func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte) {
-	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter)
+func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte, endorsers []*peer.Endorsement) {
+	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter, endorsers)
 	if err != nil {
 		logger.Warning("Failed obtaining iterator from transient store:", err)
 		return
@@ -666,8 +677,10 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 	logger.Debug("Retrieving private write sets for", len(privateInfo.missingKeysByTxIDs), "transactions from transient store")
 
 	// Put into ownedRWsets RW sets that are missing and found in the transient store
-	c.fetchMissingFromTransientStore(privateInfo.missingKeysByTxIDs, ownedRWsets)
-
+	err := c.fetchMissingFromTransientStore(privateInfo.missingKeysByTxIDs, ownedRWsets, privateInfo.sources)
+	if err != nil {
+		return nil, err
+	}
 	// In the end, iterate over the ownedRWsets, and if the key doesn't exist in
 	// the privateRWsetsInBlock - delete it from the ownedRWsets
 	for k := range ownedRWsets {

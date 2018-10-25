@@ -32,7 +32,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/transientstore"
-	psplitter "github.com/hyperledger/fabric/core/transientstore/splitter"
+	"github.com/hyperledger/fabric/core/transientstore/cdbtransientdata"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -95,7 +95,7 @@ func (sp *storeProvider) OpenStore(ledgerID string) (transientstore.Store, error
 			sp.StoreProvider = transientstore.NewStoreProvider()
 		case ledgerconfig.CouchDBTransientStorage:
 			var err error
-			sp.StoreProvider, err = psplitter.NewProvider()
+			sp.StoreProvider, err = cdbtransientdata.NewProvider()
 			if err != nil {
 				return nil, err
 			}
