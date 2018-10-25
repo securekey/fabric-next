@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	common2 "github.com/hyperledger/fabric/gossip/common"
@@ -976,16 +977,9 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
 	}
 
-	// FIXME: Should examine the block to see if it was a committed block (i.e. already loaded from the ledger) or
-	// if it's an uncommitted block coming from the orderer. (The uncommitted block will have nil set the the TxValidationFlags.)
-	// This will save the extra call to the DB.
-	committedBlock, err := s.getBlockFromLedger(block.Header.Number)
+	committedBlock, err := s.getCommittedBlock(block)
 	if err != nil {
-		return errors.Wrapf(err, "unable to get block number %d from ledger: %s", block.Header.Number, err)
-	}
-
-	if committedBlock == nil {
-		return errors.Errorf("nil block retrieved from ledger for block number %d", block.Header.Number)
+		return err
 	}
 
 	if err := s.blockPublisher.Publish(committedBlock); err != nil {
@@ -993,6 +987,30 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 	}
 
 	return nil
+}
+
+func (s *GossipStateProviderImpl) getCommittedBlock(block *common.Block) (*common.Block, error) {
+	// Examine the block to see if it was a committed block (i.e. already loaded from the ledger) or
+	// if it's an uncommitted block coming from the orderer. (The uncommitted block will have nil set the the TxValidationFlags.)
+	// This will save the extra call to the DB.
+	blockMetadata := block.GetMetadata()
+	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
+	if txValidationFlags == nil {
+		committedBlock, err := s.getBlockFromLedger(block.Header.Number)
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to get block number %d from ledger: %s", block.Header.Number, err)
+		}
+
+		if committedBlock == nil {
+			return nil, errors.Errorf("nil block retrieved from ledger for block number %d", block.Header.Number)
+		}
+
+		logger.Debugf("block %d was received in uncommitted state", block.Header.Number)
+		return committedBlock, nil
+	}
+	logger.Debugf("block %d was received in committed state", block.Header.Number)
+	return block, nil
 }
 
 func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Block, error) {
