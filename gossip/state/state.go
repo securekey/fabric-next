@@ -76,6 +76,9 @@ type GossipAdapter interface {
 	// PeersOfChannel returns the NetworkMembers considered alive
 	// and also subscribed to the channel given
 	PeersOfChannel(common2.ChainID) []discovery.NetworkMember
+
+	// Gossip sends a message to other peers to the network
+	Gossip(msg *proto.GossipMessage)
 }
 
 // MCSAdapter adapter of message crypto service interface to bound
@@ -855,7 +858,7 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		return errors.New("Given payload is nil")
 	}
 	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
-	height, err := s.ledger.LedgerHeight()
+	height, err := s.ledgerHeight()
 	if err != nil {
 		return errors.Wrap(err, "Failed obtaining ledger height")
 	}
@@ -891,10 +894,15 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 			logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 			return err
 		}
+
 		// Update ledger height
 		s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
 		logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
 			s.chainID, block.Header.Number, len(block.Data.Data))
+
+		// Gossip messages with other nodes in my org
+		s.gossipBlock(block)
+
 		return nil
 	}
 
@@ -909,6 +917,49 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
 
 	return nil
+}
+
+func (s *GossipStateProviderImpl) gossipBlock(block *common.Block) {
+	blockNum := block.Header.Number
+
+	marshaledBlock, err := pb.Marshal(block)
+	if err != nil {
+		logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", s.chainID, blockNum, err)
+	}
+	if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), blockNum, marshaledBlock); err != nil {
+		logger.Errorf("[%s] Error verifying block with sequnce number %d, due to %s", s.chainID, blockNum, err)
+	}
+
+	numberOfPeers := len(s.mediator.PeersOfChannel(common2.ChainID(s.chainID)))
+
+	// Create payload with a block received
+	payload := createPayload(blockNum, marshaledBlock)
+	// Use payload to create gossip message
+	gossipMsg := createGossipMsg(s.chainID, payload)
+
+	logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", s.chainID, blockNum, numberOfPeers)
+	s.mediator.GossipAdapter.Gossip(gossipMsg)
+}
+
+func createGossipMsg(chainID string, payload *proto.Payload) *proto.GossipMessage {
+	gossipMsg := &proto.GossipMessage{
+		Nonce:   0,
+		Tag:     proto.GossipMessage_CHAN_AND_ORG,
+		Channel: []byte(chainID),
+		Content: &proto.GossipMessage_DataMsg{
+			DataMsg: &proto.DataMessage{
+				Payload: payload,
+			},
+		},
+	}
+	return gossipMsg
+}
+
+func createPayload(seqNum uint64, marshaledBlock []byte) *proto.Payload {
+	return &proto.Payload{
+		Data:   marshaledBlock,
+		SeqNum: seqNum,
+	}
 }
 
 func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
