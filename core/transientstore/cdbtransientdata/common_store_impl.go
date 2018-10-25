@@ -10,6 +10,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 	pb "github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/pkg/errors"
 )
@@ -17,15 +18,17 @@ import (
 // TODO: This file contains code copied from the base transient store. Both of these packages should be refactored.
 
 func (s *store) Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error {
-	return errors.New("not implemented")
+	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
+	return s.persistDB(txid, blockHeight, privateSimulationResults)
 }
 
 func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *pb.TxPvtReadWriteSetWithConfigInfo) error {
-	return errors.New("not implemented")
+	return s.persistWithConfigDB(txid, blockHeight, privateSimulationResultsWithConfig)
+
 }
 
-func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error) {
-	return nil, errors.New("not implemented")
+func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
+	return s.getTxPvtRWSetByTxidDB(txid, filter, endorsers)
 }
 
 func (s *store) PurgeByTxids(txids []string) error {
