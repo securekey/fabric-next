@@ -69,6 +69,7 @@ func (provider *VersionedDBProvider) Close() {
 // VersionedDB implements VersionedDB interface
 type VersionedDB struct {
 	couchInstance      *couchdb.CouchInstance
+	couchCheckpointRev string
 	metadataDB         *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
 	chainName          string                            // The name of the chain/channel.
 	namespaceDBs       map[string]*couchdb.CouchDatabase // One database per deployed chaincode.
@@ -421,11 +422,14 @@ func (vdb *VersionedDB) ensureFullCommitAndRecordSavepoint(height *version.Heigh
 	if err != nil {
 		return err
 	}
-	_, err = vdb.metadataDB.SaveDoc(savepointDocID, "", savepointCouchDoc)
+	rev, err := vdb.metadataDB.SaveDoc(savepointDocID, vdb.couchCheckpointRev, savepointCouchDoc)
 	if err != nil {
 		logger.Errorf("Failed to save the savepoint to DB %s\n", err.Error())
 		return err
 	}
+
+	vdb.couchCheckpointRev = rev
+
 	// Note: Ensure full commit on metadataDB after storing the savepoint is not necessary
 	// as CouchDB syncs states to disk periodically (every 1 second). If peer fails before
 	// syncing the savepoint to disk, ledger recovery process kicks in to ensure consistency

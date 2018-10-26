@@ -17,7 +17,8 @@ var (
 )
 
 type checkpoint struct {
-	db *couchdb.CouchDatabase
+	db       *couchdb.CouchDatabase
+	couchRev string
 }
 
 // checkpointInfo
@@ -66,7 +67,7 @@ func (cp *checkpoint) saveCurrentInfo(i *checkpointInfo) error {
 	if err != nil {
 		return errors.WithMessage(err, "converting checkpointInfo to couchDB document failed")
 	}
-	_, err = cp.db.SaveDoc(blkMgrInfoKey, "", doc)
+	rev, err := cp.db.SaveDoc(blkMgrInfoKey, cp.couchRev, doc)
 	if err != nil {
 		return errors.WithMessage(err, "adding checkpointInfo to couchDB failed")
 	}
@@ -76,6 +77,8 @@ func (cp *checkpoint) saveCurrentInfo(i *checkpointInfo) error {
 		logger.Errorf("full commit failed [%s]", err)
 		return errors.WithMessage(err, "full commit failed")
 	}
+
+	cp.couchRev = rev
 
 	return nil
 }

@@ -18,7 +18,8 @@ import (
 var logger = flogging.MustGetLogger("peer")
 
 type Store struct {
-	db *couchdb.CouchDatabase
+	db               *couchdb.CouchDatabase
+	couchMetadataRev string
 }
 
 func OpenStore() (*Store, error) {
@@ -107,7 +108,7 @@ func (s *Store) SetUnderConstructionFlag(ledgerID string) error {
 		return err
 	}
 
-	rev, err := s.db.SaveDoc(metadataKey, "", doc)
+	rev, err := s.db.SaveDoc(metadataKey, s.couchMetadataRev, doc)
 	if err != nil {
 		return errors.WithMessage(err, "update of metadata in CouchDB failed [%s]")
 	}
@@ -117,6 +118,8 @@ func (s *Store) SetUnderConstructionFlag(ledgerID string) error {
 		logger.Errorf("full commit failed [%s]", err)
 		return errors.WithMessage(err, "full commit failed")
 	}
+
+	s.couchMetadataRev = rev
 
 	logger.Debugf("updated metadata in CouchDB inventory [%s]", rev)
 	return nil
@@ -128,7 +131,7 @@ func (s *Store) UnsetUnderConstructionFlag() error {
 		return err
 	}
 
-	rev, err := s.db.SaveDoc(metadataKey, "", doc)
+	rev, err := s.db.SaveDoc(metadataKey, s.couchMetadataRev, doc)
 	if err != nil {
 		return errors.WithMessage(err, "update of metadata in CouchDB failed [%s]")
 	}
@@ -138,6 +141,8 @@ func (s *Store) UnsetUnderConstructionFlag() error {
 		logger.Errorf("full commit failed [%s]", err)
 		return errors.WithMessage(err, "full commit failed")
 	}
+
+	s.couchMetadataRev = rev
 
 	logger.Debugf("updated metadata in CouchDB inventory [%s]", rev)
 	return nil
