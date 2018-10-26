@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fce05e94_88112e78",
+        "filename": "core/transientstore/cdbtransientdata/cdb_transientstore.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 202,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-26T22:01:08Z",
+      "side": 1,
+      "message": "this should use bulk method - Delete 1 by 1 is slow.",
+      "range": {
+        "startLine": 197,
+        "startChar": 0,
+        "endLine": 202,
+        "endChar": 2
+      },
+      "revId": "f63040bdb7c4a3f4233676ddb00c44d4a379e0b2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
