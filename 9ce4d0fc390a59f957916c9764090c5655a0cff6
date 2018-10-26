@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "2d8369fe_3d2a3169",
+        "filename": "core/transientstore/cdbtransientdata/cdb_transientstore.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 186,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-26T23:31:21Z",
+      "side": 1,
+      "message": "use func (dbclient *CouchDatabase) CommitDocuments instead. This function calls BatchUpdateDocuments and also checks for errors which it retries individually.",
+      "range": {
+        "startLine": 186,
+        "startChar": 16,
+        "endLine": 186,
+        "endChar": 36
+      },
+      "revId": "9ce4d0fc390a59f957916c9764090c5655a0cff6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
