@@ -693,6 +693,7 @@ func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchD
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
 
 	//handle the request for saving document with a retry if there is a revision conflict
+	// TODO: think about if retries make sense if an explicit revision was passed in.
 	resp, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodPut,
 		*saveURL, data, rev, defaultBoundary, maxRetries, keepConnectionOpen)
 
@@ -700,6 +701,10 @@ func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchD
 		return "", err
 	}
 	defer closeResponseBody(resp)
+
+	if resp.StatusCode != http.StatusCreated {
+		logger.Infof("couchdb saved document but did not return created status code [%d]", resp.StatusCode)
+	}
 
 	//get the revision and return
 	revision, err := getRevisionHeader(resp)

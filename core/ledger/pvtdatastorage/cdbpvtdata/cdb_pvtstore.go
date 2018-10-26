@@ -18,7 +18,8 @@ import (
 )
 
 type store struct {
-	db *couchdb.CouchDatabase
+	db               *couchdb.CouchDatabase
+	couchMetadataRev string
 
 	commonStore
 }
@@ -92,10 +93,12 @@ func (s *store) commitDB(committingBlockNum uint64) error {
 		lastCommitedBlock: committingBlockNum,
 	}
 
-	err := updateCommitMetadataDoc(s.db, &m)
+	rev, err := updateCommitMetadataDoc(s.db, &m, s.couchMetadataRev)
 	if err != nil {
 		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in commit [%d]", committingBlockNum))
 	}
+
+	s.couchMetadataRev = rev
 
 	return nil
 }
@@ -141,7 +144,13 @@ func (s *store) updateCommitMetadata(pending bool) error {
 		lastCommitedBlock: s.lastCommittedBlock,
 	}
 
-	return updateCommitMetadataDoc(s.db, &m)
+	rev, err := updateCommitMetadataDoc(s.db, &m, s.couchMetadataRev)
+	if err != nil {
+		return err
+	}
+
+	s.couchMetadataRev = rev
+	return nil
 }
 
 func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
@@ -150,5 +159,12 @@ func (s *store) initLastCommittedBlockDB(blockNum uint64) error {
 		lastCommitedBlock: blockNum,
 	}
 
-	return updateCommitMetadataDoc(s.db, &m)
+	rev, err := updateCommitMetadataDoc(s.db, &m, s.couchMetadataRev)
+	if err != nil {
+		return err
+	}
+
+	s.couchMetadataRev = rev
+	return nil
+
 }

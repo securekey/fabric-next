@@ -178,25 +178,25 @@ type metadata struct {
 	lastCommitedBlock uint64
 }
 
-func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata) error {
+func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata, rev string) (string, error) {
 	doc, err := createMetadataDoc(m.pending, m.lastCommitedBlock)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	_, err = db.SaveDoc(metadataKey, "", doc)
+	rev, err = db.SaveDoc(metadataKey, rev, doc)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// TODO: is full sync needed after saving the metadata doc (will recovery work)?
 	dbResponse, err := db.EnsureFullCommit()
 	if err != nil || dbResponse.Ok != true {
 		logger.Errorf("full commit failed [%s]", err)
-		return errors.WithMessage(err, "full commit failed")
+		return "", errors.WithMessage(err, "full commit failed")
 	}
 
-	return nil
+	return rev, nil
 }
 
 func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
