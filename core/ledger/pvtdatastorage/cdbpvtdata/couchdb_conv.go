@@ -189,6 +189,13 @@ func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata) error {
 		return err
 	}
 
+	// TODO: is full sync needed after saving the metadata doc (will recovery work)?
+	dbResponse, err := db.EnsureFullCommit()
+	if err != nil || dbResponse.Ok != true {
+		logger.Errorf("full commit failed [%s]", err)
+		return errors.WithMessage(err, "full commit failed")
+	}
+
 	return nil
 }
 

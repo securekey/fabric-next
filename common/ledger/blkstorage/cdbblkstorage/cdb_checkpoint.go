@@ -70,5 +70,12 @@ func (cp *checkpoint) saveCurrentInfo(i *checkpointInfo) error {
 	if err != nil {
 		return errors.WithMessage(err, "adding checkpointInfo to couchDB failed")
 	}
+
+	dbResponse, err := cp.db.EnsureFullCommit()
+	if err != nil || dbResponse.Ok != true {
+		logger.Errorf("full commit failed [%s]", err)
+		return errors.WithMessage(err, "full commit failed")
+	}
+
 	return nil
 }
