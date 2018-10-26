@@ -16,6 +16,24 @@
       "revId": "513b4ff06a04a7123a05e42583ea698fa0248d29",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a06df05c_e8715d58",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 431,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-10-26T19:37:40Z",
+      "side": 1,
+      "message": "I was assuming but didn\u0027t check. I can revert this file for now and revisit later.",
+      "parentUuid": "dcd6da6b_3fee4344",
+      "revId": "513b4ff06a04a7123a05e42583ea698fa0248d29",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
