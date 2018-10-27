@@ -44,7 +44,6 @@ const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
-const confBlockStorageAttachTxn = "ledger.blockchain.blockStorage.attachTransaction"
 const confRoles = "ledger.roles"
 
 // TODO: couchDB config should be in a common section rather than being under state.
@@ -332,14 +331,6 @@ func GetPvtDataStoreProvider() PvtDataStorageProvider {
 	case "goleveldb":
 		return LevelDBPvtDataStorage
 	}
-}
-
-// GetBlockStorageAttachTxn returns whether or not the block storage provider should attach a copy
-// of the transaction to the transaction ID index.
-// TODO: this was made configurable to make it easier to measure the performance & storage differences.
-// TODO: based on the analysis, we might remove this configuration.
-func GetBlockStorageAttachTxn() bool {
-	return viper.GetBool(confBlockStorageAttachTxn)
 }
 
 // Role is the role of the peer
