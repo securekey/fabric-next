@@ -1,6 +1,6 @@
-From 6a79f6ff4c8c8d300ad38c97558cef350b0ea1ab Mon Sep 17 00:00:00 2001
+From fdba5ebf6fb5151fd5c30892e784dbc0e940772f Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Thu, 25 Oct 2018 12:58:45 -0400
+Date: Sat, 27 Oct 2018 12:58:01 -0400
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -21,7 +21,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../blocksprovider/blocksprovider.go          |  11 +
  .../historycouchdb/historycouchdb.go          |   2 +-
  .../historyleveldb/historyleveldb.go          |   7 +
- .../kvledger/inventory/cdbid/cdb_store.go     |   7 +-
+ .../kvledger/inventory/cdbid/cdb_store.go     |  11 +-
  core/ledger/kvledger/kv_ledger.go             |  26 +
  .../privacyenabledstate/common_storage_db.go  |   9 +
  .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go |   7 +-
@@ -39,7 +39,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 34 files changed, 698 insertions(+), 1229 deletions(-)
+ 34 files changed, 700 insertions(+), 1231 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2281,7 +2281,7 @@ index 7b029648e..b6423c123 100644
  	keys, height, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
  	if err != nil {
 diff --git a/core/ledger/kvledger/inventory/cdbid/cdb_store.go b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
-index 5d8400b69..291ac11bf 100644
+index 4ca5a570e..571dc2e2d 100644
 --- a/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 +++ b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 @@ -8,6 +8,7 @@ package cdbid
@@ -2292,16 +2292,30 @@ index 5d8400b69..291ac11bf 100644
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-@@ -77,7 +78,7 @@ func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*St
- 		return nil, err
+@@ -62,11 +63,10 @@ func newStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, erro
+ 		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
  	}
  
--	s := Store {db}
-+	s := Store{db}
+-	s := Store {db, ""}
++	s := Store{db, ""}
  	return &s, nil
  }
  
-@@ -93,7 +94,7 @@ func createCouchInstance() (*couchdb.CouchInstance, error) {
+-
+ func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, error) {
+ 	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+ 	if err != nil {
+@@ -78,7 +78,8 @@ func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*St
+ 		return nil, err
+ 	}
+ 
+-	s := Store {db, ""}
++	s := Store{db, ""}
++
+ 	return &s, nil
+ }
+ 
+@@ -94,7 +95,7 @@ func createCouchInstance() (*couchdb.CouchInstance, error) {
  	logger.Debugf("constructing CouchDB block storage provider")
  	couchDBDef := couchdb.GetCouchDBDefinition()
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -2310,7 +2324,7 @@ index 5d8400b69..291ac11bf 100644
  	if err != nil {
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
-@@ -224,4 +225,4 @@ func (s *Store) GetAllLedgerIds() ([]string, error) {
+@@ -243,4 +244,4 @@ func (s *Store) GetAllLedgerIds() ([]string, error) {
  }
  
  func (s *Store) Close() {
@@ -2499,7 +2513,7 @@ index 7870d4ada..b81321833 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index 999b91a72..b26d6f25b 100644
+index 58383ca2d..23586d23b 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2510,7 +2524,7 @@ index 999b91a72..b26d6f25b 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-@@ -348,6 +349,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+@@ -349,6 +350,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
  
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
@@ -2871,7 +2885,7 @@ index ef673f9d4..f5784d31b 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 72db05efe..c525d6daa 100644
+index 5f75f0c33..d98fd9b76 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -12,8 +12,6 @@ import (
@@ -2951,7 +2965,7 @@ index 72db05efe..c525d6daa 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -988,7 +997,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
+@@ -993,7 +1002,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
  
  	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
  	if err != nil {
@@ -2960,7 +2974,7 @@ index 72db05efe..c525d6daa 100644
  	}
  
  	for _, row := range jsonResponse.Rows {
-@@ -1164,7 +1173,7 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
+@@ -1169,7 +1178,7 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
  
  	jsonResponse, err := dbclient.query(query)
  	if err != nil {
@@ -2969,7 +2983,7 @@ index 72db05efe..c525d6daa 100644
  	}
  
  	for _, row := range jsonResponse.Docs {
-@@ -1445,6 +1454,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1450,6 +1459,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -2982,7 +2996,7 @@ index 72db05efe..c525d6daa 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1664,7 +1679,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
+@@ -1669,7 +1684,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
  			return nil, err
  		}
  
@@ -2991,7 +3005,7 @@ index 72db05efe..c525d6daa 100644
  		namedDoc := NamedCouchDoc{ID: row.ID, Doc: &doc}
  		docs = append(docs, &namedDoc)
  	}
-@@ -1700,8 +1715,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
+@@ -1705,8 +1720,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
  		}
  
  		attachment := AttachmentInfo{
@@ -3002,7 +3016,7 @@ index 72db05efe..c525d6daa 100644
  			AttachmentBytes: bytes,
  		}
  		attachments = append(attachments, &attachment)
-@@ -1921,6 +1936,7 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
+@@ -1926,6 +1941,7 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
  type dbResponseError struct {
  	*DBReturn
  }
@@ -3010,7 +3024,7 @@ index 72db05efe..c525d6daa 100644
  func (err *dbResponseError) Error() string {
  	return fmt.Sprintf("HTTP response contains unsuccesful status [%d, %s]", err.StatusCode, err.Reason)
  }
-@@ -1932,6 +1948,11 @@ func (err *dbResponseError) Error() string {
+@@ -1937,6 +1953,11 @@ func (err *dbResponseError) Error() string {
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
  
@@ -3022,7 +3036,7 @@ index 72db05efe..c525d6daa 100644
  	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
  
  	if maxRetries < 0 {
-@@ -1964,7 +1985,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
+@@ -1969,7 +1990,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
  		},
  		retry.WithMaxAttempts(maxRetries+1),
  		retry.WithBackoffFactor(2),
@@ -3032,7 +3046,7 @@ index 72db05efe..c525d6daa 100644
  			dbErr, ok := err.(*dbResponseError)
  			if ok && dbErr.StatusCode < http.StatusInternalServerError {
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 39cb9c1a2..3f4a13ed8 100644
+index 723bc419c..fe6b71db2 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
