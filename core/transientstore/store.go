@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
@@ -67,7 +68,7 @@ type Store interface {
 	PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error
 	// GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 	// write sets persisted from different endorsers (via Gossip)
-	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (RWSetScanner, error)
+	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error)
 	// PurgeByTxids removes private write sets of a given set of transactions from the
 	// transient store
 	PurgeByTxids(txids []string) error
@@ -240,7 +241,7 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 
 // GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 // write sets persisted from different endorsers.
-func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (RWSetScanner, error) {
+func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error) {
 
 	logger.Debugf("Getting private data from transient store for transaction %s", txid)
 
