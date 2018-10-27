@@ -26,24 +26,20 @@ import (
 
 type cdbBlockStore struct {
 	blockStore *couchdb.CouchDatabase
-	txnStore   *couchdb.CouchDatabase
 	ledgerID   string
 	cpInfo     *checkpointInfo
 	cpInfoCond *sync.Cond
 	cp         *checkpoint
-	attachTxn  bool
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
-func newCDBBlockStore(blockStore *couchdb.CouchDatabase, txnStore *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
+func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
 	cp := newCheckpoint(blockStore)
 
 	cdbBlockStore := &cdbBlockStore{
 		blockStore: blockStore,
-		txnStore:   txnStore,
 		ledgerID:   ledgerID,
 		cp:         cp,
-		attachTxn:  ledgerconfig.GetBlockStorageAttachTxn(),
 	}
 
 	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
@@ -79,7 +75,8 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 	if err != nil {
 		return err
 	}
-	return s.storeTransactions(block)
+	//return s.storeTransactions(block)
+	return nil
 }
 
 func (s *cdbBlockStore) storeBlock(block *common.Block) error {
@@ -94,24 +91,6 @@ func (s *cdbBlockStore) storeBlock(block *common.Block) error {
 		return errors.WithMessage(err, "adding block to couchDB failed")
 	}
 	logger.Debugf("block added to couchDB [%d, %s]", block.GetHeader().GetNumber(), rev)
-	return nil
-}
-
-func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
-	docs, err := blockToTxnCouchDocs(block, s.attachTxn)
-	if err != nil {
-		return errors.WithMessage(err, "converting block to couchDB txn documents failed")
-	}
-
-	if len(docs) == 0 {
-		return nil
-	}
-
-	_, err = s.txnStore.CommitDocuments(docs)
-	if err != nil {
-		return errors.WithMessage(err, "adding block to couchDB failed")
-	}
-	logger.Debugf("block transactions added to couchDB [%d]", block.GetHeader().GetNumber())
 	return nil
 }
 
@@ -226,26 +205,6 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 
 // RetrieveTxByID returns a transaction for given transaction id
 func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
-	doc, _, err := s.txnStore.ReadDoc(txID)
-	if err != nil {
-		// note: allow ErrNotFoundInIndex to pass through
-		return nil, err
-	}
-	if doc == nil {
-		return nil, blkstorage.ErrNotFoundInIndex
-	}
-
-	// If this transaction includes the envelope as a valid attachment then can return immediately.
-	if len(doc.Attachments) > 0 {
-		attachedEnv, err := couchAttachmentsToTxnEnvelope(doc.Attachments)
-		if err == nil {
-			return attachedEnv, nil
-		} else {
-			logger.Debugf("transaction has attachment but failed to be extracted into envelope [%s]", err)
-		}
-	}
-
-	// Otherwise, we need to extract the transaction from the block document.
 	block, err := s.RetrieveBlockByTxID(txID)
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
@@ -269,62 +228,42 @@ func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uin
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
-	blockHash, err := s.retrieveBlockHashByTxID(txID)
+	const queryFmt = `
+	{
+		"selector": {
+			"` + blockTxnIDsField + `": {
+				"$elemMatch": {
+					"$eq": "%s"
+				}
+			}
+		},
+		"use_index": ["_design/` + blockTxnIndexDoc + `", "` + blockTxnIndexName + `"]
+	}`
+	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, txID))
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
-
-	return s.RetrieveBlockByHash(blockHash)
-}
-
-func (s *cdbBlockStore) retrieveBlockHashByTxID(txID string) ([]byte, error) {
-	jsonResult, err := retrieveJSONQuery(s.txnStore, txID)
-	if err != nil {
-		// note: allow ErrNotFoundInIndex to pass through
-		return nil, err
-	}
-
-	blockHashStoredUT, ok := jsonResult[txnBlockHashField]
-	if !ok {
-		return nil, errors.Errorf("block hash was not found for transaction ID [%s]", txID)
-	}
-
-	blockHashStored, ok := blockHashStoredUT.(string)
-	if !ok {
-		return nil, errors.Errorf("block hash has invalid type for transaction ID [%s]", txID)
-	}
-
-	blockHash, err := hex.DecodeString(blockHashStored)
-	if err != nil {
-		return nil, errors.Wrapf(err, "block hash was invalid for transaction ID [%s]", txID)
-	}
-
-	return blockHash, nil
+	
+	return block, nil
 }
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
-	jsonResult, err := retrieveJSONQuery(s.txnStore, txID)
+	const queryFmt = `
+	{
+		"selector": {
+			"` + blockTxnIDsField + `": {
+				"$elemMatch": {
+					"$eq": "%s"
+				}
+			}
+		},
+		"use_index": ["_design/` + blockTxnIndexDoc + `", "` + blockTxnIndexName + `"]
+	}`
+	txnValidationCode, err := retrieveTxValidationCodeQuery(s.blockStore, queryFmt)
 	if err != nil {
-		// note: allow ErrNotFoundInIndex to pass through
 		return peer.TxValidationCode_INVALID_OTHER_REASON, err
-	}
-
-	txnValidationCodeStoredUT, ok := jsonResult[txnValidationCode]
-	if !ok {
-		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Errorf("validation code was not found for transaction ID [%s]", txID)
-	}
-
-	txnValidationCodeStored, ok := txnValidationCodeStoredUT.(string)
-	if !ok {
-		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Errorf("validation code has invalid type for transaction ID [%s]", txID)
-	}
-
-	const sizeOfTxValidationCode = 32
-	txnValidationCode, err := strconv.ParseInt(txnValidationCodeStored, txnValidationCodeBase, sizeOfTxValidationCode)
-	if err != nil {
-		return peer.TxValidationCode_INVALID_OTHER_REASON, errors.Wrapf(err, "validation code was invalid for transaction ID [%s]", txID)
 	}
 
 	return peer.TxValidationCode(txnValidationCode), nil
