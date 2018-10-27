@@ -64,6 +64,7 @@ func (s *store) persistDB(txid string, blockHeight uint64, privateSimulationResu
 	if err != nil {
 		return err
 	}
+	logger.Debugf("persistDB save doc key %s in local db %s", hex.EncodeToString(compositeKeyPvtRWSet), s.db.DBName)
 
 	_, err = s.db.SaveDoc(hex.EncodeToString(compositeKeyPvtRWSet), "", doc)
 	if err != nil {
@@ -86,6 +87,7 @@ func (s *store) persistWithConfigDB(txid string, blockHeight uint64, privateSimu
 	if err != nil {
 		return err
 	}
+	logger.Debugf("persistWithConfigDB save doc key %s in local db %s", hex.EncodeToString(compositeKeyPvtRWSet), s.db.DBName)
 
 	_, err = s.db.SaveDoc(hex.EncodeToString(compositeKeyPvtRWSet), "", doc)
 	if err != nil {
@@ -98,13 +100,16 @@ func (s *store) persistWithConfigDB(txid string, blockHeight uint64, privateSimu
 func (s *store) getTxPvtRWSetByTxidDB(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
 	var results []*couchdb.QueryResult
 	var err error
+	logger.Debugf("getTxPvtRWSetByTxidDB txID %s from local peer db %s", txid, s.db.DBName)
 	results, err = s.db.QueryDocuments(fmt.Sprintf(queryByTxIDFmt, txid))
 	if err != nil {
 		return nil, err
 	}
 	if len(results) == 0 {
-		logger.Warningf("getTxPvtRWSetByTxidDB didn't find pvt rwset in db %s", s.db.DBName)
+		logger.Debugf("getTxPvtRWSetByTxidDB txID %s didn't find pvt rwset in local db %s", txid, s.db.DBName)
+		logger.Warningf("getTxPvtRWSetByTxidDB didn't find pvt rwset in local db %s", s.db.DBName)
 	} else {
+		logger.Debugf("getTxPvtRWSetByTxidDB txID %s find pvt rwset in local db %s", txid, s.db.DBName)
 		return &RwsetScanner{filter: filter, results: results}, nil
 	}
 	for _, endorser := range endorsers {
@@ -112,6 +117,7 @@ func (s *store) getTxPvtRWSetByTxidDB(txid string, filter ledger.PvtNsCollFilter
 		if err != nil {
 			return nil, err
 		}
+		logger.Debugf("getTxPvtRWSetByTxidDB txID %s from endorser peer db %s", txid, fmt.Sprintf(transientDataStoreName, hash))
 		db, err := getCouchDB(s.db.CouchInstance, couchdb.ConstructBlockchainDBName(s.ledgerID, fmt.Sprintf(transientDataStoreName, hash)))
 		if err != nil {
 			return nil, err
@@ -122,11 +128,14 @@ func (s *store) getTxPvtRWSetByTxidDB(txid string, filter ledger.PvtNsCollFilter
 		}
 
 		if len(results) == 0 {
+			logger.Debugf("getTxPvtRWSetByTxidDB txID %s didn't find pvt rwset in endorser db %s", txid, fmt.Sprintf(transientDataStoreName, hash))
 			logger.Warningf("getTxPvtRWSetByTxidDB didn't find pvt rwset in endorser db %s", fmt.Sprintf(transientDataStoreName, hash))
 		} else {
+			logger.Debugf("getTxPvtRWSetByTxidDB txID %s find pvt rwset in endorser db %s", txid, fmt.Sprintf(transientDataStoreName, hash))
 			return &RwsetScanner{filter: filter, results: results}, nil
 		}
 	}
+	logger.Debugf("getTxPvtRWSetByTxidDB didn't find pvt rwset in endorser dbs")
 	return nil, errors.New("getTxPvtRWSetByTxidDB didn't find pvt rwset in endorser dbs")
 
 }
@@ -149,11 +158,13 @@ func (s *store) getMinTransientBlkHtDB() (uint64, error) {
    ]
 }`
 
+	logger.Debugf("getMinTransientBlkHtDB from local peer db %s", s.db.DBName)
 	results, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(0, blockNumberBase))))
 	if err != nil {
 		return 0, err
 	}
 	if len(results) == 0 {
+		logger.Debugf("getMinTransientBlkHtDB didn't find pvt rwset in local db %s", s.db.DBName)
 		return 0, transientstore.ErrStoreEmpty
 	}
 	dbKey, err := hex.DecodeString(results[0].ID)
@@ -161,6 +172,7 @@ func (s *store) getMinTransientBlkHtDB() (uint64, error) {
 		return 0, err
 	}
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
+	logger.Debugf("getMinTransientBlkHtDB return blockHeight %d in local db %s", blockHeight, s.db.DBName)
 	return blockHeight, nil
 }
 
@@ -235,12 +247,15 @@ type RwsetScanner struct {
 // TODO: Once the related gossip changes are made as per FAB-5096, remove this function
 func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResults, error) {
 	if len(scanner.results) < 1 {
+		logger.Debugf("scanner next is empty return")
 		return nil, nil
 	}
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Debugf("scanner next key value %s", scanner.results[0].Value)
 
 	jsonResult := make(map[string]interface{})
 	decoder := json.NewDecoder(bytes.NewBuffer(scanner.results[0].Value))
@@ -258,11 +273,14 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
 
+	logger.Debugf("scanner next blockHeight %d", blockHeight)
+
 	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
 	if err := proto.Unmarshal(dbVal, txPvtRWSet); err != nil {
 		return nil, err
 	}
 	filteredTxPvtRWSet := trimPvtWSet(txPvtRWSet, scanner.filter)
+	logger.Debugf("scanner next filteredTxPvtRWSet %v", filteredTxPvtRWSet)
 
 	scanner.results = append(scanner.results[:0], scanner.results[1:]...)
 
@@ -277,12 +295,15 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 // TODO: Once the related gossip changes are made as per FAB-5096, rename this function to Next
 func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimulationResultsWithConfig, error) {
 	if len(scanner.results) < 1 {
+		logger.Debugf("scanner NextWithConfig is empty return")
 		return nil, nil
 	}
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Debugf("scanner NextWithConfig key value %s", scanner.results[0].Value)
 
 	jsonResult := make(map[string]interface{})
 	decoder := json.NewDecoder(bytes.NewBuffer(scanner.results[0].Value))
@@ -300,6 +321,8 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
 
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
 
+	logger.Debugf("scanner NextWithConfig blockHeight %d", blockHeight)
+
 	filteredTxPvtRWSet := &rwset.TxPvtReadWriteSet{}
 	txPvtRWSetWithConfig := &pb.TxPvtReadWriteSetWithConfigInfo{}
 
@@ -308,11 +331,15 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
 		return nil, err
 	}
 
+	logger.Debugf("scanner NextWithConfig txPvtRWSetWithConfig %v", txPvtRWSetWithConfig)
+
 	filteredTxPvtRWSet = trimPvtWSet(txPvtRWSetWithConfig.GetPvtRwset(), scanner.filter)
+	logger.Debugf("scanner NextWithConfig filteredTxPvtRWSet %v", filteredTxPvtRWSet)
 	configs, err := trimPvtCollectionConfigs(txPvtRWSetWithConfig.CollectionConfigs, scanner.filter)
 	if err != nil {
 		return nil, err
 	}
+	logger.Debugf("scanner NextWithConfig configs %v", configs)
 	txPvtRWSetWithConfig.CollectionConfigs = configs
 
 	txPvtRWSetWithConfig.PvtRwset = filteredTxPvtRWSet
