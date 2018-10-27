@@ -1,4 +1,4 @@
-From fdba5ebf6fb5151fd5c30892e784dbc0e940772f Mon Sep 17 00:00:00 2001
+From f3b6656239fd825d301b5628d68907f0a982977f Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Sat, 27 Oct 2018 12:58:01 -0400
 Subject: [PATCH] Ledger metrics
@@ -35,11 +35,12 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
  core/ledger/util/couchdb/couchdb.go           |  49 +-
+ .../cdbtransientdata/common_store_impl.go     |  31 ++
  gossip/privdata/coordinator.go                |  11 +
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 34 files changed, 700 insertions(+), 1231 deletions(-)
+ 35 files changed, 731 insertions(+), 1231 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -3045,6 +3046,76 @@ index 5f75f0c33..d98fd9b76 100644
  		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
  			dbErr, ok := err.(*dbResponseError)
  			if ok && dbErr.StatusCode < http.StatusInternalServerError {
+diff --git a/core/transientstore/cdbtransientdata/common_store_impl.go b/core/transientstore/cdbtransientdata/common_store_impl.go
+index 4bdb9575e..f3d3b6e70 100644
+--- a/core/transientstore/cdbtransientdata/common_store_impl.go
++++ b/core/transientstore/cdbtransientdata/common_store_impl.go
+@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
+ package cdbtransientdata
+ 
+ import (
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/transientstore"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+@@ -17,27 +18,57 @@ import (
+ // TODO: This file contains code copied from the base transient store. Both of these packages should be refactored.
+ 
+ func (s *store) Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_persist_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
+ 	return s.persistDB(txid, blockHeight, privateSimulationResults)
+ }
+ 
+ func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *pb.TxPvtReadWriteSetWithConfigInfo) error {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_persistwithconfig_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	return s.persistWithConfigDB(txid, blockHeight, privateSimulationResultsWithConfig)
+ }
+ 
+ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_gettxpvtrwsetbytxid_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	return s.getTxPvtRWSetByTxidDB(txid, filter, endorsers)
+ }
+ 
+ func (s *store) PurgeByTxids(txids []string) error {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_purgebytxids_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	return s.purgeByTxidsDB(txids)
+ }
+ 
+ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_purgebyheight_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	return s.purgeByHeightDB(maxBlockNumToRetain)
+ }
+ 
+ func (s *store) GetMinTransientBlkHt() (uint64, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_getmintransientblkht_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	return s.getMinTransientBlkHtDB()
+ }
+ 
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
 index 723bc419c..fe6b71db2 100644
 --- a/gossip/privdata/coordinator.go
@@ -3208,7 +3279,7 @@ index 7b3301b37..5f024b82e 100644
  	if ledgerconfig.IsCommitter() {
  		// Commit block with available private transactions
 diff --git a/peer/node/start.go b/peer/node/start.go
-index 710281f5f..af799d278 100644
+index e3655db4a..62b5b2a30 100644
 --- a/peer/node/start.go
 +++ b/peer/node/start.go
 @@ -25,6 +25,7 @@ import (
