@@ -1,4 +1,4 @@
-From f3b6656239fd825d301b5628d68907f0a982977f Mon Sep 17 00:00:00 2001
+From 9343fd461987382379dc1d4a90a5c7cdabe475c5 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Sat, 27 Oct 2018 12:58:01 -0400
 Subject: [PATCH] Ledger metrics
@@ -35,12 +35,14 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../cdbpvtdata/cdb_pvtprovider.go             |   2 +-
  .../cdbpvtdata/common_store_impl.go           |  24 +
  core/ledger/util/couchdb/couchdb.go           |  49 +-
+ .../cdbtransientdata/cdb_transientstore.go    |  13 +
  .../cdbtransientdata/common_store_impl.go     |  31 ++
+ core/transientstore/store.go                  |  42 ++
  gossip/privdata/coordinator.go                |  11 +
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 35 files changed, 731 insertions(+), 1231 deletions(-)
+ 37 files changed, 786 insertions(+), 1231 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -3046,6 +3048,44 @@ index 5f75f0c33..d98fd9b76 100644
  		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
  			dbErr, ok := err.(*dbResponseError)
  			if ok && dbErr.StatusCode < http.StatusInternalServerError {
+diff --git a/core/transientstore/cdbtransientdata/cdb_transientstore.go b/core/transientstore/cdbtransientdata/cdb_transientstore.go
+index 41c5e9038..0d1381451 100644
+--- a/core/transientstore/cdbtransientdata/cdb_transientstore.go
++++ b/core/transientstore/cdbtransientdata/cdb_transientstore.go
+@@ -16,6 +16,7 @@ import (
+ 	"encoding/json"
+ 
+ 	"github.com/golang/protobuf/proto"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/common/util"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+@@ -256,6 +257,12 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
+ 	}
+ 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_next_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
+ 	if err != nil {
+ 		return nil, err
+@@ -304,6 +311,12 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
+ 	}
+ 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_nextwithconfig_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
+ 	if err != nil {
+ 		return nil, err
 diff --git a/core/transientstore/cdbtransientdata/common_store_impl.go b/core/transientstore/cdbtransientdata/common_store_impl.go
 index 4bdb9575e..f3d3b6e70 100644
 --- a/core/transientstore/cdbtransientdata/common_store_impl.go
@@ -3116,8 +3156,110 @@ index 4bdb9575e..f3d3b6e70 100644
  	return s.getMinTransientBlkHtDB()
  }
  
+diff --git a/core/transientstore/store.go b/core/transientstore/store.go
+index 57326b5f6..9f23b117d 100644
+--- a/core/transientstore/store.go
++++ b/core/transientstore/store.go
+@@ -12,6 +12,7 @@ import (
+ 	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/common/util"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+@@ -191,6 +192,12 @@ func (s *store) Persist(txid string, blockHeight uint64,
+ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
+ 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_persistwithconfig_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	dbBatch := leveldbhelper.NewUpdateBatch()
+ 
+ 	// Create compositeKey with appropriate prefix, txid, uuid and blockHeight
+@@ -242,6 +249,12 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
+ // write sets persisted from different endorsers.
+ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error) {
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_gettxpvtrwsetbytxid_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	logger.Errorf("Getting private data from transient store for transaction %s", txid)
+ 
+ 	// Construct startKey and endKey to do an range query
+@@ -257,6 +270,12 @@ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter,
+ // committing a block to ledger.
+ func (s *store) PurgeByTxids(txids []string) error {
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_purgebytxids_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	logger.Errorf("Purging private data from transient store for committed txids %s", txids)
+ 
+ 	dbBatch := leveldbhelper.NewUpdateBatch()
+@@ -303,6 +322,12 @@ func (s *store) PurgeByTxids(txids []string) error {
+ // transaction that gets endorsed may not be submitted by the client for commit)
+ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
+ 
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_purgebyheight_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	logger.Errorf("Purging orphaned private data from transient store received prior to block [%d]", maxBlockNumToRetain)
+ 
+ 	// Do a range query with 0 as startKey and maxBlockNumToRetain-1 as endKey
+@@ -339,6 +364,12 @@ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
+ 
+ // GetMinTransientBlkHt returns the lowest block height remaining in transient store
+ func (s *store) GetMinTransientBlkHt() (uint64, error) {
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_getmintransientblkht_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	// Current approach performs a range query on purgeIndex with startKey
+ 	// as 0 (i.e., blockHeight) and returns the first key which denotes
+ 	// the lowest block height remaining in transient store. An alternative approach
+@@ -369,6 +400,12 @@ func (scanner *RwsetScanner) Next() (*EndorserPvtSimulationResults, error) {
+ 	if !scanner.dbItr.Next() {
+ 		return nil, nil
+ 	}
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_next_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
++
+ 	dbKey := scanner.dbItr.Key()
+ 	dbVal := scanner.dbItr.Value()
+ 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
+@@ -392,6 +429,11 @@ func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWith
+ 	if !scanner.dbItr.Next() {
+ 		return nil, nil
+ 	}
++	if metrics.IsDebug() {
++		// Measure the whole
++		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_nextwithconfig_time_seconds").Start()
++		defer stopWatch.Stop()
++	}
+ 	dbKey := scanner.dbItr.Key()
+ 	dbVal := scanner.dbItr.Value()
+ 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 723bc419c..fe6b71db2 100644
+index 8b2e2ab13..d3c655e39 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
