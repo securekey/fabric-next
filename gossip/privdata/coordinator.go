@@ -350,12 +350,12 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			break
 		}
 		if res == nil {
-			fmt.Printf("*** iterator.NextWithConfig() %s end\n", txAndSeq.txID)
+			logger.Errorf("*** iterator.NextWithConfig() %s end\n", txAndSeq.txID)
 			// End of iteration
 			break
 		}
 		//TODO remove
-		fmt.Printf("*** iterator.NextWithConfig() %s ReceivedAtBlockHeight %d\n", txAndSeq.txID, res.ReceivedAtBlockHeight)
+		logger.Errorf("*** iterator.NextWithConfig() %s ReceivedAtBlockHeight %d\n", txAndSeq.txID, res.ReceivedAtBlockHeight)
 		if res.PvtSimulationResultsWithConfig == nil {
 			logger.Warning("Resultset's PvtSimulationResultsWithConfig for", txAndSeq.txID, "is nil, skipping")
 			continue

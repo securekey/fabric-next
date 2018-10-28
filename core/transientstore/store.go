@@ -191,8 +191,6 @@ func (s *store) Persist(txid string, blockHeight uint64,
 func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
 
-	logger.Errorf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
-
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	// Create compositeKey with appropriate prefix, txid, uuid and blockHeight
@@ -204,6 +202,7 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	if err != nil {
 		return err
 	}
+	logger.Errorf("Persisting private data to transient store for txid [%s] at block height [%d] key %s", txid, blockHeight, compositeKeyPvtRWSet)
 
 	// Note that some rwset.TxPvtReadWriteSet may exist in the transient store immediately after
 	// upgrading the peer to v1.2. In order to differentiate between new proto and old proto while
@@ -243,7 +242,7 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 // write sets persisted from different endorsers.
 func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error) {
 
-	logger.Debugf("Getting private data from transient store for transaction %s", txid)
+	logger.Errorf("Getting private data from transient store for transaction %s", txid)
 
 	// Construct startKey and endKey to do an range query
 	startKey := createTxidRangeStartKey(txid)
@@ -258,7 +257,7 @@ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, 
 // committing a block to ledger.
 func (s *store) PurgeByTxids(txids []string) error {
 
-	logger.Debug("Purging private data from transient store for committed txids")
+	logger.Errorf("Purging private data from transient store for committed txids %s", txids)
 
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
@@ -304,7 +303,7 @@ func (s *store) PurgeByTxids(txids []string) error {
 // transaction that gets endorsed may not be submitted by the client for commit)
 func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
 
-	logger.Debugf("Purging orphaned private data from transient store received prior to block [%d]", maxBlockNumToRetain)
+	logger.Errorf("Purging orphaned private data from transient store received prior to block [%d]", maxBlockNumToRetain)
 
 	// Do a range query with 0 as startKey and maxBlockNumToRetain-1 as endKey
 	startKey := createPurgeIndexByHeightRangeStartKey(0)
@@ -396,6 +395,8 @@ func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWith
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
+
+	logger.Errorf("NextWithConfig() txID %s key %s", scanner.txid, dbKey)
 
 	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
 	filteredTxPvtRWSet := &rwset.TxPvtReadWriteSet{}
