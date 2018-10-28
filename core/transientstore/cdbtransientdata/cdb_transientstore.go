@@ -87,7 +87,7 @@ func (s *store) persistWithConfigDB(txid string, blockHeight uint64, privateSimu
 	if err != nil {
 		return err
 	}
-	logger.Debugf("persistWithConfigDB save doc key %s in local db %s", hex.EncodeToString(compositeKeyPvtRWSet), s.db.DBName)
+	logger.Debugf("persistWithConfigDB save doc txid %s blockHeight %d in local db %s", txid, blockHeight, s.db.DBName)
 
 	_, err = s.db.SaveDoc(hex.EncodeToString(compositeKeyPvtRWSet), "", doc)
 	if err != nil {

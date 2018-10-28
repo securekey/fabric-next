@@ -191,7 +191,7 @@ func (s *store) Persist(txid string, blockHeight uint64,
 func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
 
-	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
+	logger.Errorf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
 
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
