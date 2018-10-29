@@ -19,9 +19,11 @@ import (
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/hyperledger/fabric/protos/utils"
 )
 
 type cdbBlockStore struct {
@@ -30,16 +32,19 @@ type cdbBlockStore struct {
 	cpInfo     *checkpointInfo
 	cpInfoCond *sync.Cond
 	cp         *checkpoint
+	cache      *blockCache
 }
-
 // newCDBBlockStore constructs block store based on CouchDB
 func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
 	cp := newCheckpoint(blockStore)
+
+	blockCache := newBlockCache()
 
 	cdbBlockStore := &cdbBlockStore{
 		blockStore: blockStore,
 		ledgerID:   ledgerID,
 		cp:         cp,
+		cache: blockCache,
 	}
 
 	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
@@ -66,7 +71,8 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexC
 // AddBlock adds a new block
 func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 	if !ledgerconfig.IsCommitter() {
-		// Nothing to do if not a committer
+		s.cache.Add(block)
+		// Nothing else to do if not a committer
 		return nil
 	}
 
@@ -75,6 +81,9 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 	if err != nil {
 		return err
 	}
+
+	s.cache.Add(block)
+
 	return nil
 }
 
@@ -154,6 +163,11 @@ func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator,
 
 // RetrieveBlockByHash returns the block for given block-hash
 func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
+	block, ok := s.cache.LookupByHash(blockHash)
+	if ok {
+		return block, nil
+	}
+
 	blockHashHex := hex.EncodeToString(blockHash)
 	const queryFmt = `
 	{
@@ -170,6 +184,8 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 		return nil, err
 	}
 
+	s.cache.Add(block)
+
 	return block, nil
 }
 
@@ -184,6 +200,11 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 		blockNum = bcinfo.Height - 1
 	}
 
+	block, ok := s.cache.LookupByNumber(blockNum)
+	if ok {
+		return block, nil
+	}
+
 	id := blockNumberToKey(blockNum)
 
 	doc, _, err := s.blockStore.ReadDoc(id)
@@ -194,10 +215,12 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 		return nil, blkstorage.ErrNotFoundInIndex
 	}
 
-	block, err := couchDocToBlock(doc)
+	block, err = couchDocToBlock(doc)
 	if err != nil {
 		return nil, errors.WithMessage(err, fmt.Sprintf("unmarshal of block [%d] from couchDB [%s] failed", blockNum, s.ledgerID))
 	}
+
+	s.cache.Add(block)
 
 	return block, nil
 }
@@ -227,6 +250,11 @@ func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uin
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
+	block, ok := s.cache.LookupByTxnID(txID)
+	if ok {
+		return block, nil
+	}
+
 	const queryFmt = `
 	{
 		"selector": {
@@ -243,29 +271,43 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
+	s.cache.Add(block)
 
 	return block, nil
 }
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
-	const queryFmt = `
-	{
-		"selector": {
-			"` + blockTxnIDsField + `": {
-				"$elemMatch": {
-					"$eq": "%s"
-				}
-			}
-		},
-		"use_index": ["_design/` + blockTxnIndexDoc + `", "` + blockTxnIndexName + `"]
-	}`
-	txnValidationCode, err := retrieveTxValidationCodeQuery(s.blockStore, queryFmt, txID)
+	block, err := s.RetrieveBlockByTxID(txID)
 	if err != nil {
 		return peer.TxValidationCode_INVALID_OTHER_REASON, err
 	}
 
-	return peer.TxValidationCode(txnValidationCode), nil
+	return extractTxnValidationCode(block, txID)
+}
+
+func extractTxnValidationCode(block *common.Block, txnID string) (peer.TxValidationCode, error) {
+	blockData := block.GetData()
+	blockMetadata := block.GetMetadata()
+	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
+	for i, txEnvelopeBytes := range blockData.GetData() {
+		envelope, err := utils.GetEnvelopeFromBlock(txEnvelopeBytes)
+		if err != nil {
+			return peer.TxValidationCode_INVALID_OTHER_REASON, err
+		}
+
+		iTxnID, err := extractTxIDFromEnvelope(envelope)
+		if err != nil {
+			return peer.TxValidationCode_INVALID_OTHER_REASON, errors.WithMessage(err, "transaction ID could not be extracted")
+		}
+
+		if iTxnID == txnID {
+			return txValidationFlags.Flag(i), nil
+		}
+	}
+
+	return peer.TxValidationCode_INVALID_OTHER_REASON, errors.New("transaction was not found in block")
 }
 
 // Shutdown closes the storage instance
