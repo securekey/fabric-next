@@ -39,6 +39,7 @@ const confEnableHistoryDatabase = "ledger.history.enableHistoryDatabase"
 const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
+const confBlockCacheSize = "ledger.blockchain.blockCacheSize"
 const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
@@ -275,6 +276,15 @@ func GetBlockStoreProvider() BlockStorageProvider {
 	case "filesystem":
 		return FilesystemLedgerStorage
 	}
+}
+
+// GetBlockCacheSize returns the number of blocks to keep the in the LRU cache
+func GetBlockCacheSize() int {
+	blockCacheSize := viper.GetInt(confBlockCacheSize)
+	if !viper.IsSet(confBlockCacheSize) {
+		blockCacheSize = 10
+	}
+	return blockCacheSize
 }
 
 // GetTransientStoreProvider returns the transient storage provider specified in the configuration

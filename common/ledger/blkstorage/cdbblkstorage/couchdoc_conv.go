@@ -10,14 +10,12 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
@@ -29,7 +27,6 @@ const (
 	lastBlockNumberField = "lastBlockNumber"
 	isChainEmptyField    = "chainEmpty"
 	blockHashField       = "hash"
-	blockTxnsField       = "transactions"
 	blockTxnIDsField     = "transaction_ids"
 	blockHashIndexName   = "by_hash"
 	blockHashIndexDoc    = "indexHash"
@@ -38,12 +35,6 @@ const (
 	blockAttachmentName  = "block"
 	blockKeyPrefix       = ""
 	blockHeaderField     = "header"
-)
-
-// txn document
-const (
-	txnValidationCode     = "validation_code"
-	txnValidationCodeBase = 16
 )
 
 const blockHashIndexDef = `
@@ -86,11 +77,6 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 
 	key := blockNumberToKey(blockHeader.GetNumber())
 	blockHashHex := hex.EncodeToString(blockHeader.Hash())
-	blockTxns, err := blockToTransactionsField(block)
-	if err != nil {
-		return nil, err
-	}
-
 	blockTxnIDs, err := blockToTransactionIDsField(block)
 	if err != nil {
 		return nil, err
@@ -100,7 +86,6 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	header := make(jsonValue)
 	header[blockHashField] = blockHashHex
 	jsonMap[blockHeaderField] = header
-	jsonMap[blockTxnsField] = blockTxns
 	jsonMap[blockTxnIDsField] = blockTxnIDs
 
 	jsonBytes, err := jsonMap.toBytes()
@@ -133,36 +118,6 @@ func checkpointInfoToCouchDoc(i *checkpointInfo) (*couchdb.CouchDoc, error) {
 	}
 	couchDoc := &couchdb.CouchDoc{JSONValue: jsonBytes}
 	return couchDoc, nil
-}
-
-func blockToTransactionsField(block *common.Block) (jsonValue, error) {
-	blockData := block.GetData()
-
-	txns := make(jsonValue)
-
-	blockMetadata := block.GetMetadata()
-	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-
-	for i, txEnvelopeBytes := range blockData.GetData() {
-		envelope, err := utils.GetEnvelopeFromBlock(txEnvelopeBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		txID, err := extractTxIDFromEnvelope(envelope)
-		if err != nil {
-			return nil, errors.WithMessage(err, "transaction ID could not be extracted")
-		}
-
-		validationCode := txValidationFlags.Flag(i)
-
-		txField := make(jsonValue)
-		txField[txnValidationCode] = strconv.FormatInt(int64(validationCode), txnValidationCodeBase)
-
-		txns[txID] = txField
-	}
-
-	return txns, nil
 }
 
 func blockToTransactionIDsField(block *common.Block) ([]string, error) {
@@ -243,42 +198,6 @@ func couchDocToCheckpointInfo(doc *couchdb.CouchDoc) (*checkpointInfo, error) {
 
 func blockNumberToKey(blockNum uint64) string {
 	return blockKeyPrefix + strconv.FormatUint(blockNum, 10)
-}
-
-type blockTransactionResponse struct {
-	Transactions map[string]struct {
-		ValidationCode string `json:"validation_code"`
-	} `json:"transactions"`
-}
-
-func retrieveTxValidationCodeQuery(db *couchdb.CouchDatabase, query string, txID string) (int32, error) {
-	results, err := db.QueryDocuments(fmt.Sprintf(query, txID))
-	if err != nil {
-		return 0, err
-	}
-
-	if len(results) == 0 {
-		return 0, blkstorage.ErrNotFoundInIndex
-	}
-
-	var txResponse = &blockTransactionResponse{}
-	err = json.Unmarshal(results[0].Value, &txResponse)
-	if err != nil {
-		return 0, err
-	}
-
-	txn, ok := txResponse.Transactions[txID]
-	if !ok {
-		return 0, errors.New("transaction not found in couch document")
-	}
-
-	const sizeOfTxValidationCode = 32
-	txnValidationCode, err := strconv.ParseInt(txn.ValidationCode, txnValidationCodeBase, sizeOfTxValidationCode)
-	if err != nil {
-		return 0, errors.Wrapf(err, "validation code was invalid for transaction ID [%s]", txn.ValidationCode)
-	}
-
-	return int32(txnValidationCode), nil
 }
 
 func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block, error) {
