@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "789671ca_d56a4956",
+        "filename": "core/transientstore/memtransientdata/mem_transientstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-10-29T22:30:48Z",
+      "side": 1,
+      "message": "Actually, the whole block should be in a write lock- starting at line 46",
+      "parentUuid": "94066dd3_be99be94",
+      "revId": "9fc26014637f3d0a6eb3ebb7520291a5e3688409",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "f0113a5b_dffcdaa6",
         "filename": "core/transientstore/memtransientdata/mem_transientstore.go",
         "patchSetId": 2
