@@ -130,6 +130,9 @@ message GossipMessage {
         // Encapsulates private data used to distribute
         // private rwset after the endorsement
         PrivateDataMessage private_data = 25;
+
+        // Used to learn about validated transactions by committer
+        ValidatedTxBlock validated_tx_block = 26;
     }
 }
 
@@ -370,4 +373,28 @@ message Chaincode {
     string name = 1;
     string version = 2;
     bytes metadata = 3;
+}
+
+message ValidatedTxHeader {
+    uint64 block_num = 1;
+}
+
+// ValidatedTx is issued by a committer peer and will
+// update CacheDB in endorser peers
+message ValidatedTx {
+    string namespace = 1;
+    string key = 2;
+    bytes value = 3;
+    bool is_delete = 4;
+    // This is part of the version in underlying DB
+    uint64 index_in_block = 5;
+}
+
+message ValidatedTxPayload {
+    repeated ValidatedTx validatedTxs = 1;
+}
+
+message ValidatedTxBlock {
+    ValidatedTxHeader header = 1;
+    ValidatedTxPayload payload = 2;
 }

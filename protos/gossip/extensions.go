@@ -208,6 +208,11 @@ func (m *GossipMessage) IsPrivateDataMsg() bool {
 	return m.GetPrivateReq() != nil || m.GetPrivateRes() != nil || m.GetPrivateData() != nil
 }
 
+// IsValidatedTxMsg returns whether this message is a validated tx message
+func (m *GossipMessage) IsValidatedTxBlockMsg() bool {
+	return m.GetValidatedTxBlock() != nil
+}
+
 // IsAck returns whether this GossipMessage is an acknowledgement
 func (m *GossipMessage) IsAck() bool {
 	return m.GetAck() != nil
@@ -291,6 +296,13 @@ func (m *GossipMessage) IsTagLegal() error {
 	}
 
 	if m.IsLeadershipMsg() {
+		if m.Tag != GossipMessage_CHAN_AND_ORG {
+			return fmt.Errorf("Tag should be %s", GossipMessage_Tag_name[int32(GossipMessage_CHAN_AND_ORG)])
+		}
+		return nil
+	}
+
+	if m.IsValidatedTxBlockMsg() {
 		if m.Tag != GossipMessage_CHAN_AND_ORG {
 			return fmt.Errorf("Tag should be %s", GossipMessage_Tag_name[int32(GossipMessage_CHAN_AND_ORG)])
 		}
