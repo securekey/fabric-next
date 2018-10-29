@@ -19,7 +19,7 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
-	fileledger "github.com/hyperledger/fabric/common/ledger/blockledger/file"
+	"github.com/hyperledger/fabric/common/ledger/blockledger/file"
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/core/comm"
 	"github.com/hyperledger/fabric/core/committer"
@@ -33,6 +33,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/core/transientstore/cdbtransientdata"
+	"github.com/hyperledger/fabric/core/transientstore/memtransientdata"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -93,6 +94,8 @@ func (sp *storeProvider) OpenStore(ledgerID string) (transientstore.Store, error
 		switch transientStorageConfig {
 		case ledgerconfig.LevelDBTransientStorage:
 			sp.StoreProvider = transientstore.NewStoreProvider()
+		case ledgerconfig.MemoryTransientStorage:
+			sp.StoreProvider = memtransientdata.NewProvider()
 		case ledgerconfig.CouchDBTransientStorage:
 			var err error
 			sp.StoreProvider, err = cdbtransientdata.NewProvider()
