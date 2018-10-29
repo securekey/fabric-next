@@ -1905,6 +1905,7 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 			dbErr, ok := err.(*dbResponseError)
 			if ok && dbErr.StatusCode == http.StatusConflict {
 				logger.Warningf("couchdb document revision conflict detected, retrying. [attempt:%v, wait: %s]", attempt, backoff.String())
+				logger.Warningf("handleRequestWithRevisionRetry [%s, %s, %s, %s, %s]", id, method, connectURL.String(), data, rev)
 				rev = dbclient.getDocumentRevision(id)
 				return true
 			}
