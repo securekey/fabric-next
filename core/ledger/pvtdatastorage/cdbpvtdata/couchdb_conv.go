@@ -69,7 +69,7 @@ func dataEntriesToCouchDocs(dataEntries []*dataEntry, blockNumber uint64) ([]*co
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberField: fmt.Sprintf("%064s", strconv.FormatUint(blockNumber, blockNumberBase))}
+		indices := map[string]string{blockNumberField: fmt.Sprintf("%064s", strconv.FormatUint(dataEntry.key.blkNum, blockNumberBase))}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
@@ -88,7 +88,7 @@ func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry, blockNumber uint64) 
 		if err != nil {
 			return nil, err
 		}
-		indices := map[string]string{blockNumberExpiryField: fmt.Sprintf("%064s", strconv.FormatUint(blockNumber, blockNumberBase))}
+		indices := map[string]string{blockNumberExpiryField: fmt.Sprintf("%064s", strconv.FormatUint(expiryEntry.key.expiringBlk, blockNumberBase))}
 		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
 		if err != nil {
 			return nil, err
