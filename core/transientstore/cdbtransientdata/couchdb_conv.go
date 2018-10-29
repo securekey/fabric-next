@@ -10,14 +10,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"bytes"
-
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"github.com/pkg/errors"
 )
 
 const (
 	idField              = "_id"
+	revField             = "_rev"
 	transientDataField   = "transientData"
 	blockNumberField     = "block_number"
 	blockNumberIndexName = "by_block_number"
@@ -75,16 +73,28 @@ func keyValueToCouchDoc(key []byte, value []byte, indices map[string]string) (*c
 	return &couchDoc, nil
 }
 
-func addDeleteFlagToCouchDBJson(value []byte) (*couchdb.CouchDoc, error) {
-	jsonMap := make(jsonValue)
-	decoder := json.NewDecoder(bytes.NewBuffer(value))
-	decoder.UseNumber()
+func asBatchDeleteCouchDocs(metaData []json.RawMessage) ([]*couchdb.CouchDoc, error) {
+	var batchDeleteDocs []*couchdb.CouchDoc
+	for _, row := range metaData {
+		var docMetadata = &couchdb.DocMetadata{}
+		err := json.Unmarshal(row, &docMetadata)
+		if err != nil {
+			return nil, err
+		}
 
-	err := decoder.Decode(&jsonMap)
-	if err != nil {
-		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
+		couchDoc, err := newDeleteCouchDoc(docMetadata)
+		if err != nil {
+			return nil, err
+		}
+		batchDeleteDocs = append(batchDeleteDocs, couchDoc)
 	}
+	return batchDeleteDocs, nil
+}
 
+func newDeleteCouchDoc(docMetaData *couchdb.DocMetadata) (*couchdb.CouchDoc, error) {
+	jsonMap := make(jsonValue)
+	jsonMap[idField] = docMetaData.ID
+	jsonMap[revField] = docMetaData.Rev
 	jsonMap[deletedField] = true
 
 	jsonBytes, err := jsonMap.toBytes()
@@ -92,7 +102,5 @@ func addDeleteFlagToCouchDBJson(value []byte) (*couchdb.CouchDoc, error) {
 		return nil, err
 	}
 
-	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
-
-	return &couchDoc, nil
+	return &couchdb.CouchDoc{JSONValue: jsonBytes}, nil
 }

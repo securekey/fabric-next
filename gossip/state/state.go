@@ -24,6 +24,7 @@ import (
 	common2 "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
+	privdata2 "github.com/hyperledger/fabric/gossip/privdata"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -166,7 +167,7 @@ var logger = util.GetLogger(util.LoggingStateModule, "")
 
 // NewGossipStateProvider creates state provider with coordinator instance
 // to orchestrate arrival of private rwsets and blocks before committing them into the ledger.
-func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, peerLedger ledger.PeerLedger) GossipStateProvider {
+func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, peerLedger ledger.PeerLedger, transientStore privdata2.TransientStore) GossipStateProvider {
 
 	gossipChan, _ := services.Accept(func(message interface{}) bool {
 		// Get only data messages
@@ -246,7 +247,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		peerLedger: peerLedger,
 
-		blockPublisher: newBlockPublisher(chainID, bp, height),
+		blockPublisher: newBlockPublisher(chainID, bp, transientStore, height),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -997,6 +998,7 @@ func (s *GossipStateProviderImpl) getCommittedBlock(block *common.Block) (*commo
 	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 
 	if txValidationFlags == nil {
+		logger.Warningf("[%s] Block %d was received in uncommitted state. Getting block from ledger.", s.chainID, block.Header.Number)
 		committedBlock, err := s.getBlockFromLedger(block.Header.Number)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to get block number %d from ledger: %s", block.Header.Number, err)
@@ -1009,7 +1011,7 @@ func (s *GossipStateProviderImpl) getCommittedBlock(block *common.Block) (*commo
 		logger.Debugf("block %d was received in uncommitted state", block.Header.Number)
 		return committedBlock, nil
 	}
-	logger.Debugf("block %d was received in committed state", block.Header.Number)
+	logger.Debugf("[%s] Block %d was received in committed state", s.chainID, block.Header.Number)
 	return block, nil
 }
 

@@ -180,21 +180,19 @@ func (s *store) purgeByTxidsDB(txids []string) error {
 	logger.Errorf("Purging private data from transient store for committed txids %s", txids)
 
 	for _, txID := range txids {
-		results, err := s.db.QueryDocuments(fmt.Sprintf(queryByTxIDFmt, txID))
+		queryResponse, err := s.db.Query(fmt.Sprintf(queryByTxIDFmt, txID))
 		if err != nil {
 			return errors.Wrap(err, "purgeByTxidsDB failed")
 		}
-		if len(results) == 0 {
+		if len(queryResponse.Docs) == 0 {
 			return nil
 		}
-		batchUpdateDocs := make([]*couchdb.CouchDoc, 0)
-		for _, result := range results {
-			couchDoc, err := addDeleteFlagToCouchDBJson(result.Value)
-			if err != nil {
-				return err
-			}
-			batchUpdateDocs = append(batchUpdateDocs, couchDoc)
+
+		batchUpdateDocs, err := asBatchDeleteCouchDocs(queryResponse.Docs)
+		if err != nil {
+			return errors.Wrap(err, "purgeByTxidsDB failed")
 		}
+
 		// Do the bulk update into couchdb. Note that this will do retries if the entire bulk update fails or times out
 		_, err = s.db.CommitDocuments(batchUpdateDocs)
 		if err != nil {
@@ -216,21 +214,21 @@ func (s *store) purgeByHeightDB(maxBlockNumToRetain uint64) error {
 		},
 		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
 	}`
-	results, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(maxBlockNumToRetain, blockNumberBase))))
+	queryResponse, err := s.db.Query(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(maxBlockNumToRetain, blockNumberBase))))
 	if err != nil {
 		return errors.Wrap(err, "purgeByHeightDB failed")
 	}
-	if len(results) == 0 {
+
+	if len(queryResponse.Docs) == 0 {
 		return nil
 	}
-	batchUpdateDocs := make([]*couchdb.CouchDoc, 0)
-	for _, result := range results {
-		couchDoc, err := addDeleteFlagToCouchDBJson(result.Value)
-		if err != nil {
-			return err
-		}
-		batchUpdateDocs = append(batchUpdateDocs, couchDoc)
+
+	batchUpdateDocs, err := asBatchDeleteCouchDocs(queryResponse.Docs)
+	if err != nil {
+		return errors.Wrap(err, "purgeByHeightDB failed")
 	}
+
+	logger.Debugf("Purging %d transient private data entries", len(queryResponse.Docs))
 	// Do the bulk update into couchdb. Note that this will do retries if the entire bulk update fails or times out
 	_, err = s.db.CommitDocuments(batchUpdateDocs)
 	if err != nil {

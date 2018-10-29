@@ -12,8 +12,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/hyperledger/fabric/common/util/retry"
-	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -31,8 +29,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/op/go-logging"
+	"github.com/pkg/errors"
 )
 
 var logger = flogging.MustGetLogger("couchdb")
@@ -194,11 +194,11 @@ type NamedCouchDoc struct {
 //BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
 type BatchRetrieveDocResponse struct {
 	Rows []struct {
-		ID          string `json:"id"`
+		ID  string `json:"id"`
 		Doc struct {
-			ID      string `json:"_id"`
-			Rev     string `json:"_rev"`
-			Version string `json:"~version"`
+			ID              string          `json:"_id"`
+			Rev             string          `json:"_rev"`
+			Version         string          `json:"~version"`
 			AttachmentsInfo json.RawMessage `json:"_attachments"`
 		} `json:"doc"`
 	} `json:"rows"`
@@ -206,7 +206,7 @@ type BatchRetrieveDocResponse struct {
 
 type BatchRetreiveDocValueResponse struct {
 	Rows []struct {
-		ID          string `json:"id"`
+		ID  string                     `json:"id"`
 		Doc map[string]json.RawMessage `json:"doc"`
 	} `json:"rows"`
 }
@@ -445,7 +445,6 @@ func (couchInstance *CouchInstance) VerifyCouchConfig() (*ConnectionInfo, error)
 
 	logger.Debugf("Entering VerifyCouchConfig()")
 	defer logger.Debugf("Exiting VerifyCouchConfig()")
-
 
 	dbResponse, err := couchInstance.getConnectionInfo()
 	if err != nil {
@@ -992,7 +991,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 
 	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
 	if err != nil {
-		return nil ,err
+		return nil, err
 	}
 
 	for _, row := range jsonResponse.Rows {
@@ -1166,9 +1165,9 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
 	var bulkQueryIDs []string
 	resultsMap := make(map[string]*QueryResult)
 
-	jsonResponse, err := dbclient.query(query)
+	jsonResponse, err := dbclient.Query(query)
 	if err != nil {
-		return nil ,err
+		return nil, err
 	}
 
 	for _, row := range jsonResponse.Docs {
@@ -1217,7 +1216,7 @@ func (dbclient *CouchDatabase) QueryDocuments(query string) ([]*QueryResult, err
 	return results, nil
 }
 
-func (dbclient *CouchDatabase) query(query string) (*QueryResponse, error) {
+func (dbclient *CouchDatabase) Query(query string) (*QueryResponse, error) {
 	queryURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err.Error())
@@ -1668,7 +1667,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocument(keys []string) ([]*NamedCou
 			return nil, err
 		}
 
-		doc := CouchDoc{JSONValue:jsonValue, Attachments: attachments}
+		doc := CouchDoc{JSONValue: jsonValue, Attachments: attachments}
 		namedDoc := NamedCouchDoc{ID: row.ID, Doc: &doc}
 		docs = append(docs, &namedDoc)
 	}
@@ -1704,8 +1703,8 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
 		}
 
 		attachment := AttachmentInfo{
-			Name: name,
-			ContentType: attachmentResponse.ContentType,
+			Name:            name,
+			ContentType:     attachmentResponse.ContentType,
 			AttachmentBytes: bytes,
 		}
 		attachments = append(attachments, &attachment)
@@ -1925,6 +1924,7 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 type dbResponseError struct {
 	*DBReturn
 }
+
 func (err *dbResponseError) Error() string {
 	return fmt.Sprintf("HTTP response contains unsuccesful status [%d, %s]", err.StatusCode, err.Reason)
 }
@@ -1968,7 +1968,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 		},
 		retry.WithMaxAttempts(maxRetries+1),
 		retry.WithBackoffFactor(2),
-		retry.WithInitialBackoff(retryWaitTime * time.Millisecond),
+		retry.WithInitialBackoff(retryWaitTime*time.Millisecond),
 		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
 			dbErr, ok := err.(*dbResponseError)
 			if ok && dbErr.StatusCode < http.StatusInternalServerError {
