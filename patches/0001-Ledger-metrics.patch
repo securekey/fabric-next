@@ -1,4 +1,4 @@
-From d506a054a7fda5fb61f21b6c54988ee9eb567cf2 Mon Sep 17 00:00:00 2001
+From e5f61102caa9cde387603d75a606ca50ee636b0f Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Fri, 14 Sep 2018 15:13:31 -0400
 Subject: [PATCH] Ledger metrics
@@ -6,35 +6,35 @@ Subject: [PATCH] Ledger metrics
 Change-Id: I3a8db2f1338f86af1efae625cb915a05c4481865
 Signed-off-by: Aleksandar Likic <aleksandar.likic@securekey.com>
 ---
- bccsp/pkcs11/impl.go                          |  21 +
- bccsp/sw/impl.go                              |  25 +
- .../blkstorage/fsblkstorage/blockfile_mgr.go  |  17 +
- .../blkstorage/fsblkstorage/blockindex.go     |   7 +
- .../blkstorage/fsblkstorage/blocks_itr.go     |   8 +
- .../util/leveldbhelper/leveldb_helper.go      |  69 +++
- .../util/leveldbhelper/leveldb_provider.go    |  11 +-
- common/metrics/server.go                      | 271 +++++-----
- common/metrics/server_test.go                 | 242 ---------
- common/metrics/tally_provider.go              | 374 ++------------
- common/metrics/tally_provider_test.go         | 462 ------------------
- common/metrics/types.go                       |  45 --
- .../blocksprovider/blocksprovider.go          |  10 +
- .../historyleveldb/historyleveldb.go          |   7 +
- core/ledger/kvledger/kv_ledger.go             |  26 +
- .../privacyenabledstate/common_storage_db.go  |   9 +
- .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go |   7 +-
- .../txmgmt/statedb/statecouchdb/batch_util.go |  10 +
- .../statedb/statecouchdb/commit_handling.go   |   7 +
- .../statedb/statecouchdb/statecouchdb.go      |   7 +
- .../statedb/stateleveldb/stateleveldb.go      |   7 +
- .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  11 +
- core/ledger/ledgerstorage/store.go            |  28 ++
- core/ledger/util/couchdb/couchdb.go           |  21 +
- gossip/privdata/coordinator.go                |  11 +
- gossip/state/payloads_buffer.go               |   9 +-
- gossip/state/state.go                         |  27 +-
- peer/node/start.go                            |   4 +
- 28 files changed, 550 insertions(+), 1203 deletions(-)
+ bccsp/pkcs11/impl.go                               |  21 +
+ bccsp/sw/impl.go                                   |  25 ++
+ .../blkstorage/fsblkstorage/blockfile_mgr.go       |  17 +
+ .../ledger/blkstorage/fsblkstorage/blockindex.go   |   7 +
+ .../ledger/blkstorage/fsblkstorage/blocks_itr.go   |   8 +
+ common/ledger/util/leveldbhelper/leveldb_helper.go |  69 +++
+ .../ledger/util/leveldbhelper/leveldb_provider.go  |  11 +-
+ common/metrics/server.go                           | 271 ++++++------
+ common/metrics/server_test.go                      | 242 -----------
+ common/metrics/tally_provider.go                   | 374 ++---------------
+ common/metrics/tally_provider_test.go              | 462 ---------------------
+ common/metrics/types.go                            |  45 --
+ .../blocksprovider/blocksprovider.go               |  10 +
+ .../historydb/historyleveldb/historyleveldb.go     |   7 +
+ core/ledger/kvledger/kv_ledger.go                  |  80 ++++
+ .../privacyenabledstate/common_storage_db.go       |   9 +
+ .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go      |   7 +-
+ .../txmgmt/statedb/statecouchdb/batch_util.go      |  10 +
+ .../txmgmt/statedb/statecouchdb/commit_handling.go |   7 +
+ .../txmgmt/statedb/statecouchdb/statecouchdb.go    |   7 +
+ .../txmgmt/statedb/stateleveldb/stateleveldb.go    |   7 +
+ .../txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go |  47 +++
+ core/ledger/ledgerstorage/store.go                 |  28 ++
+ core/ledger/util/couchdb/couchdb.go                |  21 +
+ gossip/privdata/coordinator.go                     |  11 +
+ gossip/state/payloads_buffer.go                    |   9 +-
+ gossip/state/state.go                              |  27 +-
+ peer/node/start.go                                 |   4 +
+ 28 files changed, 640 insertions(+), 1203 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2125,7 +2125,7 @@ index 369787d44..1dd037616 100644
  	//Set the starting tranNo to 0
  	var tranNo uint64
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index d24aab19b..a435a7040 100644
+index d24aab19b..317ecdcd9 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -16,6 +16,7 @@ import (
@@ -2136,7 +2136,15 @@ index d24aab19b..a435a7040 100644
  	"github.com/hyperledger/fabric/common/util"
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-@@ -250,6 +251,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
+@@ -29,6 +30,7 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/peer"
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("kvledger")
+@@ -250,10 +252,23 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
@@ -2150,18 +2158,98 @@ index d24aab19b..a435a7040 100644
  	var err error
  	block := pvtdataAndBlock.Block
  	blockNo := pvtdataAndBlock.Block.Header.Number
-@@ -271,6 +279,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ 
++	var blockValidationStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure block validation
++		blockValidationStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_block_validation_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
++	}
++
+ 	startStateValidation := time.Now()
+ 	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
+ 	err = l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
+@@ -262,15 +277,52 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ 	}
+ 	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
+ 
++	if metrics.IsDebug() {
++		blockValidationStopwatch.Stop()
++	}
++
+ 	startCommitBlockStorage := time.Now()
+ 	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
++
++	var worldStateCommitLockWaitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure wroldstate commit wait for lock
++		worldStateCommitLockWaitStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_worldstate_commit_lock_wait_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
++	}
++
+ 	l.blockAPIsRWLock.Lock()
++
++	if metrics.IsDebug() {
++		worldStateCommitLockWaitStopwatch.Stop()
++	}
++
+ 	defer l.blockAPIsRWLock.Unlock()
++
++	var blockCommitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure block commit
++		blockCommitStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_block_commit_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
++	}
++
+ 	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
+ 		return err
  	}
  	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
  
++	if metrics.IsDebug() {
++		blockCommitStopwatch.Stop()
++	}
++
 +	// KEEP EVEN WHEN metrics.debug IS OFF
 +	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
 +	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
 +
++	var worldstateCommitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure worldstate commit
++		worldstateCommitStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_worldstate_commit_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
++	}
++
  	startCommitState := time.Now()
  	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
  	if err = l.txtmgmt.Commit(); err != nil {
-@@ -299,6 +311,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -278,6 +330,16 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ 	}
+ 	elapsedCommitState := time.Since(startCommitState) / time.Millisecond // duration in ms
+ 
++	if metrics.IsDebug() {
++		worldstateCommitStopwatch.Stop()
++	}
++
++	var historyCommitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure history commit
++		historyCommitStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_history_commit_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
++	}
++
+ 	// History database could be written in parallel with state and/or async as a future optimization,
+ 	// although it has not been a bottleneck...no need to clutter the log with elapsed duration.
+ 	if ledgerconfig.IsHistoryDBEnabled() {
+@@ -287,6 +349,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+ 		}
+ 	}
+ 
++	if metrics.IsDebug() {
++		historyCommitStopwatch.Stop()
++	}
++
+ 	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
+ 
+ 	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
+@@ -299,6 +365,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2175,7 +2263,7 @@ index d24aab19b..a435a7040 100644
  	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
-@@ -308,6 +327,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+@@ -308,6 +381,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
  // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2356,7 +2444,7 @@ index ba3be0ea3..6adaf3bd5 100644
  	namespaces := batch.GetUpdatedNamespaces()
  	for _, ns := range namespaces {
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd0535..aba0c264e 100644
+index d03bd0535..e707f7ea7 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2367,7 +2455,55 @@ index d03bd0535..aba0c264e 100644
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
-@@ -129,6 +130,12 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
+@@ -20,6 +21,7 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
++	"github.com/uber-go/tally"
+ )
+ 
+ var logger = flogging.MustGetLogger("lockbasedtxmgr")
+@@ -73,7 +75,19 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
+ // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
+ func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
+ 	qe := newQueryExecutor(txmgr, txid)
++
++	var queryLockWaitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure query wait for lock
++		queryLockWaitStopwatch = metrics.RootScope.Timer("lockbasedtxmgr_query_lock_wait_time_seconds").Start()
++	}
++
+ 	txmgr.commitRWLock.RLock()
++
++	if metrics.IsDebug() {
++		queryLockWaitStopwatch.Stop()
++	}
++
+ 	return qe, nil
+ }
+ 
+@@ -84,7 +98,19 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
+ 	if err != nil {
+ 		return nil, err
+ 	}
++
++	var simulatorLockWaitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure simulator wait for lock
++		simulatorLockWaitStopwatch = metrics.RootScope.Timer("lockbasedtxmgr_simulator_lock_wait_time_seconds").Start()
++	}
++
+ 	txmgr.commitRWLock.RLock()
++
++	if metrics.IsDebug() {
++		simulatorLockWaitStopwatch.Stop()
++	}
++
+ 	return s, nil
+ }
+ 
+@@ -129,6 +155,12 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
  
  // Commit implements method in interface `txmgmt.TxMgr`
  func (txmgr *LockBasedTxMgr) Commit() error {
@@ -2380,7 +2516,26 @@ index d03bd0535..aba0c264e 100644
  	// When using the purge manager for the first block commit after peer start, the asynchronous function
  	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
  	// in advance for the next block
-@@ -223,6 +230,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
+@@ -153,7 +185,18 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+ 		return err
+ 	}
+ 
++	var commitLockWaitStopwatch tally.Stopwatch;
++	if metrics.IsDebug() {
++		// Measure commit wait for lock
++		commitLockWaitStopwatch = metrics.RootScope.Timer("lockbasedtxmgr_commit_lock_wait_time_seconds").Start()
++	}
++
+ 	txmgr.commitRWLock.Lock()
++
++	if metrics.IsDebug() {
++		commitLockWaitStopwatch.Stop()
++	}
++
+ 	defer txmgr.commitRWLock.Unlock()
+ 	logger.Debugf("Write lock acquired for committing updates to state database")
+ 	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
+@@ -223,6 +266,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
  }
  
  func (txmgr *LockBasedTxMgr) updateStateListeners() {
@@ -2611,7 +2766,7 @@ index e7fbf5b18..232485341 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 4850613ef..dd7eb2863 100644
+index 4850613ef..c000b9bf0 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -12,8 +12,11 @@ import (
@@ -2713,5 +2868,5 @@ index 9735efe79..7ebbfb4ef 100644
  	// because in certain scenarios the MSP has to make sure
  	// that from a single credential you only have a single 'identity'.
 -- 
-2.17.1 (Apple Git-112)
+2.14.3 (Apple Git-98)
 
