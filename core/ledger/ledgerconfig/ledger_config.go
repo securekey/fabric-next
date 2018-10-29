@@ -93,6 +93,8 @@ const (
 	LevelDBTransientStorage TransientStorageProvider = iota
 	// CouchDBTransientStorage stores transient data in CouchDB
 	CouchDBTransientStorage
+	// MemoryTransientStorage stores transient data in Memory
+	MemoryTransientStorage
 )
 
 // ConfigHistoryStorageProvider holds the configuration names of the available config history storage providers
@@ -294,6 +296,8 @@ func GetTransientStoreProvider() TransientStorageProvider {
 	switch transientStorageConfig {
 	case "CouchDB":
 		return CouchDBTransientStorage
+	case "Memory":
+		return MemoryTransientStorage
 	default:
 		fallthrough
 	case "goleveldb":
