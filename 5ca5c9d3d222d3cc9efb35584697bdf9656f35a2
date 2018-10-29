@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e098eb59_f2a25c4f",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 73,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-10-29T19:20:41Z",
+      "side": 1,
+      "message": "Block has to be added to the cache after saving it on the store, otherwise it might be an invalid block in the cache.",
+      "revId": "5ca5c9d3d222d3cc9efb35584697bdf9656f35a2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
