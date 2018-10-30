@@ -128,6 +128,17 @@ func (c *blockCache) LookupTxnBlockPosition(id string) (int, bool) {
 	return cachedTxn.blockPosition, true
 }
 
+func (c *blockCache) LookupTxnBlockNumber(id string) (uint64, bool) {
+	c.mtx.RLock()
+	cachedTxn, ok := c.txns[id]
+	c.mtx.RUnlock()
+	if !ok {
+		return 0, false
+	}
+
+	return cachedTxn.blockNumber, true
+}
+
 func (c *blockCache) LookupByNumber(number uint64) (*common.Block, bool) {
 	c.mtx.RLock()
 	b, ok := c.blocks.Get(number)
@@ -159,11 +170,11 @@ func (c *blockCache) onEvicted(key lru.Key, value interface{}) {
 	delete(c.hashToNumber, blockHashHex)
 	delete(c.numberToHash, blockNumber)
 
-	txnIDs, ok := c.numberToTxnIDs[blockNumber]
-	if ok {
-		for _, txnID := range txnIDs {
-			delete(c.txns, txnID)
-		}
-		delete(c.numberToTxnIDs, blockNumber)
-	}
+	//txnIDs, ok := c.numberToTxnIDs[blockNumber]
+	//if ok {
+	//	for _, txnID := range txnIDs {
+	//		delete(c.txns, txnID)
+	//	}
+	//	delete(c.numberToTxnIDs, blockNumber)
+	//}
 }

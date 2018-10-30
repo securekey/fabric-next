@@ -255,23 +255,17 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 		return block, nil
 	}
 
-	const queryFmt = `
-	{
-		"selector": {
-			"` + blockTxnIDsField + `": {
-				"$elemMatch": {
-					"$eq": "%s"
-				}
-			}
-		},
-		"use_index": ["_design/` + blockTxnIndexDoc + `", "` + blockTxnIndexName + `"]
-	}`
-	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, txID))
+	blockNumber, ok := s.cache.LookupTxnBlockNumber(txID)
+	if !ok {
+		return nil, blkstorage.ErrNotFoundInIndex
+	}
+
+	block, err := s.RetrieveBlockByNumber(blockNumber)
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
 	}
-	s.cache.Add(block)
+	//s.cache.Add(block)
 
 	return block, nil
 }
