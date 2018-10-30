@@ -1,4 +1,4 @@
-From e5f61102caa9cde387603d75a606ca50ee636b0f Mon Sep 17 00:00:00 2001
+From a1df0e308644c86c31d505357698d132178405fa Mon Sep 17 00:00:00 2001
 From: Aleksandar Likic <aleksandar.likic@securekey.com>
 Date: Fri, 14 Sep 2018 15:13:31 -0400
 Subject: [PATCH] Ledger metrics
@@ -2125,7 +2125,7 @@ index 369787d44..1dd037616 100644
  	//Set the starting tranNo to 0
  	var tranNo uint64
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index d24aab19b..317ecdcd9 100644
+index d24aab19b..6f522549f 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -16,6 +16,7 @@ import (
@@ -2182,7 +2182,7 @@ index d24aab19b..317ecdcd9 100644
 +	var worldStateCommitLockWaitStopwatch tally.Stopwatch;
 +	if metrics.IsDebug() {
 +		// Measure wroldstate commit wait for lock
-+		worldStateCommitLockWaitStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_worldstate_commit_lock_wait_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
++		worldStateCommitLockWaitStopwatch = metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_blockAPIsRW_lock_wait_time_seconds", metrics.FilterMetricName(l.ledgerID))).Start()
 +	}
 +
  	l.blockAPIsRWLock.Lock()
