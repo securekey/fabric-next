@@ -7,8 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
-	"sync"
-
+	"context"
 	"github.com/hyperledger/fabric/common/ledger"
 )
 
@@ -17,40 +16,22 @@ type blocksItr struct {
 	cdbBlockStore        *cdbBlockStore
 	maxBlockNumAvailable uint64
 	blockNumToRetrieve   uint64
-	closeMarker          bool
-	closeMarkerLock      *sync.Mutex
+	ctx                  context.Context
+	cancel               context.CancelFunc
 }
 
 func newBlockItr(cdbBlockStore *cdbBlockStore, startBlockNum uint64) *blocksItr {
-	return &blocksItr{cdbBlockStore, cdbBlockStore.cpInfo.lastBlockNumber, startBlockNum, false, &sync.Mutex{}}
-}
-
-func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
-	itr.cdbBlockStore.cpInfoCond.L.Lock()
-	defer itr.cdbBlockStore.cpInfoCond.L.Unlock()
-	for itr.cdbBlockStore.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
-		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
-			itr.cdbBlockStore.cpInfo.lastBlockNumber, blockNum)
-		itr.cdbBlockStore.cpInfoCond.Wait()
-		logger.Debugf("Came out of wait. maxAvailaBlockNumber=[%d]", itr.cdbBlockStore.cpInfo.lastBlockNumber)
-	}
-	return itr.cdbBlockStore.cpInfo.lastBlockNumber
-}
-
-func (itr *blocksItr) shouldClose() bool {
-	itr.closeMarkerLock.Lock()
-	defer itr.closeMarkerLock.Unlock()
-	return itr.closeMarker
+	ctx, cancel := context.WithCancel(context.Background())
+	return &blocksItr{cdbBlockStore, cdbBlockStore.LastBlockNumber(), startBlockNum, ctx, cancel}
 }
 
 // Next moves the cursor to next block and returns true iff the iterator is not exhausted
 func (itr *blocksItr) Next() (ledger.QueryResult, error) {
 	if itr.maxBlockNumAvailable < itr.blockNumToRetrieve {
-		itr.maxBlockNumAvailable = itr.waitForBlock(itr.blockNumToRetrieve)
+		itr.maxBlockNumAvailable = itr.cdbBlockStore.WaitForBlock(itr.ctx, itr.blockNumToRetrieve)
 	}
-	itr.closeMarkerLock.Lock()
-	defer itr.closeMarkerLock.Unlock()
-	if itr.closeMarker {
+	// If we still haven't met the condition, the iterator has been closed.
+	if itr.maxBlockNumAvailable < itr.blockNumToRetrieve {
 		return nil, nil
 	}
 
@@ -64,10 +45,5 @@ func (itr *blocksItr) Next() (ledger.QueryResult, error) {
 
 // Close releases any resources held by the iterator
 func (itr *blocksItr) Close() {
-	itr.cdbBlockStore.cpInfoCond.L.Lock()
-	defer itr.cdbBlockStore.cpInfoCond.L.Unlock()
-	itr.closeMarkerLock.Lock()
-	defer itr.closeMarkerLock.Unlock()
-	itr.closeMarker = true
-	itr.cdbBlockStore.cpInfoCond.Broadcast()
+	itr.cancel()
 }
