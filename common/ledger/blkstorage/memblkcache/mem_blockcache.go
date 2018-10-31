@@ -4,7 +4,7 @@ Copyright SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package cdbblkstorage
+package memblkcache
 
 import (
 	"encoding/hex"
@@ -56,7 +56,7 @@ func newBlockCache() *blockCache {
 	return &c
 }
 
-func (c *blockCache) Add(block *common.Block) {
+func (c *blockCache) AddBlock(block *common.Block) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -79,6 +79,7 @@ func (c *blockCache) Add(block *common.Block) {
 	}
 
 	c.blocks.Add(block.GetHeader().Number, block)
+	return nil
 }
 
 func createCachedTxnsFromBlock(block *common.Block) (map[string]*cachedTxn, error) {
@@ -106,7 +107,7 @@ func createCachedTxnsFromBlock(block *common.Block) (map[string]*cachedTxn, erro
 	return txns, nil
 }
 
-func (c *blockCache) LookupByTxnID(id string) (*common.Block, bool) {
+func (c *blockCache) LookupBlockByTxnID(id string) (*common.Block, bool) {
 	c.mtx.RLock()
 	cachedTxn, ok := c.txns[id]
 	c.mtx.RUnlock()
@@ -114,10 +115,10 @@ func (c *blockCache) LookupByTxnID(id string) (*common.Block, bool) {
 		return nil, false
 	}
 
-	return c.LookupByNumber(cachedTxn.blockNumber)
+	return c.LookupBlockByNumber(cachedTxn.blockNumber)
 }
 
-func (c *blockCache) LookupTxnBlockPosition(id string) (int, bool) {
+func (c *blockCache) LookupBlockTxnBlockPosition(id string) (int, bool) {
 	c.mtx.RLock()
 	cachedTxn, ok := c.txns[id]
 	c.mtx.RUnlock()
@@ -139,7 +140,7 @@ func (c *blockCache) LookupTxnBlockNumber(id string) (uint64, bool) {
 	return cachedTxn.blockNumber, true
 }
 
-func (c *blockCache) LookupByNumber(number uint64) (*common.Block, bool) {
+func (c *blockCache) LookupBlockByNumber(number uint64) (*common.Block, bool) {
 	c.mtx.RLock()
 	b, ok := c.blocks.Get(number)
 	c.mtx.RUnlock()
@@ -150,7 +151,7 @@ func (c *blockCache) LookupByNumber(number uint64) (*common.Block, bool) {
 	return b.(*common.Block), true
 }
 
-func (c *blockCache) LookupByHash(blockHash []byte) (*common.Block, bool) {
+func (c *blockCache) LookupBlockByHash(blockHash []byte) (*common.Block, bool) {
 	blockHashHex := hex.EncodeToString(blockHash)
 
 	c.mtx.RLock()
@@ -160,7 +161,11 @@ func (c *blockCache) LookupByHash(blockHash []byte) (*common.Block, bool) {
 		return nil, false
 	}
 
-	return c.LookupByNumber(number)
+	return c.LookupBlockByNumber(number)
+}
+
+// Shutdown closes the storage instance
+func (c *blockCache) Shutdown() {
 }
 
 func (c *blockCache) onEvicted(key lru.Key, value interface{}) {
@@ -170,11 +175,26 @@ func (c *blockCache) onEvicted(key lru.Key, value interface{}) {
 	delete(c.hashToNumber, blockHashHex)
 	delete(c.numberToHash, blockNumber)
 
-	//txnIDs, ok := c.numberToTxnIDs[blockNumber]
-	//if ok {
-	//	for _, txnID := range txnIDs {
-	//		delete(c.txns, txnID)
-	//	}
-	//	delete(c.numberToTxnIDs, blockNumber)
-	//}
+	txnIDs, ok := c.numberToTxnIDs[blockNumber]
+	if ok {
+		for _, txnID := range txnIDs {
+			delete(c.txns, txnID)
+		}
+		delete(c.numberToTxnIDs, blockNumber)
+	}
+}
+
+func extractTxIDFromEnvelope(txEnvelope *common.Envelope) (string, error) {
+	payload, err := utils.GetPayload(txEnvelope)
+	if err != nil {
+		return "", nil
+	}
+
+	payloadHeader := payload.Header
+	channelHeader, err := utils.UnmarshalChannelHeader(payloadHeader.ChannelHeader)
+	if err != nil {
+		return "", err
+	}
+
+	return channelHeader.TxId, nil
 }
