@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "dd49fe2b_98f26318",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 1006,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-10-31T20:25:40Z",
+      "side": 1,
+      "message": "I need Block height and TxIndex in block in addition to the value of transaction.",
+      "revId": "7d729665fd6055de7ef8c5bd6da8b28a66b98053",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
