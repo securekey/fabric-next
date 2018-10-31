@@ -18,17 +18,15 @@ var logger = flogging.MustGetLogger("peer")
 
 const (
 	blockStoreName = "blocks"
-	txnStoreName   = "transactions"
 )
 
 // CDBBlockstoreProvider provides block storage in CouchDB
 type CDBBlockstoreProvider struct {
 	couchInstance *couchdb.CouchInstance
-	indexConfig   *blkstorage.IndexConfig
 }
 
 // NewProvider creates a new CouchDB BlockStoreProvider
-func NewProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProvider, error) {
+func NewProvider() (blkstorage.BlockStoreProvider, error) {
 	logger.Debugf("constructing CouchDB block storage provider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -36,7 +34,7 @@ func NewProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProv
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}
-	return &CDBBlockstoreProvider{couchInstance, indexConfig}, nil
+	return &CDBBlockstoreProvider{couchInstance}, nil
 }
 
 // CreateBlockStore creates a block store instance for the given ledger ID
@@ -47,23 +45,22 @@ func (p *CDBBlockstoreProvider) CreateBlockStore(ledgerid string) (blkstorage.Bl
 // OpenBlockStore opens the block store for the given ledger ID
 func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerID string) (blkstorage.BlockStore, error) {
 	blockStoreDBName := couchdb.ConstructBlockchainDBName(ledgerID, blockStoreName)
-	txnStoreDBName := couchdb.ConstructBlockchainDBName(ledgerID, txnStoreName)
 
 	if ledgerconfig.IsCommitter() {
-		return createCommitterBlockStore(p.couchInstance, ledgerID, blockStoreDBName, txnStoreDBName, p.indexConfig)
+		return createCommitterBlockStore(p.couchInstance, ledgerID, blockStoreDBName)
 	}
 
-	return createBlockStore(p.couchInstance, ledgerID, blockStoreDBName, txnStoreDBName, p.indexConfig)
+	return createBlockStore(p.couchInstance, ledgerID, blockStoreDBName)
 }
 
 
-func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, tnxStoreDBName string, indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStore, error) {
+func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string) (blkstorage.BlockStore, error) {
 	blockStoreDB, err := createCommitterBlockStoreDB(couchInstance, blockStoreDBName)
 	if err != nil {
 		return nil, err
 	}
 
-	return newCDBBlockStore(blockStoreDB, ledgerID, indexConfig), nil
+	return newCDBBlockStore(blockStoreDB, ledgerID), nil
 }
 
 func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
@@ -79,13 +76,13 @@ func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName st
 	return db, nil
 }
 
-func createBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, tnxStoreDBName string, indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStore, error) {
+func createBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string) (blkstorage.BlockStore, error) {
 	blockStoreDB, err := createBlockStoreDB(couchInstance, blockStoreDBName)
 	if err != nil {
 		return nil, err
 	}
 
-	return newCDBBlockStore(blockStoreDB, ledgerID, indexConfig), nil
+	return newCDBBlockStore(blockStoreDB, ledgerID), nil
 }
 
 func createBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
