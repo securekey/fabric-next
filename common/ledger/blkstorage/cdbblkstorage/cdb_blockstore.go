@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -29,13 +30,14 @@ import (
 type cdbBlockStore struct {
 	blockStore *couchdb.CouchDatabase
 	ledgerID   string
+	cpInfoSig  chan struct{}
+	cpInfoMtx  *sync.RWMutex
 	cpInfo     *checkpointInfo
-	cpInfoCond *sync.Cond
 	cp         *checkpoint
 	cache      *blockCache
 }
 // newCDBBlockStore constructs block store based on CouchDB
-func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
+func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBlockStore {
 	cp := newCheckpoint(blockStore)
 
 	blockCache := newBlockCache()
@@ -43,6 +45,8 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexC
 	cdbBlockStore := &cdbBlockStore{
 		blockStore: blockStore,
 		ledgerID:   ledgerID,
+		cpInfoSig:  make(chan struct {}),
+		cpInfoMtx:  &sync.RWMutex{},
 		cp:         cp,
 		cache: blockCache,
 	}
@@ -60,10 +64,6 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexC
 	}
 	// Update the manager with the checkpoint info and the file writer
 	cdbBlockStore.cpInfo = cpInfo
-
-	// Create a checkpoint condition (event) variable, for the  goroutine waiting for
-	// or announcing the occurrence of an event.
-	cdbBlockStore.cpInfoCond = sync.NewCond(&sync.Mutex{})
 
 	return cdbBlockStore
 }
@@ -323,9 +323,43 @@ func (s *cdbBlockStore) Shutdown() {
 }
 
 func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
-	s.cpInfoCond.L.Lock()
-	defer s.cpInfoCond.L.Unlock()
+	s.cpInfoMtx.Lock()
+	defer s.cpInfoMtx.Unlock()
 	s.cpInfo = cpInfo
-	logger.Debugf("Broadcasting checkpointInfo: %s", s.cpInfo)
-	s.cpInfoCond.Broadcast()
+	logger.Debugf("broadcasting checkpoint update to waiting listeners [%#v]", s.cpInfo)
+	close(s.cpInfoSig)
+	s.cpInfoSig = make(chan struct{})
+}
+
+func (s *cdbBlockStore) LastBlockNumber() uint64 {
+	s.cpInfoMtx.RLock()
+	defer s.cpInfoMtx.RUnlock()
+
+	return s.cpInfo.lastBlockNumber
+}
+
+func (s *cdbBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
+	var lastBlockNumber uint64
+
+	BlockLoop:
+	for {
+		s.cpInfoMtx.RLock()
+		lastBlockNumber = s.cpInfo.lastBlockNumber
+		sigCh := s.cpInfoSig
+		s.cpInfoMtx.RUnlock()
+
+		if lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break BlockLoop
+		case <-sigCh:
+		}
+	}
+
+	logger.Debugf("finished waiting for blocks [%d, %d]", lastBlockNumber, blockNum)
+	return lastBlockNumber
 }

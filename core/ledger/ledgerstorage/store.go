@@ -18,6 +18,9 @@ package ledgerstorage
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
@@ -84,7 +87,14 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 			fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
 			indexConfig), nil
 	case ledgerconfig.CouchDBLedgerStorage:
-		return cdbblkstorage.NewProvider(indexConfig)
+		blockStorage, err := cdbblkstorage.NewProvider()
+		if err != nil {
+			return nil, err
+		}
+		blockIndex := ldbblkindex.NewProvider(indexConfig)
+		blockCache := memblkcache.NewProvider()
+
+		return cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache), nil
 	}
 
 	return nil, errors.New("block storage provider creation failed due to unknown configuration")
