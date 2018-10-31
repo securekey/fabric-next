@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package lockbasedtxmgr
 
 import (
+	"github.com/hyperledger/fabric/protos/gossip"
 	"sync"
 
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
@@ -89,22 +90,22 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 }
 
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
-func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error {
+func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*gossip.ValidatedTx, error) {
 	block := blockAndPvtdata.Block
 	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
 	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
 	logger.Debugf("Validating new block with num trans = [%d]", len(block.Data.Data))
-	batch, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
+	validatedTxBatch, batch, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
 		txmgr.reset()
-		return err
+		return nil, err
 	}
 	txmgr.current = &current{block: block, batch: batch}
 	if err := txmgr.invokeNamespaceListeners(); err != nil {
 		txmgr.reset()
-		return err
+		return nil, err
 	}
-	return nil
+	return validatedTxBatch, nil
 }
 
 func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
@@ -200,7 +201,8 @@ func (txmgr *LockBasedTxMgr) ShouldRecover(lastAvailableBlock uint64) (bool, uin
 func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	block := blockAndPvtdata.Block
 	logger.Debugf("Constructing updateSet for the block %d", block.Header.Number)
-	if err := txmgr.ValidateAndPrepare(blockAndPvtdata, false); err != nil {
+	// Don't gossip validatedTx blocks from old blocks, most likely they are invalid
+	if _, err := txmgr.ValidateAndPrepare(blockAndPvtdata, false); err != nil {
 		return err
 	}
 	logger.Debugf("Committing block %d to state database", block.Header.Number)

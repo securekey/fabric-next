@@ -552,7 +552,7 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
 		return
 	}
 
-	if m.IsDataMsg() || m.IsStateInfoMsg() {
+	if m.IsDataMsg() || m.IsStateInfoMsg() || m.IsValidatedTxBlockMsg() {
 		added := false
 
 		if m.IsDataMsg() {
@@ -569,9 +569,11 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
 				return
 			}
 			added = gc.blockMsgStore.Add(msg.GetGossipMessage())
-		} else { // StateInfoMsg verification should be handled in a layer above
+		} else if m.IsStateInfoMsg() { // StateInfoMsg verification should be handled in a layer above
 			//  since we don't have access to the id mapper here
 			added = gc.stateInfoMsgStore.Add(msg.GetGossipMessage())
+		} else {
+			added = true
 		}
 
 		if added {

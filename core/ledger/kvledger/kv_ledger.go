@@ -9,6 +9,8 @@ package kvledger
 import (
 	"errors"
 	"fmt"
+	"github.com/hyperledger/fabric/gossip/service"
+	"github.com/hyperledger/fabric/protos/gossip"
 	"sync"
 	"time"
 
@@ -267,7 +269,7 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 	startStateValidation := time.Now()
 	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
-	err = l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
+	batch, err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 	if err != nil {
 		return err
 	}
@@ -308,9 +310,38 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
 		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
 		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
+	
+	/* batch has the list of validated transactions, so make the gossip message and send it out */
+	validatedTxBlock := &gossip.ValidatedTxBlock{
+		Header: &gossip.ValidatedTxHeader {
+			// blockNo is the block height
+			BlockNum: blockNo,
+		},
+		Payload: &gossip.ValidatedTxPayload {
+			ValidatedTxs: batch,
+		},
+	}
+
+	gossipMsg := l.createGossipMsg(l.ledgerID, validatedTxBlock)
+	service.GetGossipService().Gossip(gossipMsg)
 
 	return nil
 }
+
+
+func (l *kvLedger) createGossipMsg(chainID string, validatedTxBlock *gossip.ValidatedTxBlock) *gossip.GossipMessage {
+	logger.Infof("createGossipMsg chainID=%d", chainID)
+	gossipMsg := &gossip.GossipMessage{
+		Nonce:   0,
+		Tag:     gossip.GossipMessage_CHAN_AND_ORG,
+		Channel: []byte(chainID),
+		Content: &gossip.GossipMessage_ValidatedTxBlock{
+			ValidatedTxBlock: validatedTxBlock,
+		},
+	}
+	return gossipMsg
+}
+
 
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied

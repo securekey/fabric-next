@@ -358,7 +358,7 @@ func checkValidation(t *testing.T, val *Validator, transRWSets []*rwsetutil.TxRw
 		trans = append(trans, tx)
 	}
 	block := &valinternal.Block{Num: 1, Txs: trans}
-	_, err := val.ValidateAndPrepareBatch(block, true)
+	_, _, err := val.ValidateAndPrepareBatch(block, true)
 	testutil.AssertNoError(t, err, "")
 	t.Logf("block.Txs[0].ValidationCode = %d", block.Txs[0].ValidationCode)
 	var invalidTxs []int

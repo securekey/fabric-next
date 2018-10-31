@@ -145,6 +145,8 @@ type GossipStateProviderImpl struct {
 
 	stateRequestCh chan proto.ReceivedMessage
 
+	validatedTxCh chan *proto.ValidatedTxBlock
+
 	stopCh chan struct{}
 
 	done sync.WaitGroup
@@ -165,8 +167,8 @@ var logger = util.GetLogger(util.LoggingStateModule, "")
 func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, peerLedger ledger.PeerLedger) GossipStateProvider {
 
 	gossipChan, _ := services.Accept(func(message interface{}) bool {
-		// Get only data messages
-		return message.(*proto.GossipMessage).IsDataMsg() &&
+		// Get only data messagess
+		return (message.(*proto.GossipMessage).IsDataMsg() || message.(*proto.GossipMessage).IsValidatedTxBlockMsg()) &&
 			bytes.Equal(message.(*proto.GossipMessage).Channel, []byte(chainID))
 	}, false)
 
@@ -233,6 +235,8 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		stateResponseCh: make(chan proto.ReceivedMessage, defChannelBufferSize),
 
 		stateRequestCh: make(chan proto.ReceivedMessage, defChannelBufferSize),
+
+		validatedTxCh:	make(chan *proto.ValidatedTxBlock, defChannelBufferSize),
 
 		stopCh: make(chan struct{}, 1),
 
@@ -536,6 +540,15 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 		return
 	}
 
+	validatedTxMsg := msg.GetValidatedTxBlock()
+	if validatedTxMsg != nil {
+		logger.Infof("YYY2 validated block")
+		if err := s.addValidatedTxBlock(validatedTxMsg, nonBlocking); err != nil {
+			logger.Warningf("Validated tx block [%d] received from gossip wasn't added to validated tx buffer: %v", validatedTxMsg.Header.BlockNum, err)
+			return
+		}
+	}
+
 	dataMsg := msg.GetDataMsg()
 	if dataMsg != nil {
 		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
@@ -587,6 +600,9 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 					logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
 				}
 			}
+		case validatedTxBlock := <-s.validatedTxCh:
+			logger.Infof("ZZZ got it BlockNum=%d, ValidatedTx=%v", validatedTxBlock.Header.BlockNum, validatedTxBlock.Payload.ValidatedTxs)
+			continue
 		case <-s.stopCh:
 			s.stopCh <- struct{}{}
 			logger.Debug("State provider has been stopped, finishing to push new blocks.")
@@ -869,6 +885,17 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	}
 
 	s.payloads.Push(payload)
+	return nil
+}
+
+func (s *GossipStateProviderImpl) addValidatedTxBlock(validatedTxBlock *proto.ValidatedTxBlock, blockingMode bool) error {
+	if validatedTxBlock == nil {
+		return errors.New("Given validated tx block is nil")
+	}
+	logger.Debugf("[%s] Adding validated tx block to local buffer, blockNum = [%d]", s.chainID, validatedTxBlock.Header.BlockNum)
+
+	s.validatedTxCh <- validatedTxBlock
+
 	return nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valinternal"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric/protos/peer"
 )
@@ -86,23 +87,24 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block) erro
 }
 
 // ValidateAndPrepareBatch implements method in Validator interface
-func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCValidation bool) (*valinternal.PubAndHashUpdates, error) {
+func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCValidation bool) ([]*gossip.ValidatedTx, *valinternal.PubAndHashUpdates, error) {
 	// Check whether statedb implements BulkOptimizable interface. For now,
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.
 	if v.db.IsBulkOptimizable() {
 		err := v.preLoadCommittedVersionOfRSet(block)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	updates := valinternal.NewPubAndHashUpdates()
-	for _, tx := range block.Txs {
+	var validatedTxBatch []*gossip.ValidatedTx
+	for index, tx := range block.Txs {
 		var validationCode peer.TxValidationCode
 		var err error
 		if validationCode, err = v.validateEndorserTX(tx.RWSet, doMVCCValidation, updates); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		tx.ValidationCode = validationCode
@@ -110,12 +112,24 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
 			logger.Debugf("Block [%d] Transaction index [%d] TxId [%s] marked as valid by state validator", block.Num, tx.IndexInBlock, tx.ID)
 			committingTxHeight := version.NewHeight(block.Num, uint64(tx.IndexInBlock))
 			updates.ApplyWriteSet(tx.RWSet, committingTxHeight)
+			for _, nsRWSet := range tx.RWSet.NsRwSets {
+				for _, write := range nsRWSet.KvRwSet.Writes {
+					validatedTx := &gossip.ValidatedTx{
+						Namespace:	  nsRWSet.NameSpace,
+						Key:          write.Key,
+						Value:        write.Value,
+						IsDelete:     write.IsDelete,
+						IndexInBlock: uint64(index),
+					}
+					validatedTxBatch = append(validatedTxBatch, validatedTx)
+				}
+			}
 		} else {
 			logger.Warningf("Block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
 				block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 		}
 	}
-	return updates, nil
+	return validatedTxBatch, updates, nil
 }
 
 // validateEndorserTX validates endorser transaction

@@ -14,6 +14,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/statebasedval"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valinternal"
+	"github.com/hyperledger/fabric/protos/gossip"
 )
 
 var logger = flogging.MustGetLogger("valimpl")
@@ -36,30 +37,31 @@ func NewStatebasedValidator(txmgr txmgr.TxMgr, db privacyenabledstate.DB) valida
 
 // ValidateAndPrepareBatch implements the function in interface validator.Validator
 func (impl *DefaultImpl) ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAndPvtData,
-	doMVCCValidation bool) (*privacyenabledstate.UpdateBatch, error) {
+	doMVCCValidation bool) ([]*gossip.ValidatedTx, *privacyenabledstate.UpdateBatch, error) {
 	block := blockAndPvtdata.Block
 	logger.Debugf("ValidateAndPrepareBatch() for block number = [%d]", block.Header.Number)
 	var internalBlock *valinternal.Block
 	var pubAndHashUpdates *valinternal.PubAndHashUpdates
 	var pvtUpdates *privacyenabledstate.PvtUpdateBatch
+	var validatedTxBatch []*gossip.ValidatedTx
 	var err error
 
 	logger.Debug("preprocessing ProtoBlock...")
 	if internalBlock, err = preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, doMVCCValidation); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if pubAndHashUpdates, err = impl.InternalValidator.ValidateAndPrepareBatch(internalBlock, doMVCCValidation); err != nil {
-		return nil, err
+	if validatedTxBatch, pubAndHashUpdates, err = impl.InternalValidator.ValidateAndPrepareBatch(internalBlock, doMVCCValidation); err != nil {
+		return nil, nil, err
 	}
 	logger.Debug("validating rwset...")
 	if pvtUpdates, err = validateAndPreparePvtBatch(internalBlock, blockAndPvtdata.BlockPvtData); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	logger.Debug("postprocessing ProtoBlock...")
 	postprocessProtoBlock(block, internalBlock)
 	logger.Debug("ValidateAndPrepareBatch() complete")
-	return &privacyenabledstate.UpdateBatch{
+	return validatedTxBatch, &privacyenabledstate.UpdateBatch{
 		PubUpdates:  pubAndHashUpdates.PubUpdates,
 		HashUpdates: pubAndHashUpdates.HashUpdates,
 		PvtUpdates:  pvtUpdates,

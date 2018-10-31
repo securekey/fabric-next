@@ -10,13 +10,14 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/peer"
 )
 
 // InternalValidator is supposed to validate the transactions based on public data and hashes present in a block
 // and returns a batch that should be used to update the state
 type InternalValidator interface {
-	ValidateAndPrepareBatch(block *Block, doMVCCValidation bool) (*PubAndHashUpdates, error)
+	ValidateAndPrepareBatch(block *Block, doMVCCValidation bool) ([]*gossip.ValidatedTx, *PubAndHashUpdates, error)
 }
 
 // Block is used to used to hold the information from its proto format to a structure

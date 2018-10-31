@@ -19,13 +19,14 @@ package txmgr
 import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/protos/gossip"
 )
 
 // TxMgr - an interface that a transaction manager should implement
 type TxMgr interface {
 	NewQueryExecutor(txid string) (ledger.QueryExecutor, error)
 	NewTxSimulator(txid string) (ledger.TxSimulator, error)
-	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error
+	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*gossip.ValidatedTx, error)
 	GetLastSavepoint() (*version.Height, error)
 	ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error)
 	CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error
