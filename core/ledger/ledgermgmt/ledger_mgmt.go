@@ -20,6 +20,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
 	"fmt"
@@ -68,6 +69,7 @@ func initialize(customTxProcessors customtx.Processors, statelisteners []ledger.
 	}
 	provider.Initialize(finalStateListeners)
 	ledgerProvider = provider
+	statedb.InitKVCache()
 	logger.Info("ledger mgmt initialized")
 }
 
