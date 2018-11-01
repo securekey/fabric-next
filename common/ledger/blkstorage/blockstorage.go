@@ -90,6 +90,7 @@ type BlockCache interface {
 	AddBlock(block *common.Block) error
 	LookupBlockByNumber(number uint64) (*common.Block, bool)
 	LookupBlockByHash(blockHash []byte) (*common.Block, bool)
+	LookupTxLoc(id string) (TxLoc, bool)
 	Shutdown()
 }
 
@@ -105,8 +106,8 @@ type TxLoc interface {
 	BlockNumber() uint64
 	TxNumber() uint64
 	// TODO: make use of offset & length or remove.
-	Offset() int
-	Length() int
+	//Offset() int
+	//Length() int
 }
 
 // BlockIndex - an interface for persisting and retrieving block & transaction metadata

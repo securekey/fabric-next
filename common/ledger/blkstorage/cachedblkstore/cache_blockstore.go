@@ -9,6 +9,7 @@ package cachedblkstore
 import (
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
@@ -88,7 +89,7 @@ func (s *cachedBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block
 
 // RetrieveTxByID returns a transaction for given transaction id
 func (s *cachedBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
-	loc, err := s.blockIndex.RetrieveTxLoc(txID)
+	loc, err := s.retrieveTxLoc(txID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +107,15 @@ func (s *cachedBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum 
 	return s.blockStore.RetrieveTxByBlockNumTranNum(blockNum, tranNum)
 }
 
+func (s *cachedBlockStore) retrieveTxLoc(txID string) (blkstorage.TxLoc, error) {
+	loc, ok := s.blockCache.LookupTxLoc(txID)
+	if ok {
+		return loc, nil
+	}
+
+	return s.blockIndex.RetrieveTxLoc(txID)
+}
+
 func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Envelope, error) {
 	blockData := block.GetData()
 	envelopes := blockData.GetData()
@@ -120,7 +130,7 @@ func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Enve
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *cachedBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
-	loc, err := s.blockIndex.RetrieveTxLoc(txID)
+	loc, err := s.retrieveTxLoc(txID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +140,21 @@ func (s *cachedBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, erro
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *cachedBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
+	loc, ok := s.blockCache.LookupTxLoc(txID)
+	if ok {
+		block, ok := s.blockCache.LookupBlockByNumber(loc.BlockNumber())
+		if ok {
+			return extractTxValidationCode(block, loc.TxNumber()), nil
+		}
+	}
+
 	return s.blockIndex.RetrieveTxValidationCodeByTxID(txID)
+}
+
+func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValidationCode {
+	blockMetadata := block.GetMetadata()
+	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	return txValidationFlags.Flag(int(txNumber))
 }
 
 // Shutdown closes the storage instance
