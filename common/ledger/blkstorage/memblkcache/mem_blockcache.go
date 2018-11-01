@@ -13,21 +13,17 @@ import (
 	"github.com/golang/groupcache/lru"
 	"github.com/pkg/errors"
 
+	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 )
 
-type cachedTxn struct {
-	blockNumber   uint64
-	blockPosition int
-}
-
 type blockCache struct {
 	blocks          *lru.Cache
 	hashToNumber    map[string]uint64
 	numberToHash    map[uint64]string
-	txns            map[string]*cachedTxn
+	txnLocs         map[string]*txnLoc
 	numberToTxnIDs  map[uint64][]string
 	mtx             sync.RWMutex
 }
@@ -38,7 +34,7 @@ func newBlockCache() *blockCache {
 	blocks := lru.New(blockCacheSize)
 	hashToNumber := make(map[string]uint64)
 	numberToHash := make(map[uint64]string)
-	txns := make(map[string]*cachedTxn)
+	txns := make(map[string]*txnLoc)
 	numberToTxnIDs := make(map[uint64][]string)
 	mtx := sync.RWMutex{}
 
@@ -66,13 +62,13 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 	c.hashToNumber[blockHashHex] = blockNumber
 	c.numberToHash[blockNumber] = blockHashHex
 
-	blockTxns, err := createCachedTxnsFromBlock(block)
+	blockTxns, err := createTxnLocsFromBlock(block)
 	if err != nil {
 		logger.Warningf("extracting transaction IDs from block failed [%s]", err)
 	} else {
 		var txnIDs []string
 		for id, txn := range blockTxns {
-			c.txns[id] = txn
+			c.txnLocs[id] = txn
 			txnIDs = append(txnIDs)
 		}
 		c.numberToTxnIDs[blockNumber] = txnIDs
@@ -82,8 +78,8 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 	return nil
 }
 
-func createCachedTxnsFromBlock(block *common.Block) (map[string]*cachedTxn, error) {
-	txns := make(map[string]*cachedTxn)
+func createTxnLocsFromBlock(block *common.Block) (map[string]*txnLoc, error) {
+	txns := make(map[string]*txnLoc)
 	blockNumber := block.GetHeader().GetNumber()
 	blockData := block.GetData()
 
@@ -99,45 +95,12 @@ func createCachedTxnsFromBlock(block *common.Block) (map[string]*cachedTxn, erro
 		}
 
 		if txnID != "" {
-			cachedTxn := cachedTxn{blockNumber:blockNumber, blockPosition:i}
-			txns[txnID] = &cachedTxn
+			txnLoc := txnLoc{blockNumber:blockNumber, txNumber:uint64(i)}
+			txns[txnID] = &txnLoc
 		}
 	}
 
 	return txns, nil
-}
-
-func (c *blockCache) LookupBlockByTxnID(id string) (*common.Block, bool) {
-	c.mtx.RLock()
-	cachedTxn, ok := c.txns[id]
-	c.mtx.RUnlock()
-	if !ok {
-		return nil, false
-	}
-
-	return c.LookupBlockByNumber(cachedTxn.blockNumber)
-}
-
-func (c *blockCache) LookupBlockTxnBlockPosition(id string) (int, bool) {
-	c.mtx.RLock()
-	cachedTxn, ok := c.txns[id]
-	c.mtx.RUnlock()
-	if !ok {
-		return 0, false
-	}
-
-	return cachedTxn.blockPosition, true
-}
-
-func (c *blockCache) LookupTxnBlockNumber(id string) (uint64, bool) {
-	c.mtx.RLock()
-	cachedTxn, ok := c.txns[id]
-	c.mtx.RUnlock()
-	if !ok {
-		return 0, false
-	}
-
-	return cachedTxn.blockNumber, true
 }
 
 func (c *blockCache) LookupBlockByNumber(number uint64) (*common.Block, bool) {
@@ -164,6 +127,17 @@ func (c *blockCache) LookupBlockByHash(blockHash []byte) (*common.Block, bool) {
 	return c.LookupBlockByNumber(number)
 }
 
+func (c *blockCache) LookupTxLoc(id string) (blkstorage.TxLoc, bool) {
+	c.mtx.RLock()
+	txnLoc, ok := c.txnLocs[id]
+	c.mtx.RUnlock()
+	if !ok {
+		return nil, false
+	}
+
+	return txnLoc, true
+}
+
 // Shutdown closes the storage instance
 func (c *blockCache) Shutdown() {
 }
@@ -178,10 +152,23 @@ func (c *blockCache) onEvicted(key lru.Key, value interface{}) {
 	txnIDs, ok := c.numberToTxnIDs[blockNumber]
 	if ok {
 		for _, txnID := range txnIDs {
-			delete(c.txns, txnID)
+			delete(c.txnLocs, txnID)
 		}
 		delete(c.numberToTxnIDs, blockNumber)
 	}
+}
+
+type txnLoc struct {
+	blockNumber uint64
+	txNumber    uint64
+}
+
+func (l *txnLoc) BlockNumber() uint64 {
+	return l.blockNumber
+}
+
+func (l *txnLoc) TxNumber() uint64 {
+	return l.txNumber
 }
 
 func extractTxIDFromEnvelope(txEnvelope *common.Envelope) (string, error) {
