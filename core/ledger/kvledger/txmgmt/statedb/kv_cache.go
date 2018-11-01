@@ -4,7 +4,7 @@ Copyright SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package kvledger
+package statedb
 
 import (
 	"sync"
@@ -30,6 +30,9 @@ type KVCache struct {
 	namespace        string
 	capacity         int
 	validatedTxCache *lru.Cache
+	mutex		     sync.Mutex
+	hit              uint64
+	miss             uint64
 }
 
 var (
@@ -69,17 +72,38 @@ func newKVCache(
 	return &cache
 }
 
+func (c *KVCache) get(key string) (*ValidatedTx, bool) {
+	txn, ok := c.validatedTxCache.Get(key)
+
+	if ok {
+		return txn.(*ValidatedTx), ok
+	}
+	return nil, ok
+}
+
 func (c *KVCache) Put(validatedTx *ValidatedTx) {
-	c.validatedTxCache.Add(validatedTx.Key, validatedTx)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	exitingKeyVal, found := c.get(validatedTx.Key)
+	// Add to the cache if the exisiting version is older
+	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
+		c.validatedTxCache.Add(validatedTx.Key, validatedTx)
+	}
 }
 
 func (c *KVCache) Get(key string) (*ValidatedTx, bool) {
-	txn, ok := c.validatedTxCache.Get(key)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	txn, ok := c.get(key)
 	if !ok {
+		c.miss++
 		return nil, false
 	}
 
-	return txn.(*ValidatedTx), true
+	c.hit++
+	return txn, true
 }
 
 func (c *KVCache) Size() int {
@@ -90,10 +114,35 @@ func (c *KVCache) Capacity() int {
 	return c.capacity
 }
 
-func (c *KVCache) Remove(key string) {
+func (c *KVCache) MustRemove(key string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	c.validatedTxCache.Remove(key)
 }
 
+// Remove from the cache if the blockNum and indexInBlock are bigger than the corresponding values in the cache
+func (c *KVCache) Remove(key string, blockNum uint64, indexInBlock int) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	exitingKeyVal, found := c.get(key)
+	// Remove from the cache if the existing version is older
+	if found && exitingKeyVal.BlockNum < blockNum && exitingKeyVal.IndexInBlock < indexInBlock {
+		c.validatedTxCache.Remove(key)
+	}
+}
+
 func (c *KVCache) Clear() {
+	c.miss = 0
+	c.hit = 0
 	c.validatedTxCache.Clear()
+}
+
+func (c *KVCache) Hit() uint64 {
+	return c.hit
+}
+
+func (c *KVCache) Miss() uint64 {
+	return c.miss
 }
