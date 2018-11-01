@@ -21,6 +21,18 @@ type VersionedDBProvider interface {
 	Close()
 }
 
+// StateIndexProvider provides an handle to a StateIndex
+type StateKeyIndexProvider interface {
+	OpenStateKeyIndex(id string) (StateKeyIndex, error)
+	Close()
+}
+
+// BlockIndex - an interface for persisting and retrieving keys
+type StateKeyIndex interface {
+	AddKey() error
+	Shutdown()
+}
+
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId

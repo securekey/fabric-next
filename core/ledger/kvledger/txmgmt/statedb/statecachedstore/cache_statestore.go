@@ -1,0 +1,107 @@
+/*
+Copyright SecureKey Technologies Inc. All Rights Reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+package statecachedstore
+
+import (
+	"github.com/hyperledger/fabric/core/common/ccprovider"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+)
+
+type cachedStateStore struct {
+	stateStore      statedb.VersionedDB
+	stateKeyIndex   statedb.StateKeyIndex
+	bulkOptimizable statedb.BulkOptimizable
+	indexCapable    statedb.IndexCapable
+}
+
+func newCachedBlockStore(stateStore statedb.VersionedDB, stateKeyIndex statedb.StateKeyIndex) *cachedStateStore {
+	bulkOptimizable, _ := stateStore.(statedb.BulkOptimizable)
+	indexCapable, _ := stateStore.(statedb.IndexCapable)
+
+	s := cachedStateStore{
+		stateStore:      stateStore,
+		stateKeyIndex:   stateKeyIndex,
+		bulkOptimizable: bulkOptimizable,
+		indexCapable:    indexCapable,
+	}
+	return &s
+}
+
+// Open implements method in VersionedDB interface
+func (c *cachedStateStore) Open() error {
+	return c.stateStore.Open()
+}
+
+// Close implements method in VersionedDB interface
+func (c *cachedStateStore) Close() {
+	c.stateStore.Close()
+}
+
+// ValidateKeyValue implements method in VersionedDB interface
+func (c *cachedStateStore) ValidateKeyValue(key string, value []byte) error {
+	return c.stateStore.ValidateKeyValue(key, value)
+}
+
+// BytesKeySuppoted implements method in VersionedDB interface
+func (c *cachedStateStore) BytesKeySuppoted() bool {
+	return c.stateStore.BytesKeySuppoted()
+}
+
+// GetState implements method in VersionedDB interface
+func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
+	return c.stateStore.GetState(namespace, key)
+}
+
+// GetVersion implements method in VersionedDB interface
+func (c *cachedStateStore) GetVersion(namespace string, key string) (*version.Height, error) {
+	return c.stateStore.GetVersion(namespace, key)
+}
+
+// GetStateMultipleKeys implements method in VersionedDB interface
+func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string) ([]*statedb.VersionedValue, error) {
+	return c.stateStore.GetStateMultipleKeys(namespace, keys)
+}
+
+// GetStateRangeScanIterator implements method in VersionedDB interface
+// startKey is inclusive
+// endKey is exclusive
+func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
+}
+
+// ExecuteQuery implements method in VersionedDB interface
+func (c *cachedStateStore) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
+	return c.stateStore.ExecuteQuery(namespace, query)
+}
+
+// ApplyUpdates implements method in VersionedDB interface
+func (c *cachedStateStore) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
+	return c.stateStore.ApplyUpdates(batch, height)
+}
+
+// GetLatestSavePoint implements method in VersionedDB interface
+func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
+	return c.stateStore.GetLatestSavePoint()
+}
+
+func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
+	return c.bulkOptimizable.LoadCommittedVersions(keys)
+}
+func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
+	return c.bulkOptimizable.GetCachedVersion(namespace, key)
+}
+func (c *cachedStateStore) ClearCachedVersions() {
+	c.bulkOptimizable.ClearCachedVersions()
+}
+
+func (c *cachedStateStore) GetDBType() string {
+	return c.indexCapable.GetDBType()
+}
+func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error {
+	return c.indexCapable.ProcessIndexesForChaincodeDeploy(namespace, fileEntries)
+}
