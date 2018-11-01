@@ -30,6 +30,8 @@ type KVCache struct {
 	namespace        string
 	capacity         int
 	validatedTxCache *lru.Cache
+	hit              uint64
+	miss             uint64
 }
 
 var (
@@ -76,9 +78,11 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 func (c *KVCache) Get(key string) (*ValidatedTx, bool) {
 	txn, ok := c.validatedTxCache.Get(key)
 	if !ok {
+		c.miss++
 		return nil, false
 	}
 
+	c.hit++
 	return txn.(*ValidatedTx), true
 }
 
@@ -95,5 +99,15 @@ func (c *KVCache) Remove(key string) {
 }
 
 func (c *KVCache) Clear() {
+	c.miss = 0
+	c.hit = 0
 	c.validatedTxCache.Clear()
+}
+
+func (c *KVCache) Hit() uint64 {
+	return c.hit
+}
+
+func (c *KVCache) Miss() uint64 {
+	return c.miss
 }

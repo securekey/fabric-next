@@ -68,6 +68,7 @@ func initialize(customTxProcessors customtx.Processors, statelisteners []ledger.
 	}
 	provider.Initialize(finalStateListeners)
 	ledgerProvider = provider
+	kvledger.InitKVCache()
 	logger.Info("ledger mgmt initialized")
 }
 

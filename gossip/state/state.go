@@ -1005,9 +1005,19 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
 
-	_, err = getKVFromBlock(committedBlock)
+	validatedTxOps, err := getKVFromBlock(committedBlock)
 	if err != nil {
 		return err
+	}
+
+	for _, validatedTxOp := range validatedTxOps {
+		kvCache, _ := kvledger.GetKVCache(validatedTxOp.Namespace)
+		if validatedTxOp.IsDeleted {
+			kvCache.Remove(validatedTxOp.ValidatedTx.Key)
+		} else {
+			validatedTx := validatedTxOp.ValidatedTx
+			kvCache.Put(&validatedTx)
+		}
 	}
 
 	_, err = getPrivateDataKV(committedBlock.Header.Number, pvtData)
@@ -1017,8 +1027,8 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 	return nil
 }
 
-func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTx, error) {
-	validatedTxs := make([]kvledger.ValidatedTx, 0)
+func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTxOp, error) {
+	validatedTxOps := make([]kvledger.ValidatedTxOp, 0)
 	for txIndex, envBytes := range block.Data.Data {
 		var chdr *common.ChannelHeader
 		var err error
@@ -1087,12 +1097,14 @@ func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTx, error) {
 				}
 
 				for _, kvwrite := range pubWriteset.Writes {
-					validatedTxs = append(validatedTxs, kvledger.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex})
+					validatedTxOps = append(validatedTxOps,
+						kvledger.ValidatedTxOp{ValidatedTx: kvledger.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex},
+							IsDeleted: kvwrite.IsDelete, Namespace: nsRwSet.NameSpace})
 				}
 			}
 		}
 	}
-	return validatedTxs, nil
+	return validatedTxOps, nil
 }
 
 type dataKey struct {
