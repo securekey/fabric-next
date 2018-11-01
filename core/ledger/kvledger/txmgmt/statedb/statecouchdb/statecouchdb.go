@@ -261,6 +261,11 @@ func (vdb *VersionedDB) BytesKeySuppoted() bool {
 // GetState implements method in VersionedDB interface
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
+	if versionedValue, ok := statedb.GetFromKVCache(namespace, key); ok {
+		logger.Infof("XXX GetState(). ns=%s, key=%s, value=%s", namespace, key, string(versionedValue.Value))
+		return versionedValue, nil
+	}
+
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
 		if isDBNotFoundForEndorser(err) {
@@ -280,6 +285,7 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	if err != nil {
 		return nil, err
 	}
+
 	return kv.VersionedValue, nil
 }
 

@@ -4,7 +4,7 @@ Copyright SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package kvledger
+package statedb
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func TestKVCache(t *testing.T) {
 
 	kvCache, _ := GetKVCache("LSCC")
 
-	for i := 0; i < 500; i++ {
+	for i := 0; i < 1; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
 		theValue := fmt.Sprintf("%s-%d", "Val", i)
 		theBlockNum := uint64(i / 100)
@@ -76,7 +76,7 @@ func TestKVCache(t *testing.T) {
 
 	for i := 0; i < 500; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
-		kvCache.Remove(theKey)
+		kvCache.MustRemove(theKey)
 		_, ok := kvCache.Get(theKey)
 		testutil.AssertEquals(t, ok, false)
 	}
