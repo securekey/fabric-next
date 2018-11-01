@@ -17,44 +17,83 @@ type ValidatedTx struct {
 	Key          string
 	Value        []byte
 	BlockNum     uint64
-	IndexInBlock uint64
+	IndexInBlock int
+}
+
+type ValidatedTxOp struct {
+	Namespace string
+	IsDeleted bool
+	ValidatedTx
 }
 
 type KVCache struct {
-	ValidatedTxCache *lru.Cache
-	mutex            sync.RWMutex
+	namespace        string
+	capacity         int
+	validatedTxCache *lru.Cache
 }
 
-func NewKVCache(
-	ledgerID string) *KVCache {
+var (
+	kvCacheMap map[string]*KVCache
+	kvCacheMtx sync.Mutex
+)
+
+func InitKVCache() {
+	kvCacheMap = make(map[string]*KVCache)
+}
+
+func GetKVCache(namespace string) (*KVCache, error) {
+	kvCacheMtx.Lock()
+	defer kvCacheMtx.Unlock()
+
+	kvCache, found := kvCacheMap[namespace]
+	if !found {
+		kvCache = newKVCache(namespace)
+		kvCacheMap[namespace] = kvCache
+	}
+
+	return kvCache, nil
+}
+
+func newKVCache(
+	namespace string) *KVCache {
 	cacheSize := ledgerconfig.GetBlockCacheSize()
 
 	validatedTxCache := lru.New(cacheSize)
-	mtx := sync.RWMutex{}
 
 	cache := KVCache{
-		ValidatedTxCache: validatedTxCache,
-		mutex:            mtx,
+		namespace:        namespace,
+		capacity:         cacheSize,
+		validatedTxCache: validatedTxCache,
 	}
 
 	return &cache
 }
 
-func (c *KVCache) Put(validatedTx ValidatedTx) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	c.ValidatedTxCache.Add(validatedTx.Key, validatedTx)
+func (c *KVCache) Put(validatedTx *ValidatedTx) {
+	c.validatedTxCache.Add(validatedTx.Key, validatedTx)
 }
 
 func (c *KVCache) Get(key string) (*ValidatedTx, bool) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	txn, ok := c.ValidatedTxCache.Get(key)
+	txn, ok := c.validatedTxCache.Get(key)
 	if !ok {
 		return nil, false
 	}
 
 	return txn.(*ValidatedTx), true
+}
+
+func (c *KVCache) Size() int {
+	return c.validatedTxCache.Len()
+}
+
+func (c *KVCache) Capacity() int {
+	return c.capacity
+}
+
+func (c *KVCache) Remove(key string) {
+	c.validatedTxCache.Remove(key)
+}
+
+func (c *KVCache) Clear() {
+	c.validatedTxCache.Clear()
 }
