@@ -17,7 +17,7 @@ type ValidatedTx struct {
 	Key          string
 	Value        []byte
 	BlockNum     uint64
-	IndexInBlock uint64
+	IndexInBlock int
 }
 
 type KVCache struct {

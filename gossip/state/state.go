@@ -109,7 +109,7 @@ type MCSAdapter interface {
 type ledgerResources interface {
 	// StoreBlock deliver new block with underlined private data
 	// returns missing transaction ids
-	StoreBlock(block *common.Block, data util.PvtDataCollections) error
+	StoreBlock(block *common.Block, data util.PvtDataCollections) (map[uint64]*ledger.TxPvtData, error)
 
 	// StorePvtData used to persist private date into transient store
 	StorePvtData(txid string, privData *transientstore.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -899,7 +899,8 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 
 	if ledgerconfig.IsCommitter() {
 		// Commit block with available private transactions
-		if err := s.ledger.StoreBlock(block, pvtData); err != nil {
+		blockPvtData, err := s.ledger.StoreBlock(block, pvtData)
+		if err != nil {
 			logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 			return err
 		}
@@ -910,12 +911,12 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 			s.chainID, block.Header.Number, len(block.Data.Data))
 
 		// Gossip messages with other nodes in my org
-		s.gossipBlock(block)
+		s.gossipBlock(block, blockPvtData)
 
 		return nil
 	}
 
-	err := s.publishBlock(block)
+	err := s.publishBlock(block, pvtData)
 	if err != nil {
 		logger.Errorf("Error publishing block: %s", err)
 		// Don't return the error since it will cause a panic
@@ -928,7 +929,7 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 	return nil
 }
 
-func (s *GossipStateProviderImpl) gossipBlock(block *common.Block) {
+func (s *GossipStateProviderImpl) gossipBlock(block *common.Block, blockPvtData map[uint64]*ledger.TxPvtData) {
 	blockNum := block.Header.Number
 
 	marshaledBlock, err := pb.Marshal(block)
@@ -941,8 +942,17 @@ func (s *GossipStateProviderImpl) gossipBlock(block *common.Block) {
 
 	numberOfPeers := len(s.mediator.PeersOfChannel(common2.ChainID(s.chainID)))
 
+	pvtDataCollections := make(util.PvtDataCollections, 0)
+	for _, value := range blockPvtData {
+		pvtDataCollections = append(pvtDataCollections, &ledger.TxPvtData{SeqInBlock: value.SeqInBlock, WriteSet: value.WriteSet})
+	}
+	marshaledPvt, err := pvtDataCollections.Marshal()
+	if err != nil {
+		logger.Errorf("[%s] Error serializing pvtDataCollections with sequence number %d, due to %s", s.chainID, blockNum, err)
+	}
+
 	// Create payload with a block received
-	payload := createPayload(blockNum, marshaledBlock)
+	payload := createPayload(blockNum, marshaledBlock, marshaledPvt)
 	// Use payload to create gossip message
 	gossipMsg := createGossipMsg(s.chainID, payload)
 
@@ -964,14 +974,15 @@ func createGossipMsg(chainID string, payload *proto.Payload) *proto.GossipMessag
 	return gossipMsg
 }
 
-func createPayload(seqNum uint64, marshaledBlock []byte) *proto.Payload {
+func createPayload(seqNum uint64, marshaledBlock []byte, privateData [][]byte) *proto.Payload {
 	return &proto.Payload{
-		Data:   marshaledBlock,
-		SeqNum: seqNum,
+		Data:        marshaledBlock,
+		SeqNum:      seqNum,
+		PrivateData: privateData,
 	}
 }
 
-func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
+func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 	if block == nil {
 		return errors.New("cannot publish nil block")
 	}
@@ -999,6 +1010,10 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block) error {
 		return err
 	}
 
+	_, err = getPrivateDataKV(committedBlock.Header.Number, pvtData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1078,6 +1093,28 @@ func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTx, error) {
 		}
 	}
 	return validatedTxs, nil
+}
+
+type dataKey struct {
+	blkNum   uint64
+	txNum    uint64
+	ns, coll string
+	value    *rwset.CollectionPvtReadWriteSet
+}
+
+func getPrivateDataKV(blockNumber uint64, pvtData util.PvtDataCollections) ([]dataKey, error) {
+	pvtKeys := make([]dataKey, 0)
+	for _, txPvtdata := range pvtData {
+		for _, nsPvtdata := range txPvtdata.WriteSet.NsPvtRwset {
+			for _, collPvtdata := range nsPvtdata.CollectionPvtRwset {
+				txnum := txPvtdata.SeqInBlock
+				ns := nsPvtdata.Namespace
+				coll := collPvtdata.CollectionName
+				pvtKeys = append(pvtKeys, dataKey{blkNum: blockNumber, txNum: txnum, ns: ns, coll: coll, value: collPvtdata})
+			}
+		}
+	}
+	return pvtKeys, nil
 }
 
 func (s *GossipStateProviderImpl) getCommittedBlock(block *common.Block) (*common.Block, error) {
