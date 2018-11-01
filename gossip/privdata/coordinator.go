@@ -76,7 +76,7 @@ type TransientStore interface {
 type Coordinator interface {
 	// StoreBlock deliver new block with underlined private data
 	// returns missing transaction ids
-	StoreBlock(block *common.Block, data util.PvtDataCollections) error
+	StoreBlock(block *common.Block, data util.PvtDataCollections) (map[uint64]*ledger.TxPvtData, error)
 
 	// StorePvtData used to persist private data into transient store
 	StorePvtData(txid string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -150,12 +150,12 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
 }
 
 // StoreBlock stores block with private data into the ledger
-func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDataCollections) error {
+func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDataCollections) (map[uint64]*ledger.TxPvtData, error) {
 	if block.Data == nil {
-		return errors.New("Block data is empty")
+		return nil, errors.New("Block data is empty")
 	}
 	if block.Header == nil {
-		return errors.New("Block header is nil")
+		return nil, errors.New("Block header is nil")
 	}
 
 	logger.Infof("[%s] Received block [%d] from buffer", c.ChainID, block.Header.Number)
@@ -164,7 +164,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	err := c.Validator.Validate(block)
 	if err != nil {
 		logger.Errorf("Validation failed: %+v", err)
-		return err
+		return nil, err
 	}
 
 	blockAndPvtData := &ledger.BlockAndPvtData{
@@ -175,13 +175,13 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	ownedRWsets, err := computeOwnedRWsets(block, privateDataSets)
 	if err != nil {
 		logger.Warning("Failed computing owned RWSets", err)
-		return err
+		return nil, err
 	}
 
 	privateInfo, err := c.listMissingPrivateData(block, ownedRWsets)
 	if err != nil {
 		logger.Warning(err)
-		return err
+		return nil, err
 	}
 
 	retryThresh := viper.GetDuration("peer.gossip.pvtData.pullRetryThreshold")
@@ -239,7 +239,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	// commit block and private data
 	err = c.CommitWithPvtData(blockAndPvtData)
 	if err != nil {
-		return errors.Wrap(err, "commit failed")
+		return nil, errors.Wrap(err, "commit failed")
 	}
 
 	if len(blockAndPvtData.BlockPvtData) > 0 {
@@ -257,7 +257,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 		}
 	}
 
-	return nil
+	return blockAndPvtData.BlockPvtData, nil
 }
 
 func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][]byte, privateInfo *privateDataInfo) {
@@ -350,8 +350,7 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			// End of iteration
 			break
 		}
-		//TODO remove
-		logger.Errorf("*** iterator.NextWithConfig() %s ReceivedAtBlockHeight %d\n", txAndSeq.txID, res.ReceivedAtBlockHeight)
+
 		if res.PvtSimulationResultsWithConfig == nil {
 			logger.Warning("Resultset's PvtSimulationResultsWithConfig for", txAndSeq.txID, "is nil, skipping")
 			continue
