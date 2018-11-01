@@ -22,6 +22,30 @@
       "revId": "620d05026e8a877bc1962f9b036ec98936f6a62b",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9a6aec0a_a8709fef",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 1002,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-01T13:38:31Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "a296a321_54ecbc1f",
+      "range": {
+        "startLine": 1002,
+        "startChar": 6,
+        "endLine": 1002,
+        "endChar": 12
+      },
+      "revId": "620d05026e8a877bc1962f9b036ec98936f6a62b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
