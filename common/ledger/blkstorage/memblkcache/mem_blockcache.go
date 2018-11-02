@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 )
@@ -28,9 +27,7 @@ type blockCache struct {
 	mtx             sync.RWMutex
 }
 
-func newBlockCache() *blockCache {
-	blockCacheSize := ledgerconfig.GetBlockCacheSize()
-
+func newBlockCache(blockCacheSize int) *blockCache {
 	blocks := lru.New(blockCacheSize)
 	hashToNumber := make(map[string]uint64)
 	numberToHash := make(map[uint64]string)

@@ -1,7 +1,9 @@
 package mocks
 
 import (
+	"encoding/hex"
 	"github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 )
@@ -10,45 +12,83 @@ import (
 type MockBlockStore struct {
 	// For RetrieveTxByBlockNumTranNum().
 	EnvelopeByBlknumTxNum map[uint64]map[uint64]*common.Envelope
+	BlocksByNumber        map[uint64]*common.Block
+	BlocksByHash          map[string]*common.Block
+	ItrBlocks             []*common.Block
+	LastBlockAdd          *common.Block
+	LastBlockCheckpoint   *common.Block
+	BlockchainInfo        *common.BlockchainInfo
+	IsShutdown            bool
 }
 
 // BlockStore.AddBlock()
-func (mock MockBlockStore) AddBlock(block *common.Block) error {
-	panic("implement me")
+func (mock *MockBlockStore) AddBlock(block *common.Block) error {
+	mock.LastBlockAdd = block
+	return nil
 }
 
 // BlockStore.CheckpointBlock()
-func (mock MockBlockStore) CheckpointBlock(block *common.Block) error {
-	panic("implement me")
+func (mock *MockBlockStore) CheckpointBlock(block *common.Block) error {
+	mock.LastBlockCheckpoint = block
+	return nil
 }
 
 // BlockStore.GetBlockchainInfo()
-func (mock MockBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	panic("implement me")
+func (mock *MockBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
+	return mock.BlockchainInfo, nil
 }
 
 // BlockStore.RetrieveBLockByHash()
-func (mock MockBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
-	panic("implement me")
+func (mock *MockBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
+	blockHashHex := hex.EncodeToString(blockHash)
+	b, ok := mock.BlocksByHash[blockHashHex]
+	if !ok {
+		return nil, blkstorage.ErrAttrNotIndexed
+	}
+
+	return b, nil
 }
 
 // BlockStore.RetrieveBlockByNumber()
-func (mock MockBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
-	panic("implement me")
+func (mock *MockBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
+	b, ok := mock.BlocksByNumber[blockNum]
+	if !ok {
+		return nil, blkstorage.ErrAttrNotIndexed
+	}
+
+	return b, nil
 }
 
 // BlockStore.RetrieveBlockByTxID()
-func (mock MockBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
+func (mock *MockBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
 	panic("implement me")
 }
 
 // BlockStore.RetrieveBlocks()
-func (mock MockBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
-	panic("implement me")
+func (mock *MockBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
+	return &MockBlockStoreItr{Blocks:mock.ItrBlocks}, nil
+}
+
+type MockBlockStoreItr struct {
+	Blocks []*common.Block
+	Pos    int
+}
+
+func (m *MockBlockStoreItr) Next() (ledger.QueryResult, error) {
+	if m.Pos >= len(m.Blocks) {
+		return nil, nil
+	}
+
+	b := m.Blocks[m.Pos]
+	m.Pos++
+	return b, nil
+}
+
+func (m *MockBlockStoreItr) Close() {
 }
 
 // BlockStore.RetrieveTxByBlockNumTranNum()
-func (mock MockBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
+func (mock *MockBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
 	if trxs, found := mock.EnvelopeByBlknumTxNum[blockNum]; found {
 		if envelope, found := trxs[tranNum]; found {
 			return envelope, nil
@@ -58,17 +98,17 @@ func (mock MockBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum 
 }
 
 // BlockStore.RetrieveTxByID()
-func (mock MockBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+func (mock *MockBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 	panic("implement me")
 }
 
 // BlockStore.RetrieveTxValidationCodeByTxID()
-func (mock MockBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
+func (mock *MockBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
 	panic("implement me")
 }
 
 // BlockStore.Shutdown()
-func (mock MockBlockStore) Shutdown() {
-	panic("implement me")
+func (mock *MockBlockStore) Shutdown() {
+	mock.IsShutdown = true
 }
 

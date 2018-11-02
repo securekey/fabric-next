@@ -15,16 +15,17 @@ var logger = flogging.MustGetLogger("memblkcache")
 
 // MemBlockCacheProvider provides block cache in memory
 type MemBlockCacheProvider struct {
+	cacheLimit int
 }
 
 // NewProvider constructs a filesystem based block store provider
-func NewProvider() *MemBlockCacheProvider {
-	return &MemBlockCacheProvider{}
+func NewProvider(cacheLimit int) *MemBlockCacheProvider {
+	return &MemBlockCacheProvider{cacheLimit}
 }
 
 // OpenBlockStore opens the block cache for the given ledger ID
 func (p *MemBlockCacheProvider) OpenBlockCache(ledgerid string) (blkstorage.BlockCache, error) {
-	s := newBlockCache()
+	s := newBlockCache(p.cacheLimit)
 	return s, nil
 }
 

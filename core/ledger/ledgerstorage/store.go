@@ -87,6 +87,7 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 			fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
 			indexConfig), nil
 	case ledgerconfig.CouchDBLedgerStorage:
+		blockCacheSize := ledgerconfig.GetBlockCacheSize()
 		blockStorage, err := cdbblkstorage.NewProvider()
 		if err != nil {
 			return nil, err
@@ -94,7 +95,7 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 		blockIndex := ldbblkindex.NewProvider(
 			ldbblkindex.NewConf(ledgerconfig.GetBlockStorePath()),
 			indexConfig)
-		blockCache := memblkcache.NewProvider()
+		blockCache := memblkcache.NewProvider(blockCacheSize)
 
 		return cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache), nil
 	}
