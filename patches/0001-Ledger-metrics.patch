@@ -1,13 +1,13 @@
-From f3fcba4d77ca4d473de8a15383fd16e3a5b3f022 Mon Sep 17 00:00:00 2001
+From 9e4d524a4c4a4835dc45fcdaca6dc6bec789b78b Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Mon, 29 Oct 2018 19:31:31 -0400
+Date: Fri, 2 Nov 2018 16:54:57 -0400
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
 ---
  bccsp/pkcs11/impl.go                          |  21 +
  bccsp/sw/impl.go                              |  25 +
- .../cdbblkstorage/cdb_blockstore.go           |  61 ++-
+ .../cdbblkstorage/cdb_blockstore.go           |  67 ++-
  .../blkstorage/fsblkstorage/blockfile_mgr.go  |  16 +
  .../blkstorage/fsblkstorage/blockindex.go     |   7 +
  .../blkstorage/fsblkstorage/blocks_itr.go     |   8 +
@@ -43,7 +43,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  24 +-
  peer/node/start.go                            |   4 +
- 38 files changed, 791 insertions(+), 1218 deletions(-)
+ 38 files changed, 793 insertions(+), 1222 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -194,10 +194,10 @@ index d6a9da6c0..a172735da 100644
  	if k == nil {
  		return nil, errors.New("Invalid Key. It must not be nil.")
 diff --git a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
-index 84e7fc3e5..b95597a0e 100644
+index 892a9e70e..def732ea1 100644
 --- a/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
 +++ b/common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
-@@ -18,6 +18,7 @@ import (
+@@ -17,6 +17,7 @@ import (
  
  	"github.com/hyperledger/fabric/common/ledger"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage"
@@ -205,24 +205,24 @@ index 84e7fc3e5..b95597a0e 100644
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
  	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-@@ -34,6 +35,7 @@ type cdbBlockStore struct {
+@@ -33,6 +34,7 @@ type cdbBlockStore struct {
+ 	cpInfo     *checkpointInfo
  	cp         *checkpoint
- 	cache      *blockCache
  }
 +
  // newCDBBlockStore constructs block store based on CouchDB
- func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexConfig *blkstorage.IndexConfig) *cdbBlockStore {
+ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBlockStore {
  	cp := newCheckpoint(blockStore)
-@@ -44,7 +46,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, indexC
+@@ -40,7 +42,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBl
+ 	cdbBlockStore := &cdbBlockStore{
  		blockStore: blockStore,
  		ledgerID:   ledgerID,
+-		cpInfoSig:  make(chan struct {}),
++		cpInfoSig:  make(chan struct{}),
+ 		cpInfoMtx:  &sync.RWMutex{},
  		cp:         cp,
--		cache: blockCache,
-+		cache:      blockCache,
  	}
- 
- 	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
-@@ -75,6 +77,11 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
+@@ -68,6 +70,11 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
  		// Nothing else to do if not a committer
  		return nil
  	}
@@ -234,7 +234,7 @@ index 84e7fc3e5..b95597a0e 100644
  
  	logger.Debugf("Storing block %d", block.Header.Number)
  	err := s.storeBlock(block)
-@@ -105,6 +112,12 @@ func (s *cdbBlockStore) storeBlock(block *common.Block) error {
+@@ -96,6 +103,12 @@ func (s *cdbBlockStore) storeBlock(block *common.Block) error {
  func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
  	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
  
@@ -247,7 +247,7 @@ index 84e7fc3e5..b95597a0e 100644
  	//Update the checkpoint info with the results of adding the new block
  	newCPInfo := &checkpointInfo{
  		isChainEmpty:    false,
-@@ -128,6 +141,12 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
+@@ -119,6 +132,12 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
  
  // GetBlockchainInfo returns the current info about blockchain
  func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
@@ -260,7 +260,7 @@ index 84e7fc3e5..b95597a0e 100644
  	cpInfo, err := s.cp.getCheckpointInfo()
  	if err != nil {
  		return nil, err
-@@ -158,11 +177,21 @@ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
+@@ -149,11 +168,21 @@ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
  
  // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
  func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
@@ -279,10 +279,10 @@ index 84e7fc3e5..b95597a0e 100644
 +		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByHash_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
- 	block, ok := s.cache.LookupByHash(blockHash)
- 	if ok {
- 		return block, nil
-@@ -191,6 +220,12 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
+ 	blockHashHex := hex.EncodeToString(blockHash)
+ 	const queryFmt = `
+ 	{
+@@ -175,6 +204,12 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
  
  // RetrieveBlockByNumber returns the block at a given blockchain height
  func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
@@ -295,7 +295,7 @@ index 84e7fc3e5..b95597a0e 100644
  	// interpret math.MaxUint64 as a request for last block
  	if blockNum == math.MaxUint64 {
  		bcinfo, err := s.GetBlockchainInfo()
-@@ -227,6 +262,12 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
+@@ -204,6 +239,12 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
  
  // RetrieveTxByID returns a transaction for given transaction id
  func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
@@ -308,9 +308,9 @@ index 84e7fc3e5..b95597a0e 100644
  	block, err := s.RetrieveBlockByTxID(txID)
  	if err != nil {
  		// note: allow ErrNotFoundInIndex to pass through
-@@ -238,6 +279,12 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+@@ -215,6 +256,12 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
  
- // RetrieveTxByBlockNumTranNum returns a transaction for given block ID and transaction ID
+ // RetrieveTxByBlockNumTranNum returns a transaction for given block number and transaction number
  func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
 +	if metrics.IsDebug() {
 +		// Measure the whole
@@ -321,7 +321,18 @@ index 84e7fc3e5..b95597a0e 100644
  	block, err := s.RetrieveBlockByNumber(blockNum)
  	if err != nil {
  		// note: allow ErrNotFoundInIndex to pass through
-@@ -250,6 +297,12 @@ func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uin
+@@ -228,16 +275,20 @@ func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Enve
+ 	blockData := block.GetData()
+ 	envelopes := blockData.GetData()
+ 	envelopesLen := uint64(len(envelopes))
+-	if envelopesLen - 1 < tranNum {
++	if envelopesLen-1 < tranNum {
+ 		blockNum := block.GetHeader().GetNumber()
+ 		return nil, errors.Errorf("transaction number is invalid [%d, %d, %d]", blockNum, envelopesLen, tranNum)
+ 	}
+-
+ 	return utils.GetEnvelopeFromBlock(envelopes[tranNum])
+ }
  
  // RetrieveBlockByTxID returns a block for a given transaction ID
  func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
@@ -330,11 +341,10 @@ index 84e7fc3e5..b95597a0e 100644
 +		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByTxID_time_seconds").Start()
 +		defer stopWatch.Stop()
 +	}
-+
- 	block, ok := s.cache.LookupByTxnID(txID)
- 	if ok {
- 		return block, nil
-@@ -278,7 +331,13 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error)
+ 	const queryFmt = `
+ 	{
+ 		"selector": {
+@@ -260,7 +311,13 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error)
  
  // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
  func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
@@ -348,6 +358,22 @@ index 84e7fc3e5..b95597a0e 100644
  	if err != nil {
  		return peer.TxValidationCode_INVALID_OTHER_REASON, err
  	}
+@@ -325,7 +382,7 @@ func (s *cdbBlockStore) LastBlockNumber() uint64 {
+ func (s *cdbBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
+ 	var lastBlockNumber uint64
+ 
+-	BlockLoop:
++BlockLoop:
+ 	for {
+ 		s.cpInfoMtx.RLock()
+ 		lastBlockNumber = s.cpInfo.lastBlockNumber
+@@ -346,4 +403,4 @@ func (s *cdbBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint6
+ 
+ 	logger.Debugf("finished waiting for blocks [%d, %d]", lastBlockNumber, blockNum)
+ 	return lastBlockNumber
+-}
+\ No newline at end of file
++}
 diff --git a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go b/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
 index f2a1a522b..f781d3fba 100644
 --- a/common/ledger/blkstorage/fsblkstorage/blockfile_mgr.go
@@ -2418,7 +2444,7 @@ index 85d80ad67..a9d833897 100644
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
 diff --git a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
-index f522ab2cc..9ca7313bf 100644
+index c65e0a3fd..97872bcbd 100644
 --- a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 +++ b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 @@ -12,6 +12,7 @@ import (
@@ -2429,7 +2455,7 @@ index f522ab2cc..9ca7313bf 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
  
-@@ -257,6 +258,10 @@ func deriveHashedDataNs(namespace, collection string) string {
+@@ -260,6 +261,10 @@ func deriveHashedDataNs(namespace, collection string) string {
  }
  
  func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
@@ -2440,7 +2466,7 @@ index f522ab2cc..9ca7313bf 100644
  	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
  		for _, coll := range nsBatch.GetCollectionNames() {
  			for key, vv := range nsBatch.GetUpdates(coll) {
-@@ -267,6 +272,10 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
+@@ -270,6 +275,10 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
  }
  
  func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
@@ -2756,10 +2782,10 @@ index d03bd0535..88891bb21 100644
  		l.StateCommitDone(txmgr.ledgerid)
  	}
 diff --git a/core/ledger/ledgerstorage/store.go b/core/ledger/ledgerstorage/store.go
-index 33629096e..f5e397cb3 100644
+index 739427dc5..0d9d53436 100644
 --- a/core/ledger/ledgerstorage/store.go
 +++ b/core/ledger/ledgerstorage/store.go
-@@ -30,6 +30,7 @@ import (
+@@ -33,6 +33,7 @@ import (
  	"github.com/hyperledger/fabric/common/flogging"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage"
  	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
@@ -2767,7 +2793,7 @@ index 33629096e..f5e397cb3 100644
  	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
  	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cdbpvtdata"
  )
-@@ -135,6 +136,13 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
+@@ -148,6 +149,13 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
@@ -2781,7 +2807,7 @@ index 33629096e..f5e397cb3 100644
  	blockNum := blockAndPvtdata.Block.Header.Number
  	s.rwlock.Lock()
  	defer s.rwlock.Unlock()
-@@ -143,6 +151,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -156,6 +164,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  	if err != nil {
  		return err
  	}
@@ -2791,7 +2817,7 @@ index 33629096e..f5e397cb3 100644
  
  	writtenToPvtStore := false
  	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
-@@ -158,6 +169,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -171,6 +182,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  		}
  		writtenToPvtStore = true
  	} else {
@@ -2801,7 +2827,7 @@ index 33629096e..f5e397cb3 100644
  		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
  	}
  
-@@ -175,6 +189,13 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+@@ -188,6 +202,13 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2815,7 +2841,7 @@ index 33629096e..f5e397cb3 100644
  	s.rwlock.RLock()
  	defer s.rwlock.RUnlock()
  
-@@ -194,6 +215,13 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
+@@ -207,6 +228,13 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
  // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
  // A nil filter does not filter any results
  func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -3225,7 +3251,7 @@ index 83800f0e0..17a6c44b0 100644
  	dbVal := scanner.dbItr.Value()
  	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 8b2e2ab13..d3c655e39 100644
+index 195e98b36..0523ad063 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
@@ -3255,9 +3281,9 @@ index 8b2e2ab13..d3c655e39 100644
 +		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time_seconds").Start()
 +	}
  	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
+ 		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
  		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
- 		// If succeeded to fetch everything, no need to sleep before
-@@ -206,6 +214,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
+@@ -207,6 +215,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
  	}
  	elapsedPull := int64(time.Since(startPull) / time.Millisecond) // duration in ms
  
@@ -3310,7 +3336,7 @@ index e7fbf5b18..232485341 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index b3e3a190e..a11443e28 100644
+index ccaad5db7..c054f2614 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -15,6 +15,7 @@ import (
@@ -3320,8 +3346,8 @@ index b3e3a190e..a11443e28 100644
 +	"github.com/hyperledger/fabric/common/metrics"
  	"github.com/hyperledger/fabric/common/util/retry"
  	"github.com/hyperledger/fabric/core/ledger"
- 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-@@ -499,6 +500,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger"
+@@ -508,6 +509,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
  		return uint64(0), errors.New("Received state transfer response without payload")
  	}
  	for _, payload := range response.GetPayloads() {
@@ -3332,7 +3358,7 @@ index b3e3a190e..a11443e28 100644
  		logger.Debugf("Received payload with sequence number %d.", payload.SeqNum)
  		if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), payload.SeqNum, payload.Data); err != nil {
  			err = errors.WithStack(err)
-@@ -543,6 +548,11 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
+@@ -552,6 +557,11 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
  
  	dataMsg := msg.GetDataMsg()
  	if dataMsg != nil {
@@ -3344,7 +3370,7 @@ index b3e3a190e..a11443e28 100644
  		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
  			logger.Warningf("Block [%d] received from gossip wasn't added to payload buffer: %v", dataMsg.Payload.SeqNum, err)
  			return
-@@ -560,6 +570,9 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
+@@ -569,6 +579,9 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
  		select {
  		// Wait for notification that next seq has arrived
  		case <-s.payloads.Ready():
@@ -3354,7 +3380,7 @@ index b3e3a190e..a11443e28 100644
  			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
  			// Collect all subsequent payloads
  			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
-@@ -859,6 +872,9 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+@@ -868,6 +881,9 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  	if payload == nil {
  		return errors.New("Given payload is nil")
  	}
@@ -3364,7 +3390,7 @@ index b3e3a190e..a11443e28 100644
  	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
  	height, err := s.ledgerHeight()
  	if err != nil {
-@@ -873,7 +889,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+@@ -882,7 +898,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
  		time.Sleep(enqueueRetryInterval)
  	}
  
@@ -3376,7 +3402,7 @@ index b3e3a190e..a11443e28 100644
  	return nil
  }
  
-@@ -889,6 +908,9 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
+@@ -898,6 +917,9 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
  }
  
  func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
