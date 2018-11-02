@@ -22,11 +22,14 @@ SPDX-License-Identifier: Apache-2.0
 package statekeyindex
 
 import (
+	"bytes"
+
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 )
 
 var compositeKeySep = []byte{0x00}
+var lastKeyIndicator = byte(0x01)
 
 type stateKeyIndex struct {
 	db     *leveldbhelper.DBHandle
@@ -41,7 +44,8 @@ func newStateKeyIndex(db *leveldbhelper.DBHandle, dbName string) *stateKeyIndex 
 func (s *stateKeyIndex) AddIndex(keys []statedb.CompositeKey) error {
 	dbBatch := leveldbhelper.NewUpdateBatch()
 	for _, v := range keys {
-		compositeKey := constructCompositeKey(v.Namespace, v.Key)
+		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
+		//TODO change to DEBUG
 		logger.Infof("Channel [%s]: Applying key(string)=[%s] key(bytes)=[%#v]", s.dbName, string(compositeKey), compositeKey)
 		dbBatch.Put(compositeKey, []byte(""))
 	}
@@ -51,10 +55,29 @@ func (s *stateKeyIndex) AddIndex(keys []statedb.CompositeKey) error {
 	}
 	return nil
 }
-func (s *stateKeyIndex) Close() {
 
+// GetIterator implements method in StateKeyIndex interface
+// startKey is inclusive
+// endKey is exclusive
+func (s *stateKeyIndex) GetIterator(namespace string, startKey string, endKey string) *leveldbhelper.Iterator {
+	compositeStartKey := ConstructCompositeKey(namespace, startKey)
+	compositeEndKey := ConstructCompositeKey(namespace, endKey)
+	if endKey == "" {
+		compositeEndKey[len(compositeEndKey)-1] = lastKeyIndicator
+	}
+	//TODO change to DEBUG
+	logger.Infof("Channel [%s]: GetIterator compositeStartKey(string)=[%s] compositeEndKey(string)=[%s]", s.dbName, compositeStartKey, compositeEndKey)
+	return s.db.GetIterator(compositeStartKey, compositeEndKey)
 }
 
-func constructCompositeKey(ns string, key string) []byte {
+func (s *stateKeyIndex) Close() {
+}
+
+func ConstructCompositeKey(ns string, key string) []byte {
 	return append(append([]byte(ns), compositeKeySep...), []byte(key)...)
+}
+
+func SplitCompositeKey(compositeKey []byte) (string, string) {
+	split := bytes.SplitN(compositeKey, compositeKeySep, 2)
+	return string(split[0]), string(split[1])
 }
