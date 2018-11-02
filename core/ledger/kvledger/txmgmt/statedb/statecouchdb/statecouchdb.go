@@ -262,7 +262,8 @@ func (vdb *VersionedDB) BytesKeySuppoted() bool {
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
 	if versionedValue, ok := statedb.GetFromKVCache(namespace, key); ok {
-		logger.Infof("XXX GetState(). ns=%s, key=%s, value=%s", namespace, key, string(versionedValue.Value))
+		//TODO change to DEBUG
+		logger.Infof("XXX GetState(). ns=%s, key=%s", namespace, key)
 		return versionedValue, nil
 	}
 

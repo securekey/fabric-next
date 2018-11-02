@@ -8,6 +8,7 @@ package statedb
 import (
 	"sort"
 
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
@@ -30,6 +31,7 @@ type StateKeyIndexProvider interface {
 // StateKeyIndex - an interface for persisting and retrieving keys
 type StateKeyIndex interface {
 	AddIndex(keys []CompositeKey) error
+	GetIterator(namespace string, startKey string, endKey string) *leveldbhelper.Iterator
 	Close()
 }
 

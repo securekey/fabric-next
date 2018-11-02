@@ -9,7 +9,10 @@ package statecachedstore
 import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/pkg/errors"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
 type cachedStateStore struct {
@@ -71,7 +74,8 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // startKey is inclusive
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
-	return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
+	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
+	return newKVScanner(namespace, dbItr, c.stateStore), nil
 }
 
 // ExecuteQuery implements method in VersionedDB interface
@@ -104,4 +108,36 @@ func (c *cachedStateStore) GetDBType() string {
 }
 func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error {
 	return c.indexCapable.ProcessIndexesForChaincodeDeploy(namespace, fileEntries)
+}
+
+type kvScanner struct {
+	namespace  string
+	dbItr      iterator.Iterator
+	stateStore statedb.VersionedDB
+}
+
+func newKVScanner(namespace string, dbItr iterator.Iterator, stateStore statedb.VersionedDB) *kvScanner {
+	return &kvScanner{namespace, dbItr, stateStore}
+}
+
+func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
+	if !scanner.dbItr.Next() {
+		return nil, nil
+	}
+	dbKey := scanner.dbItr.Key()
+	_, key := statekeyindex.SplitCompositeKey(dbKey)
+
+	//TODO this code should call the cache interface first before go to db
+	//TODO We will change it when Reza code is ready
+	versionedValue, err := scanner.stateStore.GetState(scanner.namespace, key)
+	if err != nil {
+		return nil, errors.Wrapf(err, "KVScanner next get value %s %s failed", scanner.namespace, key)
+	}
+	return &statedb.VersionedKV{
+		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
+		VersionedValue: *versionedValue}, nil
+}
+
+func (scanner *kvScanner) Close() {
+	scanner.dbItr.Release()
 }
