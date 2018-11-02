@@ -87,11 +87,15 @@ func (s *store) persistWithConfigDB(txid string, blockHeight uint64, privateSimu
 }
 
 func (s *store) getTxPvtRWSetByTxidDB(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
-	s.RLock()
-	value, _ := s.cache[txid]
-	s.RUnlock()
-	return &RwsetScanner{filter: filter, results: value}, nil
+	var results []keyValue
 
+	s.RLock()
+	for key, value := range s.cache[txid] {
+		results = append(results, keyValue{key: key, value: value})
+	}
+	s.RUnlock()
+
+	return &RwsetScanner{filter: filter, results: results}, nil
 }
 
 func (s *store) getMinTransientBlkHtDB() (uint64, error) {
@@ -131,41 +135,48 @@ func (s *store) purgeByHeightDB(maxBlockNumToRetain uint64) error {
 
 }
 
+type keyValue struct {
+	key   string
+	value string
+}
+
 type RwsetScanner struct {
 	filter  ledger.PvtNsCollFilter
-	results map[string]string
+	results []keyValue
+	next    int
 }
 
 // Next moves the iterator to the next key/value pair.
 // It returns whether the iterator is exhausted.
 // TODO: Once the related gossip changes are made as per FAB-5096, remove this function
 func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResults, error) {
-	for key, value := range scanner.results {
-		delete(scanner.results, key)
-		keyBytes, err := hex.DecodeString(key)
-		if err != nil {
-			return nil, err
-		}
-		_, blockHeight := splitCompositeKeyOfPvtRWSet(keyBytes)
-		logger.Debugf("scanner next blockHeight %d", blockHeight)
-		txPvtRWSet := &rwset.TxPvtReadWriteSet{}
-		valueBytes, err := base64.StdEncoding.DecodeString(value)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error from DecodeString for transientDataField")
-		}
-
-		if err := proto.Unmarshal(valueBytes, txPvtRWSet); err != nil {
-			return nil, err
-		}
-		filteredTxPvtRWSet := trimPvtWSet(txPvtRWSet, scanner.filter)
-		logger.Debugf("scanner next filteredTxPvtRWSet %v", filteredTxPvtRWSet)
-
-		return &transientstore.EndorserPvtSimulationResults{
-			ReceivedAtBlockHeight: blockHeight,
-			PvtSimulationResults:  filteredTxPvtRWSet,
-		}, nil
+	kv, ok := scanner.nextKV()
+	if !ok {
+		return nil, nil
 	}
-	return nil, nil
+
+	keyBytes, err := hex.DecodeString(kv.key)
+	if err != nil {
+		return nil, err
+	}
+	_, blockHeight := splitCompositeKeyOfPvtRWSet(keyBytes)
+	logger.Debugf("scanner next blockHeight %d", blockHeight)
+	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
+	valueBytes, err := base64.StdEncoding.DecodeString(kv.value)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error from DecodeString for transientDataField")
+	}
+
+	if err := proto.Unmarshal(valueBytes, txPvtRWSet); err != nil {
+		return nil, err
+	}
+	filteredTxPvtRWSet := trimPvtWSet(txPvtRWSet, scanner.filter)
+	logger.Debugf("scanner next filteredTxPvtRWSet %v", filteredTxPvtRWSet)
+
+	return &transientstore.EndorserPvtSimulationResults{
+		ReceivedAtBlockHeight: blockHeight,
+		PvtSimulationResults:  filteredTxPvtRWSet,
+	}, nil
 
 }
 
@@ -173,51 +184,61 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 // It returns whether the iterator is exhausted.
 // TODO: Once the related gossip changes are made as per FAB-5096, rename this function to Next
 func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimulationResultsWithConfig, error) {
-	for key, value := range scanner.results {
-		delete(scanner.results, key)
-		keyBytes, err := hex.DecodeString(key)
-		if err != nil {
-			return nil, err
-		}
-		_, blockHeight := splitCompositeKeyOfPvtRWSet(keyBytes)
-		logger.Debugf("scanner NextWithConfig blockHeight %d", blockHeight)
-		txPvtRWSet := &rwset.TxPvtReadWriteSet{}
-		valueBytes, err := base64.StdEncoding.DecodeString(value)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error from DecodeString for transientDataField")
-		}
-
-		if err := proto.Unmarshal(valueBytes, txPvtRWSet); err != nil {
-			return nil, err
-		}
-
-		filteredTxPvtRWSet := &rwset.TxPvtReadWriteSet{}
-		txPvtRWSetWithConfig := &pb.TxPvtReadWriteSetWithConfigInfo{}
-
-		// new proto, i.e., TxPvtReadWriteSetWithConfigInfo
-		if err := proto.Unmarshal(valueBytes, txPvtRWSetWithConfig); err != nil {
-			return nil, err
-		}
-
-		logger.Debugf("scanner NextWithConfig txPvtRWSetWithConfig %v", txPvtRWSetWithConfig)
-
-		filteredTxPvtRWSet = trimPvtWSet(txPvtRWSetWithConfig.GetPvtRwset(), scanner.filter)
-		logger.Debugf("scanner NextWithConfig filteredTxPvtRWSet %v", filteredTxPvtRWSet)
-		configs, err := trimPvtCollectionConfigs(txPvtRWSetWithConfig.CollectionConfigs, scanner.filter)
-		if err != nil {
-			return nil, err
-		}
-		logger.Debugf("scanner NextWithConfig configs %v", configs)
-		txPvtRWSetWithConfig.CollectionConfigs = configs
-
-		txPvtRWSetWithConfig.PvtRwset = filteredTxPvtRWSet
-
-		return &transientstore.EndorserPvtSimulationResultsWithConfig{
-			ReceivedAtBlockHeight:          blockHeight,
-			PvtSimulationResultsWithConfig: txPvtRWSetWithConfig,
-		}, nil
+	kv, ok := scanner.nextKV()
+	if !ok {
+		return nil, nil
 	}
-	return nil, nil
+
+	keyBytes, err := hex.DecodeString(kv.key)
+	if err != nil {
+		return nil, err
+	}
+	_, blockHeight := splitCompositeKeyOfPvtRWSet(keyBytes)
+	logger.Debugf("scanner NextWithConfig blockHeight %d", blockHeight)
+	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
+	valueBytes, err := base64.StdEncoding.DecodeString(kv.value)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error from DecodeString for transientDataField")
+	}
+
+	if err := proto.Unmarshal(valueBytes, txPvtRWSet); err != nil {
+		return nil, err
+	}
+
+	filteredTxPvtRWSet := &rwset.TxPvtReadWriteSet{}
+	txPvtRWSetWithConfig := &pb.TxPvtReadWriteSetWithConfigInfo{}
+
+	// new proto, i.e., TxPvtReadWriteSetWithConfigInfo
+	if err := proto.Unmarshal(valueBytes, txPvtRWSetWithConfig); err != nil {
+		return nil, err
+	}
+
+	logger.Debugf("scanner NextWithConfig txPvtRWSetWithConfig %v", txPvtRWSetWithConfig)
+
+	filteredTxPvtRWSet = trimPvtWSet(txPvtRWSetWithConfig.GetPvtRwset(), scanner.filter)
+	logger.Debugf("scanner NextWithConfig filteredTxPvtRWSet %v", filteredTxPvtRWSet)
+	configs, err := trimPvtCollectionConfigs(txPvtRWSetWithConfig.CollectionConfigs, scanner.filter)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debugf("scanner NextWithConfig configs %v", configs)
+	txPvtRWSetWithConfig.CollectionConfigs = configs
+
+	txPvtRWSetWithConfig.PvtRwset = filteredTxPvtRWSet
+
+	return &transientstore.EndorserPvtSimulationResultsWithConfig{
+		ReceivedAtBlockHeight:          blockHeight,
+		PvtSimulationResultsWithConfig: txPvtRWSetWithConfig,
+	}, nil
+}
+
+func (scanner *RwsetScanner) nextKV() (keyValue, bool) {
+	i := scanner.next
+	if i >= len(scanner.results) {
+		return keyValue{}, false
+	}
+	scanner.next++
+	return scanner.results[i], true
 }
 
 // Close releases resource held by the iterator

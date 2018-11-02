@@ -196,6 +196,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	startPull := time.Now()
 	limit := startPull.Add(retryThresh)
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
+		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
 		// If succeeded to fetch everything, no need to sleep before
 		// retry

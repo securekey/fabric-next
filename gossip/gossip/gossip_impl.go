@@ -675,10 +675,11 @@ func (g *gossipServiceImpl) getPeersToSendTo(membership []discovery.NetworkMembe
 		peers2send = append(peers2send, peersFromEndorser...)
 	}
 
-	if g.logger.IsEnabledFor(logging.DEBUG) {
-		g.logger.Debugf("Sending to the following peers:")
+	// FIXME: Change to Debug
+	if g.logger.IsEnabledFor(logging.INFO) {
+		g.logger.Infof("Sending private data to the following peers:")
 		for _, p := range peers2send {
-			g.logger.Debugf("- [%s]", p.Endpoint)
+			g.logger.Infof("- [%s]", p.Endpoint)
 		}
 	}
 

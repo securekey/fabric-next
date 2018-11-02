@@ -138,10 +138,6 @@ func (p *publisher) purgePrivateTransientData(blockNum uint64, pvtDataTxIDs []st
 	}
 }
 
-func (p *publisher) getPvtDataTxIDs(block *fabriccmn.Block) ([]string, error) {
-	return nil, nil
-}
-
 func (p *publisher) LedgerHeight() uint64 {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
