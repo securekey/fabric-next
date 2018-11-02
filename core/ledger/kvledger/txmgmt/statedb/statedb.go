@@ -27,10 +27,10 @@ type StateKeyIndexProvider interface {
 	Close()
 }
 
-// BlockIndex - an interface for persisting and retrieving keys
+// StateKeyIndex - an interface for persisting and retrieving keys
 type StateKeyIndex interface {
-	AddKey() error
-	Shutdown()
+	AddIndex(keys []CompositeKey) error
+	Close()
 }
 
 // VersionedDB lists methods that a db is supposed to implement

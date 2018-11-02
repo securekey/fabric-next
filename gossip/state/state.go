@@ -30,6 +30,8 @@ import (
 	privdata2 "github.com/hyperledger/fabric/gossip/privdata"
 	"github.com/hyperledger/fabric/gossip/util"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -1005,11 +1007,24 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
 
-	_, err = getKVFromBlock(committedBlock)
+	validatedTxs, err := getKVFromBlock(committedBlock)
 	if err != nil {
 		return err
 	}
-
+	indexKeys := make([]statedb.CompositeKey, 0)
+	for _, v := range validatedTxs {
+		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.NameSpace})
+	}
+	if len(indexKeys) > 0 {
+		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(s.chainID)
+		if err != nil {
+			return err
+		}
+		err = stateKeyIndex.AddIndex(indexKeys)
+		if err != nil {
+			return err
+		}
+	}
 	_, err = getPrivateDataKV(committedBlock.Header.Number, pvtData)
 	if err != nil {
 		return err
@@ -1087,7 +1102,7 @@ func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTx, error) {
 				}
 
 				for _, kvwrite := range pubWriteset.Writes {
-					validatedTxs = append(validatedTxs, kvledger.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex})
+					validatedTxs = append(validatedTxs, kvledger.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex, NameSpace: nsRwSet.NameSpace})
 				}
 			}
 		}

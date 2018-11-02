@@ -36,7 +36,12 @@ func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.Version
 		return nil, errors.Wrap(err, "dbProvider GetDBHandle failed")
 	}
 
-	return newCachedBlockStore(dbProvider, nil), nil
+	stateKeyIndex, err := provider.indexProvider.OpenStateKeyIndex(dbName)
+	if err != nil {
+		return nil, errors.Wrap(err, "indexProvider OpenStateKeyIndex failed")
+	}
+
+	return newCachedBlockStore(dbProvider, stateKeyIndex), nil
 }
 
 // Close cleans up the Provider
