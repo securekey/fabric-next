@@ -74,7 +74,13 @@ func (s *cachedBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block,
 		return b, nil
 	}
 
-	return s.blockStore.RetrieveBlockByHash(blockHash)
+	b, err :=  s.blockStore.RetrieveBlockByHash(blockHash)
+	if err != nil {
+		return nil, err
+	}
+
+	s.blockCache.AddBlock(b)
+	return b, nil
 }
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
@@ -84,7 +90,34 @@ func (s *cachedBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block
 		return b, nil
 	}
 
-	return s.blockStore.RetrieveBlockByNumber(blockNum)
+	b, err := s.blockStore.RetrieveBlockByNumber(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	s.blockCache.AddBlock(b)
+	return b, nil
+}
+
+// RetrieveTxByBlockNumTranNum returns a transaction for given block number and transaction number
+func (s *cachedBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
+	b, ok := s.blockCache.LookupBlockByNumber(blockNum)
+	if ok {
+		return extractEnvelopeFromBlock(b, tranNum)
+	}
+
+	b, err := s.blockStore.RetrieveBlockByNumber(blockNum)
+	if err != nil {
+		return nil, err
+	}
+
+	e, err := extractEnvelopeFromBlock(b, tranNum)
+	if err != nil {
+		return nil, err
+	}
+
+	s.blockCache.AddBlock(b)
+	return e, nil
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
@@ -95,16 +128,6 @@ func (s *cachedBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error)
 	}
 
 	return s.RetrieveTxByBlockNumTranNum(loc.BlockNumber(), loc.TxNumber())
-}
-
-// RetrieveTxByBlockNumTranNum returns a transaction for given block number and transaction number
-func (s *cachedBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
-	b, ok := s.blockCache.LookupBlockByNumber(blockNum)
-	if ok {
-		return extractEnvelopeFromBlock(b, tranNum)
-	}
-
-	return s.blockStore.RetrieveTxByBlockNumTranNum(blockNum, tranNum)
 }
 
 func (s *cachedBlockStore) retrieveTxLoc(txID string) (blkstorage.TxLoc, error) {
