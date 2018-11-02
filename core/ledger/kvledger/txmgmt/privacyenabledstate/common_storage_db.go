@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
@@ -48,7 +49,7 @@ func NewCommonStorageDBProvider() (DBProvider, error) {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
 
-	return &CommonStorageDBProvider{statecachedstore.NewProvider(vdbProvider, nil)}, nil
+	return &CommonStorageDBProvider{statecachedstore.NewProvider(vdbProvider, statekeyindex.NewProvider())}, nil
 }
 
 // GetDBHandle implements function from interface DBProvider

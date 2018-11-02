@@ -18,6 +18,7 @@ type ValidatedTx struct {
 	Value        []byte
 	BlockNum     uint64
 	IndexInBlock int
+	NameSpace    string
 }
 
 type ValidatedTxOp struct {
