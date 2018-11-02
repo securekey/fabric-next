@@ -21,6 +21,20 @@ type MockBlockStore struct {
 	IsShutdown            bool
 }
 
+func NewMockBlockStore() *MockBlockStore {
+	envelopeByBlknumTxNum := make(map[uint64]map[uint64]*common.Envelope)
+	blocksByNumber := make(map[uint64]*common.Block)
+	blocksByHash := make(map[string]*common.Block)
+
+	mbs := MockBlockStore{
+		EnvelopeByBlknumTxNum: envelopeByBlknumTxNum,
+		BlocksByNumber: blocksByNumber,
+		BlocksByHash: blocksByHash,
+	}
+
+	return &mbs
+}
+
 // BlockStore.AddBlock()
 func (mock *MockBlockStore) AddBlock(block *common.Block) error {
 	mock.LastBlockAdd = block
