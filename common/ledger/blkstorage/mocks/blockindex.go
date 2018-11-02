@@ -33,6 +33,20 @@ func (m *MockTXLoc) TxNumber() uint64 {
 	return m.MockTxNumber
 }
 
+func NewMockBlockIndex() *MockBlockIndex {
+	txLocsByTxID := make(map[string]blkstorage.TxLoc)
+	txLocsByNum := make(map[uint64]map[uint64]blkstorage.TxLoc)
+	txValidationCodeByTxID := make(map[string]peer.TxValidationCode)
+
+	mbi := MockBlockIndex{
+		TxLocsByTxID: txLocsByTxID,
+		TxLocsByNum: txLocsByNum,
+		TxValidationCodeByTxID: txValidationCodeByTxID,
+	}
+
+	return &mbi
+}
+
 func (m *MockBlockIndex) AddBlock(block *common.Block) error {
 	m.LastBlockAdd = block
 	return nil
