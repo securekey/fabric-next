@@ -171,6 +171,8 @@ func (s *cachedBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxV
 		}
 	}
 
+	// Note: in this case, the block is not added to the cache so we always hit the index for old txn validation codes
+	// TODO: make an explicit cache for txn validation codes?
 	return s.blockIndex.RetrieveTxValidationCodeByTxID(txID)
 }
 

@@ -116,6 +116,7 @@ type BlockIndex interface {
 	Shutdown()
 	//RetrieveLastBlockIndexed() (uint64, error)
 	RetrieveTxLoc(txID string) (TxLoc, error)
-	RetrieveTxLocByBlockNumTranNum(blockNum uint64, tranNum uint64) (TxLoc, error)
+	// TODO: make us of RetrieveTxLocByBlockNumTranNum or remove.
+	//RetrieveTxLocByBlockNumTranNum(blockNum uint64, tranNum uint64) (TxLoc, error)
 	RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error)
 }
