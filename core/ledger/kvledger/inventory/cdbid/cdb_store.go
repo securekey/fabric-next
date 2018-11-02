@@ -8,6 +8,7 @@ package cdbid
 
 import (
 	"fmt"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -62,10 +63,9 @@ func newStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, erro
 		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
 	}
 
-	s := Store {db, ""}
+	s := Store{db, ""}
 	return &s, nil
 }
-
 
 func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*Store, error) {
 	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
@@ -78,7 +78,8 @@ func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*St
 		return nil, err
 	}
 
-	s := Store {db, ""}
+	s := Store{db, ""}
+
 	return &s, nil
 }
 
@@ -94,7 +95,7 @@ func createCouchInstance() (*couchdb.CouchInstance, error) {
 	logger.Debugf("constructing CouchDB block storage provider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}

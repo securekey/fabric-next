@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
@@ -260,6 +261,10 @@ func deriveHashedDataNs(namespace, collection string) string {
 }
 
 func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("privacyenabledstate_addPvtUpdates_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {
@@ -270,6 +275,10 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
 }
 
 func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("privacyenabledstate_addHashedUpdatesTimer_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	for ns, nsBatch := range hashedUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {

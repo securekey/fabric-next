@@ -33,6 +33,7 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cdbpvtdata"
 )
@@ -148,6 +149,13 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	blockNum := blockAndPvtdata.Block.Header.Number
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
@@ -155,6 +163,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 	pvtBlkStoreHt, err := s.pvtdataStore.LastCommittedBlockHeight()
 	if err != nil {
 		return err
+	}
+	if metrics.IsDebug() {
+		metrics.RootScope.Gauge("ledgerstorage_CommitWithPvtData_BlockDiff").Update(float64(blockNum - pvtBlkStoreHt))
 	}
 
 	writtenToPvtStore := false
@@ -171,6 +182,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		}
 		writtenToPvtStore = true
 	} else {
+		if metrics.IsDebug() {
+			metrics.RootScope.Counter("ledgerstorage_CommitWithPvtData_SkipCount").Inc(1)
+		}
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
 	}
 
@@ -188,6 +202,13 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
 
@@ -207,6 +228,13 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
 // A nil filter does not filter any results
 func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
 	return s.getPvtDataByNumWithoutLock(blockNum, filter)

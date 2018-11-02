@@ -11,6 +11,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
@@ -20,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
@@ -27,13 +29,17 @@ var logger = flogging.MustGetLogger("lockbasedtxmgr")
 // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
 // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
 type LockBasedTxMgr struct {
-	ledgerid        string
-	db              privacyenabledstate.DB
-	pvtdataPurgeMgr *pvtdataPurgeMgr
-	validator       validator.Validator
-	stateListeners  []ledger.StateListener
-	commitRWLock    sync.RWMutex
-	current         *current
+	ledgerid         string
+	db               privacyenabledstate.DB
+	pvtdataPurgeMgr  *pvtdataPurgeMgr
+	validator        validator.Validator
+	stateListeners   []ledger.StateListener
+	commitRWLock     sync.RWMutex
+	current          *current
+	StopWatch        tally.Stopwatch
+	StopWatchAccess  string
+	StopWatch1       tally.Stopwatch
+	StopWatch1Access string
 }
 
 type current struct {
@@ -73,7 +79,11 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
 	qe := newQueryExecutor(txmgr, txid)
+	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_wait_time_seconds").Start()
 	txmgr.commitRWLock.RLock()
+	stopWatch.Stop()
+	txmgr.StopWatch = metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_time_seconds").Start()
+	txmgr.StopWatchAccess = "1"
 	return qe, nil
 }
 
@@ -84,7 +94,11 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 	if err != nil {
 		return nil, err
 	}
+	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_wait_time_seconds").Start()
 	txmgr.commitRWLock.RLock()
+	stopWatch.Stop()
+	txmgr.StopWatch1 = metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_time_seconds").Start()
+	txmgr.StopWatch1Access = "1"
 	return s, nil
 }
 
@@ -129,18 +143,29 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
 
 // Commit implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Commit() error {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	// When using the purge manager for the first block commit after peer start, the asynchronous function
 	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
 	// in advance for the next block
 	if !txmgr.pvtdataPurgeMgr.usedOnce {
+		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_PrepareForExpiringKeys_time_seconds").Start()
 		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum())
 		txmgr.pvtdataPurgeMgr.usedOnce = true
+		stopWatch.Stop()
 	}
 	defer func() {
+		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_defer_time_seconds").Start()
 		txmgr.clearCache()
 		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum() + 1)
 		logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
 		txmgr.reset()
+		stopWatch.Stop()
+
 	}()
 
 	logger.Debugf("Committing updates to state database")
@@ -148,27 +173,42 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 		panic("validateAndPrepare() method should have been called before calling commit()")
 	}
 
+	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_time_seconds").Start()
 	if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
 		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
+		stopWatch.Stop()
 		return err
 	}
+	stopWatch.Stop()
 
+	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_commitRWLock_time_seconds").Start()
 	txmgr.commitRWLock.Lock()
+	stopWatch.Stop()
 	defer txmgr.commitRWLock.Unlock()
 	logger.Debugf("Write lock acquired for committing updates to state database")
 	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
+	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_ApplyPrivacyAwareUpdates_time_seconds").Start()
 	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
+		stopWatch.Stop()
 		return err
 	}
+	stopWatch.Stop()
+
 	logger.Debugf("Updates committed to state database")
 
+	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_BlockCommitDone_time_seconds").Start()
 	// purge manager should be called (in this call the purge mgr removes the expiry entries from schedules) after committing to statedb
 	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
+		stopWatch.Stop()
 		return err
 	}
+	stopWatch.Stop()
+
+	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_updateStateListeners_time_seconds").Start()
 	// In the case of error state listeners will not recieve this call - instead a peer panic is caused by the ledger upon receiveing
 	// an error from this function
 	txmgr.updateStateListeners()
+	stopWatch.Stop()
 	return nil
 }
 
@@ -223,6 +263,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
 }
 
 func (txmgr *LockBasedTxMgr) updateStateListeners() {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	for _, l := range txmgr.current.listeners {
 		l.StateCommitDone(txmgr.ledgerid)
 	}

@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/pkg/errors"
 )
 
@@ -165,6 +166,10 @@ func (csp *CSP) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.Ke
 // GetKey returns the key this CSP associates to
 // the Subject Key Identifier ski.
 func (csp *CSP) GetKey(ski []byte) (k bccsp.Key, err error) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("crypto_getkey_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	k, err = csp.ks.GetKey(ski)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed getting key for SKI [%v]", ski)
@@ -175,6 +180,10 @@ func (csp *CSP) GetKey(ski []byte) (k bccsp.Key, err error) {
 
 // Hash hashes messages msg using options opts.
 func (csp *CSP) Hash(msg []byte, opts bccsp.HashOpts) (digest []byte, err error) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("crypto_hash_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	// Validate arguments
 	if opts == nil {
 		return nil, errors.New("Invalid opts. It must not be nil.")
@@ -221,6 +230,10 @@ func (csp *CSP) GetHash(opts bccsp.HashOpts) (h hash.Hash, err error) {
 // the caller is responsible for hashing the larger message and passing
 // the hash (as digest).
 func (csp *CSP) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("crypto_sign_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	// Validate arguments
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil.")
@@ -245,6 +258,10 @@ func (csp *CSP) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signatu
 
 // Verify verifies signature against key k and digest
 func (csp *CSP) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("crypto_verify_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	// Validate arguments
 	if k == nil {
 		return false, errors.New("Invalid Key. It must not be nil.")
@@ -272,6 +289,10 @@ func (csp *CSP) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerO
 // Encrypt encrypts plaintext using key k.
 // The opts argument should be appropriate for the primitive used.
 func (csp *CSP) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) (ciphertext []byte, err error) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("crypto_encrypt_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	// Validate arguments
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil.")
@@ -288,6 +309,10 @@ func (csp *CSP) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts)
 // Decrypt decrypts ciphertext using key k.
 // The opts argument should be appropriate for the primitive used.
 func (csp *CSP) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) (plaintext []byte, err error) {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("crypto_decrypt_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	// Validate arguments
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil.")

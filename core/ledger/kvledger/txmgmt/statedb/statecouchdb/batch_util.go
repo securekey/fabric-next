@@ -7,6 +7,8 @@ package statecouchdb
 
 import (
 	"sync"
+
+	"github.com/hyperledger/fabric/common/metrics"
 )
 
 // batch is executed in a separate goroutine.
@@ -18,7 +20,15 @@ type batch interface {
 // any of the batches return error during its execution
 func executeBatches(batches []batch) error {
 	logger.Debugf("Executing batches = %s", batches)
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("statecouchdb_executeBatches_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	numBatches := len(batches)
+	if metrics.IsDebug() {
+		metrics.RootScope.Gauge("statecouchdb_numBatches").Update(float64(numBatches))
+	}
 	if numBatches == 0 {
 		return nil
 	}
