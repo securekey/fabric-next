@@ -17,7 +17,6 @@ import (
 	vsccErrors "github.com/hyperledger/fabric/common/errors"
 	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/core/ledger/kvledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -1007,13 +1006,13 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
 
-	validatedTxs, err := getKVFromBlock(committedBlock)
+	validatedTxOps, err := getKVFromBlock(committedBlock)
 	if err != nil {
 		return err
 	}
 	indexKeys := make([]statedb.CompositeKey, 0)
-	for _, v := range validatedTxs {
-		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.NameSpace})
+	for _, v := range validatedTxOps {
+		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 	}
 	if len(indexKeys) > 0 {
 		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(s.chainID)
@@ -1025,6 +1024,8 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 			return err
 		}
 	}
+	statedb.UpdateKVCache(validatedTxOps)
+
 	_, err = getPrivateDataKV(committedBlock.Header.Number, pvtData)
 	if err != nil {
 		return err
@@ -1032,8 +1033,8 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 	return nil
 }
 
-func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTx, error) {
-	validatedTxs := make([]kvledger.ValidatedTx, 0)
+func getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp, error) {
+	validatedTxOps := make([]statedb.ValidatedTxOp, 0)
 	for txIndex, envBytes := range block.Data.Data {
 		var chdr *common.ChannelHeader
 		var err error
@@ -1102,12 +1103,14 @@ func getKVFromBlock(block *common.Block) ([]kvledger.ValidatedTx, error) {
 				}
 
 				for _, kvwrite := range pubWriteset.Writes {
-					validatedTxs = append(validatedTxs, kvledger.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex, NameSpace: nsRwSet.NameSpace})
+					validatedTxOps = append(validatedTxOps,
+						statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex},
+							IsDeleted: kvwrite.IsDelete, Namespace: nsRwSet.NameSpace})
 				}
 			}
 		}
 	}
-	return validatedTxs, nil
+	return validatedTxOps, nil
 }
 
 type dataKey struct {
