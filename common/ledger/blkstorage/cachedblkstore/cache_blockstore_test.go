@@ -15,9 +15,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/mocks"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/protos/common"
-	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric/protos/peer"
 )
 
@@ -25,7 +23,7 @@ func TestAddBlock(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
 	const blockNumber = 0
-	b := createMockBlock(blockNumber)
+	b := mocks.CreateSimpleMockBlock(blockNumber)
 
 	err := cbs.AddBlock(b)
 	assert.NoError(t, err, "block should have been added successfully")
@@ -41,7 +39,7 @@ func TestCheckpointBlock(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
 	const blockNumber = 0
-	b := createMockBlock(blockNumber)
+	b := mocks.CreateSimpleMockBlock(blockNumber)
 
 	err := cbs.CheckpointBlock(b)
 	assert.NoError(t, err, "block should have been checkpointed successfully")
@@ -71,9 +69,9 @@ func TestGetBlockchainInfo(t *testing.T) {
 func TestRetrieveBlocks(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	eb0 := createMockBlock(0)
-	eb1 := createMockBlock(1)
-	eb2 := createMockBlock(2)
+	eb0 := mocks.CreateSimpleMockBlock(0)
+	eb1 := mocks.CreateSimpleMockBlock(1)
+	eb2 := mocks.CreateSimpleMockBlock(2)
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 
@@ -102,9 +100,9 @@ func TestRetrieveBlocks(t *testing.T) {
 func TestRetrieveBlockByNumber(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	eb0 := createMockBlock(0)
-	eb1 := createMockBlock(1)
-	eb2 := createMockBlock(2)
+	eb0 := mocks.CreateSimpleMockBlock(0)
+	eb1 := mocks.CreateSimpleMockBlock(1)
+	eb2 := mocks.CreateSimpleMockBlock(2)
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 
@@ -142,9 +140,9 @@ func TestRetrieveBlockByNumber(t *testing.T) {
 func TestRetrieveBlockByHash(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	eb0 := createMockBlock(0)
-	eb1 := createMockBlock(1)
-	eb2 := createMockBlock(2)
+	eb0 := mocks.CreateSimpleMockBlock(0)
+	eb1 := mocks.CreateSimpleMockBlock(1)
+	eb2 := mocks.CreateSimpleMockBlock(2)
 	hb0 := eb0.GetHeader().Hash()
 	hb1 := eb1.GetHeader().Hash()
 	hb2 := eb2.GetHeader().Hash()
@@ -189,9 +187,12 @@ func TestRetrieveBlockByHash(t *testing.T) {
 func TestRetrieveTxByBlockNumTranNum(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", peer.TxValidationCode_VALID))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", peer.TxValidationCode_VALID))
-	eb2 := createMockBlockWithTxn(2, newSimpleMockTx("c", "keyc", peer.TxValidationCode_VALID))
+	eb0 := mocks.CreateBlock(0,
+		mocks.NewTransactionWithMockKey("a", "keya", peer.TxValidationCode_VALID),
+		mocks.NewTransactionWithMockKey("aa", "keyaa", peer.TxValidationCode_VALID),
+	)
+	eb1 := mocks.CreateBlock(1, mocks.NewTransactionWithMockKey("b", "keyb", peer.TxValidationCode_VALID))
+	eb2 := mocks.CreateBlock(2, mocks.NewTransactionWithMockKey("c", "keyc", peer.TxValidationCode_VALID))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 
@@ -201,11 +202,17 @@ func TestRetrieveTxByBlockNumTranNum(t *testing.T) {
 	_, ok := cbs.blockCache.LookupBlockByNumber(0)
 	assert.False(t, ok, "block 0 is not in the cache")
 
-	atx0, err := cbs.RetrieveTxByBlockNumTranNum(0, 0)
+	atx0a, err := cbs.RetrieveTxByBlockNumTranNum(0, 0)
 	assert.NoError(t, err, "retrieving txn should be successful")
-	etx0, err := extractEnvelopeFromBlock(eb0, 0)
+	etx0a, err := extractEnvelopeFromBlock(eb0, 0)
 	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
-	assert.Equal(t, etx0, atx0, "expected txn 0 of block 0 from store")
+	assert.Equal(t, etx0a, atx0a, "expected txn 0 of block 0 from store")
+
+	atx0b, err := cbs.RetrieveTxByBlockNumTranNum(0, 1)
+	assert.NoError(t, err, "retrieving txn should be successful")
+	etx0b, err := extractEnvelopeFromBlock(eb0, 1)
+	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
+	assert.Equal(t, etx0b, atx0b, "expected txn 1 of block 1 from store")
 
 	_, ok = cbs.blockCache.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should be in the cache")
@@ -213,20 +220,20 @@ func TestRetrieveTxByBlockNumTranNum(t *testing.T) {
 	_, ok = cbs.blockCache.LookupBlockByNumber(1)
 	assert.False(t, ok, "block 1 is not in the cache")
 
-	atx1, err := cbs.RetrieveTxByBlockNumTranNum(1, 0)
+	atx1a, err := cbs.RetrieveTxByBlockNumTranNum(1, 0)
 	assert.NoError(t, err, "retrieving txn should be successful")
-	etx1, err := extractEnvelopeFromBlock(eb1, 0)
+	etx1a, err := extractEnvelopeFromBlock(eb1, 0)
 	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
-	assert.Equal(t, etx1, atx1, "expected txn 0 of block 1 from store")
+	assert.Equal(t, etx1a, atx1a, "expected txn 0 of block 1 from store")
 
 	_, ok = cbs.blockCache.LookupBlockByNumber(1)
 	assert.True(t, ok, "block 1 should be in the cache")
 
-	atx2, err := cbs.RetrieveTxByBlockNumTranNum(2, 0)
+	atx2a, err := cbs.RetrieveTxByBlockNumTranNum(2, 0)
 	assert.NoError(t, err, "retrieving txn should be successful")
-	etx2, err := extractEnvelopeFromBlock(eb2, 0)
+	etx2a, err := extractEnvelopeFromBlock(eb2, 0)
 	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
-	assert.Equal(t, etx2, atx2, "expected txn 0 of block 2 from cache")
+	assert.Equal(t, etx2a, atx2a, "expected txn 0 of block 2 from cache")
 
 	_, err = cbs.RetrieveTxByBlockNumTranNum(3, 0)
 	assert.Error(t, err, "retrieval should return error due to non existent block")
@@ -235,9 +242,15 @@ func TestRetrieveTxByBlockNumTranNum(t *testing.T) {
 func TestRetrieveTxByID(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", peer.TxValidationCode_VALID))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", peer.TxValidationCode_VALID))
-	eb2 := createMockBlockWithTxn(2, newSimpleMockTx("c", "keyc", peer.TxValidationCode_VALID))
+	eb0 := mocks.CreateBlock(0,
+		mocks.NewTransactionWithMockKey("a", "keya", peer.TxValidationCode_VALID),
+		mocks.NewTransactionWithMockKey("aa", "keyaa", peer.TxValidationCode_VALID),
+		)
+	eb1 := mocks.CreateBlock(1,
+		mocks.NewTransactionWithMockKey("b", "keyb", peer.TxValidationCode_VALID),
+		mocks.NewTransactionWithMockKey("bb", "keybb", peer.TxValidationCode_VALID),
+		)
+	eb2 := mocks.CreateBlock(2, mocks.NewTransactionWithMockKey("c", "keyc", peer.TxValidationCode_VALID))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 
@@ -248,12 +261,23 @@ func TestRetrieveTxByID(t *testing.T) {
 	}
 	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["a"] = &txaLoc
 
+	txaaLoc := mocks.MockTXLoc{
+		MockBlockNumber: 0,
+		MockTxNumber: 1,
+	}
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["aa"] = &txaaLoc
+
 	// Block 1 is indexed and cached.
 	txbLoc := mocks.MockTXLoc{
 		MockBlockNumber: 1,
 		MockTxNumber: 0,
 	}
 	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["b"] = &txbLoc
+	txbbLoc := mocks.MockTXLoc{
+		MockBlockNumber: 1,
+		MockTxNumber: 1,
+	}
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["bb"] = &txbbLoc
 	cbs.blockCache.AddBlock(eb1)
 
 	//cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByNum[0] = make(map[uint64]blkstorage.TxLoc)
@@ -262,20 +286,32 @@ func TestRetrieveTxByID(t *testing.T) {
 	_, ok := cbs.blockCache.LookupBlockByNumber(0)
 	assert.False(t, ok, "block 0 is not in the cache")
 
-	atx0, err := cbs.RetrieveTxByID("a")
+	atx0a, err := cbs.RetrieveTxByID("a")
 	assert.NoError(t, err, "retrieving txn should be successful")
-	etx0, err := extractEnvelopeFromBlock(eb0, 0)
+	etx0a, err := extractEnvelopeFromBlock(eb0, 0)
 	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
-	assert.Equal(t, etx0, atx0, "expected txn 0 of block 0 from store")
+	assert.Equal(t, etx0a, atx0a, "expected txn 0 of block 0 from store")
+
+	atx0b, err := cbs.RetrieveTxByID("aa")
+	assert.NoError(t, err, "retrieving txn should be successful")
+	etx0b, err := extractEnvelopeFromBlock(eb0, 1)
+	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
+	assert.Equal(t, etx0b, atx0b, "expected txn 1 of block 0 from store")
 
 	_, ok = cbs.blockCache.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should be in the cache")
 
-	atx1, err := cbs.RetrieveTxByID("b")
+	atx1a, err := cbs.RetrieveTxByID("b")
 	assert.NoError(t, err, "retrieving txn should be successful")
-	etx1, err := extractEnvelopeFromBlock(eb1, 0)
+	etx1a, err := extractEnvelopeFromBlock(eb1, 0)
 	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
-	assert.Equal(t, etx1, atx1, "expected txn 0 of block 1 from store")
+	assert.Equal(t, etx1a, atx1a, "expected txn 0 of block 1 from store")
+
+	atx1b, err := cbs.RetrieveTxByID("bb")
+	assert.NoError(t, err, "retrieving txn should be successful")
+	etx1b, err := extractEnvelopeFromBlock(eb1, 1)
+	assert.NoError(t, err, "retrieving mock txn from mock block should be successful")
+	assert.Equal(t, etx1b, atx1b, "expected txn 1 of block 1 from store")
 
 	// Block 2 is only added to cache so that we can that the cache is hit rather than the index.
 	cbs.blockCache.AddBlock(eb2)
@@ -294,8 +330,8 @@ func TestRetrieveTxByIDNonExistenceIndex(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 	// note: we do not add the transactions to the backing store so we know it does not get hit.
 
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", peer.TxValidationCode_VALID))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", peer.TxValidationCode_VALID))
+	eb0 := mocks.CreateBlock(0, mocks.NewTransactionWithMockKey("a", "keya", peer.TxValidationCode_VALID))
+	eb1 := mocks.CreateBlock(1, mocks.NewTransactionWithMockKey("b", "keyb", peer.TxValidationCode_VALID))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 	cbs.blockCache.AddBlock(eb1)
@@ -311,9 +347,15 @@ func TestRetrieveTxByIDNonExistenceIndex(t *testing.T) {
 func TestRetrieveBlockByTxID(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", peer.TxValidationCode_VALID))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", peer.TxValidationCode_VALID))
-	eb2 := createMockBlockWithTxn(2, newSimpleMockTx("c", "keyc", peer.TxValidationCode_VALID))
+	eb0 := mocks.CreateBlock(0,
+		mocks.NewTransactionWithMockKey("a", "keya", peer.TxValidationCode_VALID),
+		mocks.NewTransactionWithMockKey("aa", "keyaa", peer.TxValidationCode_VALID),
+		)
+	eb1 := mocks.CreateBlock(1,
+		mocks.NewTransactionWithMockKey("b", "keyb", peer.TxValidationCode_VALID),
+		mocks.NewTransactionWithMockKey("bb", "keybb", peer.TxValidationCode_VALID),
+		)
+	eb2 := mocks.CreateBlock(2, mocks.NewTransactionWithMockKey("c", "keyc", peer.TxValidationCode_VALID))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 
@@ -323,6 +365,11 @@ func TestRetrieveBlockByTxID(t *testing.T) {
 		MockTxNumber: 0,
 	}
 	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["a"] = &txaLoc
+	txaaLoc := mocks.MockTXLoc{
+		MockBlockNumber: 0,
+		MockTxNumber: 1,
+	}
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["aa"] = &txaaLoc
 
 	// Block 1 is indexed and cached.
 	txbLoc := mocks.MockTXLoc{
@@ -330,21 +377,34 @@ func TestRetrieveBlockByTxID(t *testing.T) {
 		MockTxNumber: 0,
 	}
 	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["b"] = &txbLoc
+	txbbLoc := mocks.MockTXLoc{
+		MockBlockNumber: 1,
+		MockTxNumber: 1,
+	}
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxLocsByTxID["bb"] = &txbbLoc
 	cbs.blockCache.AddBlock(eb1)
 
 	_, ok := cbs.blockCache.LookupBlockByNumber(0)
 	assert.False(t, ok, "block 0 is not in the cache")
 
-	ab0, err := cbs.RetrieveBlockByTxID("a")
+	ab0a, err := cbs.RetrieveBlockByTxID("a")
 	assert.NoError(t, err, "retrieving block should be successful")
-	assert.Equal(t, eb0, ab0, "expected block 0 from store")
+	assert.Equal(t, eb0, ab0a, "expected block 0 from store")
+
+	ab0b, err := cbs.RetrieveBlockByTxID("aa")
+	assert.NoError(t, err, "retrieving block should be successful")
+	assert.Equal(t, eb0, ab0b, "expected block 0 from store")
 
 	_, ok = cbs.blockCache.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should be in the cache")
 
-	ab1, err := cbs.RetrieveBlockByTxID("b")
+	ab1a, err := cbs.RetrieveBlockByTxID("b")
 	assert.NoError(t, err, "retrieving block should be successful")
-	assert.Equal(t, eb1, ab1, "expected block 1 from store")
+	assert.Equal(t, eb1, ab1a, "expected block 1 from store")
+
+	ab1b, err := cbs.RetrieveBlockByTxID("bb")
+	assert.NoError(t, err, "retrieving block should be successful")
+	assert.Equal(t, eb1, ab1b, "expected block 1 from store")
 
 	// Block 2 is only added to cache so that we can that the cache is hit rather than the index.
 	cbs.blockCache.AddBlock(eb2)
@@ -361,8 +421,8 @@ func TestRetrieveBlockByTxIDNonExistenceIndex(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 	// note: we do not add the transactions to the backing store so we know it does not get hit.
 
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", peer.TxValidationCode_VALID))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", peer.TxValidationCode_VALID))
+	eb0 := mocks.CreateBlock(0, mocks.NewTransactionWithMockKey("a", "keya", peer.TxValidationCode_VALID))
+	eb1 := mocks.CreateBlock(1, mocks.NewTransactionWithMockKey("b", "keyb", peer.TxValidationCode_VALID))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 	cbs.blockCache.AddBlock(eb1)
@@ -378,34 +438,52 @@ func TestRetrieveBlockByTxIDNonExistenceIndex(t *testing.T) {
 func TestRetrieveTxValidationCodeByTxID(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 
-	etx0 := peer.TxValidationCode_BAD_PAYLOAD
-	etx1 := peer.TxValidationCode_BAD_COMMON_HEADER
+	etx0a := peer.TxValidationCode_BAD_PAYLOAD
+	etx0b := peer.TxValidationCode_BAD_RESPONSE_PAYLOAD
+	etx1a := peer.TxValidationCode_BAD_COMMON_HEADER
+	etx1b := peer.TxValidationCode_BAD_RWSET
 	etx2 := peer.TxValidationCode_BAD_CREATOR_SIGNATURE
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", etx0))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", etx1))
-	eb2 := createMockBlockWithTxn(2, newSimpleMockTx("c", "keyc", etx2))
+	eb0 := mocks.CreateBlock(0,
+		mocks.NewTransactionWithMockKey("a", "keya", etx0a),
+		mocks.NewTransactionWithMockKey("aa", "keyaa", etx0b),
+		)
+	eb1 := mocks.CreateBlock(1,
+		mocks.NewTransactionWithMockKey("b", "keyb", etx1a),
+		mocks.NewTransactionWithMockKey("bb", "keybb", etx1b),
+	)
+	eb2 := mocks.CreateBlock(2, mocks.NewTransactionWithMockKey("c", "keyc", etx2))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 
 	// Block 0 is indexed but not cached.
-	cbs.blockIndex.(*mocks.MockBlockIndex).TxValidationCodeByTxID["a"] = etx0
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxValidationCodeByTxID["a"] = etx0a
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxValidationCodeByTxID["aa"] = etx0b
 
 	// Block 1 is indexed and cached.
-	cbs.blockIndex.(*mocks.MockBlockIndex).TxValidationCodeByTxID["b"] = etx1
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxValidationCodeByTxID["b"] = etx1a
+	cbs.blockIndex.(*mocks.MockBlockIndex).TxValidationCodeByTxID["bb"] = etx1b
 	cbs.blockCache.AddBlock(eb1)
 
 	_, ok := cbs.blockCache.LookupBlockByNumber(0)
 	assert.False(t, ok, "block 0 is not in the cache")
 
-	atx0, err := cbs.RetrieveTxValidationCodeByTxID("a")
+	atx0a, err := cbs.RetrieveTxValidationCodeByTxID("a")
 	assert.NoError(t, err, "retrieving txn should be successful")
-	assert.Equal(t, etx0, atx0, "expected txn 0 of block 0 from store")
+	assert.Equal(t, etx0a, atx0a, "expected txn 0 of block 0 from store")
+
+	atx0b, err := cbs.RetrieveTxValidationCodeByTxID("aa")
+	assert.NoError(t, err, "retrieving txn should be successful")
+	assert.Equal(t, etx0b, atx0b, "expected txn 1 of block 0 from store")
 
 	// TODO: make an explicit cache for txn validation codes?
 
-	atx1, err := cbs.RetrieveTxValidationCodeByTxID("b")
+	atx1a, err := cbs.RetrieveTxValidationCodeByTxID("b")
 	assert.NoError(t, err, "retrieving txn should be successful")
-	assert.Equal(t, etx1, atx1, "expected txn 0 of block 1 from cache")
+	assert.Equal(t, etx1a, atx1a, "expected txn 0 of block 1 from cache")
+
+	atx1b, err := cbs.RetrieveTxValidationCodeByTxID("bb")
+	assert.NoError(t, err, "retrieving txn should be successful")
+	assert.Equal(t, etx1b, atx1b, "expected txn 1 of block 1 from cache")
 
 	// Block 2 is only added to cache so that we can that the cache is hit rather than the index.
 	cbs.blockCache.AddBlock(eb2)
@@ -422,8 +500,8 @@ func TestRetrieveTxValidationCodeByTxIDNonExistenceIndex(t *testing.T) {
 	cbs := newMockCachedBlockStore(t)
 	// note: we do not add the transactions to the backing store so we know it does not get hit.
 
-	eb0 := createMockBlockWithTxn(0, newSimpleMockTx("a", "keya", peer.TxValidationCode_VALID))
-	eb1 := createMockBlockWithTxn(1, newSimpleMockTx("b", "keyb", peer.TxValidationCode_VALID))
+	eb0 := mocks.CreateBlock(0, mocks.NewTransactionWithMockKey("a", "keya", peer.TxValidationCode_VALID))
+	eb1 := mocks.CreateBlock(1, mocks.NewTransactionWithMockKey("b", "keyb", peer.TxValidationCode_VALID))
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[0] = eb0
 	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlocksByNumber[1] = eb1
 	cbs.blockCache.AddBlock(eb1)
@@ -433,57 +511,6 @@ func TestRetrieveTxValidationCodeByTxIDNonExistenceIndex(t *testing.T) {
 
 	_, err = cbs.RetrieveTxValidationCodeByTxID("b")
 	assert.NoError(t, err, "retrieving cached txn does not fail")
-}
-
-func createMockBlockWithTxn(blockNum uint64, tx *mockTx) *common.Block {
-	const namespace = "test_namespace"
-
-	var txns []*peer.Transaction
-
-	for _, key := range tx.Keys {
-		txn := mocks.NewTransaction(
-			&rwsetutil.NsRwSet{
-				NameSpace: namespace,
-				KvRwSet: &kvrwset.KVRWSet{
-					Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-				},
-			})
-		txns = append(txns, txn)
-	}
-
-	b := mocks.NewBlock(
-		blockNum,
-		&common.ChannelHeader{
-			ChannelId: "",
-			TxId:      tx.ID,
-			Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-		},
-		tx.ValidationCodes,
-		txns...
-	)
-
-	return b
-}
-
-func createMockBlock(blockNum uint64) *common.Block {
-	const key = "test_key"
-	const txID = "12345"
-
-	return createMockBlockWithTxn(blockNum, newSimpleMockTx(txID, key, peer.TxValidationCode_VALID))
-}
-
-type mockTx struct {
-	ID string
-	ValidationCodes []peer.TxValidationCode
-	Keys []string
-}
-
-func newSimpleMockTx(txID string, key string, validationCode peer.TxValidationCode) *mockTx {
-	return &mockTx{
-		ID: txID,
-		ValidationCodes: []peer.TxValidationCode{validationCode},
-		Keys: []string{key},
-	}
 }
 
 func newMockCachedBlockStore(t *testing.T) *cachedBlockStore {
