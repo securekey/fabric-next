@@ -146,6 +146,7 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 		}
 	}
 
+	/*
 	//Index4 - Store BlockNumTranNum will be used to query history data
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockNumTranNum]; ok {
 		for txIterator, txoffset := range txOffsets {
@@ -159,6 +160,7 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 			batch.Put(constructBlockNumTranNumKey(blockIdxInfo.blockNum, uint64(txIterator)), txFlpBytes)
 		}
 	}
+	*/
 
 	/*
 	// The current implementation of TxLoc indices contains the block number.
@@ -247,6 +249,7 @@ func (index *blockIndex) RetrieveBlockNumberByTxID(txID string) (uint64, error) 
 }
 */
 
+/*
 func (index *blockIndex) RetrieveTxLocByBlockNumTranNum(blockNum uint64, tranNum uint64) (blkstorage.TxLoc, error) {
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockNumTranNum]; !ok {
 		return nil, blkstorage.ErrAttrNotIndexed
@@ -261,6 +264,7 @@ func (index *blockIndex) RetrieveTxLocByBlockNumTranNum(blockNum uint64, tranNum
 	txFLP := newBlockLockPointer(b)
 	return txFLP, nil
 }
+*/
 
 func (index *blockIndex) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxValidationCode]; !ok {
