@@ -23,12 +23,13 @@ type ValidatedTx struct {
 
 type ValidatedTxOp struct {
 	Namespace string
+	ChId string
 	IsDeleted bool
 	ValidatedTx
 }
 
 type KVCache struct {
-	namespace        string
+	chIdNamespace    string
 	capacity         int
 	validatedTxCache *lru.Cache
 	mutex		     sync.Mutex
@@ -45,21 +46,22 @@ func InitKVCache() {
 	kvCacheMap = make(map[string]*KVCache)
 }
 
-func getKVCache(namespace string) (*KVCache, error) {
-	kvCache, found := kvCacheMap[namespace]
+func getKVCache(chId string, namespace string) (*KVCache, error) {
+	chIdNamespace := chId+"_"+namespace
+	kvCache, found := kvCacheMap[chIdNamespace]
 	if !found {
-		kvCache = newKVCache(namespace)
-		kvCacheMap[namespace] = kvCache
+		kvCache = newKVCache(chIdNamespace)
+		kvCacheMap[chIdNamespace] = kvCache
 	}
 
 	return kvCache, nil
 }
 
-func GetKVCache(namespace string) (*KVCache, error) {
+func GetKVCache(chId string, namespace string) (*KVCache, error) {
 	kvCacheMtx.Lock()
 	defer kvCacheMtx.Unlock()
 
-	return getKVCache(namespace)
+	return getKVCache(chId, namespace)
 }
 
 func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
@@ -67,7 +69,7 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
 	defer kvCacheMtx.Unlock()
 
 	for _, validatedTxOp := range validatedTxOps {
-		kvCache, _ := getKVCache(validatedTxOp.Namespace)
+		kvCache, _ := getKVCache(validatedTxOp.ChId, validatedTxOp.Namespace)
 		if validatedTxOp.IsDeleted {
 			kvCache.Remove(validatedTxOp.ValidatedTx.Key, validatedTxOp.ValidatedTx.BlockNum, validatedTxOp.ValidatedTx.IndexInBlock)
 		} else {
@@ -77,8 +79,8 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
 	}
 }
 
-func GetFromKVCache(namespace string, key string) (*VersionedValue, bool) {
-	kvCache, _ := GetKVCache(namespace)
+func GetFromKVCache(chId string, namespace string, key string) (*VersionedValue, bool) {
+	kvCache, _ := GetKVCache(chId, namespace)
 	if validatedTx, ok := kvCache.Get(key); ok {
 		versionedValue := &VersionedValue{
 			Value: validatedTx.Value,
@@ -93,13 +95,13 @@ func GetFromKVCache(namespace string, key string) (*VersionedValue, bool) {
 }
 
 func newKVCache(
-	namespace string) *KVCache {
+	chIdNamespace string) *KVCache {
 	cacheSize := ledgerconfig.GetKVCacheSize()
 
 	validatedTxCache := lru.New(cacheSize)
 
 	cache := KVCache{
-		namespace:        namespace,
+		chIdNamespace:        chIdNamespace,
 		capacity:         cacheSize,
 		validatedTxCache: validatedTxCache,
 	}

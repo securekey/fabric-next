@@ -1116,7 +1116,7 @@ func getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp, error) {
 				for _, kvwrite := range pubWriteset.Writes {
 					validatedTxOps = append(validatedTxOps,
 						statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex},
-							IsDeleted: kvwrite.IsDelete, Namespace: nsRwSet.NameSpace})
+							IsDeleted: kvwrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId})
 				}
 			}
 		}
