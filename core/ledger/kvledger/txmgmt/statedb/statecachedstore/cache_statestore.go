@@ -15,6 +15,10 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
+const (
+	lsccNamespace = "lscc"
+)
+
 type cachedStateStore struct {
 	stateStore      statedb.VersionedDB
 	stateKeyIndex   statedb.StateKeyIndex
@@ -76,6 +80,9 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // startKey is inclusive
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	if namespace == lsccNamespace {
+		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
+	}
 	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
 	return newKVScanner(namespace, dbItr, c), nil
 }
