@@ -27,7 +27,7 @@ func TestDbHandleReturnsQueryExecutor(t *testing.T) {
 	provider, err := NewHistoryDBProvider(def)
 	require.NoError(t, err)
 	handle, err := provider.GetDBHandle(historyDbName)
-	qe, err := handle.NewHistoryQueryExecutor(mocks.MockBlockStore{})
+	qe, err := handle.NewHistoryQueryExecutor(&mocks.MockBlockStore{})
 	require.NoError(t, err)
 	assert.NotNil(t, qe, "historycouchdb DBHandle failed to return the HistoryQueryExecutor")
 }
@@ -66,7 +66,7 @@ func TestResultsIterator(t *testing.T) {
 		blockNum++
 		commitWriteTrxInNewBlock(handle, namespace, key, value, blockNum)
 		envelopes[blockNum] = map[uint64]*common.Envelope{
-			uint64(0): mocks.NewEnvelope(
+			uint64(0): mocks.CreateEnvelope(
 				newChannelHeader(),
 				newTransaction(namespace, key, value),
 			),
@@ -79,7 +79,7 @@ func TestResultsIterator(t *testing.T) {
 		pageNum:    0,
 		pageSize:   pageSize,
 		page:       &resultsPage{},
-		blockStore: mocks.MockBlockStore{EnvelopeByBlknumTxNum: envelopes},
+		blockStore: &mocks.MockBlockStore{EnvelopeByBlknumTxNum: envelopes},
 	}
 	for _, value := range values {
 		next, err := iter.Next()
@@ -106,7 +106,7 @@ func newChannelHeader() *common.ChannelHeader {
 // New mock transaction with a write-set that will modify the given namespace-key to the
 // given value.
 func newTransaction(namespace, key, value string) *peer.Transaction {
-	return mocks.NewTransaction(
+	return mocks.CreateTransaction(
 		&rwsetutil.NsRwSet{
 			NameSpace: namespace,
 			KvRwSet: &kvrwset.KVRWSet{
@@ -121,11 +121,13 @@ func newTransaction(namespace, key, value string) *peer.Transaction {
 // given value.
 func commitWriteTrxInNewBlock(handle historydb.HistoryDB, namespace, key, value string, blockNum uint64) {
 	err := handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			newChannelHeader(),
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			newTransaction(namespace, key, value),
+			&mocks.Transaction{
+				newChannelHeader(),
+				peer.TxValidationCode_VALID,
+				newTransaction(namespace, key, value),
+			},
 		),
 	)
 	panicIfErr(err)

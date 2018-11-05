@@ -59,22 +59,24 @@ func TestDbHandleCommitsWriteSet(t *testing.T) {
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      trxID,
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: namespace,
-					KvRwSet: &kvrwset.KVRWSet{
-						Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      trxID,
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: namespace,
+						KvRwSet: &kvrwset.KVRWSet{
+							Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -94,22 +96,24 @@ func TestHistoryDB_Commit_NoDuplicateCommits(t *testing.T) {
 	require.NoError(t, err)
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
-	block := mocks.NewBlock(
+	block := mocks.CreateMockBlock(
 		uint64(123),
-		&common.ChannelHeader{
-			ChannelId: "",
-			TxId:      "12345",
-			Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-		},
-		[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-		mocks.NewTransaction(
-			&rwsetutil.NsRwSet{
-				NameSpace: namespace,
-				KvRwSet: &kvrwset.KVRWSet{
-					Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-				},
+		&mocks.Transaction{
+			ChannelHeader: &common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "12345",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 			},
-		),
+			ValidationCode: peer.TxValidationCode_VALID,
+			Txn: mocks.CreateTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: namespace,
+					KvRwSet: &kvrwset.KVRWSet{
+						Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+					},
+				},
+			),
+		},
 	)
 	err = handle.Commit(block)
 	require.NoError(t, err)
@@ -118,7 +122,7 @@ func TestHistoryDB_Commit_NoDuplicateCommits(t *testing.T) {
 	results, err := queryCouchDbByNsAndKey(def, dbname, namespace, key)
 	require.NoErrorf(t, err, "failed to query test CouchDB")
 	assert.NotEmpty(t, results, "write-sets must be saved to history couchdb")
-	assert.Len(t, *results, 1, "write-sets are being duplicated to HistoryCouchDB when calling Commit() with the same block")
+	assert.Len(t, results, 1, "write-sets are being duplicated to HistoryCouchDB when calling Commit() with the same block")
 }
 
 // DBHandle.Commit() saves the block height document as a save point.
@@ -135,22 +139,24 @@ func TestDbHandleCommitsBlockHeightAsSavePoint(t *testing.T) {
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      trxID,
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: namespace,
-					KvRwSet: &kvrwset.KVRWSet{
-						Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      trxID,
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: namespace,
+						KvRwSet: &kvrwset.KVRWSet{
+							Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -173,53 +179,66 @@ func TestGetLastSavePointReturnsBlockHeight(t *testing.T) {
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum1,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      "123",
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: "namespace",
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum1, TxNum: uint64(5)}}},
-						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      "123",
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: "namespace",
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum1, TxNum: uint64(5)}}},
+							Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum2,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      "123",
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      "123",
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
+				},
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: "namespace",
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
+							Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
+						},
+					},
+				),
 			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID, peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: "namespace",
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
-						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_value")}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      "123",
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: "namespace",
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
-						Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_other_value")}},
+				ValidationCode: peer.TxValidationCode_VALID,
+
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: "namespace",
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: blockNum2, TxNum: uint64(5)}}},
+							Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("some_other_value")}},
+						},
 					},
-				},
-			),
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -244,22 +263,24 @@ func TestDbHandleCommitsBlockHeightAsSavePointWhenNoWriteWriteSet(t *testing.T) 
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      trxID,
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: namespace,
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: key, Version: &kvrwset.Version{BlockNum: blockNum, TxNum: uint64(5)}}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      trxID,
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: namespace,
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads: []*kvrwset.KVRead{{Key: key, Version: &kvrwset.Version{BlockNum: blockNum, TxNum: uint64(5)}}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -284,22 +305,24 @@ func TestDbHandleDoesNotCommitNonEndorsementWriteSet(t *testing.T) {
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      trxID,
-				Type:      int32(headerType),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: namespace,
-					KvRwSet: &kvrwset.KVRWSet{
-						Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      trxID,
+					Type:      int32(headerType),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: namespace,
+						KvRwSet: &kvrwset.KVRWSet{
+							Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -324,22 +347,24 @@ func TestDbHandleDoesNotCommitInvalidWriteSet(t *testing.T) {
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      trxID,
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{txValidationCode},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: namespace,
-					KvRwSet: &kvrwset.KVRWSet{
-						Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      trxID,
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: txValidationCode,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: namespace,
+						KvRwSet: &kvrwset.KVRWSet{
+							Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -363,22 +388,24 @@ func TestDbHandleDoesNotCommitReadSet(t *testing.T) {
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			blockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      trxID,
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: namespace,
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: key, Version: &kvrwset.Version{BlockNum: blockNum, TxNum: trxNum}}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      trxID,
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: namespace,
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads: []*kvrwset.KVRead{{Key: key, Version: &kvrwset.Version{BlockNum: blockNum, TxNum: trxNum}}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -403,22 +430,24 @@ func TestShouldRecover(t *testing.T) {
 	handle, err := provider.GetDBHandle("testhistorydb")
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			committedBlockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      "123",
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: "namespace",
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      "123",
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: "namespace",
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -442,22 +471,24 @@ func TestShouldNotRecoverIfBlockNumbersMatch(t *testing.T) {
 	handle, err := provider.GetDBHandle("testhistorydb")
 	require.NoError(t, err)
 	err = handle.Commit(
-		mocks.NewBlock(
+		mocks.CreateMockBlock(
 			committedBlockNum,
-			&common.ChannelHeader{
-				ChannelId: "",
-				TxId:      "123",
-				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-			},
-			[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-			mocks.NewTransaction(
-				&rwsetutil.NsRwSet{
-					NameSpace: "namespace",
-					KvRwSet: &kvrwset.KVRWSet{
-						Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
-					},
+			&mocks.Transaction{
+				ChannelHeader: &common.ChannelHeader{
+					ChannelId: "",
+					TxId:      "123",
+					Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 				},
-			),
+				ValidationCode: peer.TxValidationCode_VALID,
+				Txn: mocks.CreateTransaction(
+					&rwsetutil.NsRwSet{
+						NameSpace: "namespace",
+						KvRwSet: &kvrwset.KVRWSet{
+							Reads: []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: committedBlockNum, TxNum: uint64(123)}}},
+						},
+					},
+				),
+			},
 		),
 	)
 	require.NoError(t, err)
@@ -518,22 +549,24 @@ func TestHistoryDB_CommitLostBlock(t *testing.T) {
 	require.NoError(t, err)
 	handle, err := provider.GetDBHandle(dbname)
 	require.NoError(t, err)
-	block := mocks.NewBlock(
+	block := mocks.CreateMockBlock(
 		uint64(1),
-		&common.ChannelHeader{
-			ChannelId: "",
-			TxId:      "12345",
-			Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
-		},
-		[]peer.TxValidationCode{peer.TxValidationCode_VALID},
-		mocks.NewTransaction(
-			&rwsetutil.NsRwSet{
-				NameSpace: namespace,
-				KvRwSet: &kvrwset.KVRWSet{
-					Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
-				},
+		&mocks.Transaction{
+			ChannelHeader: &common.ChannelHeader{
+				ChannelId: "",
+				TxId:      "12345",
+				Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 			},
-		),
+			ValidationCode: peer.TxValidationCode_VALID,
+			Txn: mocks.CreateTransaction(
+				&rwsetutil.NsRwSet{
+					NameSpace: namespace,
+					KvRwSet: &kvrwset.KVRWSet{
+						Writes: []*kvrwset.KVWrite{{Key: key, IsDelete: false, Value: []byte("some_value")}},
+					},
+				},
+			),
+		},
 	)
 	err = handle.CommitLostBlock(
 		&ledger.BlockAndPvtData{Block: block},
