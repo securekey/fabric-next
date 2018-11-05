@@ -209,12 +209,11 @@ func (index *blockIndex) markDuplicateTxids(blockIdxInfo *blockIdxInfo) error {
 			continue
 		}
 
-		loc, err := index.RetrieveTxLoc(txid)
-		if loc != nil { // txid is duplicate of a previous tx in the index
+		_, err := index.RetrieveTxLoc(txid)
+		if err == nil { // txid is duplicate of a previous tx in the index
 			txIdxInfo.isDuplicate = true
 			continue
-		}
-		if err != blkstorage.ErrNotFoundInIndex {
+		} else if err != blkstorage.ErrNotFoundInIndex {
 			return err
 		}
 		uniqueTxids[txid] = true
@@ -223,7 +222,11 @@ func (index *blockIndex) markDuplicateTxids(blockIdxInfo *blockIdxInfo) error {
 }
 
 func (index *blockIndex) RetrieveTxLoc(txID string) (blkstorage.TxLoc, error) {
-	return index.retrieveTxMetadata(txID)
+	tm, err := index.retrieveTxMetadata(txID)
+	if err != nil {
+		return nil, err // return nil of type blkstorage.TxLoc
+	}
+	return tm, nil
 }
 
 func (index *blockIndex) retrieveTxMetadata(txID string) (*txMetadata, error) {
