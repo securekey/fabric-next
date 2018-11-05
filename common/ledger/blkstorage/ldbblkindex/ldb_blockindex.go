@@ -28,7 +28,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -37,9 +36,9 @@ import (
 
 const (
 	txIDIdxKeyPrefix               = 't'
-	blockNumTranNumIdxKeyPrefix    = 'a'
+	//blockNumTranNumIdxKeyPrefix    = 'a'
 	//blockTxIDIdxKeyPrefix          = 'b'
-	txValidationResultIdxKeyPrefix = 'v'
+	//txValidationResultIdxKeyPrefix = 'v'
 	indexCheckpointKeyStr          = "indexCheckpointKey"
 )
 
@@ -130,29 +129,34 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 			logger.Errorf("error while detecting duplicate txids:%s", err)
 			return err
 		}
-		for _, txoffset := range txOffsets {
+		for idx, txoffset := range txOffsets {
 			if txoffset.isDuplicate { // do not overwrite txid entry in the index - FAB-8557
 				logger.Debugf("txid [%s] is a duplicate of a previous tx. Not indexing in txid-index", txoffset.txID)
 				continue
 			}
 			txLoc := txoffset.loc
 			logger.Debugf("Adding txLoc [%s] for tx ID: [%s] to txid-index", txLoc, txoffset.txID)
-			blockTxLoc := blockLocPointer{blockNumber:blockIdxInfo.blockNum,locPointer:txLoc}
-			txFlpBytes, marshalErr := blockTxLoc.marshal()
+			tm := txMetadata{
+				blockNumber: blockIdxInfo.blockNum,
+				locPointer:txLoc,
+				txValidationCode: txsfltr.Flag(idx),
+			}
+			tmBytes, marshalErr := tm.marshal()
 			if marshalErr != nil {
 				return marshalErr
 			}
-			batch.Put(constructTxIDKey(txoffset.txID), txFlpBytes)
+			batch.Put(constructTxIDKey(txoffset.txID), tmBytes)
 		}
 	}
 
 	/*
+	// This index is not being used by our higher level cached block provider.
 	//Index4 - Store BlockNumTranNum will be used to query history data
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockNumTranNum]; ok {
 		for txIterator, txoffset := range txOffsets {
 			txLoc := txoffset.loc
 			logger.Debugf("Adding txLoc [%s] for tx number:[%d] ID: [%s] to blockNumTranNum index", txLoc, txIterator, txoffset.txID)
-			blockTxLoc := blockLocPointer{blockNumber:blockIdxInfo.blockNum,locPointer:txLoc}
+			blockTxLoc := txMetadata{blockNumber:blockIdxInfo.blockNum,locPointer:txLoc}
 			txFlpBytes, marshalErr := blockTxLoc.marshal()
 			if marshalErr != nil {
 				return marshalErr
@@ -175,6 +179,8 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 	}
 	*/
 
+	/*
+	// The current implementation of TxLoc indices contains the validation code.
 	// Index6 - Store transaction validation result by transaction id
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxValidationCode]; ok {
 		for idx, txoffset := range txOffsets {
@@ -184,6 +190,7 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 			batch.Put(constructTxValidationCodeIDKey(txoffset.txID), []byte{byte(txsfltr.Flag(idx))})
 		}
 	}
+	*/
 
 	batch.Put(indexCheckpointKey, encodeBlockNum(blockIdxInfo.blockNum))
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
@@ -216,6 +223,10 @@ func (index *blockIndex) markDuplicateTxids(blockIdxInfo *blockIdxInfo) error {
 }
 
 func (index *blockIndex) RetrieveTxLoc(txID string) (blkstorage.TxLoc, error) {
+	return index.retrieveBlockTxLoc(txID)
+}
+
+func (index *blockIndex) retrieveBlockTxLoc(txID string) (*txMetadata, error) {
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxID]; !ok {
 		return nil, blkstorage.ErrAttrNotIndexed
 	}
@@ -227,8 +238,8 @@ func (index *blockIndex) RetrieveTxLoc(txID string) (blkstorage.TxLoc, error) {
 		return nil, blkstorage.ErrNotFoundInIndex
 	}
 
-	txFLP := newBlockLockPointer(b)
-	return txFLP, nil
+	txMetadata := newTxMetadata(b)
+	return txMetadata, nil
 }
 
 /*
@@ -261,11 +272,22 @@ func (index *blockIndex) RetrieveTxLocByBlockNumTranNum(blockNum uint64, tranNum
 	if b == nil {
 		return nil, blkstorage.ErrNotFoundInIndex
 	}
-	txFLP := newBlockLockPointer(b)
+	txFLP := newTxMetadata(b)
 	return txFLP, nil
 }
 */
 
+func (index *blockIndex) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
+	loc, err := index.retrieveBlockTxLoc(txID)
+	if err != nil {
+		return peer.TxValidationCode_INVALID_OTHER_REASON, err
+	}
+
+	return loc.txValidationCode, nil
+}
+
+
+/*
 func (index *blockIndex) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxValidationCode]; !ok {
 		return peer.TxValidationCode(-1), blkstorage.ErrAttrNotIndexed
@@ -285,6 +307,7 @@ func (index *blockIndex) RetrieveTxValidationCodeByTxID(txID string) (peer.TxVal
 
 	return result, nil
 }
+*/
 
 func constructTxIDKey(txID string) []byte {
 	return append([]byte{txIDIdxKeyPrefix}, []byte(txID)...)
@@ -296,16 +319,20 @@ func constructBlockTxIDKey(txID string) []byte {
 }
 */
 
+/*
 func constructTxValidationCodeIDKey(txID string) []byte {
 	return append([]byte{txValidationResultIdxKeyPrefix}, []byte(txID)...)
 }
+*/
 
+/*
 func constructBlockNumTranNumKey(blockNum uint64, txNum uint64) []byte {
 	blkNumBytes := util.EncodeOrderPreservingVarUint64(blockNum)
 	tranNumBytes := util.EncodeOrderPreservingVarUint64(txNum)
 	key := append(blkNumBytes, tranNumBytes...)
 	return append([]byte{blockNumTranNumIdxKeyPrefix}, key...)
 }
+*/
 
 func encodeBlockNum(blockNum uint64) []byte {
 	return proto.EncodeVarint(blockNum)
@@ -316,8 +343,9 @@ func decodeBlockNum(blockNumBytes []byte) uint64 {
 	return blockNum
 }
 
-type blockLocPointer struct {
+type txMetadata struct {
 	blockNumber uint64
+	txValidationCode peer.TxValidationCode
 	*locPointer
 }
 
@@ -344,11 +372,11 @@ func (lp *locPointer) String() string {
 		lp.offset, lp.bytesLength)
 }
 
-func (lp *blockLocPointer) BlockNumber() uint64 {
+func (lp *txMetadata) BlockNumber() uint64 {
 	return lp.blockNumber
 }
 
-func (lp *blockLocPointer) marshal() ([]byte, error) {
+func (lp *txMetadata) marshal() ([]byte, error) {
 	buffer := proto.NewBuffer([]byte{})
 	err := buffer.EncodeVarint(lp.blockNumber)
 	if err != nil {
@@ -366,11 +394,15 @@ func (lp *blockLocPointer) marshal() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = buffer.EncodeVarint(uint64(lp.txValidationCode))
+	if err != nil {
+		return nil, err
+	}
 	return buffer.Bytes(), nil
 }
 
-func newBlockLockPointer(b []byte) *blockLocPointer {
-	blp := blockLocPointer{
+func newTxMetadata(b []byte) *txMetadata {
+	blp := txMetadata{
 		blockNumber: 0,
 		locPointer: &locPointer{},
 	}
@@ -379,7 +411,7 @@ func newBlockLockPointer(b []byte) *blockLocPointer {
 	return &blp
 }
 
-func (lp *blockLocPointer) unmarshal(b []byte) error {
+func (lp *txMetadata) unmarshal(b []byte) error {
 	lp.locPointer = &locPointer{}
 
 	buffer := proto.NewBuffer(b)
@@ -403,10 +435,15 @@ func (lp *blockLocPointer) unmarshal(b []byte) error {
 		return err
 	}
 	lp.bytesLength = int(i)
+	i, err = buffer.DecodeVarint()
+	if err != nil {
+		return err
+	}
+	lp.txValidationCode = peer.TxValidationCode(i)
 	return nil
 }
 
-func (lp *blockLocPointer) String() string {
+func (lp *txMetadata) String() string {
 	return fmt.Sprintf("blockNumber=%d,%s", lp.blockNumber, lp.locPointer.String())
 }
 
