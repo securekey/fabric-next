@@ -29,6 +29,7 @@ import (
 	privdata2 "github.com/hyperledger/fabric/gossip/privdata"
 	"github.com/hyperledger/fabric/gossip/util"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/gossip/discovery"
@@ -1010,10 +1011,25 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 	if err != nil {
 		return err
 	}
+	dataKeys, err := getPrivateDataKV(committedBlock.Header.Number, pvtData)
+	if err != nil {
+		return err
+	}
+
+	// Update the cache
+	statedb.UpdateKVCache(validatedTxOps)
+
 	indexKeys := make([]statedb.CompositeKey, 0)
+	// Add key index for KV
 	for _, v := range validatedTxOps {
 		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 	}
+	// Add key index for pvt
+	for _, v := range dataKeys {
+		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.key, Namespace: privacyenabledstate.DerivePvtDataNs(v.ns, v.coll)})
+	}
+
+	// Add key index in leveldb
 	if len(indexKeys) > 0 {
 		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(s.chainID)
 		if err != nil {
@@ -1024,12 +1040,7 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 			return err
 		}
 	}
-	statedb.UpdateKVCache(validatedTxOps)
 
-	_, err = getPrivateDataKV(committedBlock.Header.Number, pvtData)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -1117,18 +1128,26 @@ type dataKey struct {
 	blkNum   uint64
 	txNum    uint64
 	ns, coll string
-	value    *rwset.CollectionPvtReadWriteSet
+	value    []byte
+	key      string
 }
 
 func getPrivateDataKV(blockNumber uint64, pvtData util.PvtDataCollections) ([]dataKey, error) {
 	pvtKeys := make([]dataKey, 0)
 	for _, txPvtdata := range pvtData {
-		for _, nsPvtdata := range txPvtdata.WriteSet.NsPvtRwset {
-			for _, collPvtdata := range nsPvtdata.CollectionPvtRwset {
+		pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
+		if err != nil {
+			return nil, err
+		}
+		for _, nsPvtdata := range pvtRWSet.NsPvtRwSet {
+			for _, collPvtRwSets := range nsPvtdata.CollPvtRwSets {
 				txnum := txPvtdata.SeqInBlock
-				ns := nsPvtdata.Namespace
-				coll := collPvtdata.CollectionName
-				pvtKeys = append(pvtKeys, dataKey{blkNum: blockNumber, txNum: txnum, ns: ns, coll: coll, value: collPvtdata})
+				ns := nsPvtdata.NameSpace
+				coll := collPvtRwSets.CollectionName
+				for _, write := range collPvtRwSets.KvRwSet.Writes {
+					pvtKeys = append(pvtKeys, dataKey{blkNum: blockNumber, txNum: txnum, ns: ns, coll: coll, value: write.Value, key: write.Key})
+				}
+
 			}
 		}
 	}

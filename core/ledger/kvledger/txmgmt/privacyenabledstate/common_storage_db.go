@@ -135,7 +135,7 @@ func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifec
 
 // GetPrivateData implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateData(namespace, collection, key string) (*statedb.VersionedValue, error) {
-	return s.GetState(derivePvtDataNs(namespace, collection), key)
+	return s.GetState(DerivePvtDataNs(namespace, collection), key)
 }
 
 // GetValueHash implements corresponding function in interface DB
@@ -172,17 +172,17 @@ func (s *CommonStorageDB) GetCachedKeyHashVersion(namespace, collection string, 
 
 // GetPrivateDataMultipleKeys implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([]*statedb.VersionedValue, error) {
-	return s.GetStateMultipleKeys(derivePvtDataNs(namespace, collection), keys)
+	return s.GetStateMultipleKeys(DerivePvtDataNs(namespace, collection), keys)
 }
 
 // GetPrivateDataRangeScanIterator implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error) {
-	return s.GetStateRangeScanIterator(derivePvtDataNs(namespace, collection), startKey, endKey)
+	return s.GetStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
 }
 
 // ExecuteQueryOnPrivateData implements corresponding function in interface DB
 func (s CommonStorageDB) ExecuteQueryOnPrivateData(namespace, collection, query string) (statedb.ResultsIterator, error) {
-	return s.ExecuteQuery(derivePvtDataNs(namespace, collection), query)
+	return s.ExecuteQuery(DerivePvtDataNs(namespace, collection), query)
 }
 
 // ApplyUpdates overrides the funciton in statedb.VersionedDB and throws appropriate error message
@@ -236,7 +236,7 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 		// check for the indexes directory for the collection
 		if directoryPathArray[3] == "collections" && directoryPathArray[5] == "indexes" {
 			collectionName := directoryPathArray[4]
-			err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
+			err := indexCapable.ProcessIndexesForChaincodeDeploy(DerivePvtDataNs(chaincodeDefinition.Name, collectionName),
 				archiveDirectoryEntries)
 			if err != nil {
 				logger.Errorf(err.Error())
@@ -251,7 +251,7 @@ func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 	// NOOP
 }
 
-func derivePvtDataNs(namespace, collection string) string {
+func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
@@ -263,7 +263,7 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {
-				pubUpdateBatch.Update(derivePvtDataNs(ns, coll), key, vv)
+				pubUpdateBatch.Update(DerivePvtDataNs(ns, coll), key, vv)
 			}
 		}
 	}
