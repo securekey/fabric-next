@@ -16,7 +16,7 @@ import (
 func TestKVCache(t *testing.T) {
 	InitKVCache()
 
-	kvCache, _ := GetKVCache("LSCC")
+	kvCache, _ := GetKVCache("MyCh", "LSCC")
 
 	for i := 0; i < 1; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
@@ -45,7 +45,7 @@ func TestKVCache(t *testing.T) {
 		}
 	}
 
-	kvCache2, _ := GetKVCache("VSCC")
+	kvCache2, _ := GetKVCache("MyCh", "VSCC")
 
 	for i := 0; i < 500; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
