@@ -83,6 +83,7 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 	if namespace == lsccNamespace {
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
+	logger.Infof("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s", namespace, startKey, endKey)
 	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
 	return newKVScanner(namespace, dbItr, c), nil
 }
