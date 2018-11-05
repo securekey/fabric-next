@@ -66,7 +66,7 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 		var txnIDs []string
 		for id, txn := range blockTxns {
 			c.txnLocs[id] = txn
-			txnIDs = append(txnIDs)
+			txnIDs = append(txnIDs, id)
 		}
 		c.numberToTxnIDs[blockNumber] = txnIDs
 	}
