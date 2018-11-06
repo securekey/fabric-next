@@ -1065,13 +1065,13 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 	if err != nil {
 		return err
 	}
-	dataKeys, err := getPrivateDataKV(committedBlock.Header.Number, pvtData)
+	pvtDataKeys, err := getPrivateDataKV(committedBlock.Header.Number, s.chainID, pvtData)
 	if err != nil {
 		return err
 	}
 
 	// Update the cache
-	statedb.UpdateKVCache(validatedTxOps)
+	statedb.UpdateKVCache(validatedTxOps, pvtDataKeys)
 
 	indexKeys := make([]statedb.CompositeKey, 0)
 	// Add key index for KV
@@ -1079,8 +1079,8 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 	}
 	// Add key index for pvt
-	for _, v := range dataKeys {
-		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.key, Namespace: privacyenabledstate.DerivePvtDataNs(v.ns, v.coll)})
+	for _, v := range pvtDataKeys {
+		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
 	}
 
 	// Add key index in leveldb
@@ -1178,16 +1178,8 @@ func getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp, error) {
 	return validatedTxOps, nil
 }
 
-type dataKey struct {
-	blkNum   uint64
-	txNum    uint64
-	ns, coll string
-	value    []byte
-	key      string
-}
-
-func getPrivateDataKV(blockNumber uint64, pvtData util.PvtDataCollections) ([]dataKey, error) {
-	pvtKeys := make([]dataKey, 0)
+func getPrivateDataKV(blockNumber uint64, chId string, pvtData util.PvtDataCollections) ([]statedb.ValidatedPvtData, error) {
+	pvtKeys := make([]statedb.ValidatedPvtData, 0)
 	for _, txPvtdata := range pvtData {
 		pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
 		if err != nil {
@@ -1199,8 +1191,10 @@ func getPrivateDataKV(blockNumber uint64, pvtData util.PvtDataCollections) ([]da
 				ns := nsPvtdata.NameSpace
 				coll := collPvtRwSets.CollectionName
 				for _, write := range collPvtRwSets.KvRwSet.Writes {
-					pvtKeys = append(pvtKeys, dataKey{blkNum: blockNumber, txNum: txnum, ns: ns, coll: coll, value: write.Value, key: write.Key})
-				}
+					pvtKeys = append(pvtKeys,
+						statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
+							IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
+					}
 
 			}
 		}
