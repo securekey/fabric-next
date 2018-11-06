@@ -14,8 +14,10 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/util"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/common"
+	cp "github.com/hyperledger/fabric/protos/common"
 )
 
 // NewGossipMessageComparator creates a MessageReplacingPolicy given a maximum number of blocks to hold
@@ -76,7 +78,7 @@ func (mc *msgComparator) identityInvalidationPolicy(thisIdentityMsg *PeerIdentit
 }
 
 func (mc *msgComparator) dataInvalidationPolicy(thisDataMsg *DataMessage, thatDataMsg *DataMessage) common.InvalidationResult {
-	if thisDataMsg.Payload.SeqNum == thatDataMsg.Payload.SeqNum {
+	if isDataPayloadMatching(thisDataMsg.Payload, thatDataMsg.Payload) {
 		return common.MessageInvalidated
 	}
 
@@ -89,6 +91,41 @@ func (mc *msgComparator) dataInvalidationPolicy(thisDataMsg *DataMessage, thatDa
 		return common.MessageInvalidates
 	}
 	return common.MessageInvalidated
+}
+
+// Note: to enable distributed validation, blocks might be gossiped multiple times with different validation flags set.
+// This means that, for the purposes of validation policy, a block is considered the same if it has the same sequence
+// number and the same validation flags.
+func isDataPayloadMatching(thisPayload *Payload, thatPayload *Payload) bool {
+	if thisPayload.SeqNum != thatPayload.SeqNum {
+		return false
+	}
+
+	thisBlock := &cp.Block{}
+	if err := proto.Unmarshal(thisPayload.Data, thisBlock); err != nil {
+		return false
+	}
+	thisBlockMetadata := thisBlock.GetMetadata()
+	thisTxValidationFlags := ledgerUtil.TxValidationFlags(thisBlockMetadata.GetMetadata()[cp.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
+	thatBlock := &cp.Block{}
+	if err := proto.Unmarshal(thatPayload.Data, thatBlock); err != nil {
+		return false
+	}
+	thatBlockMetadata := thatBlock.GetMetadata()
+	thatTxValidationFlags := ledgerUtil.TxValidationFlags(thatBlockMetadata.GetMetadata()[cp.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
+	if len(thisTxValidationFlags) != len(thatTxValidationFlags) {
+		return false
+	}
+
+	for i, thisFlag := range thisTxValidationFlags {
+		if thisFlag != thatTxValidationFlags[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func aliveInvalidationPolicy(thisMsg *AliveMessage, thatMsg *AliveMessage) common.InvalidationResult {
