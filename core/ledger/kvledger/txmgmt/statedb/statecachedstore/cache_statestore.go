@@ -82,10 +82,11 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
 
 	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
-	if !dbItr.Valid() {
+	if !dbItr.Next() {
 		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
+	dbItr.Prev()
 	return newKVScanner(namespace, dbItr, c), nil
 }
 
