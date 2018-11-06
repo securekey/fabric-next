@@ -21,7 +21,8 @@ func TestAddBlock(t *testing.T) {
 	assert.Equal(t, bc.blocks.Len(), 0, "there should not be any blocks on creation")
 
 	eb0 := mocks.CreateSimpleMockBlock(0)
-	bc.AddBlock(eb0)
+	err := bc.AddBlock(eb0)
+	assert.NoError(t, err, "adding block should have been successful")
 	assert.Equal(t, bc.blocks.Len(), 1, "adding a block should increase the blocks length")
 
 	key := eb0.GetHeader().Number
@@ -37,7 +38,8 @@ func TestLookupBlockByNumber(t *testing.T) {
 	assert.False(t, ok, "block 0 should not exist in cache")
 
 	eb0 := mocks.CreateSimpleMockBlock(0)
-	bc.AddBlock(eb0)
+	err := bc.AddBlock(eb0)
+	assert.NoError(t, err, "adding block 0 should have been successful")
 
 	ab0, ok := bc.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should exist in cache")
@@ -52,7 +54,8 @@ func TestLookupBlockByHash(t *testing.T) {
 	_, ok := bc.LookupBlockByHash(hb0)
 	assert.False(t, ok, "block 0 should not exist in cache")
 
-	bc.AddBlock(eb0)
+	err := bc.AddBlock(eb0)
+	assert.NoError(t, err, "adding block 0 should have been successful")
 
 	ab0, ok := bc.LookupBlockByHash(hb0)
 	assert.True(t, ok, "block 0 should exist in cache")
@@ -74,10 +77,13 @@ func TestLookupTxLoc(t *testing.T) {
 	)
 	b1 := mocks.CreateBlock(1, mocks.NewTransactionWithMockKey(txnID2, "some-key", peer.TxValidationCode_VALID))
 	_, ok := bc.LookupTxLoc(txnID2)
-	assert.False(t, ok, "block 0 should not exist in cache")
+	assert.False(t, ok, "txn 2 should not exist in cache")
 
-	bc.AddBlock(b0)
-	bc.AddBlock(b1)
+	err := bc.AddBlock(b0)
+	assert.NoError(t, err, "adding block 0 should have been successful")
+	err = bc.AddBlock(b1)
+	assert.NoError(t, err, "adding block 1 should have been successful")
+
 	atx0, ok := bc.LookupTxLoc(txnID0)
 	assert.True(t, ok, "block 0 should exist in cache")
 	assert.Equal(t, uint64(0), atx0.BlockNumber(), "retrieved block should match added block")
@@ -101,16 +107,19 @@ func TestBlockEviction(t *testing.T) {
 	assert.False(t, ok, "block 0 should not exist in cache")
 
 	eb0 := mocks.CreateSimpleMockBlock(0)
-	bc.AddBlock(eb0)
+	err := bc.AddBlock(eb0)
+	assert.NoError(t, err, "adding block 0 should have been successful")
 
 	_, ok = bc.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should exist in cache")
 
 	eb1 := mocks.CreateSimpleMockBlock(1)
-	bc.AddBlock(eb1)
+	err = bc.AddBlock(eb1)
+	assert.NoError(t, err, "adding block 1 should have been successful")
 
 	eb2 := mocks.CreateSimpleMockBlock(2)
-	bc.AddBlock(eb2)
+	err = bc.AddBlock(eb2)
+	assert.NoError(t, err, "adding block 2 should have been successful")
 
 	_, ok = bc.LookupBlockByNumber(0)
 	assert.False(t, ok, "block 0 should have been evicted from cache")
@@ -121,7 +130,8 @@ func TestBlockEviction(t *testing.T) {
 	assert.True(t, ok, "block 1 should exist in cache")
 
 	eb3 := mocks.CreateSimpleMockBlock(3)
-	bc.AddBlock(eb3)
+	err = bc.AddBlock(eb3)
+	assert.NoError(t, err, "adding block 3 should have been successful")
 
 	_, ok = bc.LookupBlockByNumber(2)
 	assert.False(t, ok, "block 2 should have been evicted from cache")
@@ -148,7 +158,9 @@ func TestEvictionCleanup(t *testing.T) {
 	assert.Equal(t, 0, len(bc.numberToTxnIDs), "numberToTxnIDs index should be empty")
 	assert.Equal(t, 0, len(bc.txnLocs), "txnLocs index should be empty")
 
-	bc.AddBlock(b0)
+	err := bc.AddBlock(b0)
+	assert.NoError(t, err, "adding block 0 should have been successful")
+
 	assert.Equal(t, 1, bc.blocks.Len(), "blocks should have one entry")
 	assert.Equal(t, 1, len(bc.hashToNumber), "hashToNumber index should have one entry")
 	assert.Equal(t, 1, len(bc.numberToHash), "numberToHash index should have one entry")
@@ -174,7 +186,9 @@ func TestEvictionCleanup(t *testing.T) {
 	_, ok = bc.txnLocs[txnID1]
 	assert.True(t, ok, "txn 1 should have been inserted into txnLocs index")
 
-	bc.AddBlock(b1)
+	err = bc.AddBlock(b1)
+	assert.NoError(t, err, "adding block 1 should have been successful")
+
 	assert.Equal(t, 1, bc.blocks.Len(), "blocks should have one entry")
 	assert.Equal(t, 1, len(bc.hashToNumber), "hashToNumber index should have one entry")
 	assert.Equal(t, 1, len(bc.numberToHash), "numberToHash index should have one entry")
