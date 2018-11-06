@@ -347,7 +347,6 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			break
 		}
 		if res == nil {
-			logger.Errorf("*** iterator.NextWithConfig() %s end\n", txAndSeq.txID)
 			// End of iteration
 			break
 		}
