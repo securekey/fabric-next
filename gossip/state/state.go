@@ -857,6 +857,7 @@ func (s *GossipStateProviderImpl) AddPayload(payload *proto.Payload) error {
 	if viper.GetBool("peer.gossip.nonBlockingCommitMode") {
 		blockingMode = false
 	}
+
 	return s.addPayload(payload, blockingMode)
 }
 
@@ -868,6 +869,12 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	if payload == nil {
 		return errors.New("Given payload is nil")
 	}
+
+	if !isPayloadValidated(payload) && !ledgerconfig.IsCommitter() {
+		logger.Errorf("XXX Skipping unvalidated payload")
+		return nil
+	}
+
 	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
 	height, err := s.ledgerHeight()
 	if err != nil {
@@ -884,6 +891,40 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 
 	s.payloads.Push(payload)
 	return nil
+}
+
+func isPayloadValidated(payload *proto.Payload) bool {
+	block := &common.Block{}
+	if err := pb.Unmarshal(payload.Data, block); err != nil {
+		logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+		return false
+	}
+	if block.Data == nil || block.Header == nil {
+		logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)", payload.SeqNum, block.Header, block.Data)
+		return false
+	}
+
+	blockData := block.GetData()
+	envelopes := blockData.GetData()
+	envelopesLen := len(envelopes)
+
+	blockMetadata := block.GetMetadata()
+	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	flagsLen := len(txValidationFlags)
+
+	if envelopesLen != flagsLen {
+		logger.Errorf("validation flags for block are not fully set [seq=%d, envelopes=%d, flags=%d]", payload.SeqNum, envelopesLen, flagsLen)
+		return false
+	}
+
+	for _, flag := range txValidationFlags {
+		if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
+			logger.Errorf("validation flag in block is set to NOT_VALIDATED [seq=%d]", payload.SeqNum)
+			return false
+		}
+	}
+
+	return true
 }
 
 func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
