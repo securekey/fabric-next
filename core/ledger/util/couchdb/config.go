@@ -24,13 +24,12 @@ import (
 
 // CouchDBDef contains parameters
 type CouchDBDef struct {
-	URL                   string
-	Username              string
-	Password              string
-	MaxRetries            int
-	MaxRetriesOnStartup   int
-	RequestTimeout        time.Duration
-	CreateGlobalChangesDB bool
+	URL                 string
+	Username            string
+	Password            string
+	MaxRetries          int
+	MaxRetriesOnStartup int
+	RequestTimeout      time.Duration
 }
 
 //GetCouchDBDefinition exposes the useCouchDB variable
@@ -42,7 +41,6 @@ func GetCouchDBDefinition() *CouchDBDef {
 	maxRetries := viper.GetInt("ledger.state.couchDBConfig.maxRetries")
 	maxRetriesOnStartup := viper.GetInt("ledger.state.couchDBConfig.maxRetriesOnStartup")
 	requestTimeout := viper.GetDuration("ledger.state.couchDBConfig.requestTimeout")
-	createGlobalChangesDB := viper.GetBool("ledger.state.couchDBConfig.createGlobalChangesDB")
 
-	return &CouchDBDef{couchDBAddress, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB}
+	return &CouchDBDef{couchDBAddress, username, password, maxRetries, maxRetriesOnStartup, requestTimeout}
 }
