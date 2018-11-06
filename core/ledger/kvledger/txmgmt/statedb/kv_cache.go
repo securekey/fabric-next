@@ -9,9 +9,17 @@ package statedb
 import (
 	"sync"
 
+	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/golang/groupcache/lru"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+)
+
+var logger = flogging.MustGetLogger("statedb")
+
+const (
+	nsJoiner       = "$$"
+	pvtDataPrefix  = "p"
 )
 
 type ValidatedTx struct {
@@ -28,8 +36,13 @@ type ValidatedTxOp struct {
 	ValidatedTx
 }
 
+type ValidatedPvtData struct {
+	ValidatedTxOp
+	Collection      string
+}
+
 type KVCache struct {
-	chIdNamespace    string
+	cacheName        string
 	capacity         int
 	validatedTxCache *lru.Cache
 	mutex		     sync.Mutex
@@ -47,11 +60,11 @@ func InitKVCache() {
 }
 
 func getKVCache(chId string, namespace string) (*KVCache, error) {
-	chIdNamespace := chId+"_"+namespace
-	kvCache, found := kvCacheMap[chIdNamespace]
+	cacheName := chId+"_"+namespace
+	kvCache, found := kvCacheMap[cacheName]
 	if !found {
-		kvCache = newKVCache(chIdNamespace)
-		kvCacheMap[chIdNamespace] = kvCache
+		kvCache = newKVCache(cacheName)
+		kvCacheMap[cacheName] = kvCache
 	}
 
 	return kvCache, nil
@@ -64,7 +77,11 @@ func GetKVCache(chId string, namespace string) (*KVCache, error) {
 	return getKVCache(chId, namespace)
 }
 
-func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
+func DerivePvtDataNs(namespace, collection string) string {
+	return namespace + nsJoiner + pvtDataPrefix + collection
+}
+
+func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData) {
 	kvCacheMtx.Lock()
 	defer kvCacheMtx.Unlock()
 
@@ -74,6 +91,17 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
 			kvCache.Remove(validatedTxOp.ValidatedTx.Key, validatedTxOp.ValidatedTx.BlockNum, validatedTxOp.ValidatedTx.IndexInBlock)
 		} else {
 			newTx := validatedTxOp.ValidatedTx
+			kvCache.Put(&newTx)
+		}
+	}
+
+	for _, pvtData := range validatedPvtData {
+		namespace := DerivePvtDataNs(pvtData.Namespace, pvtData.Collection)
+		kvCache, _ := getKVCache(pvtData.ChId, namespace)
+		if pvtData.IsDeleted {
+			kvCache.Remove(pvtData.Key, pvtData.BlockNum, pvtData.IndexInBlock)
+		} else {
+			newTx := pvtData.ValidatedTxOp.ValidatedTx
 			kvCache.Put(&newTx)
 		}
 	}
@@ -95,13 +123,13 @@ func GetFromKVCache(chId string, namespace string, key string) (*VersionedValue,
 }
 
 func newKVCache(
-	chIdNamespace string) *KVCache {
+	cacheName string) *KVCache {
 	cacheSize := ledgerconfig.GetKVCacheSize()
 
 	validatedTxCache := lru.New(cacheSize)
 
 	cache := KVCache{
-		chIdNamespace:        chIdNamespace,
+		cacheName:    cacheName,
 		capacity:         cacheSize,
 		validatedTxCache: validatedTxCache,
 	}
@@ -128,6 +156,7 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 		c.validatedTxCache.Add(validatedTx.Key, validatedTx)
+		logger.Debugf("Put cache=%s, key=%s", c.cacheName, validatedTx.Key)
 	}
 }
 
@@ -139,9 +168,11 @@ func (c *KVCache) Get(key string) (*ValidatedTx, bool) {
 	if !ok {
 		c.miss++
 		return nil, false
+
 	}
 
 	c.hit++
+	logger.Debugf("Get cache=%s, key=%s, hit=%d, miss=%d", c.cacheName, key, c.hit, c.miss)
 	return txn, true
 }
 

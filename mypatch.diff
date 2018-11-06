@@ -1,0 +1,141 @@
+diff --git a/core/ledger/kvledger/txmgmt/statedb/kv_cache.go b/core/ledger/kvledger/txmgmt/statedb/kv_cache.go
+index b03bd46f..80fd7908 100644
+--- a/core/ledger/kvledger/txmgmt/statedb/kv_cache.go
++++ b/core/ledger/kvledger/txmgmt/statedb/kv_cache.go
+@@ -10,8 +10,13 @@ import (
+ 	"sync"
+ 
+ 	"github.com/golang/groupcache/lru"
+-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
++	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
++)
++
++const (
++	nsJoiner       = "$$"
++	pvtDataPrefix  = "p"
+ )
+ 
+ type ValidatedTx struct {
+@@ -28,6 +33,11 @@ type ValidatedTxOp struct {
+ 	ValidatedTx
+ }
+ 
++type ValidatedPvtData struct {
++	ValidatedTxOp
++	Collection      string
++}
++
+ type KVCache struct {
+ 	chIdNamespace    string
+ 	capacity         int
+@@ -47,11 +57,11 @@ func InitKVCache() {
+ }
+ 
+ func getKVCache(chId string, namespace string) (*KVCache, error) {
+-	chIdNamespace := chId+"_"+namespace
+-	kvCache, found := kvCacheMap[chIdNamespace]
++	cacheName := chId+"_"+namespace
++	kvCache, found := kvCacheMap[cacheName]
+ 	if !found {
+-		kvCache = newKVCache(chIdNamespace)
+-		kvCacheMap[chIdNamespace] = kvCache
++		kvCache = newKVCache(cacheName)
++		kvCacheMap[cacheName] = kvCache
+ 	}
+ 
+ 	return kvCache, nil
+@@ -64,7 +74,11 @@ func GetKVCache(chId string, namespace string) (*KVCache, error) {
+ 	return getKVCache(chId, namespace)
+ }
+ 
+-func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
++func DerivePvtDataNs(namespace, collection string) string {
++	return namespace + nsJoiner + pvtDataPrefix + collection
++}
++
++func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData) {
+ 	kvCacheMtx.Lock()
+ 	defer kvCacheMtx.Unlock()
+ 
+@@ -77,6 +91,17 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp) {
+ 			kvCache.Put(&newTx)
+ 		}
+ 	}
++
++	for _, pvtData := range validatedPvtData {
++		namespace := DerivePvtDataNs(pvtData.Namespace, pvtData.Collection)
++		kvCache, _ := getKVCache(pvtData.ChId, namespace)
++		if pvtData.IsDeleted {
++			kvCache.Remove(pvtData.Key, pvtData.BlockNum, pvtData.IndexInBlock)
++		} else {
++			newTx := pvtData.ValidatedTxOp.ValidatedTx
++			kvCache.Put(&newTx)
++		}
++	}
+ }
+ 
+ func GetFromKVCache(chId string, namespace string, key string) (*VersionedValue, bool) {
+diff --git a/gossip/state/state.go b/gossip/state/state.go
+index cb414802..86ce4887 100644
+--- a/gossip/state/state.go
++++ b/gossip/state/state.go
+@@ -1011,13 +1011,13 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
+ 	if err != nil {
+ 		return err
+ 	}
+-	dataKeys, err := getPrivateDataKV(committedBlock.Header.Number, pvtData)
++	pvtDataKeys, err := getPrivateDataKV(committedBlock.Header.Number, s.chainID, pvtData)
+ 	if err != nil {
+ 		return err
+ 	}
+ 
+ 	// Update the cache
+-	statedb.UpdateKVCache(validatedTxOps)
++	statedb.UpdateKVCache(validatedTxOps, pvtDataKeys)
+ 
+ 	indexKeys := make([]statedb.CompositeKey, 0)
+ 	// Add key index for KV
+@@ -1025,8 +1025,8 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
+ 		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+ 	}
+ 	// Add key index for pvt
+-	for _, v := range dataKeys {
+-		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.key, Namespace: privacyenabledstate.DerivePvtDataNs(v.ns, v.coll)})
++	for _, v := range pvtDataKeys {
++		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
+ 	}
+ 
+ 	// Add key index in leveldb
+@@ -1124,16 +1124,8 @@ func getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp, error) {
+ 	return validatedTxOps, nil
+ }
+ 
+-type dataKey struct {
+-	blkNum   uint64
+-	txNum    uint64
+-	ns, coll string
+-	value    []byte
+-	key      string
+-}
+-
+-func getPrivateDataKV(blockNumber uint64, pvtData util.PvtDataCollections) ([]dataKey, error) {
+-	pvtKeys := make([]dataKey, 0)
++func getPrivateDataKV(blockNumber uint64, chId string, pvtData util.PvtDataCollections) ([]statedb.ValidatedPvtData, error) {
++	pvtKeys := make([]statedb.ValidatedPvtData, 0)
+ 	for _, txPvtdata := range pvtData {
+ 		pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
+ 		if err != nil {
+@@ -1145,8 +1137,10 @@ func getPrivateDataKV(blockNumber uint64, pvtData util.PvtDataCollections) ([]da
+ 				ns := nsPvtdata.NameSpace
+ 				coll := collPvtRwSets.CollectionName
+ 				for _, write := range collPvtRwSets.KvRwSet.Writes {
+-					pvtKeys = append(pvtKeys, dataKey{blkNum: blockNumber, txNum: txnum, ns: ns, coll: coll, value: write.Value, key: write.Key})
+-				}
++					pvtKeys = append(pvtKeys,
++						statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
++							IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
++					}
+ 
+ 			}
+ 		}
