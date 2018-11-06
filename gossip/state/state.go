@@ -857,6 +857,7 @@ func (s *GossipStateProviderImpl) AddPayload(payload *proto.Payload) error {
 	if viper.GetBool("peer.gossip.nonBlockingCommitMode") {
 		blockingMode = false
 	}
+
 	return s.addPayload(payload, blockingMode)
 }
 
@@ -868,6 +869,18 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	if payload == nil {
 		return errors.New("Given payload is nil")
 	}
+
+	block, err := createBlockFromPayload(payload)
+	if err != nil {
+		logger.Debugf("[%s] extracting block from payload failed [block=%s, err=%s]", s.chainID, payload.SeqNum, err)
+		return err
+	}
+
+	if !isBlockValidated(block) && !ledgerconfig.IsCommitter() {
+		logger.Errorf("XXX Skipping unvalidated payload")
+		return nil
+	}
+
 	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
 	height, err := s.ledgerHeight()
 	if err != nil {
@@ -884,6 +897,57 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 
 	s.payloads.Push(payload)
 	return nil
+}
+
+func createBlockFromPayload(payload *proto.Payload) (*common.Block, error) {
+	block := &common.Block{}
+	if err := pb.Unmarshal(payload.Data, block); err != nil {
+		logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+		return nil, err
+	}
+	if block.Data == nil || block.Header == nil {
+		logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)", payload.SeqNum, block.Header, block.Data)
+		return nil, errors.New("block has no header or data")
+	}
+
+	// validate private data format prior to entering the payload buffer.
+	var p util.PvtDataCollections
+	if payload.PrivateData != nil {
+		err := p.Unmarshal(payload.PrivateData)
+		if err != nil {
+			logger.Errorf("Wasn't able to unmarshal private data for block seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+			return nil, err
+		}
+	}
+
+	return block, nil
+}
+
+func isBlockValidated(block *common.Block) bool {
+	blockData := block.GetData()
+	envelopes := blockData.GetData()
+	envelopesLen := len(envelopes)
+
+	blockMetadata := block.GetMetadata()
+	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	flagsLen := len(txValidationFlags)
+
+	blockHeader := block.GetHeader()
+	blockNum := blockHeader.GetNumber()
+
+	if envelopesLen != flagsLen {
+		logger.Debugf("validation flags for block are not fully set [block=%d, envelopes=%d, flags=%d]", blockNum, envelopesLen, flagsLen)
+		return false
+	}
+
+	for _, flag := range txValidationFlags {
+		if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
+			logger.Debugf("validation flag in block is set to NOT_VALIDATED [block=%d]", blockNum)
+			return false
+		}
+	}
+
+	return true
 }
 
 func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
