@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -255,12 +254,6 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 	}
 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_next_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
-
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {
 		return nil, err
@@ -308,12 +301,6 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
 		return nil, nil
 	}
 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_nextwithconfig_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {

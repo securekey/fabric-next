@@ -11,11 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"fmt"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/gossip/api"
 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
@@ -171,10 +168,6 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 			statusCounter = 0
 			blockNum := t.Block.Header.Number
 
-			//if metrics.IsDebug() {
-			metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(blockNum))
-			//}
-
 			marshaledBlock, err := proto.Marshal(t.Block)
 			if err != nil {
 				logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", b.chainID, blockNum, err)
@@ -199,10 +192,6 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 
 				// Use payload to create gossip message
 				gossipMsg := createGossipMsg(b.chainID, payload)
-
-				if metrics.IsDebug() {
-					metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_gossiping_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(payload.SeqNum))
-				}
 
 				// Gossip messages with other nodes
 				logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)

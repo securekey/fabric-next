@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"sync"
 
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
@@ -33,14 +32,13 @@ type Provider struct {
 	db        *DB
 	dbHandles map[string]*DBHandle
 	mux       sync.Mutex
-	dbPath    string
 }
 
 // NewProvider constructs a Provider
 func NewProvider(conf *Conf) *Provider {
 	db := CreateDB(conf)
 	db.Open()
-	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}, conf.DBPath}
+	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
 }
 
 // GetDBHandle returns a handle to a named db
@@ -49,7 +47,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
 	defer p.mux.Unlock()
 	dbHandle := p.dbHandles[dbName]
 	if dbHandle == nil {
-		dbHandle = &DBHandle{dbName, p.db, p.dbPath}
+		dbHandle = &DBHandle{dbName, p.db}
 		p.dbHandles[dbName] = dbHandle
 	}
 	return dbHandle
@@ -64,7 +62,6 @@ func (p *Provider) Close() {
 type DBHandle struct {
 	dbName string
 	db     *DB
-	dbPath string
 }
 
 // Get returns the value for the given key
@@ -84,10 +81,6 @@ func (h *DBHandle) Delete(key []byte, sync bool) error {
 
 // WriteBatch writes a batch in an atomic way
 func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("leveldbhelper_dbhandle_WriteBatch_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	levelBatch := &leveldb.Batch{}
 	for k, v := range batch.KVs {
 		key := constructLevelKey(h.dbName, []byte(k))

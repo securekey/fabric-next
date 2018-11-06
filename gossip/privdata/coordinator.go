@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/common/metrics"
 	util2 "github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/committer"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
@@ -32,7 +31,6 @@ import (
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"github.com/uber-go/tally"
 )
 
 const (
@@ -197,12 +195,6 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 	startPull := time.Now()
 	limit := startPull.Add(retryThresh)
-
-	var waitingForMissingKeysStopWatch tally.Stopwatch
-	if metrics.IsDebug() {
-		metrics.RootScope.Gauge("privdata_gossipMissingKeys").Update(float64(len(privateInfo.missingKeys)))
-		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time_seconds").Start()
-	}
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
 		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
@@ -215,9 +207,6 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 	elapsedPull := int64(time.Since(startPull) / time.Millisecond) // duration in ms
 
-	if metrics.IsDebug() {
-		waitingForMissingKeysStopWatch.Stop()
-	}
 	// Only log results if we actually attempted to fetch
 	if bFetchFromPeers {
 		if len(privateInfo.missingKeys) == 0 {

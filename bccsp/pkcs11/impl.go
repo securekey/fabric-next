@@ -19,7 +19,6 @@ import (
 	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/bccsp/utils"
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/miekg/pkcs11"
 	"github.com/pkg/errors"
 )
@@ -385,10 +384,6 @@ func (csp *impl) KeyImport(raw interface{}, opts bccsp.KeyImportOpts) (k bccsp.K
 // GetKey returns the key this CSP associates to
 // the Subject Key Identifier ski.
 func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("crypto_getkey_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	pubKey, isPriv, err := csp.getECKey(ski)
 	if err == nil {
 		if isPriv {
@@ -407,10 +402,6 @@ func (csp *impl) GetKey(ski []byte) (k bccsp.Key, err error) {
 // the caller is responsible for hashing the larger message and passing
 // the hash (as digest).
 func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("crypto_sign_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	// Validate arguments
 	if k == nil {
 		return nil, errors.New("Invalid Key. It must not be nil")
@@ -430,10 +421,6 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 
 // Verify verifies signature against key k and digest
 func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("crypto_verify_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	// Validate arguments
 	if k == nil {
 		return false, errors.New("Invalid Key. It must not be nil")
@@ -459,10 +446,6 @@ func (csp *impl) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.Signer
 // Encrypt encrypts plaintext using key k.
 // The opts argument should be appropriate for the primitive used.
 func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts) (ciphertext []byte, err error) {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("crypto_encrypt_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	// TODO: Add PKCS11 support for encryption, when fabric starts requiring it
 	return csp.BCCSP.Encrypt(k, plaintext, opts)
 }
@@ -470,10 +453,6 @@ func (csp *impl) Encrypt(k bccsp.Key, plaintext []byte, opts bccsp.EncrypterOpts
 // Decrypt decrypts ciphertext using key k.
 // The opts argument should be appropriate for the primitive used.
 func (csp *impl) Decrypt(k bccsp.Key, ciphertext []byte, opts bccsp.DecrypterOpts) (plaintext []byte, err error) {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("crypto_decrypt_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	return csp.BCCSP.Decrypt(k, ciphertext, opts)
 }
 

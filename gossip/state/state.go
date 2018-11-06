@@ -15,7 +15,6 @@ import (
 
 	pb "github.com/golang/protobuf/proto"
 	vsccErrors "github.com/hyperledger/fabric/common/errors"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -509,10 +508,6 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
 		return uint64(0), errors.New("Received state transfer response without payload")
 	}
 	for _, payload := range response.GetPayloads() {
-
-		if metrics.IsDebug() {
-			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_handleStateResponse_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
-		}
 		logger.Debugf("Received payload with sequence number %d.", payload.SeqNum)
 		if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), payload.SeqNum, payload.Data); err != nil {
 			err = errors.WithStack(err)
@@ -557,11 +552,6 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 
 	dataMsg := msg.GetDataMsg()
 	if dataMsg != nil {
-
-		if metrics.IsDebug() {
-			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_adding_payload_number", metrics.FilterMetricName(s.chainID))).Update(float64(dataMsg.Payload.SeqNum))
-		}
-
 		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
 			logger.Warningf("Block [%d] received from gossip wasn't added to payload buffer: %v", dataMsg.Payload.SeqNum, err)
 			return
@@ -579,9 +569,6 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 		select {
 		// Wait for notification that next seq has arrived
 		case <-s.payloads.Ready():
-			// KEEP EVEN WHEN metrics.debug IS OFF
-			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
-
 			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
 			// Collect all subsequent payloads
 			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
@@ -881,9 +868,6 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	if payload == nil {
 		return errors.New("Given payload is nil")
 	}
-	if metrics.IsDebug() {
-		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_addPayload", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
-	}
 	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
 	height, err := s.ledgerHeight()
 	if err != nil {
@@ -898,10 +882,7 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		time.Sleep(enqueueRetryInterval)
 	}
 
-	if s.payloads.Push(payload) {
-		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
-		logger.Debugf("[%s] Adding Payload to local buffer done, blockNum = [%d]", s.chainID, payload.SeqNum)
-	}
+	s.payloads.Push(payload)
 	return nil
 }
 
@@ -917,9 +898,6 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
 }
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
-	if metrics.IsDebug() {
-		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_about_to_store_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
-	}
 
 	if ledgerconfig.IsCommitter() {
 		// Commit block with available private transactions

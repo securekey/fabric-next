@@ -20,15 +20,8 @@ import (
 	"fmt"
 	"sync"
 
-	"strings"
-
-	"bytes"
-	"time"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util"
-	"github.com/hyperledger/fabric/common/metrics"
-	"github.com/spf13/viper"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -95,9 +88,6 @@ func (dbInst *DB) Open() {
 		panic(fmt.Sprintf("Error while trying to open DB: %s", err))
 	}
 	dbInst.dbState = opened
-	if viper.GetBool("logging.leveldbState") {
-		go dbInst.getState()
-	}
 }
 
 // Close closes the underlying db
@@ -115,18 +105,6 @@ func (dbInst *DB) Close() {
 
 // Get returns the value for the given key
 func (dbInst *DB) Get(key []byte) ([]byte, error) {
-	if metrics.IsDebug() {
-		dbName := dbInst.conf.DBPath
-		if strings.Contains(dbName, "ledgersData/") {
-			dbName = metrics.FilterMetricName(strings.Split(dbName, "ledgersData/")[1])
-		} else {
-			dbName = metrics.FilterMetricName(dbName)
-		}
-		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_get_%s_processing_time_seconds", dbName))
-		ccStopWatch := ccTimer.Start()
-		defer ccStopWatch.Stop()
-	}
-
 	value, err := dbInst.db.Get(key, dbInst.readOpts)
 	if err == leveldb.ErrNotFound {
 		value = nil
@@ -141,17 +119,6 @@ func (dbInst *DB) Get(key []byte) ([]byte, error) {
 
 // Put saves the key/value
 func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
-	if metrics.IsDebug() {
-		dbName := dbInst.conf.DBPath
-		if strings.Contains(dbName, "ledgersData/") {
-			dbName = metrics.FilterMetricName(strings.Split(dbName, "ledgersData/")[1])
-		} else {
-			dbName = metrics.FilterMetricName(dbName)
-		}
-		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_put_%s_processing_time_seconds", dbName))
-		ccStopWatch := ccTimer.Start()
-		defer ccStopWatch.Stop()
-	}
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -166,17 +133,6 @@ func (dbInst *DB) Put(key []byte, value []byte, sync bool) error {
 
 // Delete deletes the given key
 func (dbInst *DB) Delete(key []byte, sync bool) error {
-	if metrics.IsDebug() {
-		dbName := dbInst.conf.DBPath
-		if strings.Contains(dbName, "ledgersData/") {
-			dbName = metrics.FilterMetricName(strings.Split(dbName, "ledgersData/")[1])
-		} else {
-			dbName = metrics.FilterMetricName(dbName)
-		}
-		ccTimer := metrics.RootScope.Timer(fmt.Sprintf("leveldb_delete_%s_processing_time_seconds", dbName))
-		ccStopWatch := ccTimer.Start()
-		defer ccStopWatch.Stop()
-	}
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -198,10 +154,6 @@ func (dbInst *DB) GetIterator(startKey []byte, endKey []byte) iterator.Iterator 
 
 // WriteBatch writes a batch
 func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("leveldbhelper_db_WriteBatch_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	wo := dbInst.writeOptsNoSync
 	if sync {
 		wo = dbInst.writeOptsSync
@@ -210,25 +162,4 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
 		return err
 	}
 	return nil
-}
-
-func (dbInst *DB) getState() {
-	for {
-		time.Sleep(5 * time.Second)
-		if dbInst.dbState == closed {
-			logger.Info("leveldb is closed exit the getState")
-			break
-		}
-		levelDBStats := []string{"stats", "iostats", "writedelay", "sstables", "blockpool", "cachedblock", "openedtables", "alivesnaps", "aliveiters"}
-		var b bytes.Buffer
-		for _, stats := range levelDBStats {
-			res, err := dbInst.db.GetProperty(fmt.Sprintf("leveldb.%s", stats))
-			if err != nil {
-				logger.Errorf("leveldb getState %s return error %s", stats, err)
-				continue
-			}
-			b.WriteString(res)
-		}
-		logger.Infof("******* leveldb getState %s", strings.Replace(b.String(), "\n", " ", -1))
-	}
 }
