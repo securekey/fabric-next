@@ -871,12 +871,11 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 
 	block, err := createBlockFromPayload(payload)
 	if err != nil {
-		logger.Debugf("[%s] extracting block from payload failed [block=%s, err=%s]", s.chainID, payload.SeqNum, err)
-		return err
+		return errors.WithMessage(err, fmt.Sprintf("[%s] extracting block from payload failed", s.chainID))
 	}
 
 	if !isBlockValidated(block) && !ledgerconfig.IsCommitter() {
-		logger.Errorf("XXX Skipping unvalidated payload")
+		logger.Debugf("[%s] skipping unvalidated payload [block=%d]", s.chainID, payload.SeqNum)
 		return nil
 	}
 
@@ -901,12 +900,10 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 func createBlockFromPayload(payload *proto.Payload) (*common.Block, error) {
 	block := &common.Block{}
 	if err := pb.Unmarshal(payload.Data, block); err != nil {
-		logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
-		return nil, err
+		return nil, errors.Wrap(err, fmt.Sprintf("block has incorrect structure [%d]", payload.SeqNum))
 	}
 	if block.Data == nil || block.Header == nil {
-		logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)", payload.SeqNum, block.Header, block.Data)
-		return nil, errors.New("block has no header or data")
+		return nil, errors.Errorf("block has no header or data [%d]", payload.SeqNum)
 	}
 
 	// validate private data format prior to entering the payload buffer.
@@ -914,8 +911,7 @@ func createBlockFromPayload(payload *proto.Payload) (*common.Block, error) {
 	if payload.PrivateData != nil {
 		err := p.Unmarshal(payload.PrivateData)
 		if err != nil {
-			logger.Errorf("Wasn't able to unmarshal private data for block seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
-			return nil, err
+			return nil, errors.Wrap(err, fmt.Sprintf("block has incorrect structure [%d]", payload.SeqNum))
 		}
 	}
 
@@ -931,17 +927,12 @@ func isBlockValidated(block *common.Block) bool {
 	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	flagsLen := len(txValidationFlags)
 
-	blockHeader := block.GetHeader()
-	blockNum := blockHeader.GetNumber()
-
 	if envelopesLen != flagsLen {
-		logger.Debugf("validation flags for block are not fully set [block=%d, envelopes=%d, flags=%d]", blockNum, envelopesLen, flagsLen)
 		return false
 	}
 
 	for _, flag := range txValidationFlags {
 		if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
-			logger.Debugf("validation flag in block is set to NOT_VALIDATED [block=%d]", blockNum)
 			return false
 		}
 	}
