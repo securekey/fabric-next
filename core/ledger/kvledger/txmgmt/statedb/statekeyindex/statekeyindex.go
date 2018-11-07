@@ -46,8 +46,23 @@ func (s *stateKeyIndex) AddIndex(keys []statedb.CompositeKey) error {
 	for _, v := range keys {
 		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
 		//TODO change to DEBUG
-		logger.Infof("Channel [%s]: Applying key(string)=[%s] key(bytes)=[%#v]", s.dbName, string(compositeKey), compositeKey)
+		logger.Infof("Channel [%s]: Applying key(string)=[%s]", s.dbName, string(compositeKey))
 		dbBatch.Put(compositeKey, []byte(""))
+	}
+	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
+	if err := s.db.WriteBatch(dbBatch, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *stateKeyIndex) DeleteIndex(keys []statedb.CompositeKey) error {
+	dbBatch := leveldbhelper.NewUpdateBatch()
+	for _, v := range keys {
+		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
+		//TODO change to DEBUG
+		logger.Infof("Channel [%s]: Delete key(string)=[%s]", s.dbName, string(compositeKey))
+		dbBatch.Delete(compositeKey)
 	}
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
 	if err := s.db.WriteBatch(dbBatch, true); err != nil {
