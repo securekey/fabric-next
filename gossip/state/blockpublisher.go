@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package state
 
 import (
+	"github.com/hyperledger/fabric/core/ledger"
 	"strings"
 	"sync"
 
@@ -14,11 +15,10 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
-	cb "github.com/hyperledger/fabric/protos/common"
 	fabriccmn "github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	pb "github.com/hyperledger/fabric/protos/peer"
-	utils "github.com/hyperledger/fabric/protos/utils"
+	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -32,8 +32,7 @@ const (
 // BlockPublisher is used for endorser-only peers to notify all interested
 // consumers of the new block
 type BlockPublisher interface {
-	AddBlock(block *cb.Block) error
-	CheckpointBlock(block *cb.Block) error
+	AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error
 }
 type privateDataPurge interface {
 	PurgeByTxids(txids []string) error
@@ -73,9 +72,11 @@ func newBlockPublisher(channelID string, bp BlockPublisher, pvtDataPurge private
 
 // AddBlock makes the new block available.
 // Note: This function should only be used for endorser-only peers.
-func (p *publisher) AddBlock(block *fabriccmn.Block) error {
+func (p *publisher) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+
+	block := pvtdataAndBlock.Block
 
 	if block.Header.Number != p.blockNumber+1 {
 		return errors.Errorf("expecting block %d for channel [%s] but got block %d", p.blockNumber+1, p.channelID, block.Header.Number)
@@ -95,27 +96,13 @@ func (p *publisher) AddBlock(block *fabriccmn.Block) error {
 		}
 	}
 
-	err := p.bp.AddBlock(block)
+	err := p.bp.AddBlock(pvtdataAndBlock)
 	if err != nil {
 		return err
 	}
 
 	if len(pvtDataTxIDs) > 0 || (block.Header.Number%p.transientBlockRetention == 0 && block.Header.Number > p.transientBlockRetention) {
 		go p.purgePrivateTransientData(block.Header.Number, pvtDataTxIDs)
-	}
-
-	return nil
-}
-
-// CheckpointBlock notifies all interested consumers of the new block.
-// Note: This function should only be used for endorser-only peers.
-func (p *publisher) CheckpointBlock(block *fabriccmn.Block) error {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	logger.Debugf("[%s] Broadcasting checkpoint for block [%d]", p.channelID, block.Header.Number)
-	if err := p.bp.CheckpointBlock(block); err != nil {
-		logger.Errorf("[%s] Error setting checkpoint for block [%d]: %s", p.channelID, block.Header.Number, err)
 	}
 
 	p.blockNumber = block.Header.Number
