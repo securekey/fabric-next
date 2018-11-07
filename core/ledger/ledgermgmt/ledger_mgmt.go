@@ -147,8 +147,7 @@ func Close() {
 }
 
 type publisher interface {
-	AddBlock(block *common.Block) error
-	CheckpointBlock(block *common.Block) error
+	AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error
 }
 
 func wrapLedger(id string, l ledger.PeerLedger) ledger.PeerLedger {

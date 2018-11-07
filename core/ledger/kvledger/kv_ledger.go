@@ -191,13 +191,18 @@ func (l *kvLedger) GetBlockByNumber(blockNumber uint64) (*common.Block, error) {
 	return block, err
 }
 
-func (l *kvLedger) AddBlock(block *common.Block) error {
-	return l.blockStore.AddBlock(block)
-}
+func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+	err := l.blockStore.AddBlock(pvtdataAndBlock.Block)
+	if err != nil {
+		return err
+	}
 
-// CheckpointBlock sets the given block as checkpoint
-func (l *kvLedger) CheckpointBlock(block *common.Block) error {
-	return l.blockStore.CheckpointBlock(block)
+	err = l.cacheBlock(pvtdataAndBlock)
+	if err != nil {
+		return err
+	}
+
+	return l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
 }
 
 // GetBlocksIterator returns an iterator that starts from `startBlockNumber`(inclusive).
@@ -296,6 +301,11 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		if err := l.historyDB.Commit(block); err != nil {
 			panic(fmt.Errorf(`Error during commit to history db:%s`, err))
 		}
+	}
+
+	err = l.cacheBlock(pvtdataAndBlock)
+	if err != nil {
+		panic(fmt.Errorf("block was not cached [%s]", err))
 	}
 
 	// Set the checkpoint now that all of the data has been successfully committed
