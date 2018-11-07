@@ -71,9 +71,9 @@ func newBlockPublisher(channelID string, bp BlockPublisher, pvtDataPurge private
 	}
 }
 
-// Publish notifies all interested consumers of the new block.
+// AddBlock makes the new block available.
 // Note: This function should only be used for endorser-only peers.
-func (p *publisher) Publish(block *fabriccmn.Block) error {
+func (p *publisher) AddBlock(block *fabriccmn.Block) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -100,18 +100,26 @@ func (p *publisher) Publish(block *fabriccmn.Block) error {
 		return err
 	}
 
-	p.blockNumber = block.Header.Number
+	if len(pvtDataTxIDs) > 0 || (block.Header.Number%p.transientBlockRetention == 0 && block.Header.Number > p.transientBlockRetention) {
+		go p.purgePrivateTransientData(block.Header.Number, pvtDataTxIDs)
+	}
+
+	return nil
+}
+
+// CheckpointBlock notifies all interested consumers of the new block.
+// Note: This function should only be used for endorser-only peers.
+func (p *publisher) CheckpointBlock(block *fabriccmn.Block) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
 	logger.Debugf("[%s] Broadcasting checkpoint for block [%d]", p.channelID, block.Header.Number)
 	if err := p.bp.CheckpointBlock(block); err != nil {
 		logger.Errorf("[%s] Error setting checkpoint for block [%d]: %s", p.channelID, block.Header.Number, err)
 	}
 
+	p.blockNumber = block.Header.Number
 	logger.Infof("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
-
-	if len(pvtDataTxIDs) > 0 || (block.Header.Number%p.transientBlockRetention == 0 && block.Header.Number > p.transientBlockRetention) {
-		go p.purgePrivateTransientData(block.Header.Number, pvtDataTxIDs)
-	}
 
 	return nil
 }

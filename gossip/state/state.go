@@ -953,34 +953,39 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 
-	if ledgerconfig.IsCommitter() {
-		// Commit block with available private transactions
-		blockPvtData, err := s.ledger.StoreBlock(block, pvtData)
+	if !ledgerconfig.IsCommitter() {
+		// If not the committer than publish the block instead of committing.
+		err := s.publishBlock(block, pvtData)
 		if err != nil {
-			logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
-			return err
+			logger.Errorf("Error publishing block: %s", err)
+			// Don't return the error since it will cause a panic
+			return nil
 		}
-
-		// Update ledger height
-		s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
-		logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
-			s.chainID, block.Header.Number, len(block.Data.Data))
-
-		// Gossip messages with other nodes in my org
-		s.gossipBlock(block, blockPvtData)
 
 		return nil
 	}
 
-	err := s.publishBlock(block, pvtData)
+	// Commit block with available private transactions
+	blockPvtData, err := s.ledger.StoreBlock(block, pvtData)
 	if err != nil {
-		logger.Errorf("Error publishing block: %s", err)
+		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
+		return err
+	}
+
+	err = s.cacheBlock(block, pvtData)
+	if err != nil {
+		logger.Errorf("Error caching block: %s", err)
 		// Don't return the error since it will cause a panic
 		return nil
 	}
 
-	logger.Debugf("Updating ledger height for channel [%s] to %d", s.chainID, block.Header.Number+1)
+	// Update ledger height
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
+	logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
+		s.chainID, block.Header.Number, len(block.Data.Data))
+
+	// Gossip messages with other nodes in my org
+	s.gossipBlock(block, blockPvtData)
 
 	return nil
 }
@@ -1038,27 +1043,10 @@ func createPayload(seqNum uint64, marshaledBlock []byte, privateData [][]byte) *
 	}
 }
 
-func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util.PvtDataCollections) error {
-	if block == nil {
-		return errors.New("cannot publish nil block")
-	}
-
-	if block.Header == nil {
-		return errors.New("cannot publish block with nil header")
-	}
-
-	currentHeight := s.blockPublisher.LedgerHeight()
-	if block.Header.Number < currentHeight-1 {
-		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
-	}
-
+func (s *GossipStateProviderImpl) cacheBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 	committedBlock, err := s.getCommittedBlock(block)
 	if err != nil {
 		return err
-	}
-
-	if err := s.blockPublisher.Publish(committedBlock); err != nil {
-		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
 
 	validatedTxOps, err := getKVFromBlock(committedBlock)
@@ -1221,6 +1209,45 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData util.PvtDataColle
 		}
 	}
 	return pvtKeys, nil
+}
+
+func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util.PvtDataCollections) error {
+	if block == nil {
+		return errors.New("cannot publish nil block")
+	}
+
+	if block.Header == nil {
+		return errors.New("cannot publish block with nil header")
+	}
+
+	committedBlock, err := s.getCommittedBlock(block)
+	if err != nil {
+		return err
+	}
+
+	currentHeight := s.blockPublisher.LedgerHeight()
+	if block.Header.Number < currentHeight-1 {
+		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
+	}
+
+	if err := s.blockPublisher.AddBlock(committedBlock); err != nil {
+		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
+	}
+
+	err = s.cacheBlock(committedBlock, pvtData)
+	if err != nil {
+		return err
+	}
+
+	err = s.blockPublisher.CheckpointBlock(committedBlock)
+	if err != nil {
+		return err
+	}
+
+	logger.Debugf("Updating ledger height for channel [%s] to %d", s.chainID, block.Header.Number+1)
+	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
+
+	return nil
 }
 
 func (s *GossipStateProviderImpl) getCommittedBlock(block *common.Block) (*common.Block, error) {
