@@ -1,4 +1,4 @@
-From b40f2d4c8e492d9e564094d83d2ae9b1841b2035 Mon Sep 17 00:00:00 2001
+From 8ca6146f17dd76572b66734db21ce9c8677f2517 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Tue, 6 Nov 2018 15:07:48 -0500
 Subject: [PATCH] Ledger metrics
@@ -3380,7 +3380,7 @@ index e7fbf5b18..232485341 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index 3465426fb..ae63f4ae6 100644
+index c190e5679..5c063ec90 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -15,6 +15,7 @@ import (
@@ -3462,8 +3462,8 @@ index 3465426fb..ae63f4ae6 100644
 +		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_about_to_store_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
 +	}
  
- 	if ledgerconfig.IsCommitter() {
- 		// Commit block with available private transactions
+ 	if !ledgerconfig.IsCommitter() {
+ 		// If not the committer than publish the block instead of committing.
 diff --git a/peer/node/start.go b/peer/node/start.go
 index e3655db4a..62b5b2a30 100644
 --- a/peer/node/start.go
