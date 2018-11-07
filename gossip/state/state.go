@@ -1074,13 +1074,22 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 	statedb.UpdateKVCache(validatedTxOps, pvtDataKeys)
 
 	indexKeys := make([]statedb.CompositeKey, 0)
+	deletedIndexKeys := make([]statedb.CompositeKey, 0)
 	// Add key index for KV
 	for _, v := range validatedTxOps {
-		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+		if v.IsDeleted {
+			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+		} else {
+			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+		}
 	}
 	// Add key index for pvt
 	for _, v := range pvtDataKeys {
-		indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
+		if v.IsDeleted {
+			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
+		} else {
+			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
+		}
 	}
 
 	// Add key index in leveldb
@@ -1090,6 +1099,18 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 			return err
 		}
 		err = stateKeyIndex.AddIndex(indexKeys)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete key index in leveldb
+	if len(deletedIndexKeys) > 0 {
+		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(s.chainID)
+		if err != nil {
+			return err
+		}
+		err = stateKeyIndex.DeleteIndex(deletedIndexKeys)
 		if err != nil {
 			return err
 		}
@@ -1194,7 +1215,7 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData util.PvtDataColle
 					pvtKeys = append(pvtKeys,
 						statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
 							IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
-					}
+				}
 
 			}
 		}
