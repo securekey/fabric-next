@@ -1,4 +1,4 @@
-From 15102525cbbc8b3d829c98bd16a15a4f931bb1a9 Mon Sep 17 00:00:00 2001
+From b40f2d4c8e492d9e564094d83d2ae9b1841b2035 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Tue, 6 Nov 2018 15:07:48 -0500
 Subject: [PATCH] Ledger metrics
@@ -28,7 +28,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../statecachedstore/cache_statestore.go      |   8 +-
  .../txmgmt/statedb/statecouchdb/batch_util.go |  10 +
  .../statedb/statecouchdb/commit_handling.go   |   7 +
- .../statedb/statecouchdb/statecouchdb.go      |   7 +
+ .../statedb/statecouchdb/statecouchdb.go      |  13 +
  .../statedb/stateleveldb/stateleveldb.go      |   7 +
  .../txmgmt/txmgr/lockbasedtxmgr/helper.go     |   8 +
  .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  58 ++-
@@ -44,7 +44,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  25 +-
  peer/node/start.go                            |   4 +
- 39 files changed, 789 insertions(+), 1230 deletions(-)
+ 39 files changed, 795 insertions(+), 1230 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2503,7 +2503,7 @@ index 1d1436cb5..0f94a7ec3 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
-index 1d29e58fa..f10a11cdf 100644
+index 1d29e58fa..9d0103db6 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 @@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
@@ -2519,17 +2519,17 @@ index 1d29e58fa..f10a11cdf 100644
  // endKey is exclusive
  func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
 -
-+	if metrics.IsDebug() {
-+		metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_request").Inc(1)
-+	}
  	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
  	if !dbItr.Next() {
++		if metrics.IsDebug() {
++			metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_miss").Inc(1)
++		}
  		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
  		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
  	}
  	dbItr.Prev()
 +	if metrics.IsDebug() {
-+		metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request").Inc(1)
++		metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_hit").Inc(1)
 +	}
  	return newKVScanner(namespace, dbItr, c), nil
  }
@@ -2589,7 +2589,7 @@ index 7870d4ada..b81321833 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index 27c23dad8..31f43d7c6 100644
+index 27c23dad8..d55e9eb10 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2600,7 +2600,22 @@ index 27c23dad8..31f43d7c6 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-@@ -356,6 +357,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+@@ -264,8 +265,14 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
+ 	if versionedValue, ok := statedb.GetFromKVCache(vdb.chainName, namespace, key); ok {
+ 		//TODO change to DEBUG
+ 		logger.Infof("XXX GetState(). ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
++		if metrics.IsDebug() {
++			metrics.RootScope.Counter("cachestatestore_getstate_cache_request_hit").Inc(1)
++		}
+ 		return versionedValue, nil
+ 	}
++	if metrics.IsDebug() {
++		metrics.RootScope.Counter("cachestatestore_getstate_cache_request_miss").Inc(1)
++	}
+ 
+ 	db, err := vdb.getNamespaceDBHandle(namespace)
+ 	if err != nil {
+@@ -356,6 +363,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
  
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
@@ -3365,7 +3380,7 @@ index e7fbf5b18..232485341 100644
  
  // Next function provides the number of the next expected block
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index cfea0020e..b7d95c7d0 100644
+index 3465426fb..ae63f4ae6 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -15,6 +15,7 @@ import (
