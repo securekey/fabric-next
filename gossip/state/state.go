@@ -1057,10 +1057,6 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return err
 	}
 
-	if err := s.blockPublisher.Publish(committedBlock); err != nil {
-		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
-	}
-
 	validatedTxOps, err := getKVFromBlock(committedBlock)
 	if err != nil {
 		return err
@@ -1114,6 +1110,10 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		if err != nil {
 			return err
 		}
+	}
+
+	if err := s.blockPublisher.Publish(committedBlock); err != nil {
+		return errors.Wrapf(err, "error updating block number %d: %s", block.Header.Number, err)
 	}
 
 	return nil
