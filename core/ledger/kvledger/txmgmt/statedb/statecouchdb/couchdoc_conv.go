@@ -108,6 +108,7 @@ func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error) 
 		kvTypeDelete = iota
 		kvTypeJSON
 		kvTypeAttachment
+		kvTypeEmpty
 	)
 	key, value, version := kv.key, kv.VersionedValue.Value, kv.VersionedValue.Version
 	jsonMap := make(jsonValue)
@@ -118,6 +119,9 @@ func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error) 
 		kvtype = kvTypeDelete
 	// check for the case where the jsonMap is nil,  this will indicate
 	// a special case for the Unmarshal that results in a valid JSON returning nil
+	case len(value) == 0:
+		// Special case for an empty value - we don't want to create empty attachments.
+		kvtype = kvTypeEmpty
 	case json.Unmarshal(value, &jsonMap) == nil && jsonMap != nil:
 		kvtype = kvTypeJSON
 		if err := jsonMap.checkReservedFieldsNotPresent(); err != nil {
