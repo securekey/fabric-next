@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 
@@ -32,6 +33,7 @@ type cdbBlockStore struct {
 	cpInfoMtx  *sync.RWMutex
 	cpInfo     *checkpointInfo
 	cp         *checkpoint
+	bcInfo     atomic.Value
 }
 // newCDBBlockStore constructs block store based on CouchDB
 func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBlockStore {
@@ -56,6 +58,13 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBl
 			panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
 		}
 	}
+
+	bi, err := createBlockchainInfo(blockStore, cpInfo)
+	if err != nil {
+		panic(fmt.Sprintf("Unable to retrieve blockchain info from DB: %s", err))
+	}
+	cdbBlockStore.bcInfo.Store(bi)
+
 	// Update the manager with the checkpoint info and the file writer
 	cdbBlockStore.cpInfo = cpInfo
 
@@ -114,37 +123,17 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 
 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
 	s.updateCheckpoint(newCPInfo)
+
+	curBcInfo := s.bcInfo.Load().(*common.BlockchainInfo)
+	newBcInfo := updateBlockchainInfo(curBcInfo, block)
+	s.bcInfo.Store(newBcInfo)
+
 	return nil
 }
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	cpInfo, err := s.cp.getCheckpointInfo()
-	if err != nil {
-		return nil, err
-	}
-
-	s.cpInfo = cpInfo
-	bcInfo := &common.BlockchainInfo{
-		Height: 0,
-	}
-	if !cpInfo.isChainEmpty {
-		//If start up is a restart of an existing storage, update BlockchainInfo for external API's
-		lastBlock, err := s.RetrieveBlockByNumber(cpInfo.lastBlockNumber)
-		if err != nil {
-			return nil, fmt.Errorf("RetrieveBlockByNumber return error: %s", err)
-		}
-
-		lastBlockHeader := lastBlock.GetHeader()
-		lastBlockHash := lastBlockHeader.Hash()
-		previousBlockHash := lastBlockHeader.GetPreviousHash()
-		bcInfo = &common.BlockchainInfo{
-			Height:            lastBlockHeader.GetNumber() + 1,
-			CurrentBlockHash:  lastBlockHash,
-			PreviousBlockHash: previousBlockHash,
-		}
-	}
-	return bcInfo, nil
+	return s.bcInfo.Load().(*common.BlockchainInfo), nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
@@ -184,11 +173,19 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 		blockNum = bcinfo.Height - 1
 	}
 
-	id := blockNumberToKey(blockNum)
-
-	doc, _, err := s.blockStore.ReadDoc(id)
+	block, err := retrieveBlockByNumber(s.blockStore, blockNum)
 	if err != nil {
 		return nil, errors.WithMessage(err, fmt.Sprintf("retrieval of block [%d] from couchDB [%s] failed", blockNum, s.ledgerID))
+	}
+	return block, nil
+}
+
+func retrieveBlockByNumber(blockStore *couchdb.CouchDatabase, blockNum uint64) (*common.Block, error) {
+	id := blockNumberToKey(blockNum)
+
+	doc, _, err := blockStore.ReadDoc(id)
+	if err != nil {
+		return nil, err
 	}
 	if doc == nil {
 		return nil, blkstorage.ErrNotFoundInIndex
@@ -196,7 +193,7 @@ func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, e
 
 	block, err := couchDocToBlock(doc)
 	if err != nil {
-		return nil, errors.WithMessage(err, fmt.Sprintf("unmarshal of block [%d] from couchDB [%s] failed", blockNum, s.ledgerID))
+		return nil, err
 	}
 
 	return block, nil
