@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "26f46e40_6b20c930",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 981,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-08T15:48:07Z",
+      "side": 1,
+      "message": "ledger height should not be updated prior to cache.",
+      "range": {
+        "startLine": 978,
+        "startChar": 0,
+        "endLine": 981,
+        "endChar": 55
+      },
+      "revId": "4aff06a420da8c1b90af738f437e1171f71a4ae6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
