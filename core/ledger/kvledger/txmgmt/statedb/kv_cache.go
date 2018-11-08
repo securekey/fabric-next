@@ -60,7 +60,10 @@ func InitKVCache() {
 }
 
 func getKVCache(chId string, namespace string) (*KVCache, error) {
-	cacheName := chId+"_"+namespace
+	cacheName := chId
+	if len(namespace) > 0 {
+		cacheName = cacheName +"_" + namespace
+	}
 	kvCache, found := kvCacheMap[cacheName]
 	if !found {
 		kvCache = newKVCache(cacheName)
