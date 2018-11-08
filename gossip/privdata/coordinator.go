@@ -76,7 +76,10 @@ type TransientStore interface {
 type Coordinator interface {
 	// StoreBlock deliver new block with underlined private data
 	// returns missing transaction ids
-	StoreBlock(block *common.Block, data util.PvtDataCollections) (map[uint64]*ledger.TxPvtData, error)
+	StoreBlock(*ledger.BlockAndPvtData, []string) error
+
+	// ValidateBlock validate block
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error)
 
 	// StorePvtData used to persist private data into transient store
 	StorePvtData(txid string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -149,13 +152,12 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
 	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
 }
 
-// StoreBlock stores block with private data into the ledger
-func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDataCollections) (map[uint64]*ledger.TxPvtData, error) {
+func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error) {
 	if block.Data == nil {
-		return nil, errors.New("Block data is empty")
+		return nil, nil, errors.New("Block data is empty")
 	}
 	if block.Header == nil {
-		return nil, errors.New("Block header is nil")
+		return nil, nil, errors.New("Block header is nil")
 	}
 
 	logger.Infof("[%s] Received block [%d] from buffer", c.ChainID, block.Header.Number)
@@ -164,7 +166,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	err := c.Validator.Validate(block)
 	if err != nil {
 		logger.Errorf("Validation failed: %+v", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	blockAndPvtData := &ledger.BlockAndPvtData{
@@ -175,13 +177,13 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	ownedRWsets, err := computeOwnedRWsets(block, privateDataSets)
 	if err != nil {
 		logger.Warning("Failed computing owned RWSets", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	privateInfo, err := c.listMissingPrivateData(block, ownedRWsets)
 	if err != nil {
 		logger.Warning(err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	retryThresh := viper.GetDuration("peer.gossip.pvtData.pullRetryThreshold")
@@ -236,21 +238,26 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 			SeqInBlock: int(missingRWS.seqInBlock),
 		})
 	}
+	return blockAndPvtData, privateInfo.txns, nil
+}
+
+// StoreBlock stores block with private data into the ledger
+func (c *coordinator) StoreBlock(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string) error {
 
 	// commit block and private data
-	err = c.CommitWithPvtData(blockAndPvtData)
+	err := c.CommitWithPvtData(blockAndPvtData)
 	if err != nil {
-		return nil, errors.Wrap(err, "commit failed")
+		return errors.Wrap(err, "commit failed")
 	}
 
 	if len(blockAndPvtData.BlockPvtData) > 0 {
 		// Finally, purge all transactions in block - valid or not valid.
-		if err := c.PurgeByTxids(privateInfo.txns); err != nil {
-			logger.Error("Purging transactions", privateInfo.txns, "failed:", err)
+		if err := c.PurgeByTxids(pvtTxns); err != nil {
+			logger.Error("Purging transactions", pvtTxns, "failed:", err)
 		}
 	}
 
-	seq := block.Header.Number
+	seq := blockAndPvtData.Block.Header.Number
 	if seq%c.transientBlockRetention == 0 && seq > c.transientBlockRetention {
 		err := c.PurgeByHeight(seq - c.transientBlockRetention)
 		if err != nil {
@@ -258,7 +265,7 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 		}
 	}
 
-	return blockAndPvtData.BlockPvtData, nil
+	return nil
 }
 
 func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][]byte, privateInfo *privateDataInfo) {
