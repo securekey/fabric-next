@@ -46,7 +46,7 @@ func (s *stateKeyIndex) AddIndex(keys []statedb.CompositeKey) error {
 	for _, v := range keys {
 		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
 		//TODO change to DEBUG
-		logger.Infof("Channel [%s]: Applying key(string)=[%s]", s.dbName, string(compositeKey))
+		logger.Debugf("Channel [%s]: Applying key(string)=[%s]", s.dbName, string(compositeKey))
 		dbBatch.Put(compositeKey, []byte(""))
 	}
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
@@ -61,7 +61,7 @@ func (s *stateKeyIndex) DeleteIndex(keys []statedb.CompositeKey) error {
 	for _, v := range keys {
 		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
 		//TODO change to DEBUG
-		logger.Infof("Channel [%s]: Delete key(string)=[%s]", s.dbName, string(compositeKey))
+		logger.Debugf("Channel [%s]: Delete key(string)=[%s]", s.dbName, string(compositeKey))
 		dbBatch.Delete(compositeKey)
 	}
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
@@ -81,7 +81,7 @@ func (s *stateKeyIndex) GetIterator(namespace string, startKey string, endKey st
 		compositeEndKey[len(compositeEndKey)-1] = lastKeyIndicator
 	}
 	//TODO change to DEBUG
-	logger.Infof("Channel [%s]: GetIterator compositeStartKey(string)=[%s] compositeEndKey(string)=[%s]", s.dbName, compositeStartKey, compositeEndKey)
+	logger.Debugf("Channel [%s]: GetIterator compositeStartKey(string)=[%s] compositeEndKey(string)=[%s]", s.dbName, compositeStartKey, compositeEndKey)
 	return s.db.GetIterator(compositeStartKey, compositeEndKey)
 }
 

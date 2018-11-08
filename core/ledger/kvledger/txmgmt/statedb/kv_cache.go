@@ -9,8 +9,8 @@ package statedb
 import (
 	"sync"
 
-	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/golang/groupcache/lru"
+	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
@@ -18,8 +18,8 @@ import (
 var logger = flogging.MustGetLogger("statedb")
 
 const (
-	nsJoiner       = "$$"
-	pvtDataPrefix  = "p"
+	nsJoiner      = "$$"
+	pvtDataPrefix = "p"
 )
 
 type ValidatedTx struct {
@@ -31,21 +31,21 @@ type ValidatedTx struct {
 
 type ValidatedTxOp struct {
 	Namespace string
-	ChId string
+	ChId      string
 	IsDeleted bool
 	ValidatedTx
 }
 
 type ValidatedPvtData struct {
 	ValidatedTxOp
-	Collection      string
+	Collection string
 }
 
 type KVCache struct {
 	cacheName        string
 	capacity         int
 	validatedTxCache *lru.Cache
-	mutex		     sync.Mutex
+	mutex            sync.Mutex
 	hit              uint64
 	miss             uint64
 }
@@ -60,7 +60,7 @@ func InitKVCache() {
 }
 
 func getKVCache(chId string, namespace string) (*KVCache, error) {
-	cacheName := chId+"_"+namespace
+	cacheName := chId + "_" + namespace
 	kvCache, found := kvCacheMap[cacheName]
 	if !found {
 		kvCache = newKVCache(cacheName)
@@ -129,7 +129,7 @@ func newKVCache(
 	validatedTxCache := lru.New(cacheSize)
 
 	cache := KVCache{
-		cacheName:    cacheName,
+		cacheName:        cacheName,
 		capacity:         cacheSize,
 		validatedTxCache: validatedTxCache,
 	}
@@ -143,7 +143,7 @@ func (c *KVCache) get(key string) (*ValidatedTx, bool) {
 	if ok {
 		return txn.(*ValidatedTx), ok
 	}
-
+	logger.Infof("*** Get not found in cache=%s, key=%s %s", c.cacheName, key, c)
 	return nil, false
 }
 
@@ -156,7 +156,7 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 		c.validatedTxCache.Add(validatedTx.Key, validatedTx)
-		logger.Debugf("Put cache=%s, key=%s", c.cacheName, validatedTx.Key)
+		logger.Infof("Put cache=%s, key=%s %s", c.cacheName, validatedTx.Key, c)
 	}
 }
 
@@ -199,7 +199,7 @@ func (c *KVCache) Remove(key string, blockNum uint64, indexInBlock int) {
 	exitingKeyVal, found := c.get(key)
 	// Remove from the cache if the existing version is older
 	if (found && exitingKeyVal.BlockNum < blockNum) ||
-		(found && exitingKeyVal.BlockNum == blockNum && exitingKeyVal.IndexInBlock < indexInBlock){
+		(found && exitingKeyVal.BlockNum == blockNum && exitingKeyVal.IndexInBlock < indexInBlock) {
 		c.validatedTxCache.Remove(key)
 	}
 }

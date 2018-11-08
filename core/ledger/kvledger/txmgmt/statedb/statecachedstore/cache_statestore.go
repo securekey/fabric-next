@@ -83,7 +83,7 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 
 	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
 	if !dbItr.Next() {
-		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
+		logger.Debugf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
 	dbItr.Prev()
