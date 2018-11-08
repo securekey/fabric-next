@@ -1,4 +1,4 @@
-From e3cfbf29074f8c4c85bd1c6c08e23370f55180fd Mon Sep 17 00:00:00 2001
+From ed5ca11ef9954f6b0ac6f8f2ddd185a1827cd121 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Thu, 8 Nov 2018 12:43:30 -0500
 Subject: [PATCH] Ledger metrics
@@ -28,7 +28,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  .../statecachedstore/cache_statestore.go      |   8 +-
  .../txmgmt/statedb/statecouchdb/batch_util.go |  10 +
  .../statedb/statecouchdb/commit_handling.go   |   7 +
- .../statedb/statecouchdb/statecouchdb.go      |  13 +
+ .../statedb/statecouchdb/statecouchdb.go      |  14 +-
  .../statedb/stateleveldb/stateleveldb.go      |   7 +
  .../txmgmt/txmgr/lockbasedtxmgr/helper.go     |   8 +
  .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  58 ++-
@@ -44,7 +44,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  25 +-
  peer/node/start.go                            |   4 +
- 39 files changed, 794 insertions(+), 1230 deletions(-)
+ 39 files changed, 794 insertions(+), 1231 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2586,7 +2586,7 @@ index 7870d4ada..b81321833 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index 27c23dad8..d55e9eb10 100644
+index 27c23dad8..f23cf5f7c 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2597,7 +2597,7 @@ index 27c23dad8..d55e9eb10 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-@@ -264,8 +265,14 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
+@@ -264,6 +265,9 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
  	if versionedValue, ok := statedb.GetFromKVCache(vdb.chainName, namespace, key); ok {
  		//TODO change to DEBUG
  		logger.Infof("XXX GetState(). ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
@@ -2606,13 +2606,19 @@ index 27c23dad8..d55e9eb10 100644
 +		}
  		return versionedValue, nil
  	}
+ 
+@@ -286,7 +290,9 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-
 +	if metrics.IsDebug() {
 +		metrics.RootScope.Counter("cachestatestore_getstate_cache_request_miss").Inc(1)
 +	}
+ 	return kv.VersionedValue, nil
+ }
  
- 	db, err := vdb.getNamespaceDBHandle(namespace)
- 	if err != nil {
-@@ -356,6 +363,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+@@ -356,6 +362,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
  
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
