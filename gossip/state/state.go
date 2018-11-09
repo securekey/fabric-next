@@ -105,7 +105,10 @@ type MCSAdapter interface {
 type ledgerResources interface {
 	// StoreBlock deliver new block with underlined private data
 	// returns missing transaction ids
-	StoreBlock(block *common.Block, data util.PvtDataCollections) (map[uint64]*ledger.TxPvtData, error)
+	StoreBlock(*ledger.BlockAndPvtData, []string) error
+
+	// ValidateBlock validate block
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error)
 
 	// StorePvtData used to persist private date into transient store
 	StorePvtData(txid string, privData *transientstore.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -947,7 +950,6 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
 }
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
-
 	if !ledgerconfig.IsCommitter() {
 		// If not the committer than publish the block instead of committing.
 		err := s.publishBlock(block, pvtData)
@@ -956,24 +958,27 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 			// Don't return the error since it will cause a panic
 			return nil
 		}
-
 		return nil
 	}
 
+	// Validate block
+	blockAndPvtData, pvtTxns, err := s.ledger.ValidateBlock(block, pvtData)
+	if err != nil {
+		logger.Errorf("Got error while validate block(%+v)", errors.WithStack(err))
+		return err
+	}
+	// Gossip messages with other nodes in my org
+	s.gossipBlock(block, blockAndPvtData.BlockPvtData)
 	// Commit block with available private transactions
-	blockPvtData, err := s.ledger.StoreBlock(block, pvtData)
+	err = s.ledger.StoreBlock(blockAndPvtData, pvtTxns)
 	if err != nil {
 		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 		return err
 	}
-
 	// Update ledger height
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
 	logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
 		s.chainID, block.Header.Number, len(block.Data.Data))
-
-	// Gossip messages with other nodes in my org
-	s.gossipBlock(block, blockPvtData)
 
 	return nil
 }
