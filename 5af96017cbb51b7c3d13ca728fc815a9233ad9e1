@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "dcd3dec7_bdb8c075",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 81,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-09T18:31:54Z",
+      "side": 0,
+      "message": "It seems that you moved this logic to cache.go, what is the difference? The new collection has nsJoiner + pvtDataPrefix prepended.",
+      "revId": "5af96017cbb51b7c3d13ca728fc815a9233ad9e1",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
