@@ -94,7 +94,7 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	}
 	// Here, hashedKeys are merged into pubKeys to get a combined set of keys for combined loading
 	for _, key := range hashedKeys {
-		ns := deriveHashedDataNs(key.Namespace, key.CollectionName)
+		ns := DeriveHashedDataNs(key.Namespace, key.CollectionName)
 		// No need to check for duplicates as hashedKeys are in separate namespace
 		var keyHashStr string
 		if !s.BytesKeySuppoted() {
@@ -144,7 +144,7 @@ func (s *CommonStorageDB) GetValueHash(namespace, collection string, keyHash []b
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetState(deriveHashedDataNs(namespace, collection), keyHashStr)
+	return s.GetState(DeriveHashedDataNs(namespace, collection), keyHashStr)
 }
 
 // GetKeyHashVersion implements corresponding function in interface DB
@@ -153,7 +153,7 @@ func (s *CommonStorageDB) GetKeyHashVersion(namespace, collection string, keyHas
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetVersion(deriveHashedDataNs(namespace, collection), keyHashStr)
+	return s.GetVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
 }
 
 // GetCachedKeyHashVersion retrieves the keyhash version from cache
@@ -167,7 +167,7 @@ func (s *CommonStorageDB) GetCachedKeyHashVersion(namespace, collection string, 
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return bulkOptimizable.GetCachedVersion(deriveHashedDataNs(namespace, collection), keyHashStr)
+	return bulkOptimizable.GetCachedVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
 }
 
 // GetPrivateDataMultipleKeys implements corresponding function in interface DB
@@ -255,7 +255,7 @@ func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
-func deriveHashedDataNs(namespace, collection string) string {
+func DeriveHashedDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + hashDataPrefix + collection
 }
 
@@ -276,7 +276,7 @@ func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedU
 				if base64Key {
 					key = base64.StdEncoding.EncodeToString([]byte(key))
 				}
-				pubUpdateBatch.Update(deriveHashedDataNs(ns, coll), key, vv)
+				pubUpdateBatch.Update(DeriveHashedDataNs(ns, coll), key, vv)
 			}
 		}
 	}

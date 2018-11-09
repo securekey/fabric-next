@@ -17,6 +17,12 @@ import (
 
 var logger = flogging.MustGetLogger("statedb")
 
+const (
+	nsJoiner          = "$$"
+	pvtDataPrefix     = "p"
+	pvtHashDataPrefix = "h"
+)
+
 type ValidatedTx struct {
 	Key          string
 	Value        []byte
@@ -72,11 +78,15 @@ func GetKVCache(chId string, namespace string) (*KVCache, error) {
 	return getKVCache(chId, namespace)
 }
 
-func DerivePvtDataNs(namespace, collection string) string {
-	return namespace + collection
+func DerivePvtHashDataNs(namespace, collection string) string {
+	return namespace + nsJoiner + pvtHashDataPrefix + collection
 }
 
-func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData) {
+func DerivePvtDataNs(namespace, collection string) string {
+	return namespace + nsJoiner + pvtDataPrefix + collection
+}
+
+func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) {
 	kvCacheMtx.Lock()
 	defer kvCacheMtx.Unlock()
 
@@ -92,6 +102,16 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedP
 
 	for _, pvtData := range validatedPvtData {
 		namespace := DerivePvtDataNs(pvtData.Namespace, pvtData.Collection)
+		kvCache, _ := getKVCache(pvtData.ChId, namespace)
+		if pvtData.IsDeleted {
+			kvCache.Remove(pvtData.Key, pvtData.BlockNum, pvtData.IndexInBlock)
+		} else {
+			newTx := pvtData.ValidatedTxOp.ValidatedTx
+			kvCache.Put(&newTx)
+		}
+	}
+	for _, pvtData := range validatedPvtHashData {
+		namespace := DerivePvtHashDataNs(pvtData.Namespace, pvtData.Collection)
 		kvCache, _ := getKVCache(pvtData.ChId, namespace)
 		if pvtData.IsDeleted {
 			kvCache.Remove(pvtData.Key, pvtData.BlockNum, pvtData.IndexInBlock)
