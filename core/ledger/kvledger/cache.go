@@ -23,12 +23,6 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 )
 
-const (
-	nsJoiner          = "$$"
-	pvtDataPrefix     = "p"
-	pvtHashDataPrefix = "h"
-)
-
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
@@ -41,10 +35,9 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	if err != nil {
 		return err
 	}
-	pvtDataKeys = append(pvtDataKeys, pvtDataHashedKeys...)
 
 	// Update the cache
-	statedb.UpdateKVCache(validatedTxOps, pvtDataKeys)
+	statedb.UpdateKVCache(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
 
 	indexKeys := make([]statedb.CompositeKey, 0)
 	deletedIndexKeys := make([]statedb.CompositeKey, 0)
@@ -62,6 +55,15 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
 		} else {
 			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
+		}
+	}
+
+	// Add key index for pvt hash
+	for _, v := range pvtDataHashedKeys {
+		if v.IsDeleted {
+			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DeriveHashedDataNs(v.Namespace, v.Collection)})
+		} else {
+			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DeriveHashedDataNs(v.Namespace, v.Collection)})
 		}
 	}
 
@@ -170,7 +172,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp,
 						pvtHashedKeys = append(pvtHashedKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: base64.StdEncoding.EncodeToString(hashedWrite.KeyHash),
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
-								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: nsJoiner + pvtHashDataPrefix + collHashedRwSets.CollectionName})
+								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName})
 					}
 				}
 			}
@@ -220,7 +222,7 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 					for _, write := range collPvtRwSets.KvRwSet.Writes {
 						pvtKeys = append(pvtKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
-								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: nsJoiner + pvtDataPrefix + coll})
+								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
 					}
 
 				}
