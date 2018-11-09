@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f03468b6_9dd05f3a",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 113,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-09T21:38:56Z",
+      "side": 1,
+      "message": "That is better, thanks!",
+      "revId": "3780186913d30f6ef9cfac6b04447f133ec3bf9f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
