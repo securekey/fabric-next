@@ -155,7 +155,6 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 		c.validatedTxCache.Add(validatedTx.Key, validatedTx)
-		logger.Infof("Put cache=%s, key=%s", c.cacheName, validatedTx.Key)
 	}
 }
 
@@ -171,7 +170,6 @@ func (c *KVCache) Get(key string) (*ValidatedTx, bool) {
 	}
 
 	c.hit++
-	logger.Infof("Get cache=%s, key=%s, hit=%d, miss=%d", c.cacheName, key, c.hit, c.miss)
 	return txn, true
 }
 
