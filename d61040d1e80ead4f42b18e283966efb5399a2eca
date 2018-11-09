@@ -1,0 +1,73 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "916afadc_af54675c",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 147,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-09T12:29:46Z",
+      "side": 1,
+      "message": "should remove once we have cache working.",
+      "range": {
+        "startLine": 146,
+        "startChar": 0,
+        "endLine": 147,
+        "endChar": 0
+      },
+      "revId": "d61040d1e80ead4f42b18e283966efb5399a2eca",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d51b75d4_66dbcad2",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 159,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-09T12:29:46Z",
+      "side": 1,
+      "message": "should remove once we have cache working.",
+      "range": {
+        "startLine": 159,
+        "startChar": 2,
+        "endLine": 159,
+        "endChar": 69
+      },
+      "revId": "d61040d1e80ead4f42b18e283966efb5399a2eca",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0529ccc8_c9f6bacd",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 175,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-09T12:29:46Z",
+      "side": 1,
+      "message": "should remove once we have cache working.",
+      "range": {
+        "startLine": 175,
+        "startChar": 1,
+        "endLine": 175,
+        "endChar": 88
+      },
+      "revId": "d61040d1e80ead4f42b18e283966efb5399a2eca",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
