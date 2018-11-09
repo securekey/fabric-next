@@ -23,6 +23,12 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 )
 
+const (
+	nsJoiner          = "$$"
+	pvtDataPrefix     = "p"
+	pvtHashDataPrefix = "h"
+)
+
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
@@ -164,7 +170,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp,
 						pvtHashedKeys = append(pvtHashedKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: base64.StdEncoding.EncodeToString(hashedWrite.KeyHash),
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
-								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName})
+								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: nsJoiner + pvtHashDataPrefix + collHashedRwSets.CollectionName})
 					}
 				}
 			}
@@ -214,7 +220,7 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 					for _, write := range collPvtRwSets.KvRwSet.Writes {
 						pvtKeys = append(pvtKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
-								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
+								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: nsJoiner + pvtDataPrefix + coll})
 					}
 
 				}

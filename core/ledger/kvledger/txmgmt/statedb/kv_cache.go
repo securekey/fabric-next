@@ -17,11 +17,6 @@ import (
 
 var logger = flogging.MustGetLogger("statedb")
 
-const (
-	nsJoiner      = "$$"
-	pvtDataPrefix = "p"
-)
-
 type ValidatedTx struct {
 	Key          string
 	Value        []byte
@@ -78,7 +73,7 @@ func GetKVCache(chId string, namespace string) (*KVCache, error) {
 }
 
 func DerivePvtDataNs(namespace, collection string) string {
-	return namespace + nsJoiner + pvtDataPrefix + collection
+	return namespace + collection
 }
 
 func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData) {
