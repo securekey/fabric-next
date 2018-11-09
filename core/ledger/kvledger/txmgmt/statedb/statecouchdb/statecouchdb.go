@@ -262,8 +262,7 @@ func (vdb *VersionedDB) BytesKeySuppoted() bool {
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
 	if versionedValue, ok := statedb.GetFromKVCache(vdb.chainName, namespace, key); ok {
-		//TODO change to DEBUG
-		logger.Infof("XXX GetState(). ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
+		logger.Debugf("state retrieved from cache. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 		return versionedValue, nil
 	}
 
@@ -287,6 +286,8 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		return nil, err
 	}
 
+	// TODO: Change to DEBUG
+	logger.Infof("state retrieved from DB. ns=%s, chainName=%s, key=%s, version=%d", namespace, vdb.chainName, key, kv.Version.BlockNum)
 	return kv.VersionedValue, nil
 }
 
