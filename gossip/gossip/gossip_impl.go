@@ -666,20 +666,19 @@ func (g *gossipServiceImpl) getPeersToSendTo(membership []discovery.NetworkMembe
 
 	committers, endorsers := g.categorizeMembershipByRole(membership)
 
-	maxPeers := criteria.MaxPeers
-	if len(committers) > maxPeers {
-		g.logger.Warningf("The number of committers: %d, exceeds criteria.MaxPeers: %d. Adjusting MaxPeers to %d so that each committer gets the private data", len(committers), criteria.MaxPeers, len(committers))
-		maxPeers = len(committers)
+	if len(committers) > criteria.MaxPeers {
+		g.logger.Infof("The number of committers %d, exceeds criteria.MaxPeers %d. Adjusting MaxPeers to %d so that (if possible) each committer gets the private data", len(committers), criteria.MaxPeers, len(committers))
 	}
 
-	// First select from endorsers
-	peers2send := filter.SelectPeers(maxPeers, committers, criteria.IsEligible)
-	if len(peers2send) < maxPeers && len(endorsers) > 0 {
+	// First select as many committers as possible. Note that it may not be possible to send to all
+	// committers due to collection policy Org restrictions.
+	peers2send := filter.SelectPeers(len(committers), committers, criteria.IsEligible)
+	if len(peers2send) < criteria.MaxPeers && len(endorsers) > 0 {
 		// FIXME: Change to Debug
-		g.logger.Infof("Only %d peers returned and need %d. Selecting from %d endorsers...", len(peers2send), maxPeers, len(endorsers))
-		peersFromEndorser := filter.SelectPeers(maxPeers-len(peers2send), endorsers, criteria.IsEligible)
+		g.logger.Infof("Only %d peer(s) returned and need %d. Selecting from %d endorsers...", len(peers2send), criteria.MaxPeers, len(endorsers))
+		peersFromEndorser := filter.SelectPeers(criteria.MaxPeers-len(peers2send), endorsers, criteria.IsEligible)
 		// FIXME: Change to Debug
-		g.logger.Infof("Got %d additional selections from endorsers", len(peersFromEndorser))
+		g.logger.Infof("Got %d additional selection(s) from endorsers", len(peersFromEndorser))
 		peers2send = append(peers2send, peersFromEndorser...)
 	}
 
