@@ -67,7 +67,11 @@ func (p *CachedBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.B
 	}
 
 
-	s := newCachedBlockStore(blockStoreWithCheckpoint, blockIndex, blockCache)
+	s, err := newCachedBlockStore(blockStoreWithCheckpoint, blockIndex, blockCache)
+	if err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 

@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package cachedblkstore
 
 import (
+	"context"
+	"fmt"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -14,52 +16,127 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
+	"sync/atomic"
+	"time"
 )
 
+const (
+	checkpointBlockInterval = 1 // number of blocks between checkpoints.
+	blockStorageQueueLen    = checkpointBlockInterval
+)
 
 type cachedBlockStore struct {
-	blockStore blockStoreWithCheckpoint
-	blockIndex blkstorage.BlockIndex
-	blockCache blkstorage.BlockCache
+	blockStore     blockStoreWithCheckpoint
+	blockIndex     blkstorage.BlockIndex
+	blockCache     blkstorage.BlockCache
+
+	bcInfo         atomic.Value
+	blockStoreCh   chan *common.Block
+	checkpointCh   chan *common.Block
+	writerClosedCh chan struct {}
+	doneCh         chan struct {}
 }
 
-func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) *cachedBlockStore {
+func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) (*cachedBlockStore, error) {
 	s := cachedBlockStore{
 		blockStore: blockStore,
 		blockIndex: blockIndex,
 		blockCache: blockCache,
+		blockStoreCh: make(chan *common.Block, blockStorageQueueLen),
+		checkpointCh: make(chan *common.Block, blockStorageQueueLen),
+		writerClosedCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
 	}
 
-	return &s
+	curBcInfo, err := blockStore.GetBlockchainInfo()
+	if err != nil {
+		return nil, err
+	}
+	s.bcInfo.Store(curBcInfo)
+
+	go s.blockWriter()
+
+	return &s, nil
 }
 
 // AddBlock adds a new block
 func (s *cachedBlockStore) AddBlock(block *common.Block) error {
-	err := s.blockStore.AddBlock(block)
-	if err != nil {
-		return err
-	}
-
-	err = s.blockIndex.AddBlock(block)
-	if err != nil {
-		return errors.WithMessage(err, "block was not indexed")
-	}
-
-	err = s.blockCache.AddBlock(block)
+	err := s.blockCache.AddBlock(block)
 	if err != nil {
 		blockNumber := block.GetHeader().GetNumber()
-		logger.Warningf("block was not cached [%d, %s]", blockNumber, err)
+		return errors.WithMessage(err, fmt.Sprintf("block was not cached [%d]", blockNumber))
 	}
+
+	blockNumber := block.GetHeader().GetNumber()
+	if blockNumber != 0 {
+		logger.Errorf("waiting for previous block to checkpoint [%d]", blockNumber - checkpointBlockInterval)
+		s.blockStore.WaitForBlock(context.Background(), blockNumber - checkpointBlockInterval)
+		logger.Errorf("ready to store incoming block [%d]", blockNumber)
+	}
+	s.blockStoreCh <- block
+
 	return nil
 }
 
 func (s *cachedBlockStore) CheckpointBlock(block *common.Block) error {
-	return s.blockStore.CheckpointBlock(block)
+	s.checkpointCh <- block
+
+	updatedBcInfo := createBlockchainInfo(block)
+	s.bcInfo.Store(updatedBcInfo)
+
+	return nil
+}
+
+func (s *cachedBlockStore) blockWriter() {
+	const panicMsg = "block processing failure"
+
+	for {
+		select {
+		case <- s.doneCh:
+			close(s.writerClosedCh)
+			return
+		case block := <- s.blockStoreCh:
+			startBlockStorage := time.Now()
+			blockNumber := block.GetHeader().GetNumber()
+			logger.Errorf("processing block for storage [%d]", blockNumber)
+
+			err := s.blockStore.AddBlock(block)
+			if err != nil {
+				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				panic(panicMsg)
+			}
+
+			err = s.blockIndex.AddBlock(block)
+			if err != nil {
+				logger.Errorf("block was not indexed [%d, %s]", blockNumber, err)
+				panic(panicMsg)
+			}
+
+			ok := s.blockCache.OnBlockStored(blockNumber)
+			if !ok {
+				logger.Errorf("block cache does not contain block [%d]", blockNumber)
+				panic(panicMsg)
+			}
+			elapsedBlockStorage := time.Since(startBlockStorage) / time.Millisecond // duration in ms
+			logger.Infof("Stored block [%d] in %dms", block.Header.Number, elapsedBlockStorage)
+
+
+		case block := <- s.checkpointCh:
+			blockNumber := block.GetHeader().GetNumber()
+			logger.Debugf("processing block checkpoint [%d]", blockNumber)
+			err := s.blockStore.CheckpointBlock(block)
+			if err != nil {
+				blockNumber := block.GetHeader().GetNumber()
+				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				panic(panicMsg)
+			}
+		}
+	}
 }
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cachedBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	return s.blockStore.GetBlockchainInfo()
+	return s.bcInfo.Load().(*common.BlockchainInfo), nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
@@ -184,7 +261,21 @@ func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValida
 
 // Shutdown closes the storage instance
 func (s *cachedBlockStore) Shutdown() {
+	close(s.doneCh)
+	<- s.writerClosedCh
+
 	s.blockCache.Shutdown()
 	s.blockIndex.Shutdown()
 	s.blockStore.Shutdown()
+}
+
+func createBlockchainInfo(block *common.Block) *common.BlockchainInfo {
+	hash := block.GetHeader().Hash()
+	number := block.GetHeader().GetNumber()
+	bi := common.BlockchainInfo {
+		Height:            number + 1,
+		CurrentBlockHash:  hash,
+		PreviousBlockHash: block.Header.PreviousHash,
+	}
+	return &bi
 }
