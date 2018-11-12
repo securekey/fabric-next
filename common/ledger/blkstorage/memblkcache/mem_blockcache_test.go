@@ -23,6 +23,8 @@ func TestAddBlock(t *testing.T) {
 	eb0 := mocks.CreateSimpleMockBlock(0)
 	err := bc.AddBlock(eb0)
 	assert.NoError(t, err, "adding block should have been successful")
+	ok := bc.OnBlockStored(eb0.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 	assert.Equal(t, bc.blocks.Len(), 1, "adding a block should increase the blocks length")
 
 	key := eb0.GetHeader().Number
@@ -40,6 +42,8 @@ func TestLookupBlockByNumber(t *testing.T) {
 	eb0 := mocks.CreateSimpleMockBlock(0)
 	err := bc.AddBlock(eb0)
 	assert.NoError(t, err, "adding block 0 should have been successful")
+	ok = bc.OnBlockStored(eb0.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	ab0, ok := bc.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should exist in cache")
@@ -56,6 +60,8 @@ func TestLookupBlockByHash(t *testing.T) {
 
 	err := bc.AddBlock(eb0)
 	assert.NoError(t, err, "adding block 0 should have been successful")
+	ok = bc.OnBlockStored(eb0.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	ab0, ok := bc.LookupBlockByHash(hb0)
 	assert.True(t, ok, "block 0 should exist in cache")
@@ -109,6 +115,8 @@ func TestBlockEviction(t *testing.T) {
 	eb0 := mocks.CreateSimpleMockBlock(0)
 	err := bc.AddBlock(eb0)
 	assert.NoError(t, err, "adding block 0 should have been successful")
+	ok = bc.OnBlockStored(eb0.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	_, ok = bc.LookupBlockByNumber(0)
 	assert.True(t, ok, "block 0 should exist in cache")
@@ -116,10 +124,14 @@ func TestBlockEviction(t *testing.T) {
 	eb1 := mocks.CreateSimpleMockBlock(1)
 	err = bc.AddBlock(eb1)
 	assert.NoError(t, err, "adding block 1 should have been successful")
+	ok = bc.OnBlockStored(eb1.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	eb2 := mocks.CreateSimpleMockBlock(2)
 	err = bc.AddBlock(eb2)
 	assert.NoError(t, err, "adding block 2 should have been successful")
+	ok = bc.OnBlockStored(eb2.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	_, ok = bc.LookupBlockByNumber(0)
 	assert.False(t, ok, "block 0 should have been evicted from cache")
@@ -132,9 +144,66 @@ func TestBlockEviction(t *testing.T) {
 	eb3 := mocks.CreateSimpleMockBlock(3)
 	err = bc.AddBlock(eb3)
 	assert.NoError(t, err, "adding block 3 should have been successful")
+	ok = bc.OnBlockStored(eb3.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	_, ok = bc.LookupBlockByNumber(2)
 	assert.False(t, ok, "block 2 should have been evicted from cache")
+}
+
+func TestPinnedBlockEviction(t *testing.T) {
+	bc := newBlockCache(2)
+
+	ok := bc.OnBlockStored(0)
+	assert.False(t, ok, "block 0 should not handle stored event")
+
+	eb0 := mocks.CreateSimpleMockBlock(0)
+	err := bc.AddBlock(eb0)
+	assert.NoError(t, err, "adding block 0 should have been successful")
+
+	_, ok = bc.LookupBlockByNumber(0)
+	assert.True(t, ok, "block 0 should exist in cache")
+
+	eb1 := mocks.CreateSimpleMockBlock(1)
+	err = bc.AddBlock(eb1)
+	assert.NoError(t, err, "adding block 1 should have been successful")
+
+	_, ok = bc.LookupBlockByNumber(1)
+	assert.True(t, ok, "block 1 should exist in cache")
+
+	eb2 := mocks.CreateSimpleMockBlock(2)
+	err = bc.AddBlock(eb2)
+	assert.NoError(t, err, "adding block 2 should have been successful")
+
+	_, ok = bc.LookupBlockByNumber(0)
+	assert.True(t, ok, "block 0 should exist in cache")
+	_, ok = bc.LookupBlockByNumber(1)
+	assert.True(t, ok, "block 1 should exist in cache")
+	_, ok = bc.LookupBlockByNumber(2)
+	assert.True(t, ok, "block 2 should exist in cache")
+
+	ok = bc.OnBlockStored(0)
+	assert.True(t, ok, "block 0 should handle stored event")
+	_, ok = bc.LookupBlockByNumber(0)
+	assert.True(t, ok, "block 0 should exist in cache")
+	ok = bc.OnBlockStored(1)
+	assert.True(t, ok, "block 1 should handle stored event")
+	_, ok = bc.LookupBlockByNumber(1)
+	assert.True(t, ok, "block 1 should exist in cache")
+	ok = bc.OnBlockStored(2)
+	assert.True(t, ok, "block 2 should handle stored event")
+	_, ok = bc.LookupBlockByNumber(2)
+	assert.True(t, ok, "block 2 should exist in cache")
+
+	_, ok = bc.LookupBlockByNumber(0)
+	assert.False(t, ok, "block 0 should have been evicted from cache")
+	_, ok = bc.LookupBlockByNumber(1)
+	assert.True(t, ok, "block 1 should exist in cache")
+	_, ok = bc.LookupBlockByNumber(2)
+	assert.True(t, ok, "block 2 should exist in cache")
+
+	ok = bc.OnBlockStored(0)
+	assert.False(t, ok, "block 0 should not handle stored event")
 }
 
 func TestEvictionCleanup(t *testing.T) {
@@ -160,6 +229,8 @@ func TestEvictionCleanup(t *testing.T) {
 
 	err := bc.AddBlock(b0)
 	assert.NoError(t, err, "adding block 0 should have been successful")
+	ok := bc.OnBlockStored(b0.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	assert.Equal(t, 1, bc.blocks.Len(), "blocks should have one entry")
 	assert.Equal(t, 1, len(bc.hashToNumber), "hashToNumber index should have one entry")
@@ -172,7 +243,7 @@ func TestEvictionCleanup(t *testing.T) {
 	assert.Equal(t, []string{txnID0, txnID1}, numberToTxnIDs, "expected txn 1 & 2 in numberToTxnIDs index")
 
 	k0 := b0.GetHeader().Number
-	_, ok := bc.blocks.Get(k0)
+	_, ok = bc.blocks.Get(k0)
 	assert.True(t, ok, "block 0 should have been inserted into blocks cache")
 	h0 := hex.EncodeToString(b0.GetHeader().Hash())
 	_, ok = bc.hashToNumber[h0]
@@ -188,6 +259,8 @@ func TestEvictionCleanup(t *testing.T) {
 
 	err = bc.AddBlock(b1)
 	assert.NoError(t, err, "adding block 1 should have been successful")
+	ok = bc.OnBlockStored(b1.GetHeader().GetNumber())
+	assert.True(t, ok, "cache should have been updated with storage event")
 
 	assert.Equal(t, 1, bc.blocks.Len(), "blocks should have one entry")
 	assert.Equal(t, 1, len(bc.hashToNumber), "hashToNumber index should have one entry")
