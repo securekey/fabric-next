@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cachedblkstore
 
 import (
+	"fmt"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -14,51 +15,101 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
+const (
+	blockStorageQueueLenKey = "ledger.blockchain.blockStorageQueueLen"
+	blockStorageQueueLenDef = 1
+)
 
 type cachedBlockStore struct {
-	blockStore blockStoreWithCheckpoint
-	blockIndex blkstorage.BlockIndex
-	blockCache blkstorage.BlockCache
+	blockStore     blockStoreWithCheckpoint
+	blockIndex     blkstorage.BlockIndex
+	blockCache     blkstorage.BlockCache
+
+	blockWriterCh  chan *common.Block
+	writerClosedCh chan struct {}
+	doneCh         chan struct {}
 }
 
 func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) *cachedBlockStore {
+	// TODO: not sure this needs to be configurable.
+	blockStorageQueueLen := viper.GetInt(blockStorageQueueLenKey)
+	if blockStorageQueueLen == 0 {
+		blockStorageQueueLen = blockStorageQueueLenDef
+	}
+
 	s := cachedBlockStore{
 		blockStore: blockStore,
 		blockIndex: blockIndex,
 		blockCache: blockCache,
+		blockWriterCh: make(chan *common.Block, blockStorageQueueLen),
+		writerClosedCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
 	}
+
+	go blockWriter(s.blockWriterCh, s.doneCh, s.writerClosedCh, s.blockStore, s.blockIndex, s.blockCache)
 
 	return &s
 }
 
 // AddBlock adds a new block
 func (s *cachedBlockStore) AddBlock(block *common.Block) error {
-	err := s.blockStore.AddBlock(block)
-	if err != nil {
-		return err
-	}
-
-	err = s.blockIndex.AddBlock(block)
-	if err != nil {
-		return errors.WithMessage(err, "block was not indexed")
-	}
-
-	err = s.blockCache.AddBlock(block)
+	err := s.blockCache.AddBlock(block)
 	if err != nil {
 		blockNumber := block.GetHeader().GetNumber()
-		logger.Warningf("block was not cached [%d, %s]", blockNumber, err)
+		return errors.WithMessage(err, fmt.Sprintf("block was not cached [%d]", blockNumber))
 	}
+
+	s.blockWriterCh <- block
+
 	return nil
 }
 
+func blockWriter(ch chan *common.Block, done chan struct {}, closed chan struct {}, blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) {
+	for {
+		select {
+		case <- done:
+			close(closed)
+			return
+		case block := <- ch:
+			logger.Debugf("processing block for storage [%d]", block.GetHeader().GetNumber())
+
+			err := blockStore.AddBlock(block)
+			if err != nil {
+				blockNumber := block.GetHeader().GetNumber()
+				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				panic("block processing failure")
+			}
+
+			err = blockIndex.AddBlock(block)
+			if err != nil {
+				blockNumber := block.GetHeader().GetNumber()
+				logger.Errorf("block was not indexed [%d, %s]", blockNumber, err)
+				panic("block processing failure")
+			}
+
+			blockNumber := block.GetHeader().GetNumber()
+			ok := blockCache.OnBlockStored(blockNumber)
+			if !ok {
+				logger.Errorf("block cache does not contain block [%d]", blockNumber)
+				panic("block processing failure")
+			}
+
+			logger.Debugf("processed block for storage [%d]", block.GetHeader().GetNumber())
+		}
+	}
+}
+
 func (s *cachedBlockStore) CheckpointBlock(block *common.Block) error {
+	// TODO: Change to be the current height of the cache (more explicitly).
 	return s.blockStore.CheckpointBlock(block)
 }
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cachedBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
+	// TODO: Change to be the current height of the cache (more explicitly).
 	return s.blockStore.GetBlockchainInfo()
 }
 
@@ -184,6 +235,9 @@ func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValida
 
 // Shutdown closes the storage instance
 func (s *cachedBlockStore) Shutdown() {
+	close(s.doneCh)
+	<- s.writerClosedCh
+
 	s.blockCache.Shutdown()
 	s.blockIndex.Shutdown()
 	s.blockStore.Shutdown()
