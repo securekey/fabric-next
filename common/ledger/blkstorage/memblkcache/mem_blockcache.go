@@ -20,6 +20,7 @@ import (
 
 type blockCache struct {
 	blocks          *lru.Cache
+	pinnedBlocks    map[uint64]*common.Block
 	hashToNumber    map[string]uint64
 	numberToHash    map[uint64]string
 	txnLocs         map[string]*txnLoc
@@ -29,6 +30,7 @@ type blockCache struct {
 
 func newBlockCache(blockCacheSize int) *blockCache {
 	blocks := lru.New(blockCacheSize)
+	pinnedBlocks := make(map[uint64]*common.Block)
 	hashToNumber := make(map[string]uint64)
 	numberToHash := make(map[uint64]string)
 	txns := make(map[string]*txnLoc)
@@ -37,6 +39,7 @@ func newBlockCache(blockCacheSize int) *blockCache {
 
 	c := blockCache{
 		blocks,
+		pinnedBlocks,
 		hashToNumber,
 		numberToHash,
 		txns,
@@ -71,7 +74,20 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 		c.numberToTxnIDs[blockNumber] = txnIDs
 	}
 
-	c.blocks.Add(block.GetHeader().Number, block)
+	c.pinnedBlocks[block.GetHeader().Number] = block
+	return nil
+}
+
+func (c *blockCache) OnBlockStored(blockNum uint64, success bool) error {
+	b, ok := c.pinnedBlocks[blockNum]
+	if !ok {
+		return errors.New("block was not added to cache")
+	}
+
+	delete(c.pinnedBlocks, blockNum)
+	if success {
+		c.blocks.Add(blockNum, b)
+	}
 	return nil
 }
 

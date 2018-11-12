@@ -16,11 +16,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	defMaxBlockWriterLen = 10
+)
 
 type cachedBlockStore struct {
-	blockStore blockStoreWithCheckpoint
-	blockIndex blkstorage.BlockIndex
-	blockCache blkstorage.BlockCache
+	blockStore     blockStoreWithCheckpoint
+	blockIndex     blkstorage.BlockIndex
+	blockCache     blkstorage.BlockCache
+
+	blockWriterCh  chan *common.Block
+	writerClosedCh chan struct {}
+	doneCh         chan struct {}
 }
 
 func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) *cachedBlockStore {
@@ -28,37 +35,75 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 		blockStore: blockStore,
 		blockIndex: blockIndex,
 		blockCache: blockCache,
+		blockWriterCh: make(chan *common.Block, defMaxBlockWriterLen),
+		writerClosedCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
 	}
+
+	go blockWriter(s.blockWriterCh, s.doneCh, s.writerClosedCh, s.blockStore, s.blockIndex, s.blockCache)
 
 	return &s
 }
 
 // AddBlock adds a new block
 func (s *cachedBlockStore) AddBlock(block *common.Block) error {
-	err := s.blockStore.AddBlock(block)
-	if err != nil {
-		return err
-	}
-
-	err = s.blockIndex.AddBlock(block)
-	if err != nil {
-		return errors.WithMessage(err, "block was not indexed")
-	}
-
-	err = s.blockCache.AddBlock(block)
+	err := s.blockCache.AddBlock(block)
 	if err != nil {
 		blockNumber := block.GetHeader().GetNumber()
 		logger.Warningf("block was not cached [%d, %s]", blockNumber, err)
 	}
+
+	s.blockWriterCh <- block
+
 	return nil
 }
 
+func blockWriter(ch chan *common.Block, done chan struct {}, closed chan struct {}, blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) {
+	handleAddBlockFailed := func(block *common.Block) {
+		blockNumber := block.GetHeader().GetNumber()
+		err := blockCache.OnBlockStored(blockNumber, true)
+		if err != nil {
+			logger.Warningf("block was not cached [%d, %s]", blockNumber, err)
+		}
+	}
+
+	for {
+		select {
+		case <- done:
+			close(closed)
+			return
+		case block := <- ch:
+			err := blockStore.AddBlock(block)
+			if err != nil {
+				blockNumber := block.GetHeader().GetNumber()
+				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				handleAddBlockFailed(block)
+			}
+
+			err = blockIndex.AddBlock(block)
+			if err != nil {
+				blockNumber := block.GetHeader().GetNumber()
+				logger.Errorf("block was not indexed [%d, %s]", blockNumber, err)
+				handleAddBlockFailed(block)
+			}
+
+			blockNumber := block.GetHeader().GetNumber()
+			err = blockCache.OnBlockStored(blockNumber, true)
+			if err != nil {
+				logger.Warningf("block cache was not notified of storage [%d, %s]", blockNumber, err)
+			}
+		}
+	}
+}
+
 func (s *cachedBlockStore) CheckpointBlock(block *common.Block) error {
+	// TODO: Change to be the current height of the cache (more explicitly).
 	return s.blockStore.CheckpointBlock(block)
 }
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cachedBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
+	// TODO: Change to be the current height of the cache (more explicitly).
 	return s.blockStore.GetBlockchainInfo()
 }
 
@@ -184,6 +229,9 @@ func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValida
 
 // Shutdown closes the storage instance
 func (s *cachedBlockStore) Shutdown() {
+	close(s.doneCh)
+	<- s.writerClosedCh
+
 	s.blockCache.Shutdown()
 	s.blockIndex.Shutdown()
 	s.blockStore.Shutdown()
