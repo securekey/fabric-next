@@ -88,6 +88,7 @@ type BlockCacheProvider interface {
 // BlockCache - an interface for persisting and retrieving blocks from a cache
 type BlockCache interface {
 	AddBlock(block *common.Block) error
+	OnBlockStored(blockNum uint64) bool
 	LookupBlockByNumber(number uint64) (*common.Block, bool)
 	LookupBlockByHash(blockHash []byte) (*common.Block, bool)
 	LookupTxLoc(id string) (TxLoc, bool)
