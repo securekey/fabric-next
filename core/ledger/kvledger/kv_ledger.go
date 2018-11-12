@@ -192,6 +192,16 @@ func (l *kvLedger) GetBlockByNumber(blockNumber uint64) (*common.Block, error) {
 }
 
 func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+	blockNo := pvtdataAndBlock.Block.Header.Number
+	block := pvtdataAndBlock.Block
+
+	logger.Debugf("[%s] Adding block [%d] to storage", l.ledgerID, blockNo)
+
+	l.blockAPIsRWLock.Lock()
+	defer l.blockAPIsRWLock.Unlock()
+
+	logger.Debugf("[%s] Adding block [%d] transactions to state database", l.ledgerID, blockNo)
+	startCommitBlockStorage := time.Now()
 	err := l.blockStore.AddBlock(pvtdataAndBlock.Block)
 	if err != nil {
 		return err
@@ -201,8 +211,19 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	if err != nil {
 		return err
 	}
+	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 
-	return l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
+	err = l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
+	if err != nil {
+		return err
+	}
+
+	elapsedAddBlock := time.Since(startCommitBlockStorage) / time.Millisecond // total duration in ms
+
+	logger.Infof("[%s] Added block [%d] with %d transaction(s) in %dms (block_commit=%dms)",
+		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedAddBlock, elapsedCommitBlockStorage)
+
+	return nil
 }
 
 // GetBlocksIterator returns an iterator that starts from `startBlockNumber`(inclusive).
