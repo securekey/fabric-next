@@ -20,6 +20,7 @@ import (
 
 type blockCache struct {
 	blocks          *lru.Cache
+	pinnedBlocks    map[uint64]*common.Block
 	hashToNumber    map[string]uint64
 	numberToHash    map[uint64]string
 	txnLocs         map[string]*txnLoc
@@ -29,6 +30,7 @@ type blockCache struct {
 
 func newBlockCache(blockCacheSize int) *blockCache {
 	blocks := lru.New(blockCacheSize)
+	pinnedBlocks := make(map[uint64]*common.Block)
 	hashToNumber := make(map[string]uint64)
 	numberToHash := make(map[uint64]string)
 	txns := make(map[string]*txnLoc)
@@ -37,6 +39,7 @@ func newBlockCache(blockCacheSize int) *blockCache {
 
 	c := blockCache{
 		blocks,
+		pinnedBlocks,
 		hashToNumber,
 		numberToHash,
 		txns,
@@ -71,8 +74,22 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 		c.numberToTxnIDs[blockNumber] = txnIDs
 	}
 
-	c.blocks.Add(block.GetHeader().Number, block)
+	c.pinnedBlocks[block.GetHeader().Number] = block
 	return nil
+}
+
+func (c *blockCache) OnBlockStored(blockNum uint64) bool {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	b, ok := c.pinnedBlocks[blockNum]
+	if !ok {
+		return false
+	}
+
+	delete(c.pinnedBlocks, blockNum)
+	c.blocks.Add(blockNum, b)
+	return true
 }
 
 func createTxnLocsFromBlock(block *common.Block) (map[string]*txnLoc, error) {
@@ -102,8 +119,20 @@ func createTxnLocsFromBlock(block *common.Block) (map[string]*txnLoc, error) {
 
 func (c *blockCache) LookupBlockByNumber(number uint64) (*common.Block, bool) {
 	c.mtx.RLock()
-	b, ok := c.blocks.Get(number)
+	b, ok := c.pinnedBlocks[number]
+	if !ok {
+		b, ok = c.lookupBlockFromLRU(number)
+	}
 	c.mtx.RUnlock()
+	if !ok {
+		return nil, false
+	}
+
+	return b, true
+}
+
+func (c *blockCache) lookupBlockFromLRU(number uint64) (*common.Block, bool){
+	b, ok := c.blocks.Get(number)
 	if !ok {
 		return nil, false
 	}
