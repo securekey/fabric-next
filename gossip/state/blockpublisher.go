@@ -29,9 +29,9 @@ const (
 	transientBlockRetentionDefault   = 1000
 )
 
-// BlockPublisher is used for endorser-only peers to notify all interested
+// blockPublisher is used for endorser-only peers to notify all interested
 // consumers of the new block
-type BlockPublisher interface {
+type blockPublisher interface {
 	AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error
 }
 
@@ -42,14 +42,14 @@ type privateDataPurge interface {
 
 type publisher struct {
 	channelID               string
-	bp                      BlockPublisher
+	bp                      blockPublisher
 	pvtDataPurge            privateDataPurge
 	blockNumber             uint64
 	transientBlockRetention uint64
 	mutex                   sync.RWMutex
 }
 
-func newBlockPublisher(channelID string, bp BlockPublisher, pvtDataPurge privateDataPurge, ledgerHeight uint64) *publisher {
+func newBlockPublisher(channelID string, bp blockPublisher, pvtDataPurge privateDataPurge, ledgerHeight uint64) *publisher {
 	if ledgerHeight == 0 {
 		panic("Ledger height must be greater than 0")
 	}
@@ -107,7 +107,7 @@ func (p *publisher) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	}
 
 	p.blockNumber = block.Header.Number
-	logger.Infof("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
+	logger.Debugf("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
 
 	return nil
 }

@@ -44,6 +44,8 @@ type PeerLedgerSupport interface {
 
 	GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error)
 
+	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
+
 	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	GetBlockchainInfo() (*common.BlockchainInfo, error)
@@ -78,6 +80,22 @@ func NewLedgerCommitter(ledger PeerLedgerSupport) *LedgerCommitter {
 // be called upon new configuration block arrival and commit event
 func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEventer) *LedgerCommitter {
 	return &LedgerCommitter{PeerLedgerSupport: ledger, eventer: eventer}
+}
+
+// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
+func (lc *LedgerCommitter) AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error {
+	// Do validation and whatever needed before
+	// committing new block
+	if err := lc.preCommit(blockAndPvtData.Block); err != nil {
+		return err
+	}
+
+	// Committing new block
+	if err := lc.PeerLedgerSupport.AddBlock(blockAndPvtData); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // preCommit takes care to validate the block and update based on its
