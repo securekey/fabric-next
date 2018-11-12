@@ -146,14 +146,9 @@ func Close() {
 	logger.Infof("ledger mgmt closed")
 }
 
-type publisher interface {
-	AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error
-}
-
 func wrapLedger(id string, l ledger.PeerLedger) ledger.PeerLedger {
 	return &closableLedger{
 		id, l,
-		l.(publisher), // FIXME: This is a hack
 	}
 }
 
@@ -161,7 +156,6 @@ func wrapLedger(id string, l ledger.PeerLedger) ledger.PeerLedger {
 type closableLedger struct {
 	id string
 	ledger.PeerLedger
-	publisher
 }
 
 // Close closes the actual ledger and removes the entries from opened ledgers map

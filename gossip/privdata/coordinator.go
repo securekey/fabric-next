@@ -74,6 +74,9 @@ type TransientStore interface {
 // blocks arrival and in flight transient data, responsible
 // to complete missing parts of transient data for given block.
 type Coordinator interface {
+	// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
+	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
+
 	// StoreBlock deliver new block with underlined private data
 	// returns missing transaction ids
 	StoreBlock(*ledger.BlockAndPvtData, []string) error

@@ -29,6 +29,8 @@ import (
 // more support (such as Gossip) this interface will
 // change
 type Committer interface {
+	// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
+	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
 
 	// CommitWithPvtData block and private data into the ledger
 	CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error

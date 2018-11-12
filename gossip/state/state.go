@@ -103,6 +103,9 @@ type MCSAdapter interface {
 
 // ledgerResources defines abilities that the ledger provides
 type ledgerResources interface {
+	// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
+	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
+
 	// StoreBlock deliver new block with underlined private data
 	// returns missing transaction ids
 	StoreBlock(*ledger.BlockAndPvtData, []string) error
@@ -217,12 +220,6 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		return nil
 	}
 
-	// FIXME: Find a better way to pass the interface
-	var bp BlockPublisher
-	if peerLedger != nil {
-		bp = peerLedger.(BlockPublisher)
-	}
-
 	s := &GossipStateProviderImpl{
 		// MessageCryptoService
 		mediator: services,
@@ -253,7 +250,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		peerLedger: peerLedger,
 
-		blockPublisher: newBlockPublisher(chainID, bp, transientStore, height),
+		blockPublisher: newBlockPublisher(chainID, ledger, transientStore, height),
 	}
 
 	logger.Infof("Updating metadata information, "+
