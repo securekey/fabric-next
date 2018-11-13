@@ -20,54 +20,36 @@ import (
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 const (
 	collectionSeparator              = "~"
-	transientBlockRetentionConfigKey = "peer.gossip.pvtData.transientstoreMaxBlockRetention"
-	transientBlockRetentionDefault   = 1000
 )
 
 // blockPublisher is used for endorser-only peers to notify all interested
 // consumers of the new block
 type blockPublisher interface {
-	AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error
-}
-
-type privateDataPurge interface {
-	PurgeByTxids(txids []string) error
-	PurgeByHeight(maxBlockNumToRetain uint64) error
+	PublishBlock(*ledger.BlockAndPvtData, []string) error
 }
 
 type publisher struct {
 	channelID               string
 	bp                      blockPublisher
-	pvtDataPurge            privateDataPurge
 	blockNumber             uint64
-	transientBlockRetention uint64
 	mutex                   sync.RWMutex
 }
 
-func newBlockPublisher(channelID string, bp blockPublisher, pvtDataPurge privateDataPurge, ledgerHeight uint64) *publisher {
+func newBlockPublisher(channelID string, bp blockPublisher, ledgerHeight uint64) *publisher {
 	if ledgerHeight == 0 {
 		panic("Ledger height must be greater than 0")
 	}
 
 	logger.Infof("Initializing ledger height to %d for channel [%s]: %s", ledgerHeight, channelID)
 
-	transientBlockRetention := uint64(viper.GetInt(transientBlockRetentionConfigKey))
-	if transientBlockRetention == 0 {
-		logger.Warning("Configuration key", transientBlockRetentionConfigKey, "isn't set, defaulting to", transientBlockRetentionDefault)
-		transientBlockRetention = transientBlockRetentionDefault
-	}
-
 	return &publisher{
 		channelID:               channelID,
 		bp:                      bp,
-		pvtDataPurge:            pvtDataPurge,
 		blockNumber:             ledgerHeight - 1,
-		transientBlockRetention: transientBlockRetention,
 	}
 }
 
@@ -97,41 +79,15 @@ func (p *publisher) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 		}
 	}
 
-	err := p.bp.AddBlock(pvtdataAndBlock)
+	err := p.bp.PublishBlock(pvtdataAndBlock, pvtDataTxIDs)
 	if err != nil {
 		return err
-	}
-
-	if len(pvtDataTxIDs) > 0 || (block.Header.Number%p.transientBlockRetention == 0 && block.Header.Number > p.transientBlockRetention) {
-		go p.purgePrivateTransientData(block.Header.Number, pvtDataTxIDs)
 	}
 
 	p.blockNumber = block.Header.Number
 	logger.Debugf("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
 
 	return nil
-}
-
-func (p *publisher) purgePrivateTransientData(blockNum uint64, pvtDataTxIDs []string) {
-	maxBlockNumToRetain := blockNum - p.transientBlockRetention
-	if len(pvtDataTxIDs) > 0 {
-		// Purge all transactions in block - valid or not valid.
-		logger.Debugf("Purging transient private data for transactions %s ...", pvtDataTxIDs)
-		if err := p.pvtDataPurge.PurgeByTxids(pvtDataTxIDs); err != nil {
-			logger.Errorf("Purging transient private data for transactions %s failed: %s", pvtDataTxIDs, err)
-		} else {
-			logger.Debugf("Purging transient private data for transactions %s succeeded", pvtDataTxIDs)
-		}
-	}
-
-	if blockNum%p.transientBlockRetention == 0 && blockNum > p.transientBlockRetention {
-		logger.Debugf("Purging transient private data with maxBlockNumToRetain [%d]...", maxBlockNumToRetain)
-		if err := p.pvtDataPurge.PurgeByHeight(maxBlockNumToRetain); err != nil {
-			logger.Errorf("Failed purging data from transient store with maxBlockNumToRetain [%d]: %s", maxBlockNumToRetain, err)
-		} else {
-			logger.Debugf("... finished running PurgeByHeight with maxBlockNumToRetain [%d]", maxBlockNumToRetain)
-		}
-	}
 }
 
 func (p *publisher) LedgerHeight() uint64 {
