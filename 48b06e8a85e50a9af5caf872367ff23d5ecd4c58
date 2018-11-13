@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "09c3de39_896e4ed1",
+        "filename": "gossip/privdata/coordinator.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 267,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-13T01:43:56Z",
+      "side": 1,
+      "message": "note: doing this in the background will be new for the committer.",
+      "range": {
+        "startLine": 267,
+        "startChar": 2,
+        "endLine": 267,
+        "endChar": 4
+      },
+      "revId": "48b06e8a85e50a9af5caf872367ff23d5ecd4c58",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
