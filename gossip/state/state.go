@@ -103,12 +103,14 @@ type MCSAdapter interface {
 
 // ledgerResources defines abilities that the ledger provides
 type ledgerResources interface {
-	// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
-	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
+	// StoreBlockForCommit deliver new block with underlined private data
+	// returns missing transaction ids (this version commits the transaction).
+	StoreBlockForCommit(*ledger.BlockAndPvtData, []string) error
 
 	// StoreBlock deliver new block with underlined private data
-	// returns missing transaction ids
-	StoreBlock(*ledger.BlockAndPvtData, []string) error
+	// returns missing transaction ids (this version adds the validated block
+	// into local caches and indexes (for a peer that does endorsement).
+	StoreBlockForAdd(*ledger.BlockAndPvtData, []string) error
 
 	// ValidateBlock validate block
 	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error)
@@ -250,7 +252,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		peerLedger: peerLedger,
 
-		blockPublisher: newBlockPublisher(chainID, ledger, transientStore, height),
+		blockPublisher: newBlockPublisher(chainID, ledger, height),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -967,7 +969,7 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 	// Gossip messages with other nodes in my org
 	s.gossipBlock(block, blockAndPvtData.BlockPvtData)
 	// Commit block with available private transactions
-	err = s.ledger.StoreBlock(blockAndPvtData, pvtTxns)
+	err = s.ledger.StoreBlockForCommit(blockAndPvtData, pvtTxns)
 	if err != nil {
 		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
 		return err
