@@ -35,6 +35,7 @@ type cdbBlockStore struct {
 	cp         *checkpoint
 	bcInfo     atomic.Value
 }
+
 // newCDBBlockStore constructs block store based on CouchDB
 func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBlockStore {
 	cp := newCheckpoint(blockStore)
@@ -42,7 +43,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBl
 	cdbBlockStore := &cdbBlockStore{
 		blockStore: blockStore,
 		ledgerID:   ledgerID,
-		cpInfoSig:  make(chan struct {}),
+		cpInfoSig:  make(chan struct{}),
 		cpInfoMtx:  &sync.RWMutex{},
 		cp:         cp,
 	}
@@ -121,12 +122,12 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 		logger.Debugf("Not saving checkpoint info for block %d since I'm not a committer. Just publishing the block.", block.Header.Number)
 	}
 
-	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
-	s.updateCheckpoint(newCPInfo)
-
 	curBcInfo := s.bcInfo.Load().(*common.BlockchainInfo)
 	newBcInfo := updateBlockchainInfo(curBcInfo, block)
 	s.bcInfo.Store(newBcInfo)
+
+	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
+	s.updateCheckpoint(newCPInfo)
 
 	return nil
 }
@@ -225,7 +226,7 @@ func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Enve
 	blockData := block.GetData()
 	envelopes := blockData.GetData()
 	envelopesLen := uint64(len(envelopes))
-	if envelopesLen - 1 < tranNum {
+	if envelopesLen-1 < tranNum {
 		blockNum := block.GetHeader().GetNumber()
 		return nil, errors.Errorf("transaction number is invalid [%d, %d, %d]", blockNum, envelopesLen, tranNum)
 	}
@@ -322,7 +323,7 @@ func (s *cdbBlockStore) LastBlockNumber() uint64 {
 func (s *cdbBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
 	var lastBlockNumber uint64
 
-	BlockLoop:
+BlockLoop:
 	for {
 		s.cpInfoMtx.RLock()
 		lastBlockNumber = s.cpInfo.lastBlockNumber
