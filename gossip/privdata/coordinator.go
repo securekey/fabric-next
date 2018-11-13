@@ -74,12 +74,14 @@ type TransientStore interface {
 // blocks arrival and in flight transient data, responsible
 // to complete missing parts of transient data for given block.
 type Coordinator interface {
-	// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
-	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
+	// StoreBlockForCommit deliver new block with underlined private data
+	// returns missing transaction ids (this version commits the transaction).
+	StoreBlockForCommit(*ledger.BlockAndPvtData, []string) error
 
 	// StoreBlock deliver new block with underlined private data
-	// returns missing transaction ids
-	StoreBlock(*ledger.BlockAndPvtData, []string) error
+	// returns missing transaction ids (this version adds the validated block
+	// into local caches and indexes (for a peer that does endorsement).
+	StoreBlockForAdd(*ledger.BlockAndPvtData, []string) error
 
 	// ValidateBlock validate block
 	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error)
@@ -244,31 +246,50 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	return blockAndPvtData, privateInfo.txns, nil
 }
 
-// StoreBlock stores block with private data into the ledger
-func (c *coordinator) StoreBlock(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string) error {
+// StoreBlockForCommit stores block with private data into the ledger
+func (c *coordinator) StoreBlockForCommit(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string) error {
+	return c.storeBlock(blockAndPvtData, pvtTxns, c.Committer.CommitWithPvtData)
+}
 
-	// commit block and private data
-	err := c.CommitWithPvtData(blockAndPvtData)
+// StoreBlockForAdd stores a validated block into local caches and indexes (for a peer that does endorsement).
+func (c *coordinator) StoreBlockForAdd(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string) error {
+	return c.storeBlock(blockAndPvtData, pvtTxns, c.Committer.AddBlock)
+}
+
+func (c *coordinator) storeBlock(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string, store func (blockAndPvtData *ledger.BlockAndPvtData) error) error {
+	err := store(blockAndPvtData)
 	if err != nil {
-		return errors.Wrap(err, "commit failed")
+		return errors.WithMessage(err, "store block failed")
 	}
 
-	if len(blockAndPvtData.BlockPvtData) > 0 {
-		// Finally, purge all transactions in block - valid or not valid.
-		if err := c.PurgeByTxids(pvtTxns); err != nil {
-			logger.Error("Purging transactions", pvtTxns, "failed:", err)
-		}
-	}
-
-	seq := blockAndPvtData.Block.Header.Number
-	if seq%c.transientBlockRetention == 0 && seq > c.transientBlockRetention {
-		err := c.PurgeByHeight(seq - c.transientBlockRetention)
-		if err != nil {
-			logger.Error("Failed purging data from transient store at block", seq, ":", err)
-		}
+	block := blockAndPvtData.Block
+	if len(pvtTxns) > 0 || (block.Header.Number%c.transientBlockRetention == 0 && block.Header.Number > c.transientBlockRetention) {
+		go c.purgePrivateTransientData(block.Header.Number, pvtTxns)
 	}
 
 	return nil
+}
+
+func (c *coordinator) purgePrivateTransientData(blockNum uint64, pvtDataTxIDs []string) {
+	maxBlockNumToRetain := blockNum - c.transientBlockRetention
+	if len(pvtDataTxIDs) > 0 {
+		// Purge all transactions in block - valid or not valid.
+		logger.Debugf("Purging transient private data for transactions %s ...", pvtDataTxIDs)
+		if err := c.PurgeByTxids(pvtDataTxIDs); err != nil {
+			logger.Errorf("Purging transient private data for transactions %s failed: %s", pvtDataTxIDs, err)
+		} else {
+			logger.Debugf("Purging transient private data for transactions %s succeeded", pvtDataTxIDs)
+		}
+	}
+
+	if blockNum%c.transientBlockRetention == 0 && blockNum > c.transientBlockRetention {
+		logger.Debugf("Purging transient private data with maxBlockNumToRetain [%d]...", maxBlockNumToRetain)
+		if err := c.PurgeByHeight(maxBlockNumToRetain); err != nil {
+			logger.Errorf("Failed purging data from transient store with maxBlockNumToRetain [%d]: %s", maxBlockNumToRetain, err)
+		} else {
+			logger.Debugf("... finished running PurgeByHeight with maxBlockNumToRetain [%d]", maxBlockNumToRetain)
+		}
+	}
 }
 
 func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][]byte, privateInfo *privateDataInfo) {
