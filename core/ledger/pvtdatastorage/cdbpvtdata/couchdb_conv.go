@@ -20,18 +20,18 @@ import (
 )
 
 const (
-	idField                    = "_id"
-	pvtDataField               = "pvtData"
-	blockNumberField           = "block_number"
-	blockNumberIndexName       = "by_block_number"
-	blockNumberIndexDoc        = "indexBlockNumber"
-	blockNumberExpiryField     = "block_number_expiry"
-	blockNumberExpiryIndexName = "by_block_number_expiry"
-	blockNumberExpiryIndexDoc  = "indexBlockNumberExpiry"
-	metadataKey                = "metadata"
-	commitField                = "commit"
-	pendingCommitField         = "pending"
-	blockNumberBase            = 10
+	idField              = "_id"
+	revField             = "_rev"
+	blockNumberField     = "block_number"
+	blockNumberIndexName = "by_block_number"
+	blockNumberIndexDoc  = "indexBlockNumber"
+	dataField            = "data"
+	expiryField          = "expiry"
+	metadataKey          = "metadata"
+	commitField          = "commit"
+	pendingCommitField   = "pending"
+	blockKeyPrefix       = ""
+	blockNumberBase      = 10
 )
 
 const blockNumberIndexDef = `
@@ -44,69 +44,29 @@ const blockNumberIndexDef = `
 		"type": "json"
 	}`
 
-const blockNumberExpiryIndexDef = `
-	{
-		"index": {
-			"fields": ["` + blockNumberExpiryField + `"]
-		},
-		"name": "` + blockNumberExpiryIndexName + `",
-		"ddoc": "` + blockNumberExpiryIndexDoc + `",
-		"type": "json"
-	}`
-
 type jsonValue map[string]interface{}
 
 func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func dataEntriesToCouchDocs(dataEntries []*dataEntry, blockNumber uint64) ([]*couchdb.CouchDoc, error) {
-	var docs []*couchdb.CouchDoc
-
-	for _, dataEntry := range dataEntries {
-		keyBytes := encodeDataKey(dataEntry.key)
-		valBytes, err := encodeDataValue(dataEntry.value)
-		if err != nil {
-			return nil, err
-		}
-		indices := map[string]string{blockNumberField: fmt.Sprintf("%064s", strconv.FormatUint(dataEntry.key.blkNum, blockNumberBase))}
-		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
-	}
-	return docs, nil
-}
-
-func expiryEntriesToCouchDocs(expiryEntries []*expiryEntry, blockNumber uint64) ([]*couchdb.CouchDoc, error) {
-	var docs []*couchdb.CouchDoc
-
-	for _, expiryEntry := range expiryEntries {
-		keyBytes := encodeExpiryKey(expiryEntry.key)
-		valBytes, err := encodeExpiryValue(expiryEntry.value)
-		if err != nil {
-			return nil, err
-		}
-		indices := map[string]string{blockNumberExpiryField: fmt.Sprintf("%064s", strconv.FormatUint(expiryEntry.key.expiringBlk, blockNumberBase))}
-		doc, err := keyValueToCouchDoc(keyBytes, valBytes, indices)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
-	}
-	return docs, nil
-}
-
-func keyValueToCouchDoc(key []byte, value []byte, indices map[string]string) (*couchdb.CouchDoc, error) {
+func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry, blockNumber uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
+	jsonMap[idField] = blockNumberToKey(blockNumber)
+	jsonMap[blockNumberField] = fmt.Sprintf("%064s", strconv.FormatUint(blockNumber, blockNumberBase))
 
-	jsonMap[idField] = hex.EncodeToString(key)
-
-	for key, val := range indices {
-		jsonMap[key] = val
+	dataJSON, err := dataEntriesToJSONValue(dataEntries)
+	if err != nil {
+		return nil, err
 	}
-	jsonMap[pvtDataField] = value
+
+	expiryJSON, err := expiryEntriesToJSONValue(expiryEntries)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonMap[dataField] = dataJSON
+	jsonMap[expiryField] = expiryJSON
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
@@ -116,9 +76,48 @@ func keyValueToCouchDoc(key []byte, value []byte, indices map[string]string) (*c
 	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
 
 	return &couchDoc, nil
+
 }
 
-func createMetadataDoc(pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
+func blockNumberToKey(blockNum uint64) string {
+	return blockKeyPrefix + strconv.FormatUint(blockNum, 10)
+}
+
+func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
+	data := make(jsonValue)
+
+	for _, dataEntry := range dataEntries {
+		keyBytes := encodeDataKey(dataEntry.key)
+		valBytes, err := encodeDataValue(dataEntry.value)
+		if err != nil {
+			return nil, err
+		}
+
+		keyBytesHex := hex.EncodeToString(keyBytes)
+		data[keyBytesHex] = valBytes
+	}
+
+	return data, nil
+}
+
+func expiryEntriesToJSONValue(expiryEntries []*expiryEntry) (jsonValue, error) {
+	expiry := make(jsonValue)
+
+	for _, expiryEntry := range expiryEntries {
+		keyBytes := encodeExpiryKey(expiryEntry.key)
+		valBytes, err := encodeExpiryValue(expiryEntry.value)
+		if err != nil {
+			return nil, err
+		}
+
+		keyBytesHex := hex.EncodeToString(keyBytes)
+		expiry[keyBytesHex] = valBytes
+	}
+
+	return expiry, nil
+}
+
+func createMetadataDoc(rev string, pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 	jsonMap[idField] = metadataKey
 
@@ -179,7 +178,7 @@ type metadata struct {
 }
 
 func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata, rev string) (string, error) {
-	doc, err := createMetadataDoc(m.pending, m.lastCommitedBlock)
+	doc, err := createMetadataDoc(rev, m.pending, m.lastCommitedBlock)
 	if err != nil {
 		return "", err
 	}
@@ -247,7 +246,7 @@ func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
 	return &m, true, nil
 }
 
-func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string) (map[string][]byte, error) {
+func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string, field string) (map[string][]byte, error) {
 	results, err := db.QueryDocuments(query)
 	if err != nil {
 		return nil, err
@@ -273,7 +272,7 @@ func retrievePvtDataQuery(db *couchdb.CouchDatabase, query string) (map[string][
 			return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
 		}
 
-		valueBytes, err := base64.StdEncoding.DecodeString(jsonResult[pvtDataField].(string))
+		valueBytes, err := base64.StdEncoding.DecodeString(jsonResult[field].(string))
 		if err != nil {
 			return nil, errors.Wrapf(err, "error from DecodeString for pvtDataField")
 		}
