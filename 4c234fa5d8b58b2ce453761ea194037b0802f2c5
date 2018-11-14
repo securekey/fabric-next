@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "74469fbc_8845d37d",
+        "filename": "core/committer/committer_impl.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 51,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-14T17:53:50Z",
+      "side": 1,
+      "message": "Probably ValidateWithPvtData would be better",
+      "range": {
+        "startLine": 51,
+        "startChar": 1,
+        "endLine": 51,
+        "endChar": 26
+      },
+      "revId": "4c234fa5d8b58b2ce453761ea194037b0802f2c5",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
