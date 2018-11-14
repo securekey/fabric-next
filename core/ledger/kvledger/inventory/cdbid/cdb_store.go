@@ -83,7 +83,7 @@ func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) (*St
 }
 
 func createIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateNewIndexWithRetry(inventoryTypeIndexDef, inventoryTypeIndexDoc)
+	err := db.CreateNewIndexWithRetry(inventoryTypeIndexDef, inventoryTypeIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of inventory metadata index failed")
 	}

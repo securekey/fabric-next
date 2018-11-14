@@ -74,9 +74,7 @@ func createMetadataDoc(constructionLedger string) (*couchdb.CouchDoc, error)  {
 	jsonMap := make(jsonValue)
 
 	jsonMap[idField] = metadataKey
-	if len(constructionLedger) > 0 {
-		jsonMap[underConstructionLedgerKey] = constructionLedger
-	}
+	jsonMap[underConstructionLedgerKey] = constructionLedger
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {

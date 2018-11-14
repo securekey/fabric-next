@@ -108,7 +108,7 @@ func (c *ConfigHistoryMgr) createCommitterConfigHistoryStore(couchInstance *couc
 }
 
 func (c *ConfigHistoryMgr) createConfigHistoryStoreIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateNewIndexWithRetry(blockNumberCCNameIndexDef, blockNumberCCNameIndexDoc)
+	err := db.CreateNewIndexWithRetry(blockNumberCCNameIndexDef, blockNumberCCNameIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number and cc name index failed")
 	}

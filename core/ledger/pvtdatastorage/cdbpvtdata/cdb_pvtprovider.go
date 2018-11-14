@@ -89,11 +89,11 @@ func createCommitterPvtDataStore(couchInstance *couchdb.CouchInstance, dbName st
 }
 
 func createPvtStoreIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateNewIndexWithRetry(blockNumberIndexDef, blockNumberIndexDoc)
+	err := db.CreateNewIndexWithRetry(blockNumberIndexDef, blockNumberIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}
-	_, err = db.CreateNewIndexWithRetry(blockNumberExpiryIndexDef, blockNumberExpiryIndexDoc)
+	err = db.CreateNewIndexWithRetry(blockNumberExpiryIndexDef, blockNumberExpiryIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}

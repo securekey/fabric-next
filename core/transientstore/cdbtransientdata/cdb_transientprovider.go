@@ -86,11 +86,11 @@ func createTransientStore(couchInstance *couchdb.CouchInstance, dbName, ledgerID
 }
 
 func createTransientStoreIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateNewIndexWithRetry(blockNumberIndexDef, blockNumberIndexDoc)
+	err := db.CreateNewIndexWithRetry(blockNumberIndexDef, blockNumberIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}
-	_, err = db.CreateNewIndexWithRetry(txIDIndexDef, txIDIndexDoc)
+	err = db.CreateNewIndexWithRetry(txIDIndexDef, txIDIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}

@@ -35,11 +35,11 @@ func (dbclient *CouchDatabase) CreateIndexWithRetry(indexdefinition string) (*Cr
 }
 
 // CreateNewIndexWithRetry method provides a function creating an index but retries on failure
-func (dbclient *CouchDatabase) CreateNewIndexWithRetry(indexdefinition string, designDoc string) (*CreateIndexResponse, error) {
+func (dbclient *CouchDatabase) CreateNewIndexWithRetry(indexdefinition string, designDoc string) error {
 	// TODO: Make configurable
 	const maxAttempts = 10
 
-	respUT, err := retry.Invoke(
+	_, err := retry.Invoke(
 		func() (interface{}, error) {
 			exists, err := dbclient.IndexDesignDocExists(designDoc)
 			if err != nil {
@@ -53,13 +53,7 @@ func (dbclient *CouchDatabase) CreateNewIndexWithRetry(indexdefinition string, d
 		},
 		retry.WithMaxAttempts(maxAttempts),
 	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	resp := respUT.(*CreateIndexResponse)
-	return resp, nil
+	return err
 }
 
 // Exists determines if the database exists
