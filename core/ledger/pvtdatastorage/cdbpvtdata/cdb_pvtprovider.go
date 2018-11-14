@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("peer")
+var logger = flogging.MustGetLogger("pvtdatastorage")
 
 const (
 	pvtDataStoreName = "pvtdata"
@@ -28,6 +28,11 @@ type Provider struct {
 func NewProvider() (*Provider, error) {
 	logger.Debugf("constructing CouchDB private data storage provider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
+
+	return newProviderWithDBDef(couchDBDef)
+}
+
+func newProviderWithDBDef(couchDBDef *couchdb.CouchDBDef) (*Provider, error) {
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 	if err != nil {
@@ -62,15 +67,13 @@ func createPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string) (pv
 	if !dbExists {
 		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
 	}
-
-	indexExists, err := db.IndexDesignDocExistsWithRetry(blockNumberIndexDoc, blockNumberExpiryIndexDoc)
+	indexExists, err := db.IndexDesignDocExistsWithRetry(purgeBlockNumbersIndexDoc)
 	if err != nil {
 		return nil, err
 	}
 	if !indexExists {
 		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
 	}
-
 	return newStore(db)
 }
 
@@ -89,17 +92,12 @@ func createCommitterPvtDataStore(couchInstance *couchdb.CouchInstance, dbName st
 }
 
 func createPvtStoreIndices(db *couchdb.CouchDatabase) error {
-	err := db.CreateNewIndexWithRetry(blockNumberIndexDef, blockNumberIndexDoc)
-	if err != nil {
-		return errors.WithMessage(err, "creation of block number index failed")
-	}
-	err = db.CreateNewIndexWithRetry(blockNumberExpiryIndexDef, blockNumberExpiryIndexDoc)
+	err := db.CreateNewIndexWithRetry(purgeBlockNumbersIndexDef, purgeBlockNumbersIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}
 	return nil
 }
-
 
 // Close cleans up the provider
 func (p *Provider) Close() {
