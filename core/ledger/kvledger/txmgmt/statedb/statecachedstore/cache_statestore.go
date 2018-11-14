@@ -80,10 +80,10 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // startKey is inclusive
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
-
+	logger.Infof("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s", namespace, startKey, endKey)
 	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
 	if !dbItr.Next() {
-		logger.Debugf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
+		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
 	dbItr.Prev()
@@ -143,6 +143,8 @@ func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "KVScanner next get value %s %s failed", scanner.namespace, key)
 	}
+	logger.Infof("*** GetStateRangeScanIterator next namespace %s key %s value %s", scanner.namespace, key, versionedValue.Value)
+
 	return &statedb.VersionedKV{
 		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
 		VersionedValue: *versionedValue}, nil

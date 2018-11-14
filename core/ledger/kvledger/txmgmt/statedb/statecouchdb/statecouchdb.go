@@ -524,6 +524,7 @@ func (scanner *queryScanner) Next() (statedb.QueryResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.Infof("*** Couchdb GetStateRangeScanIterator next namespace %s key %s value %s", scanner.namespace, key, kv.VersionedValue.Value)
 	return &statedb.VersionedKV{
 		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
 		VersionedValue: *kv.VersionedValue}, nil
