@@ -22,6 +22,30 @@
       "revId": "ec4e95e87774213a64892b3c0c33552d990ddbc4",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "29698f83_cd691743",
+        "filename": "core/ledger/kvledger/inventory/cdbid/couchdoc_conv.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 77,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-14T21:05:05Z",
+      "side": 0,
+      "message": "The GetUnderConstructionFlag() implementation expects it. Also, callers of GetUnderConstructionFlag() are aware (and can handle) of empty values for this flag.",
+      "parentUuid": "486e4b24_484fd38f",
+      "range": {
+        "startLine": 77,
+        "startChar": 1,
+        "endLine": 77,
+        "endChar": 33
+      },
+      "revId": "ec4e95e87774213a64892b3c0c33552d990ddbc4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
