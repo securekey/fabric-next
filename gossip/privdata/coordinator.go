@@ -243,6 +243,11 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 			SeqInBlock: int(missingRWS.seqInBlock),
 		})
 	}
+	err = c.Committer.ValidateBlock(blockAndPvtData)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return blockAndPvtData, privateInfo.txns, nil
 }
 
@@ -256,7 +261,7 @@ func (c *coordinator) PublishBlock(blockAndPvtData *ledger.BlockAndPvtData, pvtT
 	return c.storeBlock(blockAndPvtData, pvtTxns, c.Committer.AddBlock)
 }
 
-func (c *coordinator) storeBlock(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string, store func (blockAndPvtData *ledger.BlockAndPvtData) error) error {
+func (c *coordinator) storeBlock(blockAndPvtData *ledger.BlockAndPvtData, pvtTxns []string, store func(blockAndPvtData *ledger.BlockAndPvtData) error) error {
 	err := store(blockAndPvtData)
 	if err != nil {
 		return errors.WithMessage(err, "store block failed")

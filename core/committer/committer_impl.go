@@ -48,6 +48,8 @@ type PeerLedgerSupport interface {
 
 	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
+	ValidateCommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+
 	GetBlockchainInfo() (*common.BlockchainInfo, error)
 
 	GetBlockByNumber(blockNumber uint64) (*common.Block, error)
@@ -113,12 +115,6 @@ func (lc *LedgerCommitter) preCommit(block *common.Block) error {
 
 // CommitWithPvtData commits blocks atomically with private data
 func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error {
-	// Do validation and whatever needed before
-	// committing new block
-	if err := lc.preCommit(blockAndPvtData.Block); err != nil {
-		return err
-	}
-
 	// Committing new block
 	if err := lc.PeerLedgerSupport.CommitWithPvtData(blockAndPvtData); err != nil {
 		return err
@@ -126,6 +122,22 @@ func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvt
 
 	// post commit actions, such as event publishing
 	lc.postCommit(blockAndPvtData.Block)
+
+	return nil
+}
+
+// ValidateBlock validate block
+func (lc *LedgerCommitter) ValidateBlock(blockAndPvtData *ledger.BlockAndPvtData) error {
+	// Do validation and whatever needed before
+	// committing new block
+	if err := lc.preCommit(blockAndPvtData.Block); err != nil {
+		return err
+	}
+
+	// Committing new block
+	if err := lc.PeerLedgerSupport.ValidateCommitWithPvtData(blockAndPvtData); err != nil {
+		return err
+	}
 
 	return nil
 }

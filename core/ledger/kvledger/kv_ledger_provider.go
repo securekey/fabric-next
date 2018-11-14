@@ -9,6 +9,7 @@ package kvledger
 import (
 	"errors"
 	"fmt"
+
 	"github.com/hyperledger/fabric/core/ledger/confighistory"
 	"github.com/hyperledger/fabric/core/ledger/confighistory/cdbconfighistory"
 
@@ -17,10 +18,10 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb/historydbprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
 
 var (
@@ -80,9 +81,9 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
 	case ledgerconfig.LevelDBConfigHistoryStorage:
 		configHistoryMgr = confighistory.NewMgr()
 	case ledgerconfig.CouchDBConfigHistoryStorage:
-		configHistoryMgr,err =cdbconfighistory.NewMgr()
-		if err!=nil{
-			return nil,err
+		configHistoryMgr, err = cdbconfighistory.NewMgr()
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -122,6 +123,12 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 		logger.Errorf("Error in opening a new empty ledger. Unsetting under construction flag. Err: %s", err)
 		panicOnErr(provider.runCleanup(ledgerID), "Error while running cleanup for ledger id [%s]", ledgerID)
 		panicOnErr(provider.idStore.UnsetUnderConstructionFlag(), "Error while unsetting under construction flag")
+		return nil, err
+	}
+	if err := lgr.ValidateCommitWithPvtData(&ledger.BlockAndPvtData{
+		Block: genesisBlock,
+	}); err != nil {
+		lgr.Close()
 		return nil, err
 	}
 	if err := lgr.CommitWithPvtData(&ledger.BlockAndPvtData{

@@ -292,11 +292,6 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	blockNo := pvtdataAndBlock.Block.Header.Number
 
 	startStateValidation := time.Now()
-	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, blockNo)
-	err = l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
-	if err != nil {
-		return err
-	}
 	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
 
 	startCommitBlockStorage := time.Now()
@@ -340,6 +335,17 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
 		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
 
+	return nil
+}
+
+// ValidateCommitWithPvtData validate commit with pvt data
+func (l *kvLedger) ValidateCommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, pvtdataAndBlock.Block.Header.Number)
+	err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
+	if err != nil {
+		return err
+	}
+	//debug.PrintStack()
 	return nil
 }
 
