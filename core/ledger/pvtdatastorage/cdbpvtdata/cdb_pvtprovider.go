@@ -63,7 +63,7 @@ func createPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string) (pv
 		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
 	}
 
-	indexExists, err := db.IndexDesignDocExistsWithRetry(blockNumberIndexDoc, blockNumberExpiryIndexDoc)
+	indexExists, err := db.IndexDesignDocExistsWithRetry(blockNumberIndexDoc)
 	if err != nil {
 		return nil, err
 	}
@@ -90,10 +90,6 @@ func createCommitterPvtDataStore(couchInstance *couchdb.CouchInstance, dbName st
 
 func createPvtStoreIndices(db *couchdb.CouchDatabase) error {
 	_, err := db.CreateNewIndexWithRetry(blockNumberIndexDef, blockNumberIndexDoc)
-	if err != nil {
-		return errors.WithMessage(err, "creation of block number index failed")
-	}
-	_, err = db.CreateNewIndexWithRetry(blockNumberExpiryIndexDef, blockNumberExpiryIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block number index failed")
 	}
