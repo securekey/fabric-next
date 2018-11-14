@@ -78,9 +78,9 @@ func (m *TxNums) GetList() []uint64 {
 }
 
 func init() {
-	proto.RegisterType((*ExpiryData)(nil), "pvtdatastorage.ExpiryData")
-	proto.RegisterType((*Collections)(nil), "pvtdatastorage.Collections")
-	proto.RegisterType((*TxNums)(nil), "pvtdatastorage.TxNums")
+	proto.RegisterType((*ExpiryData)(nil), "pvtmetadata.ExpiryData")
+	proto.RegisterType((*Collections)(nil), "pvtmetadata.Collections")
+	proto.RegisterType((*TxNums)(nil), "pvtmetadata.TxNums")
 }
 
 func init() { proto.RegisterFile("expiry_data.proto", fileDescriptor0) }
