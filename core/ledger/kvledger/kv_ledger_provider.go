@@ -125,7 +125,7 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 		panicOnErr(provider.idStore.UnsetUnderConstructionFlag(), "Error while unsetting under construction flag")
 		return nil, err
 	}
-	if err := lgr.ValidateCommitWithPvtData(&ledger.BlockAndPvtData{
+	if err := lgr.ValidateBlockWithPvtData(&ledger.BlockAndPvtData{
 		Block: genesisBlock,
 	}); err != nil {
 		lgr.Close()

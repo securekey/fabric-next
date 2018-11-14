@@ -48,7 +48,7 @@ type PeerLedgerSupport interface {
 
 	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
-	ValidateCommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+	ValidateBlockWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	GetBlockchainInfo() (*common.BlockchainInfo, error)
 
@@ -135,7 +135,7 @@ func (lc *LedgerCommitter) ValidateBlock(blockAndPvtData *ledger.BlockAndPvtData
 	}
 
 	// Committing new block
-	if err := lc.PeerLedgerSupport.ValidateCommitWithPvtData(blockAndPvtData); err != nil {
+	if err := lc.PeerLedgerSupport.ValidateBlockWithPvtData(blockAndPvtData); err != nil {
 		return err
 	}
 

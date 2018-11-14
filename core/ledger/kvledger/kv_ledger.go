@@ -338,8 +338,8 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	return nil
 }
 
-// ValidateCommitWithPvtData validate commit with pvt data
-func (l *kvLedger) ValidateCommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+// ValidateBlockWithPvtData validate commit with pvt data
+func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, pvtdataAndBlock.Block.Header.Number)
 	err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 	if err != nil {
