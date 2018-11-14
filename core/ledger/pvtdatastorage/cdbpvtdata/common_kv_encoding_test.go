@@ -24,7 +24,7 @@ func TestExtractCommitMap(t *testing.T) {
 	expectedBlock := uint64(1212)
 	expectedPending := true
 
-	doc, err := createMetadataDoc(expectedPending, expectedBlock)
+	doc, err := createMetadataDoc("", expectedPending, expectedBlock)
 	assert.NoError(t, err)
 
 	jsonMap, err := couchValueToJSON(doc.JSONValue)

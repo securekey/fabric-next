@@ -54,88 +54,68 @@ func (s *store) initState() error {
 }
 
 func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	var docs []*couchdb.CouchDoc
+	if len(pvtData) == 0 {
+		// TODO: this means we aren't inserting a block record for blocks without private data.
+		// TODO: should check that this doesn't cause issues.
+		return nil
+	}
 	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
 		return err
 	}
 
-	dataEntryDocs, err := dataEntriesToCouchDocs(dataEntries, blockNum)
+	blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum)
 	if err != nil {
 		return err
 	}
-	docs = append(docs, dataEntryDocs...)
 
-	expiryEntryDocs, err := expiryEntriesToCouchDocs(expiryEntries, blockNum)
+	metadataDoc, err := createMetadataDoc(s.couchMetadataRev, true, s.lastCommittedBlock)
 	if err != nil {
 		return err
 	}
-	docs = append(docs, expiryEntryDocs...)
 
-	if len(docs) > 0 {
-		_, err = s.db.CommitDocuments(docs)
-		if err != nil {
-			return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
-		}
-	}
-
-	err = s.updateCommitMetadata(true)
+	docs := []*couchdb.CouchDoc{blockDoc, metadataDoc}
+	revs, err := s.db.CommitDocuments(docs)
 	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in prepare [%d]", blockNum))
+		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
 	}
+
+	s.couchMetadataRev = revs[metadataKey]
 
 	return nil
 }
 
 func (s *store) commitDB(committingBlockNum uint64) error {
-	m := metadata{
-		pending:           false,
-		lastCommitedBlock: committingBlockNum,
-	}
-
-	rev, err := updateCommitMetadataDoc(s.db, &m, s.couchMetadataRev)
+	err := s.updateCommitMetadata(false)
 	if err != nil {
 		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in commit [%d]", committingBlockNum))
 	}
-
-	s.couchMetadataRev = rev
 
 	return nil
 }
 
 func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, error) {
-	const queryFmt = `
-	{
-		"selector": {
-			"` + blockNumberField + `": {
-				"$eq": "%s"
-			}
-		},
-		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
-	}`
+	pd, err := retrieveBlockPvtData(s.db, strconv.FormatUint(blockNum, blockNumberBase))
+	if err != nil {
+		return nil, err
+	}
 
-	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))))
+	return pd.Data, nil
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
-	const queryFmt = `
-	{
-		"selector": {
-			"` + blockNumberExpiryField + `": {
-				"$lte": "%s"
-			}
-		},
-		"use_index": ["_design/` + blockNumberExpiryIndexDoc + `", "` + blockNumberExpiryIndexName + `"]
-	}`
-	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))))
-	if _, ok := err.(*NotFoundInIndexErr); ok {
-		return nil, nil
+	pd, err := retrieveBlockPvtData(s.db, strconv.FormatUint(blockNum, blockNumberBase))
+	if err != nil {
+		return nil, err
 	}
-	return results, err
+
+	return pd.Expiry, nil
 }
 
 func (s *store) purgeExpiredDataDB(key string) error {
-	return s.db.DeleteDoc(key, "")
+	//FIXME
+	//return s.db.DeleteDoc(key, "")
+	return nil
 }
 
 func (s *store) updateCommitMetadata(pending bool) error {

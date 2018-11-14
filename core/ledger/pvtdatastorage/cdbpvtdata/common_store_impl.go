@@ -8,6 +8,7 @@ package cdbpvtdata
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"encoding/hex"
@@ -165,12 +166,22 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 	var currentTxWsetAssember *txPvtdataAssembler
 	firstItr := true
 
-	for key, val := range results {
-		dataKeyBytes := []byte(key)
+	var sortedKeys []string
+	for key, _ := range results {
+		sortedKeys = append(sortedKeys, key)
+	}
+	sort.Strings(sortedKeys)
+
+	for _, key := range sortedKeys {
+		dataKeyBytes, err := hex.DecodeString(key)
+		if err != nil {
+			return nil, err
+		}
+		dataValueBytes := results[key]
+
 		if v11Format(dataKeyBytes) {
 			return v11RetrievePvtdata(results, filter)
 		}
-		dataValueBytes := val
 		dataKey := decodeDatakey(dataKeyBytes)
 		expired, err := isExpired(dataKey, s.btlPolicy, lastCommittedBlock)
 		if err != nil {
@@ -254,12 +265,17 @@ func (s *store) purgeExpiredData(maxBlkNum uint64) error {
 		return err
 	}
 	for k, value := range results {
-		err := s.purgeExpiredDataDB(hex.EncodeToString([]byte(k)))
+		err := s.purgeExpiredDataDB(k)
 		if err != nil {
 			return err
 		}
 
-		expiryKey := decodeExpiryKey([]byte(k))
+		kBytes, err := hex.DecodeString(k)
+		if err != nil {
+			return err
+		}
+
+		expiryKey := decodeExpiryKey(kBytes)
 		if err != nil {
 			return err
 		}
