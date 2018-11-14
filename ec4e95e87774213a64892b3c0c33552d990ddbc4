@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "486e4b24_484fd38f",
+        "filename": "core/ledger/kvledger/inventory/cdbid/couchdoc_conv.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 77,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-14T21:00:06Z",
+      "side": 0,
+      "message": "is it necessary to add constructionLedger entry if it\u0027s empty?",
+      "range": {
+        "startLine": 77,
+        "startChar": 1,
+        "endLine": 77,
+        "endChar": 33
+      },
+      "revId": "ec4e95e87774213a64892b3c0c33552d990ddbc4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
