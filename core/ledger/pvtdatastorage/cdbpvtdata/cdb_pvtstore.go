@@ -54,29 +54,23 @@ func (s *store) initState() error {
 }
 
 func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	var docs []*couchdb.CouchDoc
+	if len(pvtData) == 0 {
+		return nil
+	}
+
 	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
 		return err
 	}
 
-	dataEntryDocs, err := dataEntriesToCouchDocs(dataEntries, blockNum)
+	blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum)
 	if err != nil {
 		return err
 	}
-	docs = append(docs, dataEntryDocs...)
 
-	expiryEntryDocs, err := expiryEntriesToCouchDocs(expiryEntries, blockNum)
+	_, err = s.db.UpdateDoc(blockNumberToKey(blockNum), "", blockDoc)
 	if err != nil {
-		return err
-	}
-	docs = append(docs, expiryEntryDocs...)
-
-	if len(docs) > 0 {
-		_, err = s.db.CommitDocuments(docs)
-		if err != nil {
-			return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
-		}
+		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
 	}
 
 	err = s.updateCommitMetadata(true)
@@ -114,20 +108,20 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
 	}`
 
-	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))))
+	return retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))), dataField)
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
 	const queryFmt = `
 	{
 		"selector": {
-			"` + blockNumberExpiryField + `": {
-				"$lte": "%s"
+			"` + blockNumberField + `": {
+				"$eq": "%s"
 			}
 		},
-		"use_index": ["_design/` + blockNumberExpiryIndexDoc + `", "` + blockNumberExpiryIndexName + `"]
+		"use_index": ["_design/` + blockNumberIndexDoc + `", "` + blockNumberIndexName + `"]
 	}`
-	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))))
+	results, err := retrievePvtDataQuery(s.db, fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase))), expiryField)
 	if _, ok := err.(*NotFoundInIndexErr); ok {
 		return nil, nil
 	}
