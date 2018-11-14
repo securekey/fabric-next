@@ -293,11 +293,11 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		IndexInBlock: int(kv.VersionedValue.Version.TxNum),
 	}
 
-	validatedTxOp := [] statedb.ValidatedTxOp {
+	validatedTxOp := []statedb.ValidatedTxOp{
 		{
-			Namespace: 	 namespace,
-			ChId: 	     vdb.chainName,
-			IsDeleted: 	 false,
+			Namespace:   namespace,
+			ChId:        vdb.chainName,
+			IsDeleted:   false,
 			ValidatedTx: validatedTx,
 		},
 	}

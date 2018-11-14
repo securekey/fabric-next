@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -153,6 +154,12 @@ type nsFlusher struct {
 }
 
 func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
+
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	var flushers []batch
 	for _, db := range dbs {
 		flushers = append(flushers, &nsFlusher{db})

@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/common/deliver"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/localmsp"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/viperutil"
 	"github.com/hyperledger/fabric/core/aclmgmt"
@@ -115,6 +116,9 @@ var nodeStartCmd = &cobra.Command{
 }
 
 func serve(args []string) error {
+
+	metrics.Initialize()
+
 	// currently the peer only works with the standard MSP
 	// because in certain scenarios the MSP has to make sure
 	// that from a single credential you only have a single 'identity'.

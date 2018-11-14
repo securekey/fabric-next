@@ -166,7 +166,6 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 			errorStatusCounter = 0
 			statusCounter = 0
 			blockNum := t.Block.Header.Number
-
 			marshaledBlock, err := proto.Marshal(t.Block)
 			if err != nil {
 				logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", b.chainID, blockNum, err)
@@ -176,21 +175,16 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 				logger.Errorf("[%s] Error verifying block with sequnce number %d, due to %s", b.chainID, blockNum, err)
 				continue
 			}
-
 			// Create payload with a block received
 			payload := createPayload(blockNum, marshaledBlock)
-
 			logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", b.chainID, blockNum)
 			// Add payload to local state payloads buffer
 			if err := b.gossip.AddPayload(b.chainID, payload); err != nil {
 				logger.Warningf("Block [%d] received from ordering service wasn't added to payload buffer: %v", blockNum, err)
 			}
-
 			numberOfPeers := len(b.gossip.PeersOfChannel(gossipcommon.ChainID(b.chainID)))
-
 			// Use payload to create gossip message
 			gossipMsg := createGossipMsg(b.chainID, payload)
-
 			// Gossip messages with other nodes
 			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)
 			if !b.isDone() {

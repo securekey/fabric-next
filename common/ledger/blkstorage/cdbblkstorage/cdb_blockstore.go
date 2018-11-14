@@ -18,6 +18,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -78,6 +79,11 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 		// Nothing else to do if not a committer
 		return nil
 	}
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_addBlock_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 
 	logger.Debugf("Storing block %d", block.Header.Number)
 	err := s.storeBlock(block)
@@ -105,6 +111,12 @@ func (s *cdbBlockStore) storeBlock(block *common.Block) error {
 
 func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_checkpointBlock_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 
 	//Update the checkpoint info with the results of adding the new block
 	newCPInfo := &checkpointInfo{
@@ -134,16 +146,31 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_getBlockchainInfo_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	return s.bcInfo.Load().(*common.BlockchainInfo), nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
 func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlocks_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	return newBlockItr(s, startNum), nil
 }
 
 // RetrieveBlockByHash returns the block for given block-hash
 func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByHash_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	blockHashHex := hex.EncodeToString(blockHash)
 	const queryFmt = `
 	{
@@ -165,6 +192,12 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
 func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByNumber_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	// interpret math.MaxUint64 as a request for last block
 	if blockNum == math.MaxUint64 {
 		bcinfo, err := s.GetBlockchainInfo()
@@ -202,6 +235,12 @@ func retrieveBlockByNumber(blockStore *couchdb.CouchDatabase, blockNum uint64) (
 
 // RetrieveTxByID returns a transaction for given transaction id
 func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByID_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	block, err := s.RetrieveBlockByTxID(txID)
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
@@ -213,6 +252,12 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 
 // RetrieveTxByBlockNumTranNum returns a transaction for given block number and transaction number
 func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByBlockNumTranNum_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	block, err := s.RetrieveBlockByNumber(blockNum)
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
@@ -230,12 +275,16 @@ func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Enve
 		blockNum := block.GetHeader().GetNumber()
 		return nil, errors.Errorf("transaction number is invalid [%d, %d, %d]", blockNum, envelopesLen, tranNum)
 	}
-
 	return utils.GetEnvelopeFromBlock(envelopes[tranNum])
 }
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByTxID_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	const queryFmt = `
 	{
 		"selector": {
@@ -258,7 +307,13 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxValidationCodeByTxID_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	block, err := s.RetrieveBlockByTxID(txID)
+
 	if err != nil {
 		return peer.TxValidationCode_INVALID_OTHER_REASON, err
 	}
