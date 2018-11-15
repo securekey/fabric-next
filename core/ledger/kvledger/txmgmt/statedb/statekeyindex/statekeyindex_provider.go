@@ -11,13 +11,32 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
 
 var logger = flogging.MustGetLogger("statekeyindex")
 var instance *LevelStateKeyIndexProvider
 var lock sync.Mutex
+
+// StateIndexProvider provides an handle to a StateIndex
+type StateKeyIndexProvider interface {
+	OpenStateKeyIndex(id string) (StateKeyIndex, error)
+	Close()
+}
+
+// StateKeyIndex - an interface for persisting and retrieving keys
+type StateKeyIndex interface {
+	AddIndex(keys []CompositeKey) error
+	DeleteIndex(keys []CompositeKey) error
+	GetIterator(namespace string, startKey string, endKey string) *leveldbhelper.Iterator
+	Close()
+}
+
+// CompositeKey encloses Namespace and Key components
+type CompositeKey struct {
+	Namespace string
+	Key       string
+}
 
 // MemBlockCacheProvider provides block cache in memory
 type LevelStateKeyIndexProvider struct {
@@ -42,7 +61,7 @@ func NewProvider() *LevelStateKeyIndexProvider {
 }
 
 // OpenStateKeyIndex opens the block cache for the given dbname id
-func (p *LevelStateKeyIndexProvider) OpenStateKeyIndex(dbName string) (statedb.StateKeyIndex, error) {
+func (p *LevelStateKeyIndexProvider) OpenStateKeyIndex(dbName string) (StateKeyIndex, error) {
 	indexStore := p.leveldbProvider.GetDBHandle(dbName)
 	return newStateKeyIndex(indexStore, dbName), nil
 }

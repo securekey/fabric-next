@@ -21,18 +21,18 @@ const (
 
 type cachedStateStore struct {
 	stateStore      statedb.VersionedDB
-	stateKeyIndex   statedb.StateKeyIndex
 	bulkOptimizable statedb.BulkOptimizable
 	indexCapable    statedb.IndexCapable
+	ledgerID        string
 }
 
-func newCachedBlockStore(stateStore statedb.VersionedDB, stateKeyIndex statedb.StateKeyIndex) *cachedStateStore {
+func newCachedBlockStore(stateStore statedb.VersionedDB, ledgerID string) *cachedStateStore {
 	bulkOptimizable, _ := stateStore.(statedb.BulkOptimizable)
 	indexCapable, _ := stateStore.(statedb.IndexCapable)
 
 	s := cachedStateStore{
 		stateStore:      stateStore,
-		stateKeyIndex:   stateKeyIndex,
+		ledgerID:        ledgerID,
 		bulkOptimizable: bulkOptimizable,
 		indexCapable:    indexCapable,
 	}
@@ -80,8 +80,10 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // startKey is inclusive
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
-	logger.Infof("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s", namespace, startKey, endKey)
-	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
+	dbItr, err := statedb.GetLeveLDBIterator(namespace, startKey, endKey, c.ledgerID)
+	if err != nil {
+		return nil, err
+	}
 	if !dbItr.Next() {
 		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)

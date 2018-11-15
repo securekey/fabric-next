@@ -11,10 +11,8 @@ import (
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -37,58 +35,9 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	}
 
 	// Update the cache
-	statedb.UpdateKVCache(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
-
-	indexKeys := make([]statedb.CompositeKey, 0)
-	deletedIndexKeys := make([]statedb.CompositeKey, 0)
-	// Add key index for KV
-	for _, v := range validatedTxOps {
-		if v.IsDeleted {
-			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
-		} else {
-			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: v.Namespace})
-		}
-	}
-	// Add key index for pvt
-	for _, v := range pvtDataKeys {
-		if v.IsDeleted {
-			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
-		} else {
-			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DerivePvtDataNs(v.Namespace, v.Collection)})
-		}
-	}
-
-	// Add key index for pvt hash
-	for _, v := range pvtDataHashedKeys {
-		if v.IsDeleted {
-			deletedIndexKeys = append(deletedIndexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DeriveHashedDataNs(v.Namespace, v.Collection)})
-		} else {
-			indexKeys = append(indexKeys, statedb.CompositeKey{Key: v.Key, Namespace: privacyenabledstate.DeriveHashedDataNs(v.Namespace, v.Collection)})
-		}
-	}
-
-	// Add key index in leveldb
-	if len(indexKeys) > 0 {
-		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(l.ledgerID)
-		if err != nil {
-			return err
-		}
-		err = stateKeyIndex.AddIndex(indexKeys)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete key index in leveldb
-	if len(deletedIndexKeys) > 0 {
-		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(l.ledgerID)
-		if err != nil {
-			return err
-		}
-		err = stateKeyIndex.DeleteIndex(deletedIndexKeys)
-		if err != nil {
-			return err
-		}
+	err = statedb.UpdateKVCache(validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -208,7 +157,6 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags) ([]statedb.ValidatedPvtData, error) {
 	pvtKeys := make([]statedb.ValidatedPvtData, 0)
 	for _, txPvtdata := range pvtData {
-
 		if txValidationFlags.IsValid(int(txPvtdata.SeqInBlock)) {
 			pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
 			if err != nil {

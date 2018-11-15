@@ -15,15 +15,13 @@ import (
 var logger = flogging.MustGetLogger("statecache")
 
 type CachedStateProvider struct {
-	dbProvider    statedb.VersionedDBProvider
-	indexProvider statedb.StateKeyIndexProvider
+	dbProvider statedb.VersionedDBProvider
 }
 
 // NewProvider creates a new StateStoreProvider that combines a cache (+ index) provider and a backing storage provider
-func NewProvider(dbProvider statedb.VersionedDBProvider, indexProvider statedb.StateKeyIndexProvider) *CachedStateProvider {
+func NewProvider(dbProvider statedb.VersionedDBProvider) *CachedStateProvider {
 	p := CachedStateProvider{
-		dbProvider:    dbProvider,
-		indexProvider: indexProvider,
+		dbProvider: dbProvider,
 	}
 	return &p
 }
@@ -36,12 +34,7 @@ func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.Version
 		return nil, errors.Wrap(err, "dbProvider GetDBHandle failed")
 	}
 
-	stateKeyIndex, err := provider.indexProvider.OpenStateKeyIndex(dbName)
-	if err != nil {
-		return nil, errors.Wrap(err, "indexProvider OpenStateKeyIndex failed")
-	}
-
-	return newCachedBlockStore(dbProvider, stateKeyIndex), nil
+	return newCachedBlockStore(dbProvider, dbName), nil
 }
 
 // Close cleans up the Provider

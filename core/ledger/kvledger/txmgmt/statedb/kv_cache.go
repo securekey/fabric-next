@@ -11,6 +11,8 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
@@ -53,7 +55,7 @@ type KVCache struct {
 
 var (
 	kvCacheMap map[string]*KVCache
-	kvCacheMtx sync.Mutex
+	kvCacheMtx sync.RWMutex
 )
 
 func InitKVCache() {
@@ -72,8 +74,8 @@ func getKVCache(chId string, namespace string) (*KVCache, error) {
 }
 
 func GetKVCache(chId string, namespace string) (*KVCache, error) {
-	kvCacheMtx.Lock()
-	defer kvCacheMtx.Unlock()
+	kvCacheMtx.RLock()
+	defer kvCacheMtx.RUnlock()
 
 	return getKVCache(chId, namespace)
 }
@@ -86,7 +88,7 @@ func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
-func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) {
+func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData, ledgerID string) error {
 	kvCacheMtx.Lock()
 	defer kvCacheMtx.Unlock()
 
@@ -120,6 +122,70 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedP
 			kvCache.Put(&newTx)
 		}
 	}
+
+	indexKeys := make([]statekeyindex.CompositeKey, 0)
+	deletedIndexKeys := make([]statekeyindex.CompositeKey, 0)
+	// Add key index for KV
+	for _, v := range validatedTxOps {
+		if v.IsDeleted {
+			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+		} else {
+			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+		}
+	}
+	// Add key index for pvt
+	for _, v := range validatedPvtData {
+		if v.IsDeleted {
+			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtDataNs(v.Namespace, v.Collection)})
+		} else {
+			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtDataNs(v.Namespace, v.Collection)})
+		}
+	}
+
+	// Add key index for pvt hash
+	for _, v := range validatedPvtHashData {
+		if v.IsDeleted {
+			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtHashDataNs(v.Namespace, v.Collection)})
+		} else {
+			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtHashDataNs(v.Namespace, v.Collection)})
+		}
+	}
+
+	//Add key index in leveldb
+	if len(indexKeys) > 0 {
+		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
+		if err != nil {
+			return err
+		}
+		err = stateKeyIndex.AddIndex(indexKeys)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete key index in leveldb
+	if len(deletedIndexKeys) > 0 {
+		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
+		if err != nil {
+			return err
+		}
+		err = stateKeyIndex.DeleteIndex(deletedIndexKeys)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func GetLeveLDBIterator(namespace, startKey, endKey, ledgerID string) (*leveldbhelper.Iterator, error) {
+	kvCacheMtx.RLock()
+	defer kvCacheMtx.RUnlock()
+	stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
+	if err != nil {
+		return nil, err
+	}
+	return stateKeyIndex.GetIterator(namespace, startKey, endKey), nil
+
 }
 
 func GetFromKVCache(chId string, namespace string, key string) (*VersionedValue, bool) {

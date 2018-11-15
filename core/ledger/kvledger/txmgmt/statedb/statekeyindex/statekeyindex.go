@@ -25,7 +25,6 @@ import (
 	"bytes"
 
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 )
 
 var compositeKeySep = []byte{0x00}
@@ -41,7 +40,7 @@ func newStateKeyIndex(db *leveldbhelper.DBHandle, dbName string) *stateKeyIndex 
 	return &stateKeyIndex{db, dbName}
 }
 
-func (s *stateKeyIndex) AddIndex(keys []statedb.CompositeKey) error {
+func (s *stateKeyIndex) AddIndex(keys []CompositeKey) error {
 	dbBatch := leveldbhelper.NewUpdateBatch()
 	for _, v := range keys {
 		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
@@ -56,7 +55,7 @@ func (s *stateKeyIndex) AddIndex(keys []statedb.CompositeKey) error {
 	return nil
 }
 
-func (s *stateKeyIndex) DeleteIndex(keys []statedb.CompositeKey) error {
+func (s *stateKeyIndex) DeleteIndex(keys []CompositeKey) error {
 	dbBatch := leveldbhelper.NewUpdateBatch()
 	for _, v := range keys {
 		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)

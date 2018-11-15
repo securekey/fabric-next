@@ -8,7 +8,6 @@ package statedb
 import (
 	"sort"
 
-	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
@@ -19,20 +18,6 @@ type VersionedDBProvider interface {
 	// GetDBHandle returns a handle to a VersionedDB
 	GetDBHandle(id string) (VersionedDB, error)
 	// Close closes all the VersionedDB instances and releases any resources held by VersionedDBProvider
-	Close()
-}
-
-// StateIndexProvider provides an handle to a StateIndex
-type StateKeyIndexProvider interface {
-	OpenStateKeyIndex(id string) (StateKeyIndex, error)
-	Close()
-}
-
-// StateKeyIndex - an interface for persisting and retrieving keys
-type StateKeyIndex interface {
-	AddIndex(keys []CompositeKey) error
-	DeleteIndex(keys []CompositeKey) error
-	GetIterator(namespace string, startKey string, endKey string) *leveldbhelper.Iterator
 	Close()
 }
 
