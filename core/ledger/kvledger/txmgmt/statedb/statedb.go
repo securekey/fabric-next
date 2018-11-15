@@ -179,6 +179,12 @@ func (batch *UpdateBatch) GetUpdates(ns string) map[string]*VersionedValue {
 	return nsUpdates.m
 }
 
+// RemoveUpdates removes all the updates for a namespace
+func (batch *UpdateBatch) RemoveUpdates(ns string) {
+	// TODO SV: double-check if safe to delete
+	delete(batch.updates, ns)
+}
+
 // GetRangeScanIterator returns an iterator that iterates over keys of a specific namespace in sorted order
 // In other word this gives the same functionality over the contents in the `UpdateBatch` as
 // `VersionedDB.GetStateRangeScanIterator()` method gives over the contents in the statedb

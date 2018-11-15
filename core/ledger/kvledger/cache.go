@@ -8,12 +8,16 @@ package kvledger
 
 import (
 	"encoding/base64"
+	"math"
+
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -25,17 +29,19 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 
-	validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block)
+	btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
+	validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
 	if err != nil {
 		return err
 	}
-	pvtDataKeys, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags)
+
+	pvtDataKeys, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
 	if err != nil {
 		return err
 	}
 
 	// Update the cache
-	err = statedb.UpdateKVCache(validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
+	err = statedb.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
 	if err != nil {
 		return err
 	}
@@ -43,7 +49,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	return nil
 }
 
-func (l *kvLedger) getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp, []statedb.ValidatedPvtData, util.TxValidationFlags, error) {
+func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.BTLPolicy) ([]statedb.ValidatedTxOp, []statedb.ValidatedPvtData, util.TxValidationFlags, error) {
 	validatedTxOps := make([]statedb.ValidatedTxOp, 0)
 	pvtHashedKeys := make([]statedb.ValidatedPvtData, 0)
 	txsFilter := ledgerUtil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
@@ -118,10 +124,14 @@ func (l *kvLedger) getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp,
 				}
 				for _, collHashedRwSets := range nsRwSet.CollHashedRwSets {
 					for _, hashedWrite := range collHashedRwSets.HashedRwSet.HashedWrites {
+						btl, err := btlPolicy.GetBTL(nsRwSet.NameSpace, collHashedRwSets.CollectionName)
+						if err != nil {
+							return nil, nil, nil, err
+						}
 						pvtHashedKeys = append(pvtHashedKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: base64.StdEncoding.EncodeToString(hashedWrite.KeyHash),
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
-								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName})
+								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName, Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(block.Header.Number, btl), Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl)})
 					}
 				}
 			}
@@ -154,7 +164,7 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 	return simRes.PubSimulationResults, nil
 }
 
-func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags) ([]statedb.ValidatedPvtData, error) {
+func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags, btlPolicy pvtdatapolicy.BTLPolicy) ([]statedb.ValidatedPvtData, error) {
 	pvtKeys := make([]statedb.ValidatedPvtData, 0)
 	for _, txPvtdata := range pvtData {
 		if txValidationFlags.IsValid(int(txPvtdata.SeqInBlock)) {
@@ -167,15 +177,44 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 					txnum := txPvtdata.SeqInBlock
 					ns := nsPvtdata.NameSpace
 					coll := collPvtRwSets.CollectionName
+					btl, err := btlPolicy.GetBTL(ns, coll)
+					if err != nil {
+						return nil, err
+					}
 					for _, write := range collPvtRwSets.KvRwSet.Writes {
 						pvtKeys = append(pvtKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
-								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
+								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll, Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(blockNumber, btl), Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(blockNumber, btl)})
 					}
-
 				}
 			}
 		}
 	}
 	return pvtKeys, nil
+}
+
+func min(x, y uint64) uint64 {
+	if x < y {
+		return x
+	}
+	return y
+}
+
+func getFirstLevelCacheExpiryBlock(blockNum, policyBTL uint64) uint64 {
+	btl := policyBTL
+	if policyBTL == 0 {
+		// A zero value is treated same as MaxUint64
+		btl = math.MaxUint64
+	}
+	return blockNum + min(ledgerconfig.GetKVCacheBlocksToLive(), btl) + 1
+}
+
+func getSecondLevelCacheExpiryBlock(blockNum, policyBTL uint64) uint64 {
+
+	if policyBTL == 0 {
+		// A zero value is treated same as MaxUint64
+		return math.MaxUint64
+	}
+	// TODO: How to handle if this is more than MaxUint64 (check how current code handles it)
+	return blockNum + policyBTL + 1
 }
