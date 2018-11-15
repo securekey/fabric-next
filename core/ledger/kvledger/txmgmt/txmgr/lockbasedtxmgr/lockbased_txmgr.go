@@ -148,6 +148,11 @@ func (txmgr *LockBasedTxMgr) Commit() error {
 		panic("validateAndPrepare() method should have been called before calling commit()")
 	}
 
+	if err := txmgr.pvtdataPurgeMgr.RemoveNonDurable(
+		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
+		return err
+	}
+
 	if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
 		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
 		return err
