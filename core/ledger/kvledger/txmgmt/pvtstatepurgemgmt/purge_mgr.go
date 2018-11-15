@@ -10,6 +10,8 @@ import (
 	"math"
 	"sync"
 
+	"github.com/spf13/viper"
+
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -17,7 +19,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 )
 
-// PurgeMgr manages purging of the expired pvtdata
+// PurgeMgr manages purging of the expired pvtdata and removes non-durable key, value pairs
 type PurgeMgr interface {
 	// PrepareForExpiringKeys gives a chance to the PurgeMgr to do background work in advance if any
 	PrepareForExpiringKeys(expiringAtBlk uint64)
@@ -27,6 +29,11 @@ type PurgeMgr interface {
 	DeleteExpiredAndUpdateBookkeeping(
 		pvtUpdates *privacyenabledstate.PvtUpdateBatch,
 		hashedUpdates *privacyenabledstate.HashedUpdateBatch) error
+	// RemoveNonDurable updates the bookkeeping and modifies the update batch by removing non-durable items
+	RemoveNonDurable(
+		pvtUpdateBatch *privacyenabledstate.PvtUpdateBatch,
+		hashedUpdateBatch *privacyenabledstate.HashedUpdateBatch) error
+
 	// BlockCommitDone is a callback to the PurgeMgr when the block is committed to the ledger
 	BlockCommitDone() error
 }
@@ -84,6 +91,49 @@ func (p *purgeMgr) PrepareForExpiringKeys(expiringAtBlk uint64) {
 func (p *purgeMgr) WaitForPrepareToFinish() {
 	p.lock.Lock()
 	p.lock.Unlock()
+}
+
+// RemoveNonDurable implements function in the interface 'PurgeMgr'
+func (p *purgeMgr) RemoveNonDurable(
+	pvtUpdates *privacyenabledstate.PvtUpdateBatch,
+	hashedUpdates *privacyenabledstate.HashedUpdateBatch) error {
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	if p.workingset.err != nil {
+		return p.workingset.err
+	}
+
+	blocksToLiveInCache := getBlocksToLiveInCache()
+	for ns, nsBatch := range pvtUpdates.UpdateMap {
+		for _, coll := range nsBatch.GetCollectionNames() {
+			btl, err := p.btlPolicy.GetBTL(ns, coll)
+			if err != nil {
+				return err
+			}
+			if btl != 0 && btl < blocksToLiveInCache {
+				logger.Debugf("Collection policy[%s] blocks to live[%d] is less than blocks to live in cache[%d] - no need to store collection entries",
+					 coll, btl, blocksToLiveInCache)
+				// delete all collection entries from the batch
+				nsBatch.RemoveUpdates(coll)
+			}
+		}
+	}
+
+	for ns, nsBatch := range hashedUpdates.UpdateMap {
+		for _, coll := range nsBatch.GetCollectionNames() {
+			btl, err := p.btlPolicy.GetBTL(ns, coll)
+			if err != nil {
+				return err
+			}
+			if btl < blocksToLiveInCache {
+				// delete all collection entries from the batch
+				nsBatch.RemoveUpdates(coll)
+			}
+		}
+	}
+
+	return nil
 }
 
 // DeleteExpiredAndUpdateBookkeeping implements function in the interface 'PurgeMgr'
@@ -242,4 +292,15 @@ func sameVersion(version *version.Height, blockNum uint64) bool {
 
 func sameVersionFromVal(vv *statedb.VersionedValue, blockNum uint64) bool {
 	return vv != nil && sameVersion(vv.Version, blockNum)
+}
+
+func getBlocksToLiveInCache() uint64 {
+
+	const configKey = "BLOCKS_TO_LIVE_IN_CACHE"
+	if !viper.IsSet(configKey) {
+		// TODO SV: Should we have default value
+		return 100
+	}
+
+	return uint64(viper.GetInt(configKey))
 }

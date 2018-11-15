@@ -8,6 +8,7 @@ package kvledger
 
 import (
 	"encoding/base64"
+	"math"
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
@@ -16,11 +17,13 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 	"github.com/hyperledger/fabric/protos/utils"
+	"github.com/spf13/viper"
 )
 
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
@@ -31,7 +34,10 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	if err != nil {
 		return err
 	}
-	pvtDataKeys, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags)
+
+	// TODO SV: Move to kvLedger struct
+	btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
+	pvtDataKeys, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
 	if err != nil {
 		return err
 	}
@@ -205,7 +211,7 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 	return simRes.PubSimulationResults, nil
 }
 
-func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags) ([]statedb.ValidatedPvtData, error) {
+func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags, btlPolicy pvtdatapolicy.BTLPolicy) ([]statedb.ValidatedPvtData, error) {
 	pvtKeys := make([]statedb.ValidatedPvtData, 0)
 	for _, txPvtdata := range pvtData {
 
@@ -219,15 +225,44 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 					txnum := txPvtdata.SeqInBlock
 					ns := nsPvtdata.NameSpace
 					coll := collPvtRwSets.CollectionName
+					btl, err := btlPolicy.GetBTL(ns, coll)
+					if err != nil {
+						return nil, err
+					}
 					for _, write := range collPvtRwSets.KvRwSet.Writes {
 						pvtKeys = append(pvtKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
-								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
+								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll, ExpiringBlock: getExpiringBlockNumber(blockNumber, btl)})
 					}
-
 				}
 			}
 		}
 	}
 	return pvtKeys, nil
+}
+
+func getBlocksToLiveInCache() uint64 {
+	const configKey = "BLOCKS_TO_LIVE_IN_CACHE"
+	if !viper.IsSet(configKey) {
+		// TODO SV: Should we have default value
+		return 100
+	}
+
+	return uint64(viper.GetInt(configKey))
+}
+
+func min(x, y uint64) uint64 {
+	if x > y {
+		return x
+	}
+	return y
+}
+
+func getExpiringBlockNumber(blockNum, policyBTL uint64) uint64 {
+	btl := policyBTL
+	if policyBTL == 0 {
+		// A zero value is treated same as MaxUint64
+		btl = math.MaxUint64
+	}
+	return blockNum + min(getBlocksToLiveInCache(), btl) + 1
 }
