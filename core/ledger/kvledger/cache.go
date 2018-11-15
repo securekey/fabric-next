@@ -139,7 +139,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp,
 				continue
 			}
 		} else {
-			rwsetProto, err := processNonEndorserTx(env, chdr.TxId, txType, l.txtmgmt)
+			rwsetProto, err := processNonEndorserTx(env, chdr.ChannelId, chdr.TxId, txType, l.txtmgmt)
 			if _, ok := err.(*customtx.InvalidTxError); ok {
 				continue
 			}
@@ -181,7 +181,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block) ([]statedb.ValidatedTxOp,
 	return validatedTxOps, pvtHashedKeys, txsFilter, nil
 }
 
-func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.HeaderType, txmgr txmgr.TxMgr) (*rwset.TxReadWriteSet, error) {
+func processNonEndorserTx(txEnv *common.Envelope, channelID string, txid string, txType common.HeaderType, txmgr txmgr.TxMgr) (*rwset.TxReadWriteSet, error) {
 	logger.Debugf("Performing custom processing for transaction [txid=%s], [txType=%s]", txid, txType)
 	processor := customtx.GetProcessor(txType)
 	logger.Debugf("Processor for custom tx processing:%#v", processor)
@@ -199,7 +199,7 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 	if err = processor.GenerateSimulationResults(txEnv, sim, false); err != nil {
 		return nil, err
 	}
-	if simRes, err = sim.GetTxSimulationResults(); err != nil {
+	if simRes, err = sim.GetTxSimulationResults(channelID); err != nil {
 		return nil, err
 	}
 	return simRes.PubSimulationResults, nil

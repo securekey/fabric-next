@@ -174,7 +174,7 @@ type TxSimulator interface {
 	// Returned type 'TxSimulationResults' contains the simulation results for both the public data and the private data.
 	// The public data simulation results are expected to be used as in V1 while the private data simulation results are expected
 	// to be used by the gossip to disseminate this to the other endorsers (in phase-2 of sidedb)
-	GetTxSimulationResults() (*TxSimulationResults, error)
+	GetTxSimulationResults(chainID string) (*TxSimulationResults, error)
 }
 
 // TxPvtData encapsulates the transaction number and pvt write-set for a transaction

@@ -17,8 +17,11 @@ limitations under the License.
 package rwsetutil
 
 import (
+	"fmt"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
@@ -106,9 +109,46 @@ func (b *RWSetBuilder) AddToPvtAndHashedWriteSet(ns string, coll string, key str
 	b.getOrCreateCollHashedRwBuilder(ns, coll).writeMap[key] = kvWriteHash
 }
 
+func (s *RWSetBuilder) validatePvtSimResults(chainID string, results *TxPvtRwSet) error {
+	for _, nsRwSet := range results.NsPvtRwSet {
+		for _, collPvtRwSets := range nsRwSet.CollPvtRwSets {
+			namespace := statedb.DerivePvtDataNs(nsRwSet.NameSpace, collPvtRwSets.CollectionName)
+			for _, kvread := range collPvtRwSets.KvRwSet.Reads {
+				key := kvread.Key
+				version := kvread.Version
+				if versionedValue, ok := statedb.GetFromKVCache(chainID, namespace, key); ok {
+					if versionedValue.Version.BlockNum != version.BlockNum && versionedValue.Version.TxNum != version.TxNum {
+						return fmt.Errorf("Private key=%s has a newer version (b=%d, index=%d) since simulation started (b=%d, index=%d)",
+							key, versionedValue.Version.BlockNum, versionedValue.Version.TxNum, version.BlockNum, version.TxNum)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *RWSetBuilder) validatePubSimResults(chainID string, results *TxRwSet) error {
+	for _, nsRwSet := range results.NsRwSets {
+		for _, kvread := range nsRwSet.KvRwSet.Reads {
+			key := kvread.Key
+			version := kvread.Version
+			if versionedValue, ok := statedb.GetFromKVCache(chainID, nsRwSet.NameSpace, key); ok {
+				if versionedValue.Version.BlockNum != version.BlockNum && versionedValue.Version.TxNum != version.TxNum {
+					return fmt.Errorf("Public key=%s has a newer version (b=%d, index=%d) since simulation started (b=%d, index=%d)",
+						key, versionedValue.Version.BlockNum, versionedValue.Version.TxNum, version.BlockNum, version.TxNum)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // GetTxSimulationResults returns the proto bytes of public rwset
 // (public data + hashes of private data) and the private rwset for the transaction
-func (b *RWSetBuilder) GetTxSimulationResults() (*ledger.TxSimulationResults, error) {
+func (b *RWSetBuilder) GetTxSimulationResults(chainID string, doMVCCValidation bool) (*ledger.TxSimulationResults, error) {
 	pvtData := b.getTxPvtReadWriteSet()
 	var err error
 
@@ -117,6 +157,12 @@ func (b *RWSetBuilder) GetTxSimulationResults() (*ledger.TxSimulationResults, er
 
 	// Populate the collection-level hashes into pub rwset and compute the proto bytes for pvt rwset
 	if pvtData != nil {
+		if doMVCCValidation {
+			err = b.validatePvtSimResults(chainID, pvtData)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if pvtDataProto, err = pvtData.toProtoMsg(); err != nil {
 			return nil, err
 		}
@@ -129,6 +175,12 @@ func (b *RWSetBuilder) GetTxSimulationResults() (*ledger.TxSimulationResults, er
 	// Compute the proto bytes for pub rwset
 	pubSet := b.GetTxReadWriteSet()
 	if pubSet != nil {
+		if doMVCCValidation {
+			err = b.validatePubSimResults(chainID, pubSet)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if pubDataProto, err = b.GetTxReadWriteSet().toProtoMsg(); err != nil {
 			return nil, err
 		}

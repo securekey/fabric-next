@@ -62,7 +62,7 @@ func TestTxSimulationResultWithOnlyPubData(t *testing.T) {
 	rwSetBuilder.AddToReadSet("ns2", "key2", version.NewHeight(1, 2))
 	rwSetBuilder.AddToWriteSet("ns2", "key3", []byte("value3"))
 
-	txSimulationResults, err := rwSetBuilder.GetTxSimulationResults()
+	txSimulationResults, err := rwSetBuilder.GetTxSimulationResults("",false)
 	testutil.AssertNoError(t, err, "")
 
 	ns1KVRWSet := &kvrwset.KVRWSet{
@@ -108,7 +108,7 @@ func TestTxSimulationResultWithPvtData(t *testing.T) {
 	rwSetBuilder.AddToHashedReadSet("ns2", "coll1", "key2", version.NewHeight(1, 1))
 	rwSetBuilder.AddToPvtAndHashedWriteSet("ns2", "coll2", "key1", []byte("pvt-ns2-coll2-key1-value"))
 
-	actualSimRes, err := rwSetBuilder.GetTxSimulationResults()
+	actualSimRes, err := rwSetBuilder.GetTxSimulationResults("",false)
 	testutil.AssertNoError(t, err, "")
 
 	///////////////////////////////////////////////////////

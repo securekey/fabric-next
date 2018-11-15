@@ -291,7 +291,7 @@ func (e *Endorser) SimulateProposal(ctx context.Context, chainID string, txid st
 	}
 
 	if txsim != nil {
-		if simResult, err = txsim.GetTxSimulationResults(); err != nil {
+		if simResult, err = txsim.GetTxSimulationResults(chainID); err != nil {
 			txsim.Done()
 			return nil, nil, nil, nil, err
 		}

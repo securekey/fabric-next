@@ -131,7 +131,7 @@ func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, val
 				continue
 			}
 		} else {
-			rwsetProto, err := processNonEndorserTx(env, chdr.TxId, txType, txmgr, !doMVCCValidation)
+			rwsetProto, err := processNonEndorserTx(env, chdr.ChannelId, chdr.TxId, txType, txmgr, !doMVCCValidation)
 			if _, ok := err.(*customtx.InvalidTxError); ok {
 				txsFilter.SetFlag(txIndex, peer.TxValidationCode_INVALID_OTHER_REASON)
 				continue
@@ -160,7 +160,7 @@ func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, val
 	return b, nil
 }
 
-func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.HeaderType, txmgr txmgr.TxMgr, synchingState bool) (*rwset.TxReadWriteSet, error) {
+func processNonEndorserTx(txEnv *common.Envelope, channelID string, txid string, txType common.HeaderType, txmgr txmgr.TxMgr, synchingState bool) (*rwset.TxReadWriteSet, error) {
 	logger.Debugf("Performing custom processing for transaction [txid=%s], [txType=%s]", txid, txType)
 	processor := customtx.GetProcessor(txType)
 	logger.Debugf("Processor for custom tx processing:%#v", processor)
@@ -178,7 +178,7 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 	if err = processor.GenerateSimulationResults(txEnv, sim, synchingState); err != nil {
 		return nil, err
 	}
-	if simRes, err = sim.GetTxSimulationResults(); err != nil {
+	if simRes, err = sim.GetTxSimulationResults(channelID); err != nil {
 		return nil, err
 	}
 	return simRes.PubSimulationResults, nil

@@ -132,7 +132,7 @@ func (s *lockBasedTxSimulator) ExecuteQueryOnPrivateData(namespace, collection, 
 }
 
 // GetTxSimulationResults implements method in interface `ledger.TxSimulator`
-func (s *lockBasedTxSimulator) GetTxSimulationResults() (*ledger.TxSimulationResults, error) {
+func (s *lockBasedTxSimulator) GetTxSimulationResults(chainID string) (*ledger.TxSimulationResults, error) {
 	if s.simulationResultsComputed {
 		return nil, errors.New("the function GetTxSimulationResults() should only be called once on a transaction simulator instance")
 	}
@@ -142,7 +142,7 @@ func (s *lockBasedTxSimulator) GetTxSimulationResults() (*ledger.TxSimulationRes
 		return nil, s.helper.err
 	}
 	s.helper.addRangeQueryInfo()
-	return s.rwsetBuilder.GetTxSimulationResults()
+	return s.rwsetBuilder.GetTxSimulationResults(chainID, true)
 }
 
 // ExecuteUpdate implements method in interface `ledger.TxSimulator`
