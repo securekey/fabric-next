@@ -42,6 +42,7 @@ const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfter
 const confBlockCacheSize = "ledger.blockchain.blockCacheSize"
 const confKVCacheSize = "ledger.blockchain.kvCacheSize"
 const confPvtDataCacheSize = "ledger.blockchain.pvtDataCacheSize"
+const confKVCacheBlocksToLive = "ledger.blockchain.kvCacheBlocksToLive"
 const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
@@ -309,6 +310,13 @@ func GetKVCacheSize() int {
 		kvCacheSize = 64 * 1024
 	}
 	return kvCacheSize
+}
+
+func GetKVCacheBlocksToLive() uint64 {
+	if !viper.IsSet(confKVCacheBlocksToLive) {
+		return 100
+	}
+	return uint64(viper.GetInt(confKVCacheBlocksToLive))
 }
 
 // GetTransientStoreProvider returns the transient storage provider specified in the configuration
