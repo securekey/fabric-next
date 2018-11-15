@@ -39,7 +39,8 @@ type ValidatedTxOp struct {
 
 type ValidatedPvtData struct {
 	ValidatedTxOp
-	Collection string
+	Collection    string
+	ExpiringBlock uint64
 }
 
 type KVCache struct {
