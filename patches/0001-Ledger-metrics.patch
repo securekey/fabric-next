@@ -1,6 +1,6 @@
-From edc2af312022ca94f21b956d31bb9309dfc96b2d Mon Sep 17 00:00:00 2001
+From bd34cccc61d8189db10788d7482198ced4e46df1 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Fri, 9 Nov 2018 14:07:57 -0500
+Date: Wed, 14 Nov 2018 18:59:54 -0500
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -25,10 +25,10 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  core/ledger/kvledger/kv_ledger.go             |  26 +
  .../privacyenabledstate/common_storage_db.go  |   9 +
  .../txmgmt/pvtstatepurgemgmt/expiry_keeper.go |   7 +-
- .../statecachedstore/cache_statestore.go      |   8 +-
+ .../statecachedstore/cache_statestore.go      |   4 +
  .../txmgmt/statedb/statecouchdb/batch_util.go |  10 +
  .../statedb/statecouchdb/commit_handling.go   |   7 +
- .../statedb/statecouchdb/statecouchdb.go      |  14 +-
+ .../statedb/statecouchdb/statecouchdb.go      |  20 +-
  .../statedb/stateleveldb/stateleveldb.go      |   7 +
  .../txmgmt/txmgr/lockbasedtxmgr/helper.go     |   8 +
  .../txmgr/lockbasedtxmgr/lockbased_txmgr.go   |  58 ++-
@@ -44,7 +44,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/state/payloads_buffer.go               |   9 +-
  gossip/state/state.go                         |  26 +-
  peer/node/start.go                            |   4 +
- 39 files changed, 790 insertions(+), 1227 deletions(-)
+ 39 files changed, 793 insertions(+), 1226 deletions(-)
  delete mode 100644 common/metrics/server_test.go
  delete mode 100644 common/metrics/tally_provider_test.go
  delete mode 100644 common/metrics/types.go
@@ -2335,7 +2335,7 @@ index 4ca5a570e..571dc2e2d 100644
 \ No newline at end of file
 +}
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 13ddad9ab..c67cf87c3 100644
+index 9a4337a6e..dd9f20d97 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -16,6 +16,7 @@ import (
@@ -2360,7 +2360,7 @@ index 13ddad9ab..c67cf87c3 100644
  	var err error
  	block := pvtdataAndBlock.Block
  	blockNo := pvtdataAndBlock.Block.Header.Number
-@@ -308,6 +316,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -303,6 +311,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  	}
  	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
  
@@ -2371,7 +2371,7 @@ index 13ddad9ab..c67cf87c3 100644
  	startCommitState := time.Now()
  	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
  	if err = l.txtmgmt.Commit(); err != nil {
-@@ -346,6 +358,13 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -352,6 +364,13 @@ func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtD
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2385,7 +2385,7 @@ index 13ddad9ab..c67cf87c3 100644
  	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
-@@ -355,6 +374,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+@@ -361,6 +380,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
  // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2462,7 +2462,7 @@ index 1d1436cb5..0f94a7ec3 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
-index e49f60724..54a15135d 100644
+index 8c09836df..106fc116a 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 @@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
@@ -2473,17 +2473,7 @@ index e49f60724..54a15135d 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
-@@ -80,13 +81,18 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
- // startKey is inclusive
- // endKey is exclusive
- func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
--
- 	dbItr := c.stateKeyIndex.GetIterator(namespace, startKey, endKey)
- 	if !dbItr.Next() {
-+		if metrics.IsDebug() {
-+			metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_miss").Inc(1)
-+		}
- 		logger.Debugf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
+@@ -87,6 +88,9 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey
  		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
  	}
  	dbItr.Prev()
@@ -2548,7 +2538,7 @@ index 7870d4ada..b81321833 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index 1000553b6..861050a4d 100644
+index 857b278e9..959e29cde 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2582,7 +2572,20 @@ index 1000553b6..861050a4d 100644
  	return kv.VersionedValue, nil
  }
  
-@@ -357,6 +363,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
+@@ -323,6 +329,12 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
+ 		logger.Debugf("Error calling ReadDocRange(): %s\n", err.Error())
+ 		return nil, err
+ 	}
++	if len(queryResult) != 0 {
++		if metrics.IsDebug() {
++			metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_miss").Inc(1)
++		}
++	}
++
+ 	logger.Debugf("Exiting GetStateRangeScanIterator")
+ 	return newQueryScanner(namespace, queryResult), nil
+ }
+@@ -357,6 +369,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
  
  // ApplyUpdates implements method in VersionedDB interface
  func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
@@ -3262,7 +3265,7 @@ index 83800f0e0..17a6c44b0 100644
  	dbVal := scanner.dbItr.Value()
  	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 7e00061be..acd5a4eeb 100644
+index 5369dc9f5..53a465923 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -13,6 +13,7 @@ import (
