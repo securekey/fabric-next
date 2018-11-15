@@ -112,12 +112,12 @@ func createBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*c
 
 
 func createBlockStoreIndices(db *couchdb.CouchDatabase) error {
-	_, err := db.CreateNewIndexWithRetry(blockHashIndexDef, blockHashIndexDoc)
+	err := db.CreateNewIndexWithRetry(blockHashIndexDef, blockHashIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of block hash index failed")
 	}
 
-	_, err = db.CreateNewIndexWithRetry(blockTxnIndexDef, blockTxnIndexDoc)
+	err = db.CreateNewIndexWithRetry(blockTxnIndexDef, blockTxnIndexDoc)
 	if err != nil {
 		return errors.WithMessage(err, "creation of txn index failed")
 	}
