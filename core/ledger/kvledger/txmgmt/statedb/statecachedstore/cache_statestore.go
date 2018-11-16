@@ -145,7 +145,6 @@ func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "KVScanner next get value %s %s failed", scanner.namespace, key)
 	}
-	logger.Infof("*** GetStateRangeScanIterator next namespace %s key %s value %s", scanner.namespace, key, versionedValue.Value)
 
 	return &statedb.VersionedKV{
 		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
