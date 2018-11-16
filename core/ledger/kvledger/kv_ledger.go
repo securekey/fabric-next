@@ -195,23 +195,24 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	blockNo := pvtdataAndBlock.Block.Header.Number
 	block := pvtdataAndBlock.Block
 
-	logger.Debugf("[%s] Adding block [%d] to storage", l.ledgerID, blockNo)
-
 	l.blockAPIsRWLock.Lock()
 	defer l.blockAPIsRWLock.Unlock()
 
-	logger.Debugf("[%s] Adding block [%d] transactions to state database", l.ledgerID, blockNo)
+	logger.Debugf("[%s] Adding block [%d] to storage", l.ledgerID, blockNo)
 	startCommitBlockStorage := time.Now()
 	err := l.blockStore.AddBlock(pvtdataAndBlock.Block)
 	if err != nil {
 		return err
 	}
+	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 
+	logger.Debugf("[%s] Adding block [%d] transactions to state cache", l.ledgerID, blockNo)
+	startStateCacheStorage := time.Now()
 	err = l.cacheBlock(pvtdataAndBlock)
 	if err != nil {
 		return err
 	}
-	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
+	elapsedCacheBlock := time.Since(startStateCacheStorage) / time.Millisecond // total duration in ms
 
 	err = l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
 	if err != nil {
@@ -220,8 +221,8 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
 	elapsedAddBlock := time.Since(startCommitBlockStorage) / time.Millisecond // total duration in ms
 
-	logger.Infof("[%s] Added block [%d] with %d transaction(s) in %dms (block_commit=%dms)",
-		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedAddBlock, elapsedCommitBlockStorage)
+	logger.Infof("[%s] Added block [%d] with %d transaction(s) in %dms (block_commit=%dms state_cache=%dms)",
+		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedAddBlock, elapsedCommitBlockStorage, elapsedCacheBlock)
 
 	return nil
 }

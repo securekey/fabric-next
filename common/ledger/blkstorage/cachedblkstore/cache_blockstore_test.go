@@ -55,15 +55,57 @@ func TestShutdown(t *testing.T) {
 	// TODO: cache
 }
 
-func TestGetBlockchainInfo(t *testing.T) {
-	cbs := newMockCachedBlockStore(t)
-
+func TestGetBlockchainInfoOnStartup(t *testing.T) {
 	mbi := common.BlockchainInfo{Height: 10}
-	cbs.blockStore.(*mockBlockStoreWithCheckpoint).BlockchainInfo = &mbi
+	cbs := newMockCachedBlockStoreWithBlockchainInfo(t, &mbi)
 
 	bi, err := cbs.GetBlockchainInfo()
 	assert.NoError(t, err, "getting blockchain info should be successful")
 	assert.Equal(t, &mbi, bi, "blockchain info from store should have been returned")
+}
+
+func TestGetBlockchainInfo(t *testing.T) {
+	mbi := common.BlockchainInfo{Height: 10}
+	cbs := newMockCachedBlockStoreWithBlockchainInfo(t, &mbi)
+
+	eb0 := mocks.CreateSimpleMockBlock(0)
+	eb1 := mocks.CreateSimpleMockBlock(1)
+	eb1.Header.PreviousHash = eb0.GetHeader().Hash()
+
+	mbi0 := common.BlockchainInfo{
+		Height: 1,
+		CurrentBlockHash: eb0.GetHeader().Hash(),
+	}
+
+	mbi1 := common.BlockchainInfo{
+		Height: 2,
+		CurrentBlockHash: eb1.GetHeader().Hash(),
+		PreviousBlockHash: eb0.GetHeader().Hash(),
+	}
+
+	err := cbs.AddBlock(eb0)
+	assert.NoError(t, err, "block should have been added successfully")
+
+	bi, err := cbs.GetBlockchainInfo()
+	assert.NoError(t, err, "getting blockchain info should be successful")
+	assert.Equal(t, &mbi, bi, "blockchain info from store should have been returned")
+
+	err = cbs.CheckpointBlock(eb0)
+	assert.NoError(t, err, "block should have been checkpointed successfully")
+
+	bi, err = cbs.GetBlockchainInfo()
+	assert.NoError(t, err, "getting blockchain info should be successful")
+	assert.Equal(t, &mbi0, bi, "blockchain info from store should have been returned")
+
+	err = cbs.AddBlock(eb1)
+	assert.NoError(t, err, "block should have been added successfully")
+
+	err = cbs.CheckpointBlock(eb1)
+	assert.NoError(t, err, "block should have been checkpointed successfully")
+
+	bi, err = cbs.GetBlockchainInfo()
+	assert.NoError(t, err, "getting blockchain info should be successful")
+	assert.Equal(t, &mbi1, bi, "blockchain info from store should have been returned")
 }
 
 func TestRetrieveBlocks(t *testing.T) {
@@ -514,16 +556,27 @@ func TestRetrieveTxValidationCodeByTxIDNonExistenceIndex(t *testing.T) {
 }
 
 func newMockCachedBlockStore(t *testing.T) *cachedBlockStore {
+	return newMockCachedBlockStoreWithBlockchainInfo(t, nil)
+}
+
+func newMockCachedBlockStoreWithBlockchainInfo(t *testing.T, mbi *common.BlockchainInfo) *cachedBlockStore {
 	const noCacheLimit = 0
 	blockCacheProvider := memblkcache.NewProvider(noCacheLimit)
 
 	blockStore := newMockBlockStoreWithCheckpoint()
 	blockIndex := mocks.NewMockBlockIndex()
 
+	if mbi != nil {
+		blockStore.BlockchainInfo = mbi
+	}
+
 	blockCache, err := blockCacheProvider.OpenBlockCache("mock")
 	assert.NoError(t, err)
 
-	return newCachedBlockStore(blockStore, blockIndex, blockCache)
+	cbs, err := newCachedBlockStore(blockStore, blockIndex, blockCache)
+	assert.NoError(t, err)
+
+	return cbs
 }
 
 type mockBlockStoreWithCheckpoint struct {
