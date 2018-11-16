@@ -140,7 +140,7 @@ func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 	}
 	dbKey := scanner.dbItr.Key()
 	_, key := statekeyindex.SplitCompositeKey(dbKey)
-	logger.Infof("*** GetStateRangeScanIterator next namespace %s key %s", scanner.namespace, key)
+
 	versionedValue, err := scanner.cachedStateStore.GetState(scanner.namespace, key)
 	if err != nil {
 		return nil, errors.Wrapf(err, "KVScanner next get value %s %s failed", scanner.namespace, key)

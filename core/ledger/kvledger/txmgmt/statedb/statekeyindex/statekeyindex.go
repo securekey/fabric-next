@@ -45,7 +45,7 @@ func (s *stateKeyIndex) AddIndex(keys []CompositeKey) error {
 	for _, v := range keys {
 		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
 		//TODO change to DEBUG
-		logger.Infof("Channel [%s]: Applying key(string)=[%s]", s.dbName, string(compositeKey))
+		logger.Debugf("Channel [%s]: Applying key(string)=[%s]", s.dbName, string(compositeKey))
 		dbBatch.Put(compositeKey, []byte(""))
 	}
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.

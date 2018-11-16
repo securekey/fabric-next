@@ -168,7 +168,6 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 					ns := nsPvtdata.NameSpace
 					coll := collPvtRwSets.CollectionName
 					for _, write := range collPvtRwSets.KvRwSet.Writes {
-						logger.Infof("*** cache pvt data key key %s blockNumber %d", pvtKeys, blockNumber)
 						pvtKeys = append(pvtKeys,
 							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
 								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll})
