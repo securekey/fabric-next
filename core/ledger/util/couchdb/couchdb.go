@@ -1134,7 +1134,7 @@ func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 
 	//handle the request for saving document with a retry if there is a revision conflict
 	resp, err := dbclient.handleRequestWithRevisionRetry(id, http.MethodDelete,
-		*deleteURL, nil, "", "", maxRetries, true)
+		*deleteURL, nil, rev, "", maxRetries, true)
 
 	if err != nil {
 		dbErr, ok := err.(*dbResponseError)
