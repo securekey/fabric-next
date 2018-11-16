@@ -1,4 +1,4 @@
-From bd34cccc61d8189db10788d7482198ced4e46df1 Mon Sep 17 00:00:00 2001
+From f44a5efd21a397307d75b08813f9636cd5401b0b Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Wed, 14 Nov 2018 18:59:54 -0500
 Subject: [PATCH] Ledger metrics
@@ -2284,7 +2284,7 @@ index 7b029648e..b6423c123 100644
  	keys, height, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)
  	if err != nil {
 diff --git a/core/ledger/kvledger/inventory/cdbid/cdb_store.go b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
-index 4ca5a570e..571dc2e2d 100644
+index ecebba846..7e18de624 100644
 --- a/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 +++ b/core/ledger/kvledger/inventory/cdbid/cdb_store.go
 @@ -8,6 +8,7 @@ package cdbid
@@ -2335,7 +2335,7 @@ index 4ca5a570e..571dc2e2d 100644
 \ No newline at end of file
 +}
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 9a4337a6e..dd9f20d97 100644
+index 28b041eec..9af2c7bc7 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
 @@ -16,6 +16,7 @@ import (
@@ -2346,7 +2346,7 @@ index 9a4337a6e..dd9f20d97 100644
  	"github.com/hyperledger/fabric/common/util"
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-@@ -287,6 +288,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
+@@ -288,6 +289,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
  
  // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
  func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
@@ -2360,7 +2360,7 @@ index 9a4337a6e..dd9f20d97 100644
  	var err error
  	block := pvtdataAndBlock.Block
  	blockNo := pvtdataAndBlock.Block.Header.Number
-@@ -303,6 +311,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
+@@ -304,6 +312,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
  	}
  	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
  
@@ -2371,7 +2371,7 @@ index 9a4337a6e..dd9f20d97 100644
  	startCommitState := time.Now()
  	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
  	if err = l.txtmgmt.Commit(); err != nil {
-@@ -352,6 +364,13 @@ func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtD
+@@ -353,6 +365,13 @@ func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtD
  // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
@@ -2385,7 +2385,7 @@ index 9a4337a6e..dd9f20d97 100644
  	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
-@@ -361,6 +380,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
+@@ -362,6 +381,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
  // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
  // The pvt data is filtered by the list of 'collections' supplied
  func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2400,7 +2400,7 @@ index 9a4337a6e..dd9f20d97 100644
  	l.blockAPIsRWLock.RLock()
  	l.blockAPIsRWLock.RUnlock()
 diff --git a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
-index c31df373d..8de154ea4 100644
+index fdcba0d9d..6940117ec 100644
 --- a/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 +++ b/core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go
 @@ -12,6 +12,7 @@ import (
@@ -2411,7 +2411,7 @@ index c31df373d..8de154ea4 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
  
-@@ -260,6 +261,10 @@ func DeriveHashedDataNs(namespace, collection string) string {
+@@ -259,6 +260,10 @@ func DeriveHashedDataNs(namespace, collection string) string {
  }
  
  func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
@@ -2422,7 +2422,7 @@ index c31df373d..8de154ea4 100644
  	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
  		for _, coll := range nsBatch.GetCollectionNames() {
  			for key, vv := range nsBatch.GetUpdates(coll) {
-@@ -270,6 +275,10 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
+@@ -269,6 +274,10 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
  }
  
  func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
@@ -2462,7 +2462,7 @@ index 1d1436cb5..0f94a7ec3 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
-index 8c09836df..106fc116a 100644
+index e98633830..c2e29c7a0 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 @@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
@@ -2473,7 +2473,7 @@ index 8c09836df..106fc116a 100644
  	"github.com/hyperledger/fabric/core/common/ccprovider"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
-@@ -87,6 +88,9 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey
+@@ -89,6 +90,9 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey
  		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
  	}
  	dbItr.Prev()
@@ -2870,12 +2870,12 @@ index 739427dc5..0d9d53436 100644
  	defer s.rwlock.RUnlock()
  	return s.getPvtDataByNumWithoutLock(blockNum, filter)
 diff --git a/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go b/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
-index bd1f059e2..37adf4347 100644
+index c2ae3dafd..8387c70bd 100644
 --- a/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
 +++ b/core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtprovider.go
-@@ -29,7 +29,7 @@ func NewProvider() (*Provider, error) {
- 	logger.Debugf("constructing CouchDB private data storage provider")
- 	couchDBDef := couchdb.GetCouchDBDefinition()
+@@ -34,7 +34,7 @@ func NewProvider() (*Provider, error) {
+ 
+ func newProviderWithDBDef(couchDBDef *couchdb.CouchDBDef) (*Provider, error) {
  	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 -		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout)
 +		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
@@ -2883,10 +2883,10 @@ index bd1f059e2..37adf4347 100644
  		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
  	}
 diff --git a/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go b/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
-index ef673f9d4..f5784d31b 100644
+index 0eab2effb..ecea7b44f 100644
 --- a/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
 +++ b/core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
-@@ -12,6 +12,7 @@ import (
+@@ -13,6 +13,7 @@ import (
  
  	"encoding/hex"
  
@@ -2894,7 +2894,7 @@ index ef673f9d4..f5784d31b 100644
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-@@ -72,6 +73,12 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+@@ -73,6 +74,12 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
  		panic("calling Prepare on a peer that is not a committer")
  	}
  
@@ -2907,7 +2907,7 @@ index ef673f9d4..f5784d31b 100644
  	if s.batchPending {
  		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
  			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
-@@ -97,6 +104,12 @@ func (s *store) Commit() error {
+@@ -98,6 +105,12 @@ func (s *store) Commit() error {
  		panic("calling Commit on a peer that is not a committer")
  	}
  
@@ -2920,7 +2920,7 @@ index ef673f9d4..f5784d31b 100644
  	if !s.batchPending {
  		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
  	}
-@@ -117,6 +130,11 @@ func (s *store) Commit() error {
+@@ -118,6 +131,11 @@ func (s *store) Commit() error {
  }
  
  func (s *store) InitLastCommittedBlock(blockNum uint64) error {
@@ -2932,7 +2932,7 @@ index ef673f9d4..f5784d31b 100644
  	if !(s.isEmpty && !s.batchPending) {
  		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
  	}
-@@ -133,6 +151,12 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
+@@ -134,6 +152,12 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
  }
  
  func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
@@ -2946,7 +2946,7 @@ index ef673f9d4..f5784d31b 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 1dcdc6cbe..5cb073b79 100644
+index 47007d255..1704ab399 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -29,6 +29,8 @@ import (
