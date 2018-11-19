@@ -286,8 +286,26 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		return nil, err
 	}
 
-	// TODO: Change to DEBUG
-	logger.Infof("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
+	validatedTx := statedb.ValidatedTx{
+		Key:          key,
+		Value:        kv.VersionedValue.Value,
+		BlockNum:     kv.VersionedValue.Version.BlockNum,
+		IndexInBlock: int(kv.VersionedValue.Version.TxNum),
+	}
+
+	validatedTxOp := [] statedb.ValidatedTxOp {
+		{
+			Namespace: 	 namespace,
+			ChId: 	     vdb.chainName,
+			IsDeleted: 	 false,
+			ValidatedTx: validatedTx,
+		},
+	}
+
+	// Put retreived KV from DB to the cache
+	statedb.UpdateKVCache(validatedTxOp, nil, nil, vdb.chainName)
+
+	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 	return kv.VersionedValue, nil
 }
 

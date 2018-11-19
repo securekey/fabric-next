@@ -63,7 +63,11 @@ func InitKVCache() {
 }
 
 func getKVCache(chId string, namespace string) (*KVCache, error) {
-	cacheName := chId + "_" + namespace
+	cacheName := chId
+	if len(namespace) > 0 {
+		cacheName = cacheName + "_" + namespace
+	}
+
 	kvCache, found := kvCacheMap[cacheName]
 	if !found {
 		kvCache = newKVCache(cacheName)
@@ -92,65 +96,47 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedP
 	kvCacheMtx.Lock()
 	defer kvCacheMtx.Unlock()
 
-	for _, validatedTxOp := range validatedTxOps {
-		kvCache, _ := getKVCache(validatedTxOp.ChId, validatedTxOp.Namespace)
-		if validatedTxOp.IsDeleted {
-			kvCache.Remove(validatedTxOp.ValidatedTx.Key, validatedTxOp.ValidatedTx.BlockNum, validatedTxOp.ValidatedTx.IndexInBlock)
-		} else {
-			newTx := validatedTxOp.ValidatedTx
-			kvCache.Put(&newTx)
-		}
-	}
-
-	for _, pvtData := range validatedPvtData {
-		namespace := DerivePvtDataNs(pvtData.Namespace, pvtData.Collection)
-		kvCache, _ := getKVCache(pvtData.ChId, namespace)
-		if pvtData.IsDeleted {
-			kvCache.Remove(pvtData.Key, pvtData.BlockNum, pvtData.IndexInBlock)
-		} else {
-			newTx := pvtData.ValidatedTxOp.ValidatedTx
-			kvCache.Put(&newTx)
-		}
-	}
-	for _, pvtData := range validatedPvtHashData {
-		namespace := DerivePvtHashDataNs(pvtData.Namespace, pvtData.Collection)
-		kvCache, _ := getKVCache(pvtData.ChId, namespace)
-		if pvtData.IsDeleted {
-			kvCache.Remove(pvtData.Key, pvtData.BlockNum, pvtData.IndexInBlock)
-		} else {
-			newTx := pvtData.ValidatedTxOp.ValidatedTx
-			kvCache.Put(&newTx)
-		}
-	}
-
 	indexKeys := make([]statekeyindex.CompositeKey, 0)
 	deletedIndexKeys := make([]statekeyindex.CompositeKey, 0)
-	// Add key index for KV
+	
 	for _, v := range validatedTxOps {
+		kvCache, _ := getKVCache(v.ChId, v.Namespace)
 		if v.IsDeleted {
+			kvCache.Remove(v.ValidatedTx.Key, v.ValidatedTx.BlockNum, v.ValidatedTx.IndexInBlock)
 			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 		} else {
+			newTx := v.ValidatedTx
+			kvCache.Put(&newTx)
 			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 		}
 	}
-	// Add key index for pvt
+
 	for _, v := range validatedPvtData {
+		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
 		if v.IsDeleted {
+			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtDataNs(v.Namespace, v.Collection)})
 		} else {
+			newTx := v.ValidatedTxOp.ValidatedTx
+			kvCache.Put(&newTx)
 			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtDataNs(v.Namespace, v.Collection)})
 		}
 	}
-
-	// Add key index for pvt hash
+	
 	for _, v := range validatedPvtHashData {
+		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
 		if v.IsDeleted {
+			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtHashDataNs(v.Namespace, v.Collection)})
 		} else {
+			newTx := v.ValidatedTxOp.ValidatedTx
+			kvCache.Put(&newTx)
 			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: DerivePvtHashDataNs(v.Namespace, v.Collection)})
 		}
 	}
-
+	
 	//Add key index in leveldb
 	if len(indexKeys) > 0 {
 		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
@@ -174,6 +160,7 @@ func UpdateKVCache(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedP
 			return err
 		}
 	}
+	
 	return nil
 }
 
