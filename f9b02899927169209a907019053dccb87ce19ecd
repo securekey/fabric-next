@@ -16,6 +16,24 @@
       "revId": "f9b02899927169209a907019053dccb87ce19ecd",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8f541d5f_98810fd6",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 156,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-19T16:41:34Z",
+      "side": 1,
+      "message": "KVs must be cached to their own ledger IDs.",
+      "parentUuid": "a9a1cc8e_286796e5",
+      "revId": "f9b02899927169209a907019053dccb87ce19ecd",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
