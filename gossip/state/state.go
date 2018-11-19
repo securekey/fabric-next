@@ -16,6 +16,7 @@ import (
 	pb "github.com/golang/protobuf/proto"
 	vsccErrors "github.com/hyperledger/fabric/common/errors"
 	"github.com/hyperledger/fabric/common/util/retry"
+	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -113,7 +114,9 @@ type ledgerResources interface {
 	PublishBlock(*ledger.BlockAndPvtData, []string) error
 
 	// ValidateBlock validate block
-	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error)
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
+
+	ValidatePartialBlock(block *common.Block)
 
 	// StorePvtData used to persist private date into transient store
 	StorePvtData(txid string, privData *transientstore.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -153,7 +156,8 @@ type GossipStateProviderImpl struct {
 	commChan <-chan proto.ReceivedMessage
 
 	// Queue of payloads which wasn't acquired yet
-	payloads PayloadsBuffer
+	payloads           PayloadsBuffer
+	validationPayloads PayloadsBuffer
 
 	ledger ledgerResources
 
@@ -162,6 +166,10 @@ type GossipStateProviderImpl struct {
 	stateRequestCh chan proto.ReceivedMessage
 
 	stopCh chan struct{}
+
+	validationResponseChan chan *txvalidator.ValidationResults
+
+	pendingValidations *blockCache
 
 	done sync.WaitGroup
 
@@ -235,8 +243,13 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		// Channel to read direct messages from other peers
 		commChan: commChan,
 
+		validationResponseChan: make(chan *txvalidator.ValidationResults, 10),
+
+		pendingValidations: newBlockCache(),
+
 		// Create a queue for payload received
-		payloads: NewPayloadsBuffer(height),
+		payloads:           NewPayloadsBuffer(height),
+		validationPayloads: NewPayloadsBuffer(height),
 
 		ledger: ledger,
 
@@ -547,14 +560,45 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 	}
 
 	dataMsg := msg.GetDataMsg()
-	if dataMsg != nil {
-		if err := s.addPayload(dataMsg.GetPayload(), nonBlocking); err != nil {
-			logger.Warningf("Block [%d] received from gossip wasn't added to payload buffer: %v", dataMsg.Payload.SeqNum, err)
-			return
-		}
+	if dataMsg == nil {
+		logger.Info("Gossip message received is not of data message type, usually this should not happen.")
+		return
+	}
 
+	block, err := createBlockFromPayload(dataMsg.GetPayload())
+	if err != nil {
+		panic(fmt.Sprintf("[%s] extracting block from payload failed: %s", s.chainID, err))
+	}
+
+	fullyValidated, partiallyValidated, unvalidated := getValidationStatus(block)
+
+	if ledgerconfig.IsCommitter() {
+		if partiallyValidated {
+			// FIXME: Change to Debug
+			logger.Infof("[%s] Partially validated block [%d] received - sending to response channel", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+			s.validationResponseChan <- &txvalidator.ValidationResults{
+				BlockNumber: block.Header.Number,
+				TxFlags:     block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER],
+			}
+		} else {
+			logger.Debugf("[%s] Adding block [%d] to payload buffer", s.chainID, dataMsg.Payload.SeqNum)
+			if err := s.addPayload(dataMsg.Payload, nonBlocking); err != nil {
+				logger.Warningf("[%s] Block [%d] received from gossip wasn't added to payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+			}
+		}
+	} else if fullyValidated {
+		logger.Debugf("[%s] Fully validated block [%d] received with %d transactions. Adding to payload buffer.", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+		if err := s.addPayload(dataMsg.Payload, nonBlocking); err != nil {
+			logger.Warningf("[%s] Block [%d] received from gossip wasn't added to payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+		}
+	} else if unvalidated {
+		// FIXME: Change to Debug
+		logger.Infof("[%s] Unvalidated block [%d] received with %d transaction(s). Adding to validation payload buffer.", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+		if err := s.addValidationPayload(dataMsg.Payload); err != nil {
+			logger.Warningf("[%s] Block [%d] received from gossip wasn't added to validation payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+		}
 	} else {
-		logger.Debug("Gossip message received is not of data message type, usually this should not happen.")
+		logger.Debugf("[%s] Will not add partially validated block [%d] to validation payload buffer", s.chainID, dataMsg.Payload.SeqNum)
 	}
 }
 
@@ -595,6 +639,38 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 						return
 					}
 					logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
+				}
+
+				unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
+				if unvalidatedBlock != nil {
+					// FIXME: Change to Debug
+					logger.Infof("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
+					s.ledger.ValidatePartialBlock(unvalidatedBlock)
+				}
+			}
+		case <-s.validationPayloads.Ready():
+			logger.Debugf("[%s] Ready to validate payloads (blocks), next block number is = [%d]", s.chainID, s.validationPayloads.Next())
+			// Collect all subsequent payloads
+			for payload := s.validationPayloads.Pop(); payload != nil; payload = s.validationPayloads.Pop() {
+				rawBlock := &common.Block{}
+				if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
+					logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+					continue
+				}
+				if rawBlock.Data == nil || rawBlock.Header == nil {
+					logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)",
+						payload.SeqNum, rawBlock.Header, rawBlock.Data)
+					continue
+				}
+
+				if rawBlock.Header.Number == s.blockPublisher.LedgerHeight() {
+					// FIXME: Change to Debug
+					logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
+					s.ledger.ValidatePartialBlock(rawBlock)
+				} else {
+					// FIXME: Change to Debug
+					logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, payload.SeqNum, len(rawBlock.Data.Data), s.blockPublisher.LedgerHeight())
+					s.pendingValidations.Add(rawBlock)
 				}
 			}
 		case <-s.stopCh:
@@ -866,16 +942,6 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		return errors.New("Given payload is nil")
 	}
 
-	block, err := createBlockFromPayload(payload)
-	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("[%s] extracting block from payload failed", s.chainID))
-	}
-
-	if !isBlockValidated(block) && !ledgerconfig.IsCommitter() {
-		logger.Debugf("[%s] skipping unvalidated payload [block=%d]", s.chainID, payload.SeqNum)
-		return nil
-	}
-
 	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
 	height, err := s.ledgerHeight()
 	if err != nil {
@@ -891,6 +957,15 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	}
 
 	s.payloads.Push(payload)
+
+	return nil
+}
+
+func (s *GossipStateProviderImpl) addValidationPayload(payload *proto.Payload) error {
+	if payload == nil {
+		return errors.New("Given payload is nil")
+	}
+	s.validationPayloads.Push(payload)
 	return nil
 }
 
@@ -916,6 +991,11 @@ func createBlockFromPayload(payload *proto.Payload) (*common.Block, error) {
 }
 
 func isBlockValidated(block *common.Block) bool {
+	validated, _, _ := getValidationStatus(block)
+	return validated
+}
+
+func getValidationStatus(block *common.Block) (validated, partiallyValidated, unvalidated bool) {
 	blockData := block.GetData()
 	envelopes := blockData.GetData()
 	envelopesLen := len(envelopes)
@@ -925,16 +1005,24 @@ func isBlockValidated(block *common.Block) bool {
 	flagsLen := len(txValidationFlags)
 
 	if envelopesLen != flagsLen {
-		return false
+		return false, false, true
 	}
 
+	atLeastOneValidated := false
+	atLeastOneUnvalidated := false
 	for _, flag := range txValidationFlags {
 		if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
-			return false
+			atLeastOneUnvalidated = true
+		} else {
+			atLeastOneValidated = true
 		}
 	}
 
-	return true
+	validated = !atLeastOneUnvalidated
+	partiallyValidated = atLeastOneValidated && atLeastOneUnvalidated
+	unvalidated = !atLeastOneValidated
+
+	return
 }
 
 func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
@@ -950,6 +1038,11 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
 	if !ledgerconfig.IsCommitter() {
+		if !isBlockValidated(block) {
+			logger.Warningf("Non-committer got unvalidated block %d. Ignoring.", block.Header.Number)
+			return nil
+		}
+
 		// If not the committer than publish the block instead of committing.
 		err := s.publishBlock(block, pvtData)
 		if err != nil {
@@ -960,12 +1053,12 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 		return nil
 	}
 
-	// Validate block
-	blockAndPvtData, pvtTxns, err := s.ledger.ValidateBlock(block, pvtData)
+	blockAndPvtData, pvtTxns, err := s.ledger.ValidateBlock(block, pvtData, s.validationResponseChan)
 	if err != nil {
-		logger.Errorf("Got error while validate block(%+v)", errors.WithStack(err))
+		logger.Errorf("Got error while validating block: %s", err)
 		return err
 	}
+
 	// Gossip messages with other nodes in my org
 	s.gossipBlock(block, blockAndPvtData.BlockPvtData)
 	// Commit block with available private transactions

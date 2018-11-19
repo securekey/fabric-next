@@ -84,7 +84,10 @@ type Coordinator interface {
 	PublishBlock(*ledger.BlockAndPvtData, []string) error
 
 	// ValidateBlock validate block
-	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error)
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
+
+	// ValidatePartialBlock is called by the validator to validate only a subset of the transactions within the block
+	ValidatePartialBlock(block *common.Block)
 
 	// StorePvtData used to persist private data into transient store
 	StorePvtData(txid string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -157,7 +160,7 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
 	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
 }
 
-func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, []string, error) {
+func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, resultsChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error) {
 	if block.Data == nil {
 		return nil, nil, errors.New("Block data is empty")
 	}
@@ -165,10 +168,9 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		return nil, nil, errors.New("Block header is nil")
 	}
 
-	logger.Infof("[%s] Received block [%d] from buffer", c.ChainID, block.Header.Number)
+	logger.Infof("[%s] Validating block [%d]", c.ChainID, block.Header.Number)
 
-	logger.Debugf("[%s] Validating block [%d]", c.ChainID, block.Header.Number)
-	err := c.Validator.Validate(block)
+	err := c.Validator.Validate(block, resultsChan)
 	if err != nil {
 		logger.Errorf("Validation failed: %+v", err)
 		return nil, nil, err
@@ -249,6 +251,11 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	}
 
 	return blockAndPvtData, privateInfo.txns, nil
+}
+
+func (c *coordinator) ValidatePartialBlock(block *common.Block) {
+	// This can be done in the background
+	go c.Validator.ValidatePartial(block)
 }
 
 // StoreBlock stores block with private data into the ledger
