@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "a9a1cc8e_286796e5",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 156,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-19T16:39:33Z",
+      "side": 1,
+      "message": "In theory, based on the structure of a gossiped block, each record of private data can have different channel ID (ledger ID). This changes doesn\u0027t seem support this case and it is assumed all the KVs in all transactions have the same ledger ID. Are you OK with this?",
+      "revId": "f9b02899927169209a907019053dccb87ce19ecd",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
