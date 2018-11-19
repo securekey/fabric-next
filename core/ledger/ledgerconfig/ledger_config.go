@@ -41,6 +41,7 @@ const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
 const confBlockCacheSize = "ledger.blockchain.blockCacheSize"
 const confKVCacheSize = "ledger.blockchain.kvCacheSize"
+const confPvtDataCacheSize = "ledger.blockchain.pvtDataCacheSize"
 const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
@@ -290,10 +291,19 @@ func GetBlockCacheSize() int {
 	return blockCacheSize
 }
 
+// GetPvtDataCacheSize returns the number of pvt data per block to keep the in the LRU cache
+func GetPvtDataCacheSize() int {
+	pvtDataCacheSize := viper.GetInt(confPvtDataCacheSize)
+	if !viper.IsSet(confPvtDataCacheSize) {
+		pvtDataCacheSize = 10
+	}
+	return pvtDataCacheSize
+}
+
 func GetKVCacheSize() int {
 	kvCacheSize := viper.GetInt(confKVCacheSize)
 	if !viper.IsSet(confKVCacheSize) {
-		kvCacheSize = 64*1024
+		kvCacheSize = 64 * 1024
 	}
 	return kvCacheSize
 }
