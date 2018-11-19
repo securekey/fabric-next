@@ -18,10 +18,11 @@ package ledgerstorage
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
-	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -34,7 +35,9 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+	cachedpvtdatastore "github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cachedpvtdatastore"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cdbpvtdata"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/mempvtdatacache"
 )
 
 var logger = flogging.MustGetLogger("ledgerstorage")
@@ -110,10 +113,15 @@ func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
 	case ledgerconfig.LevelDBPvtDataStorage:
 		return pvtdatastorage.NewProvider(), nil
 	case ledgerconfig.CouchDBPvtDataStorage:
-		return cdbpvtdata.NewProvider()
+		pvtDataCacheSize := ledgerconfig.GetPvtDataCacheSize()
+		dbPvtData, err := cdbpvtdata.NewProvider()
+		if err != nil {
+			return nil, err
+		}
+		return cachedpvtdatastore.NewProvider(dbPvtData, mempvtdatacache.NewProvider(pvtDataCacheSize)), nil
 	}
-
 	return nil, errors.New("private data storage provider creation failed due to unknown configuration")
+
 }
 
 // Open opens the store
