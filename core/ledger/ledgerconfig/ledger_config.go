@@ -47,6 +47,7 @@ const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confRoles = "ledger.roles"
+const confValidationTimeout = "ledger.blockchain.validation.timeout"
 
 // TODO: couchDB config should be in a common section rather than being under state.
 const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
@@ -55,6 +56,8 @@ const confCouchDBIdleConnTimeout = "ledger.state.couchDBConfig.idleConnTimeout"
 const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout"
 
 const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
+
+const defaultValidationTimeout = 50 * time.Millisecond
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
@@ -293,7 +296,7 @@ func GetBlockCacheSize() int {
 func GetKVCacheSize() int {
 	kvCacheSize := viper.GetInt(confKVCacheSize)
 	if !viper.IsSet(confKVCacheSize) {
-		kvCacheSize = 64*1024
+		kvCacheSize = 64 * 1024
 	}
 	return kvCacheSize
 }
@@ -364,6 +367,8 @@ const (
 	CommitterRole Role = "committer"
 	// EndorserRole indicates that the peer endorses transaction proposals
 	EndorserRole Role = "endorser"
+	// ValidatorRole indicates that the peer validates the block
+	ValidatorRole Role = "validator"
 )
 
 var initOnce sync.Once
@@ -386,6 +391,11 @@ func IsCommitter() bool {
 // IsEndorser returns true if the peer is an endorser
 func IsEndorser() bool {
 	return HasRole(EndorserRole)
+}
+
+// IsValidator returns true if the peer is a validator
+func IsValidator() bool {
+	return HasRole(ValidatorRole)
 }
 
 // Roles returns the roles for the peer
@@ -427,4 +437,13 @@ func getRoles() map[Role]struct{} {
 // CouchDBHTTPTraceEnabled returns true if HTTP tracing is enabled for Couch DB
 func CouchDBHTTPTraceEnabled() bool {
 	return viper.GetBool(confCouchDBHTTPTraceEnabled)
+}
+
+// GetValidationTimeout is the timeout while waiting for Tx validation responses from validators
+func GetValidationTimeout() time.Duration {
+	timeout := viper.GetDuration(confValidationTimeout)
+	if timeout == 0 {
+		return defaultValidationTimeout
+	}
+	return timeout
 }
