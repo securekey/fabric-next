@@ -14,6 +14,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/mempvtdatacache"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -24,12 +27,14 @@ import (
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
+	//TODO change to debug
+	logger.Infof("*** cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
 
 	validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block)
 	if err != nil {
 		return err
 	}
-	pvtDataKeys, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags)
+	pvtDataKeys, validPvtData, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags)
 	if err != nil {
 		return err
 	}
@@ -40,6 +45,21 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 		return err
 	}
 
+	if !ledgerconfig.IsCommitter() {
+		// Update pvt data cache
+		pvtCache, err := getPrivateDataCache(l.ledgerID, block.Header.Number-1)
+		if err != nil {
+			return err
+		}
+		err = pvtCache.Prepare(block.Header.Number, validPvtData)
+		if err != nil {
+			return err
+		}
+		err = pvtCache.Commit()
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -154,13 +174,15 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 	return simRes.PubSimulationResults, nil
 }
 
-func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags) ([]statedb.ValidatedPvtData, error) {
+func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags) ([]statedb.ValidatedPvtData, []*ledger.TxPvtData, error) {
 	pvtKeys := make([]statedb.ValidatedPvtData, 0)
+	validPvtData := make([]*ledger.TxPvtData, 0)
 	for _, txPvtdata := range pvtData {
 		if txValidationFlags.IsValid(int(txPvtdata.SeqInBlock)) {
+			validPvtData = append(validPvtData, txPvtdata)
 			pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, nsPvtdata := range pvtRWSet.NsPvtRwSet {
 				for _, collPvtRwSets := range nsPvtdata.CollPvtRwSets {
@@ -177,5 +199,23 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 			}
 		}
 	}
-	return pvtKeys, nil
+	return pvtKeys, validPvtData, nil
+}
+
+func getPrivateDataCache(chID string, blockNumber uint64) (pvtdatastorage.Store, error) {
+	p := mempvtdatacache.NewProvider(ledgerconfig.GetPvtDataCacheSize())
+	var err error
+	pvtCache, err := p.OpenStore(chID)
+	if err != nil {
+		return nil, err
+	}
+	isEmpty, err := pvtCache.IsEmpty()
+	if isEmpty {
+		logger.Infof("InitLastCommittedBlock chID:%s blockNumber:%d", chID, blockNumber)
+		err = pvtCache.InitLastCommittedBlock(blockNumber)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return pvtCache, nil
 }
