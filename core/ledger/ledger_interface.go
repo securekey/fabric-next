@@ -31,12 +31,20 @@ type PeerLedgerProvider interface {
 	Close()
 }
 
+// SearchHint is passed to some query functions in order to optimize their search.
+type SearchHint int
+
+const (
+	// RecentOnly hints that the search function need only search within the most recently used set of elements.
+	RecentOnly SearchHint = iota
+)
+
 // PeerLedger differs from the OrdererLedger in that PeerLedger locally maintain a bitmask
 // that tells apart valid transactions from invalid ones
 type PeerLedger interface {
 	commonledger.Ledger
 	// GetTransactionByID retrieves a transaction by id
-	GetTransactionByID(txID string) (*peer.ProcessedTransaction, error)
+	GetTransactionByID(txID string, hints ...SearchHint) (*peer.ProcessedTransaction, error)
 	// GetBlockByHash returns a block given it's hash
 	GetBlockByHash(blockHash []byte) (*common.Block, error)
 	// GetBlockByTxID returns a block which contains a transaction

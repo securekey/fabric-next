@@ -79,12 +79,12 @@ func (s *SupportImpl) GetHistoryQueryExecutor(ledgername string) (ledger.History
 }
 
 // GetTransactionByID retrieves a transaction by id
-func (s *SupportImpl) GetTransactionByID(chid, txID string) (*pb.ProcessedTransaction, error) {
+func (s *SupportImpl) GetTransactionByID(chid, txID string, hints ...ledger.SearchHint) (*pb.ProcessedTransaction, error) {
 	lgr := s.Peer.GetLedger(chid)
 	if lgr == nil {
 		return nil, errors.Errorf("failed to look up the ledger for Channel %s", chid)
 	}
-	tx, err := lgr.GetTransactionByID(txID)
+	tx, err := lgr.GetTransactionByID(txID, hints...)
 	if err != nil {
 		return nil, errors.WithMessage(err, "GetTransactionByID failed")
 	}

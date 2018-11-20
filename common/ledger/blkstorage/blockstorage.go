@@ -70,7 +70,7 @@ type BlockStore interface {
 	RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error)
 	RetrieveBlockByHash(blockHash []byte) (*common.Block, error)
 	RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) // blockNum of  math.MaxUint64 will return last block
-	RetrieveTxByID(txID string) (*common.Envelope, error)
+	RetrieveTxByID(txID string, hints ...l.SearchHint) (*common.Envelope, error)
 	RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error)
 	RetrieveBlockByTxID(txID string) (*common.Block, error)
 	RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error)
