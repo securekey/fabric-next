@@ -22,6 +22,30 @@
       "revId": "187afbd1d83173fddffd6537ae815c8c4cf11e48",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6e025773_756c628d",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-20T18:57:38Z",
+      "side": 0,
+      "message": "(I was actually thinking these read locks should exist, and a write lock should be obtained when updating the cache).",
+      "parentUuid": "2d00c6ce_20ca9172",
+      "range": {
+        "startLine": 76,
+        "startChar": 1,
+        "endLine": 76,
+        "endChar": 27
+      },
+      "revId": "187afbd1d83173fddffd6537ae815c8c4cf11e48",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
