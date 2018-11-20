@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "70f7e42b_dd4eb625",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 120,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-20T20:04:51Z",
+      "side": 1,
+      "message": "Have a question,\n\nShall I remove this channel commitPipeline,\nPreviously if we call validate twice, it replaces previous \u0027txmgr.current\u0027 object no matter committer picked it up or not. Now by introducing this channel, it will wait till committer picks already validated \u0027current\u0027 object.\nDo you think it will impact performance",
+      "revId": "1821a845e37dd70a45dfb476bbde427772e9f85d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "63ce3ee4_9072a0eb",
         "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
         "patchSetId": 2
