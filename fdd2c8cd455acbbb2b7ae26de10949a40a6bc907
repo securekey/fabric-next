@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0feaba1d_cf122e7b",
+        "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore_provider.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-20T13:12:57Z",
+      "side": 1,
+      "message": "odd trailing character",
+      "range": {
+        "startLine": 7,
+        "startChar": 26,
+        "endLine": 7,
+        "endChar": 27
+      },
+      "revId": "fdd2c8cd455acbbb2b7ae26de10949a40a6bc907",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
