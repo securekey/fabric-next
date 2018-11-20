@@ -674,16 +674,13 @@ func (g *gossipServiceImpl) getPeersToSendTo(membership []discovery.NetworkMembe
 	// committers due to collection policy Org restrictions.
 	peers2send := filter.SelectPeers(len(committers), committers, criteria.IsEligible)
 	if len(peers2send) < criteria.MaxPeers && len(endorsers) > 0 {
-		// FIXME: Change to Debug
 		g.logger.Debugf("Only %d peer(s) returned and need %d. Selecting from %d endorsers...", len(peers2send), criteria.MaxPeers, len(endorsers))
 		peersFromEndorser := filter.SelectPeers(criteria.MaxPeers-len(peers2send), endorsers, criteria.IsEligible)
-		// FIXME: Change to Debug
 		g.logger.Debugf("Got %d additional selection(s) from endorsers", len(peersFromEndorser))
 		peers2send = append(peers2send, peersFromEndorser...)
 	}
 
-	// FIXME: Change to Debug
-	if g.logger.IsEnabledFor(logging.INFO) {
+	if g.logger.IsEnabledFor(logging.DEBUG) {
 		g.logger.Debugf("Sending private data to the following peers:")
 		for _, p := range peers2send {
 			g.logger.Debugf("- [%s]", p.Endpoint)
