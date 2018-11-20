@@ -70,6 +70,30 @@
       "revId": "187afbd1d83173fddffd6537ae815c8c4cf11e48",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "424c6167_18037fba",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-20T20:24:57Z",
+      "side": 0,
+      "message": "The problem is that we can get inconsistent results without the locks.\n\nConsider this sequence:\n1) Client requests endorsement from ChainCode.\n2) Chaincode reads key A\n3) Block commit begins\n4) Key A \u0026 B is written to cache.\n5) Chaincode reads key B\n6) Client receives an inconsistent result (based on A from previous block \u0026 B from current block even though it should have been A \u0026 B from current block).\n\ni.e., the cache update should be atomic with the chaincode simulations and query executions.",
+      "parentUuid": "f963ada2_f8c06352",
+      "range": {
+        "startLine": 76,
+        "startChar": 1,
+        "endLine": 76,
+        "endChar": 27
+      },
+      "revId": "187afbd1d83173fddffd6537ae815c8c4cf11e48",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
