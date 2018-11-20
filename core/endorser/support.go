@@ -84,7 +84,7 @@ func (s *SupportImpl) GetTransactionByID(chid, txID string) (*pb.ProcessedTransa
 	if lgr == nil {
 		return nil, errors.Errorf("failed to look up the ledger for Channel %s", chid)
 	}
-	tx, err := lgr.GetTransactionByID(txID)
+	tx, err := lgr.GetTransactionByID(txID, ledger.RecentOnly)
 	if err != nil {
 		return nil, errors.WithMessage(err, "GetTransactionByID failed")
 	}
