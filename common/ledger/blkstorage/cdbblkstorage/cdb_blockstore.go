@@ -18,6 +18,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	cledger "github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -201,7 +202,7 @@ func retrieveBlockByNumber(blockStore *couchdb.CouchDatabase, blockNum uint64) (
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
-func (s *cdbBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+func (s *cdbBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*common.Envelope, error) {
 	block, err := s.RetrieveBlockByTxID(txID)
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
