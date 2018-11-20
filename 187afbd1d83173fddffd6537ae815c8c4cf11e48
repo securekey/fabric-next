@@ -46,6 +46,30 @@
       "revId": "187afbd1d83173fddffd6537ae815c8c4cf11e48",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f963ada2_f8c06352",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 76,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-20T20:00:11Z",
+      "side": 0,
+      "message": "Since we have committer channel we don\u0027t actually need locks.",
+      "parentUuid": "6e025773_756c628d",
+      "range": {
+        "startLine": 76,
+        "startChar": 1,
+        "endLine": 76,
+        "endChar": 27
+      },
+      "revId": "187afbd1d83173fddffd6537ae815c8c4cf11e48",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }

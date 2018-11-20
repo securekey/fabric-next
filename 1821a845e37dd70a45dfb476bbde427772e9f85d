@@ -22,6 +22,30 @@
       "revId": "1821a845e37dd70a45dfb476bbde427772e9f85d",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a9f82be0_16413e1a",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 141,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-20T20:00:11Z",
+      "side": 1,
+      "message": "Ok, will fix it",
+      "parentUuid": "63ce3ee4_9072a0eb",
+      "range": {
+        "startLine": 141,
+        "startChar": 1,
+        "endLine": 141,
+        "endChar": 20
+      },
+      "revId": "1821a845e37dd70a45dfb476bbde427772e9f85d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
