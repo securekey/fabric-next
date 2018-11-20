@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b90ea669_6ee4674a",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 209,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-20T23:13:12Z",
+      "side": 1,
+      "message": "this is better done by using an ok variable case tx, ok :\u003d ...",
+      "range": {
+        "startLine": 206,
+        "startChar": 2,
+        "endLine": 209,
+        "endChar": 4
+      },
+      "revId": "902ef597487bdcaee4c7c9135f88129c7918cee3",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
