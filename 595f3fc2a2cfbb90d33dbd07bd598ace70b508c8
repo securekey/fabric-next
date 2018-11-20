@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "ba79ae67_810aab1b",
+        "filename": "core/ledger/kvledger/cache.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-20T21:13:41Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "cd01aa5e_9545fba3",
+      "range": {
+        "startLine": 31,
+        "startChar": 1,
+        "endLine": 31,
+        "endChar": 13
+      },
+      "revId": "595f3fc2a2cfbb90d33dbd07bd598ace70b508c8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "e79a6065_2d354f39",
         "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
         "patchSetId": 3
@@ -36,6 +60,30 @@
       "writtenOn": "2018-11-20T20:59:20Z",
       "side": 1,
       "message": "Should be WithMessage if the previous function already used Wrap to create a stack.",
+      "range": {
+        "startLine": 38,
+        "startChar": 9,
+        "endLine": 38,
+        "endChar": 20
+      },
+      "revId": "595f3fc2a2cfbb90d33dbd07bd598ace70b508c8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a64e11eb_7efd73e0",
+        "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 38,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-20T21:13:41Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "e79a6065_2d354f39",
       "range": {
         "startLine": 38,
         "startChar": 9,
