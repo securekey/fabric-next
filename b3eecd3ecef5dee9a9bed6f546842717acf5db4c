@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "3eed2cd6_5b30bb28",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 2
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:33:06Z",
+      "side": 1,
+      "message": "this is not public Fabric code yet :-)",
+      "parentUuid": "9076e418_a757913b",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "6fb18770_eb815fc1",
         "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
         "patchSetId": 2
@@ -30,6 +48,24 @@
       "writtenOn": "2018-11-21T20:03:20Z",
       "side": 1,
       "message": "this looks like it isn\u0027t being used. can we get rid of it?",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "e9fd2cc6_157c10be",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:33:06Z",
+      "side": 1,
+      "message": "this is used in all the changes below, it can\u0027t be removed",
+      "parentUuid": "6fb18770_eb815fc1",
       "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
@@ -53,6 +89,24 @@
     },
     {
       "key": {
+        "uuid": "9121285e_03421880",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 159,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:33:06Z",
+      "side": 1,
+      "message": "if createIndex is false, then we append an empty string for index (ie no index in the query)",
+      "parentUuid": "ee162c64_2590790f",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "017927c6_aff35a78",
         "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
         "patchSetId": 2
@@ -64,6 +118,24 @@
       "writtenOn": "2018-11-21T20:03:20Z",
       "side": 1,
       "message": "minor issue: could this line be indented? this way it\u0027ll be more clear that it\u0027s a continuation of the previous statement",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a8376cea_6c2ae4b2",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 162,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:33:06Z",
+      "side": 1,
+      "message": "it is indented, I\u0027m using `` ;)",
+      "parentUuid": "017927c6_aff35a78",
       "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
@@ -87,6 +159,24 @@
     },
     {
       "key": {
+        "uuid": "33940c9b_7e0ac598",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:33:06Z",
+      "side": 1,
+      "message": "same answer as above",
+      "parentUuid": "b6d0d7d1_ddd4f1f0",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "d65dda21_8f1fcdd8",
         "filename": "core/ledger/ledgerstorage/store.go",
         "patchSetId": 2
@@ -98,6 +188,24 @@
       "writtenOn": "2018-11-21T20:03:20Z",
       "side": 1,
       "message": "if this is always false, then does it make sense to add it at all? couldn\u0027t we just have removed indices entirely?",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8a6efab2_9720db35",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:33:06Z",
+      "side": 1,
+      "message": "if a config variable is needed, it can be added and read here instead.. for now, it was not required.",
+      "parentUuid": "d65dda21_8f1fcdd8",
       "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
