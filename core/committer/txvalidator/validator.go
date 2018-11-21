@@ -182,7 +182,7 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Committer has validated all %d transactions in block %d", v.ChainID, len(block.Data.Data), block.Header.Number)
 		} else {
-			err = v.waitForValidationResults(block.Header.Number, txsfltr, resultsChan)
+			err = v.waitForValidationResults(block.Header.Number, txsfltr, resultsChan, ledgerconfig.GetValidationTimeout())
 			if err != nil {
 				logger.Warningf("[%s] Got error in validation response for block %d: %s", v.ChainID, block.Header.Number, err)
 			}
@@ -200,7 +200,8 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 				// Haven't received results for some of the transactions. Validate the remaining ones.
 				go v.validateRemaining(block, notValidated, resultsChan)
 
-				err = v.waitForValidationResults(block.Header.Number, txsfltr, resultsChan)
+				// Wait forever for a response
+				err = v.waitForValidationResults(block.Header.Number, txsfltr, resultsChan, time.Hour)
 				if err != nil {
 					logger.Warningf("[%s] Got error validating remaining transactions in block %d: %s", v.ChainID, block.Header.Number, err)
 				}
@@ -298,10 +299,9 @@ func (v *TxValidator) validateRemaining(block *common.Block, notValidated map[in
 	}
 }
 
-func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledgerUtil.TxValidationFlags, resultsChan chan *ValidationResults) error {
-	validationTimeout := ledgerconfig.GetValidationTimeout()
+func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledgerUtil.TxValidationFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
 	// FIXME: Change to Debug
-	logger.Infof("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, validationTimeout, blockNumber)
+	logger.Infof("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
 
 	for {
 		select {
@@ -327,9 +327,9 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledge
 					return nil
 				}
 			}
-		case <-time.After(validationTimeout):
+		case <-time.After(timeout):
 			// FIXME: Change to Debug
-			logger.Infof("[%s] Timed out after %s waiting for validation response for block %d", v.ChainID, validationTimeout, blockNumber)
+			logger.Infof("[%s] Timed out after %s waiting for validation response for block %d", v.ChainID, timeout, blockNumber)
 			return nil
 		}
 	}
