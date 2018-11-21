@@ -272,7 +272,7 @@ func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
 	// Add to the cache if the existing version is older
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
-		logger.Infof("Adding key[%s] to expiring private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
+		logger.Debugf("Adding key[%s] to expiring private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
 		c.expiringPvtCache[validatedTx.Key] = validatedTx
 		c.addKeyToExpiryMap(validatedTx.Level1ExpiringBlock, validatedTx.Key)
 		if len(c.expiringPvtCache) > ledgerconfig.GetKVCacheExpiringSize() {
@@ -300,7 +300,7 @@ func (c *KVCache) purgePrivate(blockNumber uint64) {
 		if ok && pvtData.Level1ExpiringBlock <= blockNumber {
 			// safe to delete from expiring private cache
 			if pvtData.Level2ExpiringBlock > pvtData.Level1ExpiringBlock {
-				logger.Infof("Moving key[%s] to lru cache; level1[%d] level2[%d]", pvtData.Key, pvtData.Level1ExpiringBlock, pvtData.Level2ExpiringBlock)
+				logger.Debugf("Moving key[%s] to lru cache; level1[%d] level2[%d]", pvtData.Key, pvtData.Level1ExpiringBlock, pvtData.Level2ExpiringBlock)
 				// add to lru cache
 				newTx := pvtData.ValidatedTxOp.ValidatedTx
 				c.validatedTxCache.Add(key, &newTx)
