@@ -205,7 +205,7 @@ func TestBadCouchDBInstance(t *testing.T) {
 	testutil.AssertError(t, err, "Error should have been thrown with QueryDocuments and invalid connection")
 
 	//Test BatchRetrieveDocumentMetadata with bad connection
-	_, err = badDB.BatchRetrieveDocumentMetadata(nil)
+	_, err = badDB.BatchRetrieveDocumentMetadata(nil, true)
 	testutil.AssertError(t, err, "Error should have been thrown with BatchRetrieveDocumentMetadata and invalid connection")
 
 	//Test BatchUpdateDocuments with bad connection
@@ -1473,7 +1473,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 	keys = append(keys, "marble01")
 	keys = append(keys, "marble03")
 
-	batchRevs, err := db.BatchRetrieveDocumentMetadata(keys)
+	batchRevs, err := db.BatchRetrieveDocumentMetadata(keys, true)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting retrieve revisions"))
 
 	batchUpdateDocs = []*CouchDoc{}
@@ -1509,7 +1509,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
 	keys = append(keys, "marble02")
 	keys = append(keys, "marble04")
 
-	batchRevs, err = db.BatchRetrieveDocumentMetadata(keys)
+	batchRevs, err = db.BatchRetrieveDocumentMetadata(keys, true)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting retrieve revisions"))
 
 	batchUpdateDocs = []*CouchDoc{}

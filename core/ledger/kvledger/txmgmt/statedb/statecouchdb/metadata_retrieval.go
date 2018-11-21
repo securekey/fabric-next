@@ -19,6 +19,7 @@ type nsMetadataRetriever struct {
 	db              *couchdb.CouchDatabase
 	keys            []string
 	executionResult []*couchdb.DocMetadata
+	includeDocs       bool
 }
 
 // subNsMetadataRetriever implements `batch` interface and wraps the function `couchdb.BatchRetrieveDocumentMetadata`
@@ -27,7 +28,7 @@ type nsMetadataRetriever struct {
 type subNsMetadataRetriever nsMetadataRetriever
 
 // retrievedMetadata retrievs the metadata for a collection of `namespace-keys` combination
-func (vdb *VersionedDB) retrieveMetadata(nsKeysMap map[string][]string) (map[string][]*couchdb.DocMetadata, error) {
+func (vdb *VersionedDB) retrieveMetadata(nsKeysMap map[string][]string, includeDocs bool) (map[string][]*couchdb.DocMetadata, error) {
 	// consturct one batch per namespace
 	nsMetadataRetrievers := []batch{}
 	for ns, keys := range nsKeysMap {
@@ -35,7 +36,7 @@ func (vdb *VersionedDB) retrieveMetadata(nsKeysMap map[string][]string) (map[str
 		if err != nil {
 			return nil, err
 		}
-		nsMetadataRetrievers = append(nsMetadataRetrievers, &nsMetadataRetriever{ns: ns, db: db, keys: keys})
+		nsMetadataRetrievers = append(nsMetadataRetrievers, &nsMetadataRetriever{ns: ns, db: db, keys: keys, includeDocs: includeDocs})
 	}
 	if err := executeBatches(nsMetadataRetrievers); err != nil {
 		return nil, err
@@ -50,7 +51,7 @@ func (vdb *VersionedDB) retrieveMetadata(nsKeysMap map[string][]string) (map[str
 }
 
 // retrieveNsMetadata retrieves metadata for a given namespace
-func retrieveNsMetadata(db *couchdb.CouchDatabase, keys []string) ([]*couchdb.DocMetadata, error) {
+func retrieveNsMetadata(db *couchdb.CouchDatabase, keys []string, includeDocs bool) ([]*couchdb.DocMetadata, error) {
 	// consturct one batch per group of keys based on maxBacthSize
 	maxBacthSize := ledgerconfig.GetMaxBatchUpdateSize()
 	batches := []batch{}
@@ -60,7 +61,7 @@ func retrieveNsMetadata(db *couchdb.CouchDatabase, keys []string) ([]*couchdb.Do
 		if numKeys == 0 {
 			break
 		}
-		batch := &subNsMetadataRetriever{db: db, keys: remainingKeys[:numKeys]}
+		batch := &subNsMetadataRetriever{db: db, keys: remainingKeys[:numKeys], includeDocs: includeDocs}
 		batches = append(batches, batch)
 		remainingKeys = remainingKeys[numKeys:]
 	}
@@ -77,7 +78,7 @@ func retrieveNsMetadata(db *couchdb.CouchDatabase, keys []string) ([]*couchdb.Do
 
 func (r *nsMetadataRetriever) execute() error {
 	var err error
-	if r.executionResult, err = retrieveNsMetadata(r.db, r.keys); err != nil {
+	if r.executionResult, err = retrieveNsMetadata(r.db, r.keys, r.includeDocs); err != nil {
 		return err
 	}
 	return nil
@@ -89,7 +90,7 @@ func (r *nsMetadataRetriever) String() string {
 
 func (b *subNsMetadataRetriever) execute() error {
 	var err error
-	if b.executionResult, err = b.db.BatchRetrieveDocumentMetadata(b.keys); err != nil {
+	if b.executionResult, err = b.db.BatchRetrieveDocumentMetadata(b.keys, b.includeDocs); err != nil {
 		return err
 	}
 	return nil
