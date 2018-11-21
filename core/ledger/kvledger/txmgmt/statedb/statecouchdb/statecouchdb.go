@@ -201,7 +201,7 @@ func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) erro
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
 	}
-	nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap)
+	nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
 	logger.Debugf("nsKeysMap=%s", nsKeysMap)
 	logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
 	if err != nil {
