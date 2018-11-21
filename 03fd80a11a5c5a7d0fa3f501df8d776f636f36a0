@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "f60ce57d_e7998576",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-21T19:08:29Z",
+      "side": 1,
+      "message": "document createIndex?",
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "b3034e5e_38441dc8",
         "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
         "patchSetId": 1
@@ -45,6 +62,23 @@
       "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f3febdf4_7c149f5f",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 26,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-21T19:08:29Z",
+      "side": 1,
+      "message": "This has to be configurable?",
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
