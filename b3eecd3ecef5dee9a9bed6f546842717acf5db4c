@@ -1,0 +1,106 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9076e418_a757913b",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 2
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-21T20:03:20Z",
+      "side": 1,
+      "message": "please add a reference to the issue\u0027s ID",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "6fb18770_eb815fc1",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-21T20:03:20Z",
+      "side": 1,
+      "message": "this looks like it isn\u0027t being used. can we get rid of it?",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "ee162c64_2590790f",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 159,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-21T20:03:20Z",
+      "side": 1,
+      "message": "I don\u0027t understand this change in the context of the task \"make creation of indices optional\"",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "017927c6_aff35a78",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 162,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-21T20:03:20Z",
+      "side": 1,
+      "message": "minor issue: could this line be indented? this way it\u0027ll be more clear that it\u0027s a continuation of the previous statement",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b6d0d7d1_ddd4f1f0",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 261,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-21T20:03:20Z",
+      "side": 1,
+      "message": "same here with indentation",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "d65dda21_8f1fcdd8",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-21T20:03:20Z",
+      "side": 1,
+      "message": "if this is always false, then does it make sense to add it at all? couldn\u0027t we just have removed indices entirely?",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
