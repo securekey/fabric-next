@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0dd3d795_8c210e8c",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/metadata_retrieval.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-21T19:12:06Z",
+      "side": 1,
+      "message": "Does it need to be configurable?",
+      "revId": "a3ebeef9e6ef9c30f0e68c4fff0038fedf987e7e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
