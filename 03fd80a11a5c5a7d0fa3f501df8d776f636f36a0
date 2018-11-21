@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "b3034e5e_38441dc8",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 248,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-21T17:38:22Z",
+      "side": 1,
+      "message": "would leave this as a const and use sprintf below to fill in the template.",
+      "range": {
+        "startLine": 248,
+        "startChar": 1,
+        "endLine": 248,
+        "endChar": 4
+      },
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4e90ad27_dc124921",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 258,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-21T17:38:22Z",
+      "side": 1,
+      "message": "this is better named blockTxnIndexEnabled to match rest of the variables.",
+      "range": {
+        "startLine": 258,
+        "startChar": 4,
+        "endLine": 258,
+        "endChar": 17
+      },
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
