@@ -13,16 +13,37 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	pvtDataStorageQueueLen = 1
+)
+
 type cachedPvtDataStore struct {
-	pvtDataStore pvtdatastorage.Store
-	pvtDataCache pvtdatastorage.Store
+	pvtDataStore      pvtdatastorage.Store
+	pvtDataCache      pvtdatastorage.Store
+	pvtDataStoreCh    chan *pvtPrepareData
+	writerClosedCh    chan struct{}
+	commitReadyCh     chan bool
+	doneCh            chan struct{}
+	commitImmediately bool
+}
+
+type pvtPrepareData struct {
+	blockNum uint64
+	pvtData  []*ledger.TxPvtData
 }
 
 func newCachedPvtDataStore(pvtDataStore pvtdatastorage.Store, pvtDataCache pvtdatastorage.Store) (*cachedPvtDataStore, error) {
 	c := cachedPvtDataStore{
-		pvtDataStore: pvtDataStore,
-		pvtDataCache: pvtDataCache,
+		pvtDataStore:      pvtDataStore,
+		pvtDataCache:      pvtDataCache,
+		pvtDataStoreCh:    make(chan *pvtPrepareData, pvtDataStorageQueueLen),
+		writerClosedCh:    make(chan struct{}),
+		commitReadyCh:     make(chan bool),
+		doneCh:            make(chan struct{}),
+		commitImmediately: false,
 	}
+
+	go c.pvtDataWriter()
 
 	return &c, nil
 }
@@ -37,7 +58,45 @@ func (c *cachedPvtDataStore) Prepare(blockNum uint64, pvtData []*ledger.TxPvtDat
 	if err != nil {
 		return errors.WithMessage(err, "Prepare pvtdata in cache failed")
 	}
-	return c.pvtDataStore.Prepare(blockNum, pvtData)
+	if blockNum == 0 {
+		c.commitImmediately = true
+		return c.pvtDataStore.Prepare(blockNum, pvtData)
+	}
+	c.commitImmediately = false
+	c.pvtDataStoreCh <- &pvtPrepareData{blockNum: blockNum, pvtData: pvtData}
+	return nil
+
+}
+
+func (c *cachedPvtDataStore) pvtDataWriter() {
+	const panicMsg = "pvt data processing failure"
+
+	for {
+		select {
+		case <-c.doneCh:
+			close(c.writerClosedCh)
+			return
+		case pvtPrepareData := <-c.pvtDataStoreCh:
+			logger.Infof("prepare pvt data for storage [%d]", pvtPrepareData.blockNum)
+			err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
+			if err != nil {
+				logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
+				panic(panicMsg)
+			}
+			commitReady := <-c.commitReadyCh
+			if commitReady {
+				if err := c.pvtDataStore.Commit(); err != nil {
+					logger.Errorf("pvt data was not committed to db [%d, %s]", pvtPrepareData.blockNum, err)
+					panic(panicMsg)
+				}
+			} else {
+				if err := c.pvtDataStore.Rollback(); err != nil {
+					logger.Errorf("pvt data rollback in db failed [%d, %s]", pvtPrepareData.blockNum, err)
+					panic(panicMsg)
+				}
+			}
+		}
+	}
 }
 
 func (c *cachedPvtDataStore) Commit() error {
@@ -45,7 +104,11 @@ func (c *cachedPvtDataStore) Commit() error {
 	if err != nil {
 		return errors.WithMessage(err, "Commit pvtdata in cache failed")
 	}
-	return c.pvtDataStore.Commit()
+	if c.commitImmediately {
+		return c.pvtDataStore.Commit()
+	}
+	c.commitReadyCh <- true
+	return nil
 }
 
 func (c *cachedPvtDataStore) InitLastCommittedBlock(blockNum uint64) error {
@@ -74,7 +137,7 @@ func (c *cachedPvtDataStore) GetPvtDataByBlockNum(blockNum uint64, filter ledger
 }
 
 func (c *cachedPvtDataStore) HasPendingBatch() (bool, error) {
-	return c.pvtDataCache.HasPendingBatch()
+	return c.pvtDataStore.HasPendingBatch()
 }
 
 func (c *cachedPvtDataStore) LastCommittedBlockHeight() (uint64, error) {
@@ -91,10 +154,13 @@ func (c *cachedPvtDataStore) Rollback() error {
 	if err != nil {
 		return errors.WithMessage(err, "Rollback pvtdata in cache failed")
 	}
-	return c.pvtDataStore.Rollback()
+	c.commitReadyCh <- false
+	return nil
 }
 
 func (c *cachedPvtDataStore) Shutdown() {
+	close(c.doneCh)
+	<-c.writerClosedCh
 	c.pvtDataCache.Shutdown()
 	c.pvtDataStore.Shutdown()
 }

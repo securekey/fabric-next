@@ -8,7 +8,6 @@ package mempvtdatacache
 
 import (
 	"encoding/hex"
-	"fmt"
 	"sort"
 
 	"github.com/golang/groupcache/lru"
@@ -147,8 +146,8 @@ func (c *pvtDataCache) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNs
 	}
 	lastCommittedBlock := c.lastCommittedBlock
 	if blockNum > lastCommittedBlock {
-		logger.Debugf("Block %d is greater than last committed block %d in cache", blockNum, lastCommittedBlock)
-		return nil, pvtdatastorage.NewErrOutOfRange(fmt.Sprintf("Last committed block=%d, block requested=%d", lastCommittedBlock, blockNum))
+		logger.Warningf("Block %d is greater than last committed block %d in cache", blockNum, lastCommittedBlock)
+		return nil, nil
 	}
 	logger.Debugf("Querying private data storage for write sets using blockNum=%d in cache", blockNum)
 
