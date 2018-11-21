@@ -195,6 +195,9 @@ type NamedCouchDoc struct {
 type BatchRetrieveDocResponse struct {
 	Rows []struct {
 		ID  string `json:"id"`
+		Value struct {
+			Rev             string          `json:"rev"`
+		} `json:"value"`
 		Doc struct {
 			ID              string          `json:"_id"`
 			Rev             string          `json:"_rev"`
@@ -1715,9 +1718,9 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
 
 //BatchRetrieveDocumentMetadata - batch method to retrieve document metadata for  a set of keys,
 // including ID, couchdb revision number, and ledger version
-func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*DocMetadata, error) {
+func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string, includeDoc bool) ([]*DocMetadata, error) {
 
-	logger.Debugf("Entering BatchRetrieveDocumentMetadata()  keys=%s", keys)
+	logger.Debugf("Entering BatchRetrieveDocumentMetadata() [keys=%s, includeDoc=%t]", keys, includeDoc)
 
 	batchRetrieveURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 	if err != nil {
@@ -1730,11 +1733,13 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 
 	// While BatchRetrieveDocumentMetadata() does not return the entire document,
 	// for reads/writes, we do need to get document so that we can get the ledger version of the key.
-	// TODO For blind writes we do not need to get the version, therefore when we bulk get
+	// For blind writes we do not need to get the version, therefore when we bulk get
 	// the revision numbers for the write keys that were not represented in read set
 	// (the second time BatchRetrieveDocumentMetadata is called during block processing),
 	// we could set include_docs to false to optimize the response.
-	queryParms.Add("include_docs", "true")
+	if includeDoc {
+		queryParms.Add("include_docs", "true")
+	}
 	batchRetrieveURL.RawQuery = queryParms.Encode()
 
 	keymap := make(map[string]interface{})
@@ -1777,7 +1782,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	docMetadataArray := []*DocMetadata{}
 
 	for _, row := range jsonResponse.Rows {
-		docMetadata := &DocMetadata{ID: row.ID, Rev: row.Doc.Rev, Version: row.Doc.Version}
+		docMetadata := &DocMetadata{ID: row.ID, Rev: row.Value.Rev, Version: row.Doc.Version}
 		docMetadataArray = append(docMetadataArray, docMetadata)
 	}
 

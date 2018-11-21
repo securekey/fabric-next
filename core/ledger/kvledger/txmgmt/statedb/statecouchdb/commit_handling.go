@@ -61,6 +61,7 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 // execute implements the function in `batch` interface. This function builds one or more `subNsCommitter`s that
 // cover the updates for a namespace
 func (builder *nsCommittersBuilder) execute() error {
+	// TODO: Perform couchdb revision load in the background earlier.
 	if err := addRevisionsForMissingKeys(builder.revisions, builder.db, builder.updates); err != nil {
 		return err
 	}
@@ -178,7 +179,7 @@ func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDa
 		}
 	}
 	logger.Debugf("Pulling revisions for the [%d] keys for namsespace [%s] that were not part of the readset", len(missingKeys), db.DBName)
-	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys)
+	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys, false)
 	if err != nil {
 		return err
 	}

@@ -108,6 +108,8 @@ func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 }
 
 func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
+	// TODO: Read height from local index.
+	// TODO: Populate height cache into next level (couchDB).
 	return c.bulkOptimizable.LoadCommittedVersions(keys)
 }
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
