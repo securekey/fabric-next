@@ -91,7 +91,8 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 			indexConfig), nil
 	case ledgerconfig.CouchDBLedgerStorage:
 		blockCacheSize := ledgerconfig.GetBlockCacheSize()
-		blockStorage, err := cdbblkstorage.NewProvider()
+		//cdb uses cache, no need to create indexes (createIndex=false)
+		blockStorage, err := cdbblkstorage.NewProvider(false)
 		if err != nil {
 			return nil, err
 		}
@@ -222,7 +223,7 @@ func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) 
 
 // getPvtDataByNumWithoutLock returns only the pvt data  corresponding to the given block number.
 // This function does not acquire a readlock and it is expected that in most of the circumstances, the caller
-// posesses a read lock on `s.rwlock`
+// possesses a read lock on `s.rwlock`
 func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
 	var pvtdata []*ledger.TxPvtData
 	var err error
@@ -256,7 +257,7 @@ func (s *Store) init() error {
 // This situation is expected to happen when a peer is upgrated from version 1.0
 // and an existing blockchain is present that was generated with version 1.0.
 // Under this scenario, the pvtdata store is brought upto the point as if it has
-// processed exisitng blocks with no pvt data. This function returns true if the
+// processed existng blocks with no pvt data. This function returns true if the
 // above mentioned condition is found to be true and pvtdata store is successfully updated
 func (s *Store) initPvtdataStoreFromExistingBlockchain() (bool, error) {
 	var bcInfo *common.BlockchainInfo
