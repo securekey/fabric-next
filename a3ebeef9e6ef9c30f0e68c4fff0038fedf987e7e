@@ -16,6 +16,24 @@
       "revId": "a3ebeef9e6ef9c30f0e68c4fff0038fedf987e7e",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "498a202d_0af6ed5f",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/metadata_retrieval.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-21T19:19:40Z",
+      "side": 1,
+      "message": "I don\u0027t understand the question. The variable is set below and is set to true in one code path and false in the other.",
+      "parentUuid": "0dd3d795_8c210e8c",
+      "revId": "a3ebeef9e6ef9c30f0e68c4fff0038fedf987e7e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
