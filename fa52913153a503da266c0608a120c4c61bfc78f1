@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f70ffa5b_c4c2c016",
+        "filename": "core/endorser/support.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 87,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-21T00:19:32Z",
+      "side": 1,
+      "message": "this should only be applied for the transaction existence case not all.",
+      "range": {
+        "startLine": 87,
+        "startChar": 41,
+        "endLine": 87,
+        "endChar": 58
+      },
+      "revId": "fa52913153a503da266c0608a120c4c61bfc78f1",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
