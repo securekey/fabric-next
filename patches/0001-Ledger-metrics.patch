@@ -1,6 +1,6 @@
-From 929bca5fbf6f45689b48edfc21bc63e3b2156e64 Mon Sep 17 00:00:00 2001
+From 48526cf08a35190cdcad9bdca332c01a65aaf000 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Tue, 20 Nov 2018 16:55:42 -0500
+Date: Wed, 21 Nov 2018 15:28:59 -0500
 Subject: [PATCH] Ledger metrics
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
@@ -2463,7 +2463,7 @@ index 1d1436cb5..0f94a7ec3 100644
  	for _, expinfo := range toTrack {
  		k, v, err := encodeKV(expinfo)
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
-index e98633830..c2e29c7a0 100644
+index a6a500700..92a351073 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go
 @@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
@@ -2514,7 +2514,7 @@ index 2dd88237c..a80f2f3a3 100644
  		return nil
  	}
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
-index 7870d4ada..b81321833 100644
+index 7b7af4e0d..1c24935a5 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go
 @@ -9,6 +9,7 @@ import (
@@ -2525,7 +2525,7 @@ index 7870d4ada..b81321833 100644
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-@@ -153,6 +154,12 @@ type nsFlusher struct {
+@@ -154,6 +155,12 @@ type nsFlusher struct {
  }
  
  func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
@@ -2539,7 +2539,7 @@ index 7870d4ada..b81321833 100644
  	for _, db := range dbs {
  		flushers = append(flushers, &nsFlusher{db})
 diff --git a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
-index 06719bfdd..ab3183623 100644
+index d167a7038..2326a4e27 100644
 --- a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 +++ b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
 @@ -12,6 +12,7 @@ import (
@@ -2577,7 +2577,7 @@ index 06719bfdd..ab3183623 100644
  		},
  	}
 @@ -306,6 +310,9 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
- 	statedb.UpdateKVCache(validatedTxOp, nil, nil, vdb.chainName)
+ 	statedb.UpdateKVCache(0, validatedTxOp, nil, nil, vdb.chainName)
  
  	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 +	if metrics.IsDebug() {
@@ -2657,7 +2657,7 @@ index f13febb53..a9aeff37a 100644
  		for _, itr := range h.itrs {
  			itr.Close()
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index d03bd0535..88891bb21 100644
+index 17222f11e..1fcbd842d 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -11,6 +11,7 @@ import (
@@ -2755,8 +2755,8 @@ index d03bd0535..88891bb21 100644
  	}()
  
  	logger.Debugf("Committing updates to state database")
-@@ -148,27 +173,42 @@ func (txmgr *LockBasedTxMgr) Commit() error {
- 		panic("validateAndPrepare() method should have been called before calling commit()")
+@@ -153,27 +178,42 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+ 		return err
  	}
  
 +	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_time_seconds").Start()
@@ -2798,7 +2798,7 @@ index d03bd0535..88891bb21 100644
  	return nil
  }
  
-@@ -223,6 +263,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
+@@ -228,6 +268,10 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
  }
  
  func (txmgr *LockBasedTxMgr) updateStateListeners() {
@@ -2995,7 +2995,7 @@ index 0eab2effb..ecea7b44f 100644
  	if s.isEmpty {
  		return nil, pvtdatastorage.NewErrOutOfRange("The store is empty")
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index 47007d255..1704ab399 100644
+index 3b2c89284..c3204284f 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -29,6 +29,8 @@ import (
@@ -3007,7 +3007,7 @@ index 47007d255..1704ab399 100644
  	"github.com/hyperledger/fabric/common/util/retry"
  	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
  	"github.com/op/go-logging"
-@@ -551,6 +553,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
+@@ -555,6 +557,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
  // EnsureFullCommit calls _ensure_full_commit for explicit fsync
  func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
  
@@ -3018,7 +3018,7 @@ index 47007d255..1704ab399 100644
  	logger.Debugf("Entering EnsureFullCommit()")
  
  	dbResponse, err := dbclient.dbOperation("/_ensure_full_commit")
-@@ -627,6 +633,11 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
+@@ -631,6 +637,11 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
  //for document updates.
  func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
  
@@ -3030,7 +3030,7 @@ index 47007d255..1704ab399 100644
  	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
  
  	if !utf8.ValidString(id) {
-@@ -1449,6 +1460,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
+@@ -1453,6 +1464,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
  	//URL to execute the view function associated with the index
  	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
  
@@ -3043,7 +3043,7 @@ index 47007d255..1704ab399 100644
  	queryParms := indexURL.Query()
  	//Query parameter that allows the execution of the URL to return immediately
  	//The update_after will cause the index update to run after the URL returns
-@@ -1937,6 +1954,11 @@ func (err *dbResponseError) Error() string {
+@@ -1945,6 +1962,11 @@ func (err *dbResponseError) Error() string {
  func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
  	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
  
