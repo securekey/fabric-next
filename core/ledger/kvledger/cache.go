@@ -53,7 +53,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
-		pvtCache, err := getPrivateDataCache(l.ledgerID, block.Header.Number-1)
+		pvtCache, err := getPrivateDataCache(l.ledgerID)
 		if err != nil {
 			return err
 		}
@@ -220,20 +220,12 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 	return pvtKeys, validPvtData, nil
 }
 
-func getPrivateDataCache(chID string, blockNumber uint64) (pvtdatastorage.Store, error) {
+func getPrivateDataCache(chID string) (pvtdatastorage.Store, error) {
 	p := mempvtdatacache.NewProvider(ledgerconfig.GetPvtDataCacheSize())
 	var err error
 	pvtCache, err := p.OpenStore(chID)
 	if err != nil {
 		return nil, err
-	}
-	isEmpty, err := pvtCache.IsEmpty()
-	if isEmpty {
-		logger.Infof("InitLastCommittedBlock chID:%s blockNumber:%d", chID, blockNumber)
-		err = pvtCache.InitLastCommittedBlock(blockNumber)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return pvtCache, nil
 }

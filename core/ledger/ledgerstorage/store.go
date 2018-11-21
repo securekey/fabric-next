@@ -239,7 +239,9 @@ func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsC
 // to follow the normal course
 func (s *Store) init() error {
 	if !ledgerconfig.IsCommitter() {
-		logger.Debugf("Will not init pvt data since I am not a committer")
+		if initialized, err := s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {
+			return err
+		}
 		return nil
 	}
 
