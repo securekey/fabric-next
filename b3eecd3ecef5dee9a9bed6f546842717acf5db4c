@@ -37,6 +37,24 @@
     },
     {
       "key": {
+        "uuid": "1f305622_9152deba",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 2
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T20:58:00Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "3eed2cd6_5b30bb28",
+      "revId": "b3eecd3ecef5dee9a9bed6f546842717acf5db4c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "6fb18770_eb815fc1",
         "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
         "patchSetId": 2
