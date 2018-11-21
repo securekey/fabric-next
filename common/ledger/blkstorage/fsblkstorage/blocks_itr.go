@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger"
-	"github.com/hyperledger/fabric/common/metrics"
 )
 
 // blocksItr - an iterator for iterating over a sequence of blocks
@@ -38,13 +37,6 @@ func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
 }
 
 func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("fsblkstorage_waitForBlock_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
-
 	itr.mgr.cpInfoCond.L.Lock()
 	defer itr.mgr.cpInfoCond.L.Unlock()
 	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {

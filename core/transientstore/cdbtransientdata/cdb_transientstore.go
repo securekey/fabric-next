@@ -257,7 +257,7 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_next_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_next_time").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -311,7 +311,7 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_nextwithconfig_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_nextwithconfig_time").Start()
 		defer stopWatch.Stop()
 	}
 

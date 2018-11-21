@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"sync"
 
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
@@ -84,10 +83,6 @@ func (h *DBHandle) Delete(key []byte, sync bool) error {
 
 // WriteBatch writes a batch in an atomic way
 func (h *DBHandle) WriteBatch(batch *UpdateBatch, sync bool) error {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("leveldbhelper_dbhandle_WriteBatch_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	levelBatch := &leveldb.Batch{}
 	for k, v := range batch.KVs {
 		key := constructLevelKey(h.dbName, []byte(k))

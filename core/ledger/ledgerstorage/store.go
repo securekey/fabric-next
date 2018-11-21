@@ -160,7 +160,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_time").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -213,7 +213,7 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_time").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -239,7 +239,7 @@ func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) 
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_time").Start()
 		defer stopWatch.Stop()
 	}
 

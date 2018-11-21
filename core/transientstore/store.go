@@ -12,7 +12,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
@@ -192,12 +191,6 @@ func (s *store) Persist(txid string, blockHeight uint64,
 func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_persistwithconfig_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
-
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	// Create compositeKey with appropriate prefix, txid, uuid and blockHeight
@@ -249,12 +242,6 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 // write sets persisted from different endorsers.
 func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error) {
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_gettxpvtrwsetbytxid_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
-
 	logger.Debugf("Getting private data from transient store for transaction %s", txid)
 
 	// Construct startKey and endKey to do an range query
@@ -269,12 +256,6 @@ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, 
 // transient store. PurgeByTxids() is expected to be called by coordinator after
 // committing a block to ledger.
 func (s *store) PurgeByTxids(txids []string) error {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_purgebytxids_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 
 	logger.Debugf("Purging private data from transient store for committed txids %s", txids)
 
@@ -322,12 +303,6 @@ func (s *store) PurgeByTxids(txids []string) error {
 // transaction that gets endorsed may not be submitted by the client for commit)
 func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_purgebyheight_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
-
 	logger.Debugf("Purging orphaned private data from transient store received prior to block [%d]", maxBlockNumToRetain)
 
 	// Do a range query with 0 as startKey and maxBlockNumToRetain-1 as endKey
@@ -364,11 +339,6 @@ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
 
 // GetMinTransientBlkHt returns the lowest block height remaining in transient store
 func (s *store) GetMinTransientBlkHt() (uint64, error) {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_getmintransientblkht_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 
 	// Current approach performs a range query on purgeIndex with startKey
 	// as 0 (i.e., blockHeight) and returns the first key which denotes
@@ -400,11 +370,6 @@ func (scanner *RwsetScanner) Next() (*EndorserPvtSimulationResults, error) {
 	if !scanner.dbItr.Next() {
 		return nil, nil
 	}
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_next_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
@@ -429,11 +394,7 @@ func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWith
 	if !scanner.dbItr.Next() {
 		return nil, nil
 	}
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("leveltransientdata_couchdb_nextwithconfig_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
+
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)

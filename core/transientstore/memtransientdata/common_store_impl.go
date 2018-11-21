@@ -26,7 +26,7 @@ func (s *store) Persist(txid string, blockHeight uint64, privateSimulationResult
 func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *pb.TxPvtReadWriteSetWithConfigInfo) error {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("memtransientdata_persistwithconfig_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("memtransientdata_persistwithconfig_time").Start()
 		defer stopWatch.Stop()
 	}
 	return s.persistWithConfigDB(txid, blockHeight, privateSimulationResultsWithConfig)
@@ -35,7 +35,7 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimula
 func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("memtransientdata_gettxpvtrwsetbytxid_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("memtransientdata_gettxpvtrwsetbytxid_time").Start()
 		defer stopWatch.Stop()
 	}
 	return s.getTxPvtRWSetByTxidDB(txid, filter, endorsers)
@@ -44,7 +44,7 @@ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, 
 func (s *store) PurgeByTxids(txids []string) error {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("memtransientdata_purgebytxids_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("memtransientdata_purgebytxids_time").Start()
 		defer stopWatch.Stop()
 	}
 	return s.purgeByTxidsDB(txids)

@@ -197,10 +197,10 @@ type NamedCouchDoc struct {
 //BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
 type BatchRetrieveDocResponse struct {
 	Rows []struct {
-		ID   string `json:"id"`
-		Key  string `json:"key"`
+		ID    string `json:"id"`
+		Key   string `json:"key"`
 		Value struct {
-			Rev             string          `json:"rev"`
+			Rev string `json:"rev"`
 		} `json:"value"`
 		Doc struct {
 			ID              string          `json:"_id"`
@@ -558,7 +558,7 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_ensureFullCommit_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("couchdb_ensureFullCommit_time").Start()
 		defer stopWatch.Stop()
 	}
 	logger.Debugf("Entering EnsureFullCommit()")
@@ -638,7 +638,7 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_saveDoc_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("couchdb_saveDoc_time").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -1963,7 +1963,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_handleRequest_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("couchdb_handleRequest_time").Start()
 		defer stopWatch.Stop()
 	}
 

@@ -390,7 +390,7 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("statecouchdb_ApplyUpdates_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("statecouchdb_ApplyUpdates_time").Start()
 		defer stopWatch.Stop()
 	}
 

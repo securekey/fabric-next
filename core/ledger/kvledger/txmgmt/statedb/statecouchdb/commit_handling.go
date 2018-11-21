@@ -157,7 +157,7 @@ type nsFlusher struct {
 func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time_seconds").Start()
+		stopWatch := metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time").Start()
 		defer stopWatch.Stop()
 	}
 

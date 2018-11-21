@@ -29,7 +29,6 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	putil "github.com/hyperledger/fabric/protos/utils"
@@ -248,11 +247,6 @@ func (mgr *blockfileMgr) moveToNextFile() {
 }
 
 func (mgr *blockfileMgr) addBlock(block *common.Block) error {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("fsblkstorage_addBlock_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	if block.Header.Number != mgr.getBlockchainInfo().Height {
 		return fmt.Errorf("Block number should have been %d but was %d", mgr.getBlockchainInfo().Height, block.Header.Number)
 	}
@@ -434,12 +428,6 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
 }
 
 func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("fsblkstorage_updateCheckpoint_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
-
 	mgr.cpInfoCond.L.Lock()
 	defer mgr.cpInfoCond.L.Unlock()
 	mgr.cpInfo = cpInfo
@@ -607,10 +595,6 @@ func (mgr *blockfileMgr) loadCurrentInfo() (*checkpointInfo, error) {
 }
 
 func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("fsblkstorage_saveCurrentInfo_time_seconds").Start()
-		defer stopWatch.Stop()
-	}
 	b, err := i.marshal()
 	if err != nil {
 		return err
