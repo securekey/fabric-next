@@ -34,6 +34,23 @@
       "revId": "a3ebeef9e6ef9c30f0e68c4fff0038fedf987e7e",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3842c0ea_3474b4f5",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 204,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-21T19:32:33Z",
+      "side": 1,
+      "message": "Sorry, I should have put the comment here. Do you want to turn ON/OFF the flag here?",
+      "revId": "a3ebeef9e6ef9c30f0e68c4fff0038fedf987e7e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
