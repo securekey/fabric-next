@@ -194,7 +194,11 @@ type NamedCouchDoc struct {
 //BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
 type BatchRetrieveDocResponse struct {
 	Rows []struct {
-		ID  string `json:"id"`
+		ID   string `json:"id"`
+		Key  string `json:"key"`
+		Value struct {
+			Rev             string          `json:"rev"`
+		} `json:"value"`
 		Doc struct {
 			ID              string          `json:"_id"`
 			Rev             string          `json:"_rev"`
@@ -1715,9 +1719,9 @@ func createAttachmentsFromBatchResponse(attachmentsInfo json.RawMessage) ([]*Att
 
 //BatchRetrieveDocumentMetadata - batch method to retrieve document metadata for  a set of keys,
 // including ID, couchdb revision number, and ledger version
-func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*DocMetadata, error) {
+func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string, includeDocs bool) ([]*DocMetadata, error) {
 
-	logger.Debugf("Entering BatchRetrieveDocumentMetadata()  keys=%s", keys)
+	logger.Debugf("Entering BatchRetrieveDocumentMetadata() [keys=%s, includeDocs=%t]", keys, includeDocs)
 
 	batchRetrieveURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 	if err != nil {
@@ -1730,11 +1734,13 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 
 	// While BatchRetrieveDocumentMetadata() does not return the entire document,
 	// for reads/writes, we do need to get document so that we can get the ledger version of the key.
-	// TODO For blind writes we do not need to get the version, therefore when we bulk get
+	// For blind writes we do not need to get the version, therefore when we bulk get
 	// the revision numbers for the write keys that were not represented in read set
 	// (the second time BatchRetrieveDocumentMetadata is called during block processing),
 	// we could set include_docs to false to optimize the response.
-	queryParms.Add("include_docs", "true")
+	if includeDocs {
+		queryParms.Add("include_docs", "true")
+	}
 	batchRetrieveURL.RawQuery = queryParms.Encode()
 
 	keymap := make(map[string]interface{})
@@ -1777,8 +1783,10 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	docMetadataArray := []*DocMetadata{}
 
 	for _, row := range jsonResponse.Rows {
-		docMetadata := &DocMetadata{ID: row.ID, Rev: row.Doc.Rev, Version: row.Doc.Version}
-		docMetadataArray = append(docMetadataArray, docMetadata)
+		if row.ID != "" { // Key doesn't exist (note: row.Key will be set to the ID that wasn't found).
+			docMetadata := DocMetadata{ID: row.ID, Rev: row.Value.Rev, Version: row.Doc.Version}
+			docMetadataArray = append(docMetadataArray, &docMetadata)
+		}
 	}
 
 	logger.Debugf("Exiting BatchRetrieveDocumentMetadata()")
