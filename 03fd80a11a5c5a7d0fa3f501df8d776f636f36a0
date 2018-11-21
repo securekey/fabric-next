@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "323abf69_91625fce",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T19:26:28Z",
+      "side": 1,
+      "message": "as the type of createIndex entails(a bool), it serves as a flag to create indexes (or not) in CouchDB, I can probably add it in the comment of the function above if it\u0027s really necessary but the variable is self explanatory",
+      "parentUuid": "f60ce57d_e7998576",
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "b3034e5e_38441dc8",
         "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
         "patchSetId": 1
@@ -30,6 +48,30 @@
       "writtenOn": "2018-11-21T17:38:22Z",
       "side": 1,
       "message": "would leave this as a const and use sprintf below to fill in the template.",
+      "range": {
+        "startLine": 248,
+        "startChar": 1,
+        "endLine": 248,
+        "endChar": 4
+      },
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f425438e_f3f4ece6",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 248,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T19:26:28Z",
+      "side": 1,
+      "message": "will revert back to const here and line 150 above",
+      "parentUuid": "b3034e5e_38441dc8",
       "range": {
         "startLine": 248,
         "startChar": 1,
@@ -65,6 +107,30 @@
     },
     {
       "key": {
+        "uuid": "3eedde05_861394f6",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 258,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T19:26:28Z",
+      "side": 1,
+      "message": "s.createIndex is used for TxnIndex and HashIndex (line 158 above), should I make them 2 variables (blockTxnIndexEnabled and blockHasnIndexEnabled)?\n\nthe intention was to use 1 variable to control the creation of indexes in general",
+      "parentUuid": "4e90ad27_dc124921",
+      "range": {
+        "startLine": 258,
+        "startChar": 4,
+        "endLine": 258,
+        "endChar": 17
+      },
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "f3febdf4_7c149f5f",
         "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go",
         "patchSetId": 1
@@ -76,6 +142,24 @@
       "writtenOn": "2018-11-21T19:08:29Z",
       "side": 1,
       "message": "This has to be configurable?",
+      "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3f29d3b8_7fd2e65e",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore_provider.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 26,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-21T19:26:28Z",
+      "side": 1,
+      "message": "Not sure if has to be configurable. It was not requested.",
+      "parentUuid": "f3febdf4_7c149f5f",
       "revId": "03fd80a11a5c5a7d0fa3f501df8d776f636f36a0",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
