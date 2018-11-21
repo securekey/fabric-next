@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "be4f7110_0d086362",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-11-21T20:44:42Z",
+      "side": 1,
+      "message": "Clear the list before emitting the list from the map, otherwise it is going to be a memory leak.",
+      "revId": "ec073148be95615a27e6bd77fd5019381c230514",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
