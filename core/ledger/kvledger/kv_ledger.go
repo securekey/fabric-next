@@ -16,6 +16,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
@@ -288,6 +289,13 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("kvledger_CommitWithPvtData_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	var err error
 	block := pvtdataAndBlock.Block
 	blockNo := pvtdataAndBlock.Block.Header.Number
@@ -303,6 +311,10 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		return err
 	}
 	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
+
+	// KEEP EVEN WHEN metrics.debug IS OFF
+	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
+	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
 
 	startCommitState := time.Now()
 	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
@@ -353,6 +365,13 @@ func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtD
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
 	l.blockAPIsRWLock.RLock()
 	l.blockAPIsRWLock.RUnlock()
@@ -362,6 +381,13 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
 // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
 // The pvt data is filtered by the list of 'collections' supplied
 func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataByNum_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	pvtdata, err := l.blockStore.GetPvtDataByNum(blockNum, filter)
 	l.blockAPIsRWLock.RLock()
 	l.blockAPIsRWLock.RUnlock()

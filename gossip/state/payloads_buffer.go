@@ -21,7 +21,7 @@ import (
 // to signal whenever expected block has arrived.
 type PayloadsBuffer interface {
 	// Adds new block into the buffer
-	Push(payload *proto.Payload)
+	Push(payload *proto.Payload) bool
 
 	// Returns next expected sequence number
 	Next() uint64
@@ -74,7 +74,7 @@ func (b *PayloadsBufferImpl) Ready() chan struct{} {
 // sequence number is below the expected next block number payload will be
 // thrown away.
 // TODO return bool to indicate if payload was added or not, so that caller can log result.
-func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
+func (b *PayloadsBufferImpl) Push(payload *proto.Payload) bool {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
@@ -82,15 +82,18 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) {
 
 	if seqNum < b.next || b.buf[seqNum] != nil {
 		logger.Debugf("Payload with sequence number = %d has been already processed", payload.SeqNum)
-		return
+		return false
 	}
 
 	b.buf[seqNum] = payload
 
 	// Send notification that next sequence has arrived
+
 	if seqNum == b.next && len(b.readyChan) == 0 {
 		b.readyChan <- struct{}{}
 	}
+
+	return true
 }
 
 // Next function provides the number of the next expected block

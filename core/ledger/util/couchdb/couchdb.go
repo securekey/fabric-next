@@ -29,6 +29,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/hyperledger/fabric/common/flogging"
+
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/op/go-logging"
@@ -555,6 +557,10 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 // EnsureFullCommit calls _ensure_full_commit for explicit fsync
 func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
 
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("couchdb_ensureFullCommit_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 	logger.Debugf("Entering EnsureFullCommit()")
 
 	dbResponse, err := dbclient.dbOperation("/_ensure_full_commit")
@@ -630,6 +636,11 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 //UpdateDoc method provides a function to update or create a document, id and byte array. The revision must be provided
 //for document updates.
 func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
+
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("couchdb_saveDoc_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 
 	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
 
@@ -1453,6 +1464,12 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 	//URL to execute the view function associated with the index
 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
 
+	if metrics.IsDebug() {
+		timer := metrics.RootScope.Timer("couchdb_WarmIndex")
+		stopWatch := timer.Start()
+		defer stopWatch.Stop()
+	}
+
 	queryParms := indexURL.Query()
 	//Query parameter that allows the execution of the URL to return immediately
 	//The update_after will cause the index update to run after the URL returns
@@ -1944,6 +1961,11 @@ func (err *dbResponseError) Error() string {
 // Any http error or CouchDB error (4XX or 500) will result in a golang error getting returned
 func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
+
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("couchdb_handleRequest_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 
 	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
 

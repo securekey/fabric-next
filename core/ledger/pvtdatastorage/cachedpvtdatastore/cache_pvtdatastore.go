@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package cachedpvtdatastore
 
 import (
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
@@ -63,6 +64,9 @@ func (c *cachedPvtDataStore) GetPvtDataByBlockNum(blockNum uint64, filter ledger
 		return nil, errors.WithMessage(err, "GetPvtDataByBlockNum in cache failed")
 	}
 	if data != nil {
+		if metrics.IsDebug() {
+			metrics.RootScope.Counter("cachepvtdatastore_getpvtdatabyblocknum_request_hit").Inc(1)
+		}
 		return data, nil
 	}
 	logger.Warningf("GetPvtDataByBlockNum didn't find pvt data in cache for blockNum %d", blockNum)
@@ -70,6 +74,12 @@ func (c *cachedPvtDataStore) GetPvtDataByBlockNum(blockNum uint64, filter ledger
 	if err != nil {
 		return nil, err
 	}
+	if len(data) > 0 {
+		if metrics.IsDebug() {
+			metrics.RootScope.Counter("cachepvtdatastore_getpvtdatabyblocknum_request_miss").Inc(1)
+		}
+	}
+
 	return data, nil
 }
 

@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/golang/protobuf/proto"
 	vsccErrors "github.com/hyperledger/fabric/common/errors"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -517,6 +518,10 @@ func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage)
 		return uint64(0), errors.New("Received state transfer response without payload")
 	}
 	for _, payload := range response.GetPayloads() {
+
+		if metrics.IsDebug() {
+			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_handleStateResponse_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
+		}
 		logger.Debugf("Received payload with sequence number %d.", payload.SeqNum)
 		if err := s.mediator.VerifyBlock(common2.ChainID(s.chainID), payload.SeqNum, payload.Data); err != nil {
 			err = errors.WithStack(err)
@@ -609,6 +614,9 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 		select {
 		// Wait for notification that next seq has arrived
 		case <-s.payloads.Ready():
+			// KEEP EVEN WHEN metrics.debug IS OFF
+			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
+
 			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
 			// Collect all subsequent payloads
 			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
@@ -1046,6 +1054,10 @@ func (s *GossipStateProviderImpl) addPayloads(payloads []*proto.Payload) error {
 }
 
 func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.PvtDataCollections) error {
+	if metrics.IsDebug() {
+		metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_about_to_store_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
+	}
+
 	if !ledgerconfig.IsCommitter() {
 		if !isBlockValidated(block) {
 			logger.Warningf("Non-committer got unvalidated block %d. Ignoring.", block.Header.Number)

@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
@@ -263,6 +264,9 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
 	if versionedValue, ok := statedb.GetFromKVCache(vdb.chainName, namespace, key); ok {
 		logger.Debugf("state retrieved from cache. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
+		if metrics.IsDebug() {
+			metrics.RootScope.Counter("cachestatestore_getstate_cache_request_hit").Inc(1)
+		}
 		return versionedValue, nil
 	}
 
@@ -293,11 +297,11 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		IndexInBlock: int(kv.VersionedValue.Version.TxNum),
 	}
 
-	validatedTxOp := [] statedb.ValidatedTxOp {
+	validatedTxOp := []statedb.ValidatedTxOp{
 		{
-			Namespace: 	 namespace,
-			ChId: 	     vdb.chainName,
-			IsDeleted: 	 false,
+			Namespace:   namespace,
+			ChId:        vdb.chainName,
+			IsDeleted:   false,
 			ValidatedTx: validatedTx,
 		},
 	}
@@ -306,6 +310,9 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	statedb.UpdateKVCache(0, validatedTxOp, nil, nil, vdb.chainName)
 
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
+	if metrics.IsDebug() {
+		metrics.RootScope.Counter("cachestatestore_getstate_cache_request_miss").Inc(1)
+	}
 	return kv.VersionedValue, nil
 }
 
@@ -341,6 +348,12 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 		logger.Debugf("Error calling ReadDocRange(): %s\n", err.Error())
 		return nil, err
 	}
+	if len(queryResult) != 0 {
+		if metrics.IsDebug() {
+			metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_miss").Inc(1)
+		}
+	}
+
 	logger.Debugf("Exiting GetStateRangeScanIterator")
 	return newQueryScanner(namespace, queryResult), nil
 }
@@ -375,6 +388,12 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 
 // ApplyUpdates implements method in VersionedDB interface
 func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
+
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("statecouchdb_ApplyUpdates_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
+
 	// TODO a note about https://jira.hyperledger.org/browse/FAB-8622
 	// the function `Apply update can be split into three functions. Each carrying out one of the following three stages`.
 	// The write lock is needed only for the stage 2.

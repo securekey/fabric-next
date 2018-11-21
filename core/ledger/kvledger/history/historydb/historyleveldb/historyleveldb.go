@@ -10,6 +10,7 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
@@ -68,6 +69,12 @@ func (historyDB *historyDB) Close() {
 
 // Commit implements method in HistoryDB interface
 func (historyDB *historyDB) Commit(block *common.Block) error {
+
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("historyleveldb_Commit_time_seconds").Start()
+		defer stopWatch.Stop()
+	}
 
 	// Get the history batch from the block
 	keys, height, err := historydb.ConstructHistoryBatch(historyDB.dbName, block)

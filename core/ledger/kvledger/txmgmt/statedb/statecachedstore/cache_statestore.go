@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package statecachedstore
 
 import (
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
@@ -89,6 +90,9 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
 	dbItr.Prev()
+	if metrics.IsDebug() {
+		metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_hit").Inc(1)
+	}
 	return newKVScanner(namespace, dbItr, c), nil
 }
 
