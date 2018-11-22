@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "43bf9918_cc778c87",
+        "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 65,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-11-22T14:12:47Z",
+      "side": 1,
+      "message": "Will this function ever be called concurrently?",
+      "range": {
+        "startLine": 65,
+        "startChar": 4,
+        "endLine": 65,
+        "endChar": 28
+      },
+      "revId": "fd94fa2411d76629e08e51a054025f3b2e124e52",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
