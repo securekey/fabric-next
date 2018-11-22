@@ -9,14 +9,16 @@ package cachedblkstore
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	cledger "github.com/hyperledger/fabric/core/ledger"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
-	"sync/atomic"
 )
 
 const (
@@ -25,26 +27,26 @@ const (
 )
 
 type cachedBlockStore struct {
-	blockStore     blockStoreWithCheckpoint
-	blockIndex     blkstorage.BlockIndex
-	blockCache     blkstorage.BlockCache
+	blockStore blockStoreWithCheckpoint
+	blockIndex blkstorage.BlockIndex
+	blockCache blkstorage.BlockCache
 
 	bcInfo         atomic.Value
 	blockStoreCh   chan *common.Block
 	checkpointCh   chan *common.Block
-	writerClosedCh chan struct {}
-	doneCh         chan struct {}
+	writerClosedCh chan struct{}
+	doneCh         chan struct{}
 }
 
 func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) (*cachedBlockStore, error) {
 	s := cachedBlockStore{
-		blockStore: blockStore,
-		blockIndex: blockIndex,
-		blockCache: blockCache,
-		blockStoreCh: make(chan *common.Block, blockStorageQueueLen),
-		checkpointCh: make(chan *common.Block, blockStorageQueueLen),
+		blockStore:     blockStore,
+		blockIndex:     blockIndex,
+		blockCache:     blockCache,
+		blockStoreCh:   make(chan *common.Block, blockStorageQueueLen),
+		checkpointCh:   make(chan *common.Block, blockStorageQueueLen),
 		writerClosedCh: make(chan struct{}),
-		doneCh: make(chan struct{}),
+		doneCh:         make(chan struct{}),
 	}
 
 	curBcInfo, err := blockStore.GetBlockchainInfo()
@@ -68,8 +70,8 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 
 	blockNumber := block.GetHeader().GetNumber()
 	if blockNumber != 0 {
-		logger.Debugf("waiting for previous block to checkpoint [%d]", blockNumber - checkpointBlockInterval)
-		s.blockStore.WaitForBlock(context.Background(), blockNumber - checkpointBlockInterval)
+		logger.Debugf("waiting for previous block to checkpoint [%d]", blockNumber-checkpointBlockInterval)
+		s.blockStore.WaitForBlock(context.Background(), blockNumber-checkpointBlockInterval)
 		logger.Debugf("ready to store incoming block [%d]", blockNumber)
 	}
 	s.blockStoreCh <- block
@@ -91,10 +93,10 @@ func (s *cachedBlockStore) blockWriter() {
 
 	for {
 		select {
-		case <- s.doneCh:
+		case <-s.doneCh:
 			close(s.writerClosedCh)
 			return
-		case block := <- s.blockStoreCh:
+		case block := <-s.blockStoreCh:
 			//startBlockStorage := time.Now()
 			blockNumber := block.GetHeader().GetNumber()
 			logger.Debugf("processing block for storage [%d]", blockNumber)
@@ -118,7 +120,7 @@ func (s *cachedBlockStore) blockWriter() {
 			}
 			//elapsedBlockStorage := time.Since(startBlockStorage) / time.Millisecond // duration in ms
 			//logger.Debugf("Stored block [%d] in %dms", block.Header.Number, elapsedBlockStorage)
-		case block := <- s.checkpointCh:
+		case block := <-s.checkpointCh:
 			blockNumber := block.GetHeader().GetNumber()
 			logger.Debugf("processing block checkpoint [%d]", blockNumber)
 			err := s.blockStore.CheckpointBlock(block)
@@ -148,7 +150,7 @@ func (s *cachedBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block,
 		return b, nil
 	}
 
-	b, err :=  s.blockStore.RetrieveBlockByHash(blockHash)
+	b, err := s.blockStore.RetrieveBlockByHash(blockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -195,8 +197,8 @@ func (s *cachedBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum 
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
-func (s *cachedBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
-	loc, err := s.retrieveTxLoc(txID)
+func (s *cachedBlockStore) RetrieveTxByID(txID string, hints ...cledger.SearchHint) (*common.Envelope, error) {
+	loc, err := s.retrieveTxLoc(txID, hints...)
 	if err != nil {
 		return nil, err
 	}
@@ -204,20 +206,32 @@ func (s *cachedBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error)
 	return s.RetrieveTxByBlockNumTranNum(loc.BlockNumber(), loc.TxNumber())
 }
 
-func (s *cachedBlockStore) retrieveTxLoc(txID string) (blkstorage.TxLoc, error) {
+func (s *cachedBlockStore) retrieveTxLoc(txID string, hints ...cledger.SearchHint) (blkstorage.TxLoc, error) {
 	loc, ok := s.blockCache.LookupTxLoc(txID)
 	if ok {
 		return loc, nil
+	} else if searchCacheOnly(hints...) {
+		return nil, cledger.NotFoundInIndexErr(txID)
 	}
 
 	return s.blockIndex.RetrieveTxLoc(txID)
+}
+
+// Returns true if the 'RecentOnly' search hint is passed.
+func searchCacheOnly(hints ...cledger.SearchHint) bool {
+	for _, hint := range hints {
+		if hint == cledger.RecentOnly {
+			return true
+		}
+	}
+	return false
 }
 
 func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Envelope, error) {
 	blockData := block.GetData()
 	envelopes := blockData.GetData()
 	envelopesLen := uint64(len(envelopes))
-	if envelopesLen - 1 < tranNum {
+	if envelopesLen-1 < tranNum {
 		blockNum := block.GetHeader().GetNumber()
 		return nil, errors.Errorf("transaction number is invalid [%d, %d, %d]", blockNum, envelopesLen, tranNum)
 	}
@@ -259,7 +273,7 @@ func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValida
 // Shutdown closes the storage instance
 func (s *cachedBlockStore) Shutdown() {
 	close(s.doneCh)
-	<- s.writerClosedCh
+	<-s.writerClosedCh
 
 	s.blockCache.Shutdown()
 	s.blockIndex.Shutdown()
@@ -269,7 +283,7 @@ func (s *cachedBlockStore) Shutdown() {
 func createBlockchainInfo(block *common.Block) *common.BlockchainInfo {
 	hash := block.GetHeader().Hash()
 	number := block.GetHeader().GetNumber()
-	bi := common.BlockchainInfo {
+	bi := common.BlockchainInfo{
 		Height:            number + 1,
 		CurrentBlockHash:  hash,
 		PreviousBlockHash: block.Header.PreviousHash,
