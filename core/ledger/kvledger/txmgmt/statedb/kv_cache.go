@@ -103,18 +103,21 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 
 	purgePrivate(blockNumber)
 
-	indexKeys := make([]statekeyindex.CompositeKey, 0)
-	deletedIndexKeys := make([]statekeyindex.CompositeKey, 0)
+	var indexUpdates []*statekeyindex.IndexUpdate
+	var deletedIndexKeys []statekeyindex.CompositeKey
 
 	for _, v := range validatedTxOps {
 		kvCache, _ := getKVCache(v.ChId, v.Namespace)
 		if v.IsDeleted {
-			kvCache.Remove(v.ValidatedTx.Key, v.ValidatedTx.BlockNum, v.ValidatedTx.IndexInBlock)
+			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 		} else {
-			newTx := v.ValidatedTx
-			kvCache.Put(&newTx)
-			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+			kvCache.Put(&v.ValidatedTx)
+			indexUpdate := statekeyindex.IndexUpdate{
+				Key: statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace},
+				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+			}
+			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
 
@@ -125,9 +128,12 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
 		} else {
-			newTx := v
-			kvCache.PutPrivate(&newTx)
-			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+			kvCache.PutPrivate(&v)
+			indexUpdate := statekeyindex.IndexUpdate{
+				Key: statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+			}
+			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
 
@@ -138,19 +144,22 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
 		} else {
-			newTx := v
-			kvCache.PutPrivate(&newTx)
-			indexKeys = append(indexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+			kvCache.PutPrivate(&v)
+			indexUpdate := statekeyindex.IndexUpdate{
+				Key: statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+			}
+			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
 
 	//Add key index in leveldb
-	if len(indexKeys) > 0 {
+	if len(indexUpdates) > 0 {
 		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
 		if err != nil {
 			return err
 		}
-		err = stateKeyIndex.AddIndex(indexKeys)
+		err = stateKeyIndex.AddIndex(indexUpdates)
 		if err != nil {
 			return err
 		}
