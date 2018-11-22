@@ -69,6 +69,30 @@
       "revId": "fd94fa2411d76629e08e51a054025f3b2e124e52",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7535c5c7_4b81a79b",
+        "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 68,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-22T17:02:28Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "716d6b90_89e527f6",
+      "range": {
+        "startLine": 68,
+        "startChar": 4,
+        "endLine": 68,
+        "endChar": 24
+      },
+      "revId": "fd94fa2411d76629e08e51a054025f3b2e124e52",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
