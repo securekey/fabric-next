@@ -23,6 +23,7 @@ package statekeyindex
 
 import (
 	"bytes"
+	"github.com/golang/protobuf/proto"
 
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 )
@@ -35,18 +36,68 @@ type stateKeyIndex struct {
 	dbName string
 }
 
+type Metadata struct {
+	BlockNumber uint64
+	TxNumber    uint64
+}
+
+type IndexUpdate struct {
+	Key   CompositeKey
+	Value Metadata
+}
+
+// MarshalMetadata marshals a Metadata into a byte slice.
+func MarshalMetadata(m *Metadata) ([]byte, error) {
+	buffer := proto.NewBuffer([]byte{})
+	err := buffer.EncodeVarint(m.BlockNumber)
+	if err != nil {
+		return nil, err
+	}
+	err = buffer.EncodeVarint(m.TxNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalMetadata unmarshals the byte slice into a Metadata.
+func UnmarshalMetadata(b []byte) (*Metadata, error) {
+	buffer := proto.NewBuffer(b)
+
+	blockNumber, err := buffer.DecodeVarint()
+	if err != nil {
+		return nil, err
+	}
+
+	txNumber, err := buffer.DecodeVarint()
+	if err != nil {
+		return nil, err
+	}
+
+	m := Metadata{
+		BlockNumber: blockNumber,
+		TxNumber: txNumber,
+	}
+	return &m, nil
+}
+
 // newStateKeyIndex constructs an instance of StateKeyIndex
 func newStateKeyIndex(db *leveldbhelper.DBHandle, dbName string) *stateKeyIndex {
 	return &stateKeyIndex{db, dbName}
 }
 
-func (s *stateKeyIndex) AddIndex(keys []CompositeKey) error {
+func (s *stateKeyIndex) AddIndex(indexUpdates []*IndexUpdate) error {
 	dbBatch := leveldbhelper.NewUpdateBatch()
-	for _, v := range keys {
-		compositeKey := ConstructCompositeKey(v.Namespace, v.Key)
-		//TODO change to DEBUG
-		logger.Debugf("Channel [%s]: Applying key(string)=[%s]", s.dbName, string(compositeKey))
-		dbBatch.Put(compositeKey, []byte(""))
+	for _, u := range indexUpdates {
+		compositeKey := ConstructCompositeKey(u.Key.Namespace, u.Key.Key)
+		logger.Debugf("[%s] adding index for state key [%s, %#v]", s.dbName, string(compositeKey), u.Value)
+
+		metadata, err := MarshalMetadata(&u.Value)
+		if err != nil {
+			return err
+		}
+		dbBatch.Put(compositeKey, metadata)
 	}
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
 	if err := s.db.WriteBatch(dbBatch, true); err != nil {
