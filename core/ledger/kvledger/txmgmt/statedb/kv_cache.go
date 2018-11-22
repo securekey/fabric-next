@@ -300,7 +300,7 @@ func (c *KVCache) purgePrivate(blockNumber uint64) {
 		return
 	}
 
-	logger.Infof("Purging private data for block[%d]", blockNumber)
+	var  deleted, moved int
 
 	e := l.Front()
 	for {
@@ -316,13 +316,16 @@ func (c *KVCache) purgePrivate(blockNumber uint64) {
 				// add to lru cache
 				newTx := pvtData.ValidatedTxOp.ValidatedTx
 				c.validatedTxCache.Add(key, &newTx)
+				moved++
 			}
+
 			delete(c.expiringPvtCache, key)
+			deleted++
 		}
 		e = e.Next()
 	}
 
-	logger.Infof("Purged %d private keys for block %d", l.Len(), blockNumber)
+	logger.Infof("Deleted %d keys from level1, moved %d keys to level2, processed %d keys for block %d in collection %s", deleted, moved, l.Len(), blockNumber, c.cacheName)
 
 	delete(c.expiringPvtKeys, blockNumber)
 
