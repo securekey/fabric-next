@@ -8,7 +8,6 @@ package mempvtdatacache
 
 import (
 	"encoding/hex"
-	"fmt"
 	"sort"
 
 	"github.com/golang/groupcache/lru"
@@ -121,8 +120,7 @@ func (c *pvtDataCache) Commit() error {
 	c.batchPending = false
 	c.isEmpty = false
 	c.lastCommittedBlock = committingBlockNum
-	//TODO change to debug
-	logger.Infof("Committed private data in cache %s for block [%d]", c.ledgerID, committingBlockNum)
+	logger.Debugf("Committed private data in cache %s for block [%d]", c.ledgerID, committingBlockNum)
 	return nil
 }
 
@@ -133,8 +131,7 @@ func (c *pvtDataCache) InitLastCommittedBlock(blockNum uint64) error {
 
 	c.isEmpty = false
 	c.lastCommittedBlock = blockNum
-	//TODO change to debug
-	logger.Infof("InitLastCommittedBlock cache %s set to block [%d]", c.ledgerID, blockNum)
+	logger.Debugf("InitLastCommittedBlock cache %s set to block [%d]", c.ledgerID, blockNum)
 	return nil
 }
 
@@ -147,8 +144,8 @@ func (c *pvtDataCache) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNs
 	}
 	lastCommittedBlock := c.lastCommittedBlock
 	if blockNum > lastCommittedBlock {
-		logger.Debugf("Block %d is greater than last committed block %d in cache", blockNum, lastCommittedBlock)
-		return nil, pvtdatastorage.NewErrOutOfRange(fmt.Sprintf("Last committed block=%d, block requested=%d", lastCommittedBlock, blockNum))
+		logger.Warningf("Block %d is greater than last committed block %d in cache", blockNum, lastCommittedBlock)
+		return nil, nil
 	}
 	logger.Debugf("Querying private data storage for write sets using blockNum=%d in cache", blockNum)
 
