@@ -166,6 +166,30 @@
     },
     {
       "key": {
+        "uuid": "92b1a72e_aa7f2a8f",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 442,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-23T18:55:18Z",
+      "side": 1,
+      "message": "Move it before for",
+      "parentUuid": "9894e1b2_d077c9d9",
+      "range": {
+        "startLine": 442,
+        "startChar": 3,
+        "endLine": 442,
+        "endChar": 45
+      },
+      "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "5d8349ae_8ae03d34",
         "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
         "patchSetId": 6
