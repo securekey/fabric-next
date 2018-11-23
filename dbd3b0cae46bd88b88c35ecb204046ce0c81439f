@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e5ceaff9_25123c80",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T16:08:40Z",
+      "side": 1,
+      "message": "Suggest a more descriptive function name, as this is exposed.",
+      "range": {
+        "startLine": 115,
+        "startChar": 27,
+        "endLine": 115,
+        "endChar": 33
+      },
+      "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
