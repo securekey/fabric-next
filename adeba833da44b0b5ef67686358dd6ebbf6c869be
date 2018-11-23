@@ -45,6 +45,75 @@
       "revId": "adeba833da44b0b5ef67686358dd6ebbf6c869be",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "99db725d_d099aa87",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 193,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T20:01:08Z",
+      "side": 1,
+      "message": "I assume we should lock since the sibling function is locking?\n\nvdb.verCacheLock.Lock()",
+      "range": {
+        "startLine": 193,
+        "startChar": 1,
+        "endLine": 193,
+        "endChar": 37
+      },
+      "revId": "adeba833da44b0b5ef67686358dd6ebbf6c869be",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "88ad364c_c54ed7c1",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 205,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T20:01:08Z",
+      "side": 1,
+      "message": "this logic will not behave the same way now - we removed the pre-loaded keys.",
+      "range": {
+        "startLine": 205,
+        "startChar": 1,
+        "endLine": 205,
+        "endChar": 36
+      },
+      "revId": "adeba833da44b0b5ef67686358dd6ebbf6c869be",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4bca1618_481f6b3a",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 211,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T20:01:08Z",
+      "side": 1,
+      "message": "we should not be calling the database if we have no keys to fetch.",
+      "range": {
+        "startLine": 211,
+        "startChar": 1,
+        "endLine": 211,
+        "endChar": 60
+      },
+      "revId": "adeba833da44b0b5ef67686358dd6ebbf6c869be",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
