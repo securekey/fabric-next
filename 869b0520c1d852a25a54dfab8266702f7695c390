@@ -22,6 +22,30 @@
       "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3deba818_470047b4",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 15,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T16:42:27Z",
+      "side": 1,
+      "message": "My go-import did it, will check it",
+      "parentUuid": "e953f3d4_3bac8d82",
+      "range": {
+        "startLine": 15,
+        "startChar": 1,
+        "endLine": 15,
+        "endChar": 68
+      },
+      "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
