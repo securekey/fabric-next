@@ -29,7 +29,7 @@ type store struct {
 
 func newStore(db *couchdb.CouchDatabase) (*store, error) {
 	s := store{
-		db: db,
+		db:            db,
 		purgeInterval: ledgerconfig.GetPvtdataStorePurgeInterval(),
 	}
 
@@ -128,21 +128,27 @@ func (s *store) purgeExpiredDataDB(maxBlkNum uint64, expiryEntries []*expiryEntr
 	for _, e := range expiryEntries {
 		blockToExpiryEntries[e.key.committingBlk] = append(blockToExpiryEntries[e.key.committingBlk], e)
 	}
-
+	docs := make([]*couchdb.CouchDoc, 0)
 	for k, e := range blockToExpiryEntries {
-		err := s.purgeExpiredDataForBlockDB(k, maxBlkNum, e)
+		doc, err := s.purgeExpiredDataForBlockDB(k, maxBlkNum, e)
 		if err != nil {
 			return nil
 		}
+		docs = append(docs, doc)
 	}
-
+	if len(docs) > 0 {
+		_, err := s.db.BatchUpdateDocuments(docs)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64, expiryEntries []*expiryEntry) error {
+func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64, expiryEntries []*expiryEntry) (*couchdb.CouchDoc, error) {
 	blockPvtData, err := retrieveBlockPvtData(s.db, blockNumberToKey(blockNumber))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, expiryKey := range expiryEntries {
@@ -168,7 +174,7 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 	for _, pvtBlockNum := range blockPvtData.ExpiryBlocks {
 		n, err := strconv.ParseUint(pvtBlockNum, blockNumberBase, 64)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if n > maxBlkNum {
 			expiryBlockNumbers = append(expiryBlockNumbers, pvtBlockNum)
@@ -178,16 +184,9 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 
 	jsonBytes, err := json.Marshal(blockPvtData)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
-	_, err = s.db.UpdateDoc(blockPvtData.ID, blockPvtData.Rev, &couchDoc)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return &couchdb.CouchDoc{JSONValue: jsonBytes}, nil
 }
 
 func (s *store) updateCommitMetadata(pending bool, blockNum uint64) error {
