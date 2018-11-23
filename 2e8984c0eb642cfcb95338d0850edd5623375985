@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "34bdd003_bc6855f7",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 8
+      },
+      "lineNbr": 188,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T17:21:00Z",
+      "side": 1,
+      "message": "not needed",
+      "range": {
+        "startLine": 188,
+        "startChar": 24,
+        "endLine": 188,
+        "endChar": 31
+      },
+      "revId": "2e8984c0eb642cfcb95338d0850edd5623375985",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "458576ac_73f19a38",
+        "filename": "common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go",
+        "patchSetId": 8
+      },
+      "lineNbr": 309,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T17:21:00Z",
+      "side": 1,
+      "message": "not needed",
+      "range": {
+        "startLine": 309,
+        "startChar": 24,
+        "endLine": 309,
+        "endChar": 32
+      },
+      "revId": "2e8984c0eb642cfcb95338d0850edd5623375985",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
