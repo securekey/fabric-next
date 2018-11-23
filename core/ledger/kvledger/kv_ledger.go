@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 
 	"github.com/hyperledger/fabric/common/flogging"
@@ -34,6 +36,8 @@ import (
 
 var logger = flogging.MustGetLogger("kvledger")
 
+const onCommitQueueLen = 5
+
 // KVLedger provides an implementation of `ledger.PeerLedger`.
 // This implementation provides a key-value based data model
 type kvLedger struct {
@@ -43,6 +47,7 @@ type kvLedger struct {
 	historyDB              historydb.HistoryDB
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
+	commitDone             chan *ledger.BlockAndPvtData
 }
 
 // NewKVLedger constructs new `KVLedger`
@@ -59,7 +64,7 @@ func newKVLedger(
 	stateListeners = append(stateListeners, configHistoryMgr)
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
-	l := &kvLedger{ledgerID: ledgerID, blockStore: blockStore, historyDB: historyDB, blockAPIsRWLock: &sync.RWMutex{}}
+	l := &kvLedger{ledgerID: ledgerID, blockStore: blockStore, historyDB: historyDB, blockAPIsRWLock: &sync.RWMutex{}, commitDone: make(chan *ledger.BlockAndPvtData, onCommitQueueLen)}
 
 	// TODO Move the function `GetChaincodeEventListener` to ledger interface and
 	// this functionality of regiserting for events to ledgermgmt package so that this
@@ -81,13 +86,16 @@ func newKVLedger(
 		}
 	}
 	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
+
+	go l.OnCommit()
+
 	return l, nil
 }
 
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider)
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDone)
 	return err
 }
 
@@ -412,8 +420,39 @@ func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, e
 
 // Close closes `KVLedger`
 func (l *kvLedger) Close() {
+	close(l.commitDone)
 	l.blockStore.Shutdown()
 	l.txtmgmt.Shutdown()
+}
+
+// OnCommit performs required cache cleanup on each DB commit
+func (l *kvLedger) OnCommit() {
+	for {
+		select {
+		case pvtdataAndBlock, ok := <-l.commitDone:
+			if !ok {
+				//time to shut down on commit queue
+				return
+			}
+
+			block := pvtdataAndBlock.Block
+			pvtData := pvtdataAndBlock.BlockPvtData
+			logger.Debugf("*** cleaning up pinned tx in cache for cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
+
+			btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
+			validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
+			if err != nil {
+				logger.Errorf(" failed to clear cache for committed block %d : %s", pvtdataAndBlock.Block.Header.GetNumber(), err)
+			}
+			pvtDataKeys, _, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
+			if err != nil {
+				logger.Errorf(" failed to clear cache for committed block %d : %s", pvtdataAndBlock.Block.Header.GetNumber(), err)
+			}
+
+			// Update the cache
+			statedb.OnTxCommit(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
+		}
+	}
 }
 
 type blocksItr struct {

@@ -53,6 +53,7 @@ type KVCache struct {
 	validatedTxCache *lru.Cache
 	expiringPvtCache map[string]*ValidatedPvtData
 	expiringPvtKeys  map[uint64]*list.List
+	pinnedTx         map[string]*ValidatedTx
 	mutex            sync.Mutex
 	hit              uint64
 	miss             uint64
@@ -115,7 +116,7 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 			newTx := v.ValidatedTx
 			kvCache.Put(&newTx)
 			indexUpdate := statekeyindex.IndexUpdate{
-				Key: statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace},
+				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace},
 				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
 			}
 			indexUpdates = append(indexUpdates, &indexUpdate)
@@ -132,7 +133,7 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 			newTx := v
 			kvCache.PutPrivate(&newTx)
 			indexUpdate := statekeyindex.IndexUpdate{
-				Key: statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
 				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
 			}
 			indexUpdates = append(indexUpdates, &indexUpdate)
@@ -149,7 +150,7 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 			newTx := v
 			kvCache.PutPrivate(&newTx)
 			indexUpdate := statekeyindex.IndexUpdate{
-				Key: statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
 				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
 			}
 			indexUpdates = append(indexUpdates, &indexUpdate)
@@ -221,6 +222,31 @@ func GetFromKVCache(chId string, namespace string, key string) (*VersionedValue,
 	return nil, false
 }
 
+//OnTxCommit when called pinned TX for given key gets removed
+func OnTxCommit(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) {
+
+	kvCacheMtx.Lock()
+	defer kvCacheMtx.Unlock()
+
+	for _, v := range validatedTxOps {
+		kvCache, _ := getKVCache(v.ChId, v.Namespace)
+		delete(kvCache.pinnedTx, v.Key)
+	}
+
+	for _, v := range validatedPvtData {
+		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
+		delete(kvCache.pinnedTx, v.ValidatedTxOp.ValidatedTx.Key)
+	}
+
+	for _, v := range validatedPvtHashData {
+		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
+		delete(kvCache.pinnedTx, v.ValidatedTxOp.ValidatedTx.Key)
+
+	}
+}
+
 func newKVCache(
 	cacheName string) *KVCache {
 	cacheSize := ledgerconfig.GetKVCacheSize()
@@ -229,12 +255,15 @@ func newKVCache(
 	expiringPvtCache := make(map[string]*ValidatedPvtData)
 	expiringPvtKeys := make(map[uint64]*list.List)
 
+	pinnedTx := make(map[string]*ValidatedTx)
+
 	cache := KVCache{
 		cacheName:        cacheName,
 		capacity:         cacheSize,
 		validatedTxCache: validatedTxCache,
 		expiringPvtCache: expiringPvtCache,
 		expiringPvtKeys:  expiringPvtKeys,
+		pinnedTx:         pinnedTx,
 	}
 
 	return &cache
@@ -246,7 +275,13 @@ func (c *KVCache) get(key string) (*ValidatedTx, bool) {
 	if ok {
 		return &pvt.ValidatedTxOp.ValidatedTx, ok
 	}
+
 	txn, ok := c.validatedTxCache.Get(key)
+	if ok {
+		return txn.(*ValidatedTx), ok
+	}
+
+	txn, ok = c.pinnedTx[key]
 	if ok {
 		return txn.(*ValidatedTx), ok
 	}
@@ -273,6 +308,7 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 		c.validatedTxCache.Add(validatedTx.Key, validatedTx)
+		c.pinnedTx[validatedTx.Key] = validatedTx
 	}
 }
 
@@ -286,6 +322,7 @@ func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 		logger.Debugf("Adding key[%s] to expiring private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
 		c.expiringPvtCache[validatedTx.Key] = validatedTx
+		c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
 		c.addKeyToExpiryMap(validatedTx.Level1ExpiringBlock, validatedTx.Key)
 		if len(c.expiringPvtCache) > ledgerconfig.GetKVCacheExpiringSize() {
 			logger.Warningf("Expiring cache size[%d] is over limit[%d]", len(c.expiringPvtCache), ledgerconfig.GetKVCacheExpiringSize())
