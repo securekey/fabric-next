@@ -72,6 +72,30 @@
     },
     {
       "key": {
+        "uuid": "d9661a2f_bfebb7a8",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T18:51:50Z",
+      "side": 1,
+      "message": "commit watcher queue length, to cleanup pinned TX in cache",
+      "parentUuid": "3e7b5920_7559fff4",
+      "range": {
+        "startLine": 39,
+        "startChar": 6,
+        "endLine": 39,
+        "endChar": 22
+      },
+      "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "6a5b0413_d69e1c01",
         "filename": "core/ledger/kvledger/kv_ledger.go",
         "patchSetId": 6
@@ -106,6 +130,30 @@
       "writtenOn": "2018-11-23T18:21:56Z",
       "side": 1,
       "message": "does this need to be created every time?",
+      "range": {
+        "startLine": 442,
+        "startChar": 3,
+        "endLine": 442,
+        "endChar": 45
+      },
+      "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9894e1b2_d077c9d9",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 442,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T18:51:50Z",
+      "side": 1,
+      "message": "looks like it is once per block.",
+      "parentUuid": "fcba9624_21d8f6de",
       "range": {
         "startLine": 442,
         "startChar": 3,
