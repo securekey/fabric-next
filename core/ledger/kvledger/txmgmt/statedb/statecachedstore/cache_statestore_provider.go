@@ -9,6 +9,7 @@ package statecachedstore
 import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +35,12 @@ func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.Version
 		return nil, errors.Wrap(err, "dbProvider GetDBHandle failed")
 	}
 
-	return newCachedBlockStore(dbProvider, dbName), nil
+	stateIdx, err := statekeyindex.NewProvider().OpenStateKeyIndex(dbName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open the stateindex for db %s", dbName)
+	}
+
+	return newCachedBlockStore(dbProvider, stateIdx, dbName), nil
 }
 
 // Close cleans up the Provider

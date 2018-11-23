@@ -29,9 +29,12 @@ type StateKeyIndex interface {
 	AddIndex(indexUpdates []*IndexUpdate) error
 	DeleteIndex(keys []CompositeKey) error
 	GetIterator(namespace string, startKey string, endKey string) *leveldbhelper.Iterator
+	// Returns a previously indexed Metadata if found.
+	GetMetadata(key *CompositeKey) (Metadata, bool, error)
 	Close()
 }
 
+// TODO remove this CompositeKey and reuse statedb.CompositeKey instead.
 // CompositeKey encloses Namespace and Key components
 type CompositeKey struct {
 	Namespace string
