@@ -11,6 +11,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 )
@@ -22,6 +23,8 @@ type nsCommittersBuilder struct {
 	db              *couchdb.CouchDatabase
 	revisions       map[string]string
 	subNsCommitters []batch
+	ns              string
+	keyIndex        statekeyindex.StateKeyIndex
 }
 
 // subNsCommitter implements `batch` interface. Each batch commits the portion of updates within a namespace assigned to it
@@ -32,6 +35,11 @@ type subNsCommitter struct {
 
 // buildCommitters build the batches of type subNsCommitter. This functions processes different namespaces in parallel
 func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, error) {
+	keyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(vdb.chainName)
+	if err != nil {
+		return nil, err
+	}
+
 	namespaces := updates.GetUpdatedNamespaces()
 	var nsCommitterBuilder []batch
 	for _, ns := range namespaces {
@@ -46,7 +54,7 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 		}
 		// for each namespace, construct one builder with the corresponding couchdb handle and couch revisions
 		// that are already loaded into cache (during validation phase)
-		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{updates: nsUpdates, db: db, revisions: nsRevs})
+		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{ns: ns, updates: nsUpdates, db: db, revisions: nsRevs, keyIndex: keyIndex})
 	}
 	if err := executeBatches(nsCommitterBuilder); err != nil {
 		return nil, err
@@ -63,7 +71,7 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 // cover the updates for a namespace
 func (builder *nsCommittersBuilder) execute() error {
 	// TODO: Perform couchdb revision load in the background earlier.
-	if err := addRevisionsForMissingKeys(builder.revisions, builder.db, builder.updates); err != nil {
+	if err := addRevisionsForMissingKeys(builder.ns, builder.keyIndex, builder.revisions, builder.db, builder.updates); err != nil {
 		return err
 	}
 	maxBacthSize := ledgerconfig.GetMaxBatchUpdateSize()
@@ -177,12 +185,21 @@ func (f *nsFlusher) execute() error {
 	return nil
 }
 
-func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
+func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex, revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
 	var missingKeys []string
 	for key := range nsUpdates {
 		_, ok := revisions[key]
 		if !ok {
-			missingKeys = append(missingKeys, key)
+			_, exists, err := keyIndex.GetMetadata(&statekeyindex.CompositeKey{Namespace: ns, Key: key})
+			if err != nil {
+				return err
+			}
+
+			if !exists {
+				revisions[key] = ""
+			} else {
+				missingKeys = append(missingKeys, key)
+			}
 		}
 	}
 	logger.Debugf("Pulling revisions for the [%d] keys for namsespace [%s] that were not part of the readset", len(missingKeys), db.DBName)
