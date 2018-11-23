@@ -11,6 +11,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 )
@@ -22,6 +23,8 @@ type nsCommittersBuilder struct {
 	db              *couchdb.CouchDatabase
 	revisions       map[string]string
 	subNsCommitters []batch
+	ns              string
+	keyIndex        statekeyindex.StateKeyIndex
 }
 
 // subNsCommitter implements `batch` interface. Each batch commits the portion of updates within a namespace assigned to it
@@ -32,6 +35,11 @@ type subNsCommitter struct {
 
 // buildCommitters build the batches of type subNsCommitter. This functions processes different namespaces in parallel
 func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, error) {
+	keyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(vdb.chainName)
+	if err != nil {
+		return nil, err
+	}
+
 	namespaces := updates.GetUpdatedNamespaces()
 	var nsCommitterBuilder []batch
 	for _, ns := range namespaces {
@@ -46,7 +54,7 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 		}
 		// for each namespace, construct one builder with the corresponding couchdb handle and couch revisions
 		// that are already loaded into cache (during validation phase)
-		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{updates: nsUpdates, db: db, revisions: nsRevs})
+		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{ns: ns, updates: nsUpdates, db: db, revisions: nsRevs, keyIndex: keyIndex})
 	}
 	if err := executeBatches(nsCommitterBuilder); err != nil {
 		return nil, err
@@ -63,7 +71,7 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 // cover the updates for a namespace
 func (builder *nsCommittersBuilder) execute() error {
 	// TODO: Perform couchdb revision load in the background earlier.
-	if err := addRevisionsForMissingKeys(builder.revisions, builder.db, builder.updates); err != nil {
+	if err := addRevisionsForMissingKeys(builder.ns, builder.keyIndex, builder.revisions, builder.db, builder.updates); err != nil {
 		return err
 	}
 	maxBacthSize := ledgerconfig.GetMaxBatchUpdateSize()
@@ -83,6 +91,10 @@ func (builder *nsCommittersBuilder) execute() error {
 	if len(batchUpdateMap) > 0 {
 		builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.db, batchUpdateMap})
 	}
+
+
+
+
 	return nil
 }
 
@@ -133,7 +145,7 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				logger.Warningf("CouchDB batch document update encountered an problem. Retrying update for document ID:%s", respDoc.ID)
 				// Save the individual document to couchdb
 				// Note that this will do retries as needed
-				_, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
+				batchUpdateDocument.UpdatedRev, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
 			}
 
 			// If the single document update or delete returns an error, then throw the error
@@ -144,6 +156,9 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				logger.Errorf(errorString)
 				return fmt.Errorf(errorString)
 			}
+		} else {
+			batchUpdateDocument := batchUpdateMap[respDoc.ID]
+			batchUpdateDocument.UpdatedRev = respDoc.Rev
 		}
 	}
 	return nil
@@ -177,12 +192,24 @@ func (f *nsFlusher) execute() error {
 	return nil
 }
 
-func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
+func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex, revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
 	var missingKeys []string
 	for key := range nsUpdates {
 		_, ok := revisions[key]
 		if !ok {
-			missingKeys = append(missingKeys, key)
+			_, exists, err := keyIndex.GetMetadata(&statekeyindex.CompositeKey{Namespace: ns, Key: key})
+			if err != nil {
+				return err
+			}
+
+			if !exists {
+				logger.Errorf("Key does not exist [%s]", key)
+				revisions[key] = ""
+			} else {
+				logger.Errorf("Key exists [%s]", key)
+				missingKeys = append(missingKeys, key)
+			}
+
 		}
 	}
 	logger.Debugf("Pulling revisions for the [%d] keys for namsespace [%s] that were not part of the readset", len(missingKeys), db.DBName)
@@ -198,6 +225,7 @@ func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDa
 
 //batchableDocument defines a document for a batch
 type batchableDocument struct {
-	CouchDoc *couchdb.CouchDoc
-	Deleted  bool
+	CouchDoc   *couchdb.CouchDoc
+	Deleted    bool
+	UpdatedRev string
 }
