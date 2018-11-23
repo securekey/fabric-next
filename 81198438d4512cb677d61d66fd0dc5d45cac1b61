@@ -70,6 +70,30 @@
       "revId": "81198438d4512cb677d61d66fd0dc5d45cac1b61",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "388f874e_c7215235",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 429,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T16:09:35Z",
+      "side": 1,
+      "message": "Will rename it as commitWatcher()",
+      "parentUuid": "58db85b2_e0803d8a",
+      "range": {
+        "startLine": 429,
+        "startChar": 19,
+        "endLine": 429,
+        "endChar": 27
+      },
+      "revId": "81198438d4512cb677d61d66fd0dc5d45cac1b61",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
