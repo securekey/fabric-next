@@ -23,6 +23,7 @@ package statekeyindex
 
 import (
 	"bytes"
+
 	"github.com/golang/protobuf/proto"
 
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
@@ -62,24 +63,23 @@ func MarshalMetadata(m *Metadata) ([]byte, error) {
 }
 
 // UnmarshalMetadata unmarshals the byte slice into a Metadata.
-func UnmarshalMetadata(b []byte) (*Metadata, error) {
+func UnmarshalMetadata(b []byte) (Metadata, error) {
 	buffer := proto.NewBuffer(b)
 
 	blockNumber, err := buffer.DecodeVarint()
 	if err != nil {
-		return nil, err
+		return Metadata{}, err
 	}
 
 	txNumber, err := buffer.DecodeVarint()
 	if err != nil {
-		return nil, err
+		return Metadata{}, err
 	}
 
-	m := Metadata{
+	return Metadata{
 		BlockNumber: blockNumber,
-		TxNumber: txNumber,
-	}
-	return &m, nil
+		TxNumber:    txNumber,
+	}, nil
 }
 
 // newStateKeyIndex constructs an instance of StateKeyIndex
@@ -136,6 +136,22 @@ func (s *stateKeyIndex) GetIterator(namespace string, startKey string, endKey st
 }
 
 func (s *stateKeyIndex) Close() {
+}
+
+func (s *stateKeyIndex) GetMetadata(key *CompositeKey) (Metadata, bool, error) {
+	data, err := s.db.Get(ConstructCompositeKey(key.Namespace, key.Key))
+	if err != nil {
+		return Metadata{}, false, err
+	}
+	if data != nil {
+		md, err := UnmarshalMetadata(data)
+		if err != nil {
+			return Metadata{}, false, err
+		} else {
+			return md, true, err
+		}
+	}
+	return Metadata{}, false, nil
 }
 
 func ConstructCompositeKey(ns string, key string) []byte {

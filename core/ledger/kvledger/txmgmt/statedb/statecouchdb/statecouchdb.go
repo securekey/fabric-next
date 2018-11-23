@@ -193,21 +193,19 @@ func (vdb *VersionedDB) GetDBType() string {
 // A bulk retrieve from couchdb is used to populate the cache.
 // committedVersions cache will be used for state validation of readsets
 // revisionNumbers cache will be used during commit phase for couchdb bulk updates
-func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
-	nsKeysMap := map[string][]string{}
+func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
+	nsKeysMap := make(map[string][]string)
 	committedDataCache := newVersionCache()
-	for _, compositeKey := range keys {
+	for _, compositeKey := range notPreloaded {
 		ns, key := compositeKey.Namespace, compositeKey.Key
 		committedDataCache.setVerAndRev(ns, key, nil, "")
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
 	}
-	nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
+	//nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
+	nsMetadataMap := make(map[string][]*couchdb.DocMetadata)
 	logger.Debugf("nsKeysMap=%s", nsKeysMap)
 	logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
-	if err != nil {
-		return err
-	}
 	for ns, nsMetadata := range nsMetadataMap {
 		for _, keyMetadata := range nsMetadata {
 			// TODO - why would version be ever zero if loaded from db?
@@ -219,6 +217,9 @@ func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) erro
 	vdb.verCacheLock.Lock()
 	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = committedDataCache
+	for key, height := range preLoaded {
+		vdb.committedDataCache.setVerAndRev(key.Namespace, key.Key, height, "")
+	}
 	return nil
 }
 
