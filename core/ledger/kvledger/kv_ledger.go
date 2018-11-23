@@ -96,6 +96,17 @@ func newKVLedger(
 	}
 	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
 
+	// pre populate non durable private data cache
+	blkInfo, err := blockStore.GetBlockchainInfo()
+	if err != nil {
+		logger.Warningf("Skipping pre populate of non-durable private data cache due to failed fetching BlockChainInfo [ledgerID:%s] - error : %s", ledgerID, err)
+	} else {
+		err = l.populateNonDurablePvtCache(blkInfo.Height)
+		if err != nil {
+			logger.Warningf("Skipping pre populate of non-durable private data cache on new KV ledger because it failed [ledgerID:%s] - error : %s", ledgerID, err)
+		}
+	}
+
 	go l.commitWatcher(btlPolicy)
 
 	return l, nil
@@ -171,6 +182,32 @@ func (l *kvLedger) recommitLostBlocks(firstBlockNum uint64, lastBlockNum uint64,
 			if err := r.CommitLostBlock(blockAndPvtdata); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+//populateNonDurablePvtCache will populate non durable private data cache
+func (l *kvLedger) populateNonDurablePvtCache(lastBlockNum uint64) error {
+	if lastBlockNum <= 0 {
+		logger.Debugf("block number is zero, nothing to do for non-durable cache")
+		return nil
+	}
+
+	var initBlockNum = lastBlockNum - ledgerconfig.GetKVCacheBlocksToLive()
+	if initBlockNum < 0 {
+		initBlockNum = 0
+	}
+
+	var err error
+	var blockAndPvtdata *ledger.BlockAndPvtData
+	for blockNumber := initBlockNum; blockNumber <= lastBlockNum; blockNumber++ {
+		if blockAndPvtdata, err = l.GetPvtDataAndBlockByNum(blockNumber, nil); err != nil {
+			return err
+		}
+		err = l.cacheNonDurableBlock(blockAndPvtdata)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
