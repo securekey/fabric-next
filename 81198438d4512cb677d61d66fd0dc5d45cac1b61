@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ecc07829_21b1c4f7",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 429,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T15:51:30Z",
+      "side": 1,
+      "message": "This isn\u0027t being called on every Commit so I would name the func differently.",
+      "range": {
+        "startLine": 429,
+        "startChar": 19,
+        "endLine": 429,
+        "endChar": 27
+      },
+      "revId": "81198438d4512cb677d61d66fd0dc5d45cac1b61",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
