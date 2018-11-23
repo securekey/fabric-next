@@ -19,12 +19,16 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valimpl"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/uber-go/tally"
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
+
+const (
+	checkpointCommitInterval = 1 // number of commits between checkpoints.
+	commitQueueLen           = checkpointCommitInterval
+)
 
 // LockBasedTxMgr a simple implementation of interface `txmgmt.TxMgr`.
 // This implementation uses a read-write lock to prevent conflicts between transaction simulation and committing
@@ -40,33 +44,49 @@ type LockBasedTxMgr struct {
 	StopWatchAccess  string
 	StopWatch1       tally.Stopwatch
 	StopWatch1Access string
+
+	commitCh   chan *current
+	commitDone chan *ledger.BlockAndPvtData
+	shutdownCh chan struct{}
+	doneCh     chan struct{}
 }
 
 type current struct {
-	block     *common.Block
-	batch     *privacyenabledstate.UpdateBatch
-	listeners []ledger.StateListener
+	blockAndPvtData *ledger.BlockAndPvtData
+	batch           *privacyenabledstate.UpdateBatch
+	listeners       []ledger.StateListener
 }
 
 func (c *current) blockNum() uint64 {
-	return c.block.Header.Number
+	return c.blockAndPvtData.Block.Header.Number
 }
 
 func (c *current) maxTxNumber() uint64 {
-	return uint64(len(c.block.Data.Data)) - 1
+	return uint64(len(c.blockAndPvtData.Block.Data.Data)) - 1
 }
 
 // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
 func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
-	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider) (*LockBasedTxMgr, error) {
+	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, commitDone chan *ledger.BlockAndPvtData) (*LockBasedTxMgr, error) {
 	db.Open()
-	txmgr := &LockBasedTxMgr{ledgerid: ledgerid, db: db, stateListeners: stateListeners}
+	txmgr := &LockBasedTxMgr{
+		ledgerid:       ledgerid,
+		db:             db,
+		stateListeners: stateListeners,
+		commitCh:       make(chan *current, commitQueueLen),
+		commitDone:     commitDone,
+		shutdownCh:     make(chan struct{}),
+		doneCh:         make(chan struct{}),
+	}
 	pvtstatePurgeMgr, err := pvtstatepurgemgmt.InstantiatePurgeMgr(ledgerid, db, btlPolicy, bookkeepingProvider)
 	if err != nil {
 		return nil, err
 	}
 	txmgr.pvtdataPurgeMgr = &pvtdataPurgeMgr{pvtstatePurgeMgr, false}
 	txmgr.validator = valimpl.NewStatebasedValidator(txmgr, db)
+
+	go txmgr.committer()
+
 	return txmgr, nil
 }
 
@@ -104,16 +124,15 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error {
-	block := blockAndPvtdata.Block
 	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
 	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
-	logger.Debugf("Validating new block with num trans = [%d]", len(block.Data.Data))
+	logger.Debugf("Validating new block with num trans = [%d]", len(blockAndPvtdata.Block.Data.Data))
 	batch, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
 		txmgr.reset()
 		return err
 	}
-	txmgr.current = &current{block: block, batch: batch}
+	txmgr.current = &current{blockAndPvtData: blockAndPvtdata, batch: batch}
 	if err := txmgr.invokeNamespaceListeners(); err != nil {
 		txmgr.reset()
 		return err
@@ -138,82 +157,21 @@ func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
 
 // Shutdown implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Shutdown() {
+
+	close(txmgr.doneCh)
+	<-txmgr.shutdownCh
+
 	txmgr.db.Close()
 }
 
 // Commit implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Commit() error {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_time").Start()
-		defer stopWatch.Stop()
-	}
 
-	// When using the purge manager for the first block commit after peer start, the asynchronous function
-	// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
-	// in advance for the next block
-	if !txmgr.pvtdataPurgeMgr.usedOnce {
-		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_PrepareForExpiringKeys_time").Start()
-		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum())
-		txmgr.pvtdataPurgeMgr.usedOnce = true
-		stopWatch.Stop()
-	}
-	defer func() {
-		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_defer_time").Start()
-		txmgr.clearCache()
-		txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(txmgr.current.blockNum() + 1)
-		logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
-		txmgr.reset()
-		stopWatch.Stop()
-
-	}()
-
-	logger.Debugf("Committing updates to state database")
 	if txmgr.current == nil {
 		panic("validateAndPrepare() method should have been called before calling commit()")
 	}
 
-	if err := txmgr.pvtdataPurgeMgr.RemoveNonDurable(
-		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
-		return err
-	}
-
-	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_time").Start()
-	if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
-		txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
-		stopWatch.Stop()
-		return err
-	}
-	stopWatch.Stop()
-
-	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_commitRWLock_time").Start()
-	txmgr.commitRWLock.Lock()
-	stopWatch.Stop()
-	defer txmgr.commitRWLock.Unlock()
-	logger.Debugf("Write lock acquired for committing updates to state database")
-	commitHeight := version.NewHeight(txmgr.current.blockNum(), txmgr.current.maxTxNumber())
-	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_ApplyPrivacyAwareUpdates_time").Start()
-	if err := txmgr.db.ApplyPrivacyAwareUpdates(txmgr.current.batch, commitHeight); err != nil {
-		stopWatch.Stop()
-		return err
-	}
-	stopWatch.Stop()
-
-	logger.Debugf("Updates committed to state database")
-
-	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_BlockCommitDone_time").Start()
-	// purge manager should be called (in this call the purge mgr removes the expiry entries from schedules) after committing to statedb
-	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
-		stopWatch.Stop()
-		return err
-	}
-	stopWatch.Stop()
-
-	stopWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_updateStateListeners_time").Start()
-	// In the case of error state listeners will not recieve this call - instead a peer panic is caused by the ledger upon receiveing
-	// an error from this function
-	txmgr.updateStateListeners()
-	stopWatch.Stop()
+	txmgr.commitCh <- txmgr.current
 	return nil
 }
 
@@ -252,6 +210,103 @@ func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvt
 	return txmgr.Commit()
 }
 
+//committer commits current batch from incoming commitCh items
+//TODO panic may not be required for some errors
+func (txmgr *LockBasedTxMgr) committer() {
+
+	const panicMsg = "commit failure"
+
+	for {
+		select {
+		case <-txmgr.doneCh:
+			close(txmgr.shutdownCh)
+			return
+		case tx := <-txmgr.commitCh:
+
+			var commitWatch tally.Stopwatch
+			if metrics.IsDebug() {
+				// Measure the whole
+				commitWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_time").Start()
+			}
+
+			// When using the purge manager for the first block commit after peer start, the asynchronous function
+			// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
+			// in advance for the next block
+			if !txmgr.pvtdataPurgeMgr.usedOnce {
+				stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_PrepareForExpiringKeys_time").Start()
+				txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(tx.blockNum())
+				txmgr.pvtdataPurgeMgr.usedOnce = true
+				stopWatch.Stop()
+			}
+
+			forExpiry := tx.blockNum() + 1
+
+			if err := txmgr.pvtdataPurgeMgr.RemoveNonDurable(
+				txmgr.current.batch.PvtUpdates, txmgr.current.batch.HashUpdates); err != nil {
+				logger.Errorf("failed to remove non durable : %s", err)
+				panic(panicMsg)
+			}
+
+			purgeWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_time").Start()
+			if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
+				tx.batch.PvtUpdates, tx.batch.HashUpdates); err != nil {
+				logger.Errorf("failed to delete expired and update booking : %s", err)
+				panic(panicMsg)
+				purgeWatch.Stop()
+			}
+			purgeWatch.Stop()
+
+			lockWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_commitRWLock_time").Start()
+			txmgr.commitRWLock.Lock()
+			lockWatch.Stop()
+			logger.Debugf("Write lock acquired for committing updates to state database")
+
+			commitHeight := version.NewHeight(tx.blockNum(), tx.maxTxNumber())
+			applyUpdateWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_ApplyPrivacyAwareUpdates_time").Start()
+			if err := txmgr.db.ApplyPrivacyAwareUpdates(tx.batch, commitHeight); err != nil {
+				logger.Errorf("failed to apply updates : %s", err)
+				txmgr.commitRWLock.Unlock()
+				applyUpdateWatch.Stop()
+				panic(panicMsg)
+			}
+			applyUpdateWatch.Stop()
+			logger.Debugf("Updates committed to state database")
+
+			// purge manager should be called (in this call the purge mgr removes the expiry entries from schedules) after committing to statedb
+			blkCommitWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_BlockCommitDone_time").Start()
+			if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
+				logger.Errorf("failed to purge expiry entries from schedules : %s", err)
+				txmgr.commitRWLock.Unlock()
+				blkCommitWatch.Stop()
+				panic(panicMsg)
+			}
+			blkCommitWatch.Stop()
+
+			// In the case of error state listeners will not recieve this call - instead a peer panic is caused by the ledger upon receiveing
+			// an error from this function
+			updateListnWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_updateStateListeners_time").Start()
+			txmgr.updateStateListeners(tx)
+			updateListnWatch.Stop()
+
+			//clean up and prepare for expiring keys
+			clearWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_defer_time").Start()
+			txmgr.clearCache()
+			txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(forExpiry)
+			logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
+			clearWatch.Stop()
+
+			txmgr.commitRWLock.Unlock()
+
+			//notify kv ledger that commit is done for given block and private data
+			txmgr.commitDone <- tx.blockAndPvtData
+
+			if metrics.IsDebug() {
+				commitWatch.Stop()
+			}
+		}
+	}
+}
+
 func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []string) ledger.StateUpdates {
 	stateupdates := make(ledger.StateUpdates)
 	for _, namespace := range namespaces {
@@ -267,12 +322,14 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
 	return stateupdates
 }
 
-func (txmgr *LockBasedTxMgr) updateStateListeners() {
+func (txmgr *LockBasedTxMgr) updateStateListeners(tx *current) {
+
 	if metrics.IsDebug() {
 		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_time").Start()
 		defer stopWatch.Stop()
 	}
-	for _, l := range txmgr.current.listeners {
+
+	for _, l := range tx.listeners {
 		l.StateCommitDone(txmgr.ledgerid)
 	}
 }
