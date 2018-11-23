@@ -62,6 +62,7 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 
 // GetState implements method in VersionedDB interface
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
+
 	//TODO Add call to the cache interface first before go to db
 	//TODO We will change it when Reza code is ready
 	return c.stateStore.GetState(namespace, key)
@@ -111,10 +112,36 @@ func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 	return c.stateStore.GetLatestSavePoint()
 }
 
+func (c *cachedStateStore) Accept(preoptimized map[*statedb.CompositeKey]*version.Height) {
+	c.bulkOptimizable.Accept(preoptimized)
+}
 func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
-	// TODO: Read height from local index.
-	// TODO: Populate height cache into next level (couchDB).
-	return c.bulkOptimizable.LoadCommittedVersions(keys)
+	stateidx, err := statekeyindex.NewProvider().OpenStateKeyIndex(c.ledgerID)
+	if err != nil {
+		return errors.Wrapf(err, "failed to open statekeyindex for %s: ", c.ledgerID)
+	}
+	preloaded := make(map[*statedb.CompositeKey]*version.Height)
+	notPreloaded := make([]*statedb.CompositeKey, 0)
+	for _, key := range keys {
+		metadata, err := stateidx.GetMetaData(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
+		}
+		if statekeyindex.NoMetadata != metadata {
+			preloaded[key] = version.NewHeight(metadata.BlockNumber, metadata.TxNumber)
+		} else {
+			notPreloaded = append(notPreloaded, key)
+		}
+	}
+	// TODO fix the temporal coupling between statecouchdb.LoadCommittedVersions()
+	// and statecouchdb.Accept() - the former is clearing its own internal cache
+	// while the latter isn't.
+	err = c.bulkOptimizable.LoadCommittedVersions(notPreloaded)
+	if err != nil {
+		return err
+	}
+	c.bulkOptimizable.Accept(preloaded)
+	return nil
 }
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)

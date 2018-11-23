@@ -23,6 +23,7 @@ package statekeyindex
 
 import (
 	"bytes"
+
 	"github.com/golang/protobuf/proto"
 
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
@@ -40,6 +41,9 @@ type Metadata struct {
 	BlockNumber uint64
 	TxNumber    uint64
 }
+
+// NoMetadata is used to signal that the Metadata for a CompositeKey could not be retrieved.
+var NoMetadata = Metadata{}
 
 type IndexUpdate struct {
 	Key   CompositeKey
@@ -62,24 +66,23 @@ func MarshalMetadata(m *Metadata) ([]byte, error) {
 }
 
 // UnmarshalMetadata unmarshals the byte slice into a Metadata.
-func UnmarshalMetadata(b []byte) (*Metadata, error) {
+func UnmarshalMetadata(b []byte) (Metadata, error) {
 	buffer := proto.NewBuffer(b)
 
 	blockNumber, err := buffer.DecodeVarint()
 	if err != nil {
-		return nil, err
+		return Metadata{}, err
 	}
 
 	txNumber, err := buffer.DecodeVarint()
 	if err != nil {
-		return nil, err
+		return Metadata{}, err
 	}
 
-	m := Metadata{
+	return Metadata{
 		BlockNumber: blockNumber,
-		TxNumber: txNumber,
-	}
-	return &m, nil
+		TxNumber:    txNumber,
+	}, nil
 }
 
 // newStateKeyIndex constructs an instance of StateKeyIndex
@@ -136,6 +139,17 @@ func (s *stateKeyIndex) GetIterator(namespace string, startKey string, endKey st
 }
 
 func (s *stateKeyIndex) Close() {
+}
+
+func (s *stateKeyIndex) GetMetaData(key *CompositeKey) (Metadata, error) {
+	data, err := s.db.Get(ConstructCompositeKey(key.Namespace, key.Key))
+	if err != nil {
+		return NoMetadata, err
+	}
+	if data != nil {
+		return UnmarshalMetadata(data)
+	}
+	return NoMetadata, nil
 }
 
 func ConstructCompositeKey(ns string, key string) []byte {
