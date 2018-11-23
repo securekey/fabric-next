@@ -119,6 +119,30 @@
     },
     {
       "key": {
+        "uuid": "bc39c0a7_e8c97ca7",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 423,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T19:42:01Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "6a5b0413_d69e1c01",
+      "range": {
+        "startLine": 423,
+        "startChar": 1,
+        "endLine": 423,
+        "endChar": 20
+      },
+      "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "fcba9624_21d8f6de",
         "filename": "core/ledger/kvledger/kv_ledger.go",
         "patchSetId": 6
@@ -201,6 +225,30 @@
       "writtenOn": "2018-11-23T18:21:56Z",
       "side": 1,
       "message": "should block until close completes.",
+      "range": {
+        "startLine": 156,
+        "startChar": 1,
+        "endLine": 156,
+        "endChar": 22
+      },
+      "revId": "869b0520c1d852a25a54dfab8266702f7695c390",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "148ec7cf_6678ebf7",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 156,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T19:42:01Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "5d8349ae_8ae03d34",
       "range": {
         "startLine": 156,
         "startChar": 1,
