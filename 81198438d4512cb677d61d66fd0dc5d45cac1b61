@@ -22,6 +22,30 @@
       "revId": "81198438d4512cb677d61d66fd0dc5d45cac1b61",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "166b1c54_30c391e8",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 429,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-23T16:00:55Z",
+      "side": 1,
+      "message": "This one is being called on after every commit actually\n\n\u0027OnCommitDone()\u0027??",
+      "parentUuid": "ecc07829_21b1c4f7",
+      "range": {
+        "startLine": 429,
+        "startChar": 19,
+        "endLine": 429,
+        "endChar": 27
+      },
+      "revId": "81198438d4512cb677d61d66fd0dc5d45cac1b61",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
