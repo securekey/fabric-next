@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "13190cf3_3c9a37d8",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 9
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T21:36:16Z",
+      "side": 1,
+      "message": "why 5?",
+      "range": {
+        "startLine": 37,
+        "startChar": 30,
+        "endLine": 37,
+        "endChar": 31
+      },
+      "revId": "e407d6d44b06afc23e90595177268cc02a2dafc8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
