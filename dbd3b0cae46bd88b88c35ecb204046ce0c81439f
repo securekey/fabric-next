@@ -71,6 +71,30 @@
     },
     {
       "key": {
+        "uuid": "dc0db7c8_fe535dd6",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-23T16:24:03Z",
+      "side": 1,
+      "message": "Not really. It was an \"artistic\" choice.\n\nI did it because of semantics: it seemed weird that we are creating a new struct but only returning a pointer to it. Why? Are we sharing it with anyone else? Will there be side effects if I mutate it somehow? A couple of stackoverflow answers seemed to agree with me so there\u0027s that.\n\nThis change can be reversed if you want.",
+      "parentUuid": "439700b9_b19bbc24",
+      "range": {
+        "startLine": 69,
+        "startChar": 34,
+        "endLine": 69,
+        "endChar": 42
+      },
+      "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "bfb17d73_cdbfb4d7",
         "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex_provider.go",
         "patchSetId": 1
