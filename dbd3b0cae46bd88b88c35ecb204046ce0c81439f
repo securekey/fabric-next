@@ -22,6 +22,75 @@
       "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "35616472_9d88630e",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 46,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T16:15:10Z",
+      "side": 1,
+      "message": "Should use a boolean return value instead.",
+      "range": {
+        "startLine": 45,
+        "startChar": 0,
+        "endLine": 46,
+        "endChar": 27
+      },
+      "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "439700b9_b19bbc24",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T16:15:10Z",
+      "side": 1,
+      "message": "I assume the pointer was removed as an optimization?",
+      "range": {
+        "startLine": 69,
+        "startChar": 34,
+        "endLine": 69,
+        "endChar": 42
+      },
+      "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bfb17d73_cdbfb4d7",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex_provider.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T16:15:10Z",
+      "side": 1,
+      "message": "metadata is a single word (D should not be capital).",
+      "range": {
+        "startLine": 34,
+        "startChar": 4,
+        "endLine": 34,
+        "endChar": 12
+      },
+      "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
