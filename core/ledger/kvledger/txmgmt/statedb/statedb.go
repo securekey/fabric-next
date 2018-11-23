@@ -61,6 +61,9 @@ type VersionedDB interface {
 //BulkOptimizable interface provides additional functions for
 //databases capable of batch operations
 type BulkOptimizable interface {
+	// Accept this pre-loaded collection of committed key-heights and merge it with internal cached bulk.
+	AcceptPreloadedCommittedVersions(preLoaded map[*CompositeKey]*version.Height)
+	// Load all heights from the data store in bulk and store in cache for later retrieval.
 	LoadCommittedVersions(keys []*CompositeKey) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()

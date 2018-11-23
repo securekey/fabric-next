@@ -189,6 +189,12 @@ func (vdb *VersionedDB) GetDBType() string {
 	return "couchdb"
 }
 
+func (vdb *VersionedDB) AcceptPreloadedCommittedVersions(preLoaded map[*statedb.CompositeKey]*version.Height) {
+	for key, height := range preLoaded {
+		vdb.committedDataCache.setVerAndRev(key.Namespace, key.Key, height, "")
+	}
+}
+
 // LoadCommittedVersions populates committedVersions and revisionNumbers into cache.
 // A bulk retrieve from couchdb is used to populate the cache.
 // committedVersions cache will be used for state validation of readsets
