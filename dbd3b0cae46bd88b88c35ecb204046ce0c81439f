@@ -48,6 +48,30 @@
     },
     {
       "key": {
+        "uuid": "f42f8b08_41210abb",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 46,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T16:54:49Z",
+      "side": 1,
+      "message": "A) You shouldn\u0027t use a comparison between a return value struct and a zero value struct to determine NotFound.\nB) Zero values can be real values.\nC) It\u0027s more explicit to return an ok or use a typed error for these situations.",
+      "parentUuid": "35616472_9d88630e",
+      "range": {
+        "startLine": 45,
+        "startChar": 0,
+        "endLine": 46,
+        "endChar": 27
+      },
+      "revId": "dbd3b0cae46bd88b88c35ecb204046ce0c81439f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "439700b9_b19bbc24",
         "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex.go",
         "patchSetId": 1
