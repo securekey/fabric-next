@@ -28,6 +28,28 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 )
 
+func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+	block := pvtdataAndBlock.Block
+	pvtData := pvtdataAndBlock.BlockPvtData
+	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
+
+	btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
+	_, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
+	if err != nil {
+		return err
+	}
+
+	pvtDataKeys, _, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
+	if err != nil {
+		return err
+	}
+
+	// Update the 'non-durable' cache only
+	statedb.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
+
+	return nil
+}
+
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
