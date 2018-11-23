@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "dce2303f_509cf619",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-23T16:44:35Z",
+      "side": 1,
+      "message": "A couple ideas:\nSetCommittedVersions\nPreloadCommittedVersions",
+      "range": {
+        "startLine": 115,
+        "startChar": 27,
+        "endLine": 115,
+        "endChar": 59
+      },
+      "revId": "7cf6239d2e3dea719af72b2ec55229bd4b4c4954",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
