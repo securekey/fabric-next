@@ -193,7 +193,7 @@ func (vdb *VersionedDB) GetDBType() string {
 // A bulk retrieve from couchdb is used to populate the cache.
 // committedVersions cache will be used for state validation of readsets
 // revisionNumbers cache will be used during commit phase for couchdb bulk updates
-func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
+func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
 	nsKeysMap := map[string][]string{}
 	committedDataCache := newVersionCache()
 	for _, compositeKey := range keys {
@@ -219,6 +219,9 @@ func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) erro
 	vdb.verCacheLock.Lock()
 	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = committedDataCache
+	for key, height := range preLoaded {
+		vdb.committedDataCache.setVerAndRev(key.Namespace, key.Key, height, "")
+	}
 	return nil
 }
 

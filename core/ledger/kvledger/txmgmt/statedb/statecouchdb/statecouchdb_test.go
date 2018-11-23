@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -444,6 +446,20 @@ func TestIsBulkOptimizable(t *testing.T) {
 	_, ok := db.(statedb.BulkOptimizable)
 	if !ok {
 		t.Fatal("state couch db is expected to implement interface statedb.BulkOptimizable")
+	}
+}
+
+func TestPreloadCommittedVersions(t *testing.T) {
+	preloaded := make(map[*statedb.CompositeKey]*version.Height)
+	preloaded[&statedb.CompositeKey{Namespace: "ns1", Key: "key1"}] = version.NewHeight(1, 4)
+	preloaded[&statedb.CompositeKey{Namespace: "ns2", Key: "key23"}] = version.NewHeight(200, 9823)
+	preloaded[&statedb.CompositeKey{Namespace: "ns3", Key: "key934"}] = version.NewHeight(349, 283)
+	db := &VersionedDB{committedDataCache: newVersionCache()}
+	db.LoadCommittedVersions([]*statedb.CompositeKey{}, preloaded)
+	for key, expected := range preloaded {
+		actual, found := db.GetCachedVersion(key.Namespace, key.Key)
+		assert.True(t, found, "failed to find key %+v", key)
+		assert.Equal(t, expected, actual, "expected height [%+v] for key [%+v] but instead got height [%+v]", actual, key, expected)
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
@@ -48,7 +50,12 @@ func NewCommonStorageDBProvider() (DBProvider, error) {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
 
-	return &CommonStorageDBProvider{statecachedstore.NewProvider(vdbProvider)}, nil
+	return &CommonStorageDBProvider{
+		statecachedstore.NewProvider(
+			vdbProvider,
+			statekeyindex.NewProvider(),
+		),
+	}, nil
 }
 
 // GetDBHandle implements function from interface DBProvider
@@ -107,7 +114,7 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 		})
 	}
 
-	err := bulkOptimizable.LoadCommittedVersions(pubKeys)
+	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*version.Height))
 	if err != nil {
 		return err
 	}

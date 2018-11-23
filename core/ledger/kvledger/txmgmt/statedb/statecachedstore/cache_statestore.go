@@ -25,9 +25,10 @@ type cachedStateStore struct {
 	bulkOptimizable statedb.BulkOptimizable
 	indexCapable    statedb.IndexCapable
 	ledgerID        string
+	stateKeyIndex   statekeyindex.StateKeyIndex
 }
 
-func newCachedBlockStore(stateStore statedb.VersionedDB, ledgerID string) *cachedStateStore {
+func newCachedBlockStore(stateStore statedb.VersionedDB, stateKeyIndex statekeyindex.StateKeyIndex, ledgerID string) *cachedStateStore {
 	bulkOptimizable, _ := stateStore.(statedb.BulkOptimizable)
 	indexCapable, _ := stateStore.(statedb.IndexCapable)
 
@@ -36,6 +37,7 @@ func newCachedBlockStore(stateStore statedb.VersionedDB, ledgerID string) *cache
 		ledgerID:        ledgerID,
 		bulkOptimizable: bulkOptimizable,
 		indexCapable:    indexCapable,
+		stateKeyIndex:   stateKeyIndex,
 	}
 	return &s
 }
@@ -62,6 +64,7 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 
 // GetState implements method in VersionedDB interface
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
+
 	//TODO Add call to the cache interface first before go to db
 	//TODO We will change it when Reza code is ready
 	return c.stateStore.GetState(namespace, key)
@@ -112,9 +115,30 @@ func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 }
 
 func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
-	// TODO: Read height from local index.
-	// TODO: Populate height cache into next level (couchDB).
-	return c.bulkOptimizable.LoadCommittedVersions(keys)
+	preloaded := make(map[*statedb.CompositeKey]*version.Height)
+	notPreloaded := make([]*statedb.CompositeKey, 0)
+	for _, key := range keys {
+		metadata, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
+		}
+		if found {
+			preloaded[key] = version.NewHeight(metadata.BlockNumber, metadata.TxNumber)
+			if metrics.IsDebug() {
+				metrics.RootScope.Counter("cachestatestore_loadcommittedversions_statekeyindex_hit").Inc(1)
+			}
+		} else {
+			notPreloaded = append(notPreloaded, key)
+			if metrics.IsDebug() {
+				metrics.RootScope.Counter("cachestatestore_loadcommittedversions_statekeyindex_miss").Inc(1)
+			}
+		}
+	}
+	err := c.bulkOptimizable.LoadCommittedVersions(notPreloaded, preloaded)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)
