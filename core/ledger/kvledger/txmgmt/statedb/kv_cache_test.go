@@ -119,13 +119,13 @@ func TestKVCachePrivate(t *testing.T) {
 		testutil.AssertEquals(t, theValidatedTx.IndexInBlock, validatedTx.IndexInBlock)
 	}
 
-	purgePrivate(0)
+	purgeNonDurable(0)
 
 	// Check that first key has been moved to LRU
 	theKey := fmt.Sprintf("%s-%d", "Key", 0)
 
-	// first key has been moved from expiring cache to LRU
-	pvtData, ok := kvCache.getPrivate(theKey)
+	// first key is stored in 'permanent' cache hence missing in 'non-durable'
+	pvtData, ok := kvCache.getNonDurable(theKey)
 	testutil.AssertEquals(t, ok, false)
 	testutil.AssertNil(t, pvtData)
 
@@ -135,7 +135,7 @@ func TestKVCachePrivate(t *testing.T) {
 
 	// Second key has not expired yet
 	theKey = fmt.Sprintf("%s-%d", "Key", 1)
-	pvtData, ok = kvCache.getPrivate(theKey)
+	pvtData, ok = kvCache.getNonDurable(theKey)
 	testutil.AssertEquals(t, ok, true)
 	testutil.AssertNotNil(t, pvtData)
 
@@ -143,10 +143,10 @@ func TestKVCachePrivate(t *testing.T) {
 	testutil.AssertEquals(t, ok, true)
 	testutil.AssertNotNil(t, validatedTx)
 
-	purgePrivate(1)
+	purgeNonDurable(1)
 
 	// second key has been removed from expired
-	pvtData, ok = kvCache.getPrivate(theKey)
+	pvtData, ok = kvCache.getNonDurable(theKey)
 	testutil.AssertEquals(t, ok, false)
 	testutil.AssertNil(t, pvtData)
 

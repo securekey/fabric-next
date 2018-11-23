@@ -43,7 +43,7 @@ const confBlockCacheSize = "ledger.blockchain.blockCacheSize"
 const confKVCacheSize = "ledger.blockchain.kvCacheSize"
 const confPvtDataCacheSize = "ledger.blockchain.pvtDataCacheSize"
 const confKVCacheBlocksToLive = "ledger.blockchain.kvCacheBlocksToLive"
-const confKVCacheExpiringSize = "ledger.blockchain.kvCacheExpiringSize"
+const confKVCacheNonDurableSize = "ledger.blockchain.kvCacheNonDurableSize"
 const confBlockStorage = "ledger.blockchain.blockStorage"
 const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
 const confHistoryStorage = "ledger.state.historyStorage"
@@ -320,11 +320,11 @@ func GetKVCacheBlocksToLive() uint64 {
 	return uint64(viper.GetInt(confKVCacheBlocksToLive))
 }
 
-func GetKVCacheExpiringSize() int {
-	if !viper.IsSet(confKVCacheExpiringSize) {
+func GetKVCacheNonDurableSize() int {
+	if !viper.IsSet(confKVCacheNonDurableSize) {
 		return 64 * 1024
 	}
-	return viper.GetInt(confKVCacheExpiringSize)
+	return viper.GetInt(confKVCacheNonDurableSize)
 }
 
 // GetTransientStoreProvider returns the transient storage provider specified in the configuration
