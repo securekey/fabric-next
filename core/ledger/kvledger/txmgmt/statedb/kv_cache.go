@@ -98,6 +98,8 @@ func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
+// UpdateKVCache will purge non durable data from the cache for the given blockNumber and update all caches with the
+// provided validatedTxOps, validatedPvtData and validatedPvtHashData and update leveldb indexes for the given ledgerID
 func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData, ledgerID string) error {
 	kvCacheMtx.Lock()
 	defer kvCacheMtx.Unlock()
@@ -182,6 +184,32 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 	}
 
 	return nil
+}
+
+// UpdateNonDurableKVCache will purge non durable data from the cache for the given blockNumber then update it with non durable
+// private data only (validatedPvtData and validatedPvtHashData)
+func UpdateNonDurableKVCache(blockNumber uint64, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) {
+	kvCacheMtx.Lock()
+	defer kvCacheMtx.Unlock()
+
+	purgeNonDurable(blockNumber)
+
+	for _, v := range validatedPvtData {
+		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
+
+		newTx := v
+		kvCache.PutPrivateNonDurable(&newTx)
+
+	}
+
+	for _, v := range validatedPvtHashData {
+		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
+		newTx := v
+		kvCache.PutPrivateNonDurable(&newTx)
+	}
+
 }
 
 func GetLeveLDBIterator(namespace, startKey, endKey, ledgerID string) (*leveldbhelper.Iterator, error) {
@@ -312,6 +340,8 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 	}
 }
 
+// PutPrivate will add the validateTx to the 'permanent' lru cache (if level2 Block height > level1 Block)
+// or to the 'non-durable' cache otherwise
 func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -330,6 +360,19 @@ func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
 	}
 
 	// Otherwise, data goes to 'non-durable' cache
+	c.addNonDurable(validatedTx)
+}
+
+// PutPrivateNonDurable will add validatedTx data to the 'non-durable' cache only
+func (c *KVCache) PutPrivateNonDurable(validatedTx *ValidatedPvtData) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.addNonDurable(validatedTx)
+}
+
+func (c *KVCache) addNonDurable(validatedTx *ValidatedPvtData) {
+	// data goes to 'non-durable' cache
 	exitingKeyVal, found := c.getNonDurable(validatedTx.Key)
 	// Add to the cache if the existing version is older
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
