@@ -34,7 +34,7 @@ import (
 
 var logger = flogging.MustGetLogger("kvledger")
 
-const commitWatcherQueueLen = 5
+const commitWatcherQueueLen = 1
 
 // KVLedger provides an implementation of `ledger.PeerLedger`.
 // This implementation provides a key-value based data model
