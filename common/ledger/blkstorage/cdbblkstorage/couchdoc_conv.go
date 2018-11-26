@@ -25,7 +25,6 @@ import (
 const (
 	idField              = "_id"
 	lastBlockNumberField = "lastBlockNumber"
-	isChainEmptyField    = "chainEmpty"
 	blockHashField       = "hash"
 	blockTxnIDsField     = "transaction_ids"
 	blockHashIndexName   = "by_hash"
@@ -35,6 +34,7 @@ const (
 	blockAttachmentName  = "block"
 	blockKeyPrefix       = ""
 	blockHeaderField     = "header"
+	numIndexDocs         = 2
 )
 
 const blockHashIndexDef = `
@@ -106,20 +106,6 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 
 var errorNoTxID = errors.New("missing transaction ID")
 
-func checkpointInfoToCouchDoc(i *checkpointInfo) (*couchdb.CouchDoc, error) {
-	jsonMap := make(jsonValue)
-
-	jsonMap[idField] = blkMgrInfoKey
-	jsonMap[lastBlockNumberField] = strconv.FormatUint(i.lastBlockNumber, 10)
-	jsonMap[isChainEmptyField] = strconv.FormatBool(i.isChainEmpty)
-	jsonBytes, err := jsonMap.toBytes()
-	if err != nil {
-		return nil, err
-	}
-	couchDoc := &couchdb.CouchDoc{JSONValue: jsonBytes}
-	return couchDoc, nil
-}
-
 func blockToTransactionIDsField(block *common.Block) ([]string, error) {
 	blockData := block.GetData()
 
@@ -188,11 +174,9 @@ func couchDocToCheckpointInfo(doc *couchdb.CouchDoc) (*checkpointInfo, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "couchDocToJSON return error")
 	}
-	isChainEmptyValue, _ := v[isChainEmptyField].(string)
 	lastBlockNumberValue, _ := v[lastBlockNumberField].(string)
-	isChainEmpty, _ := strconv.ParseBool(isChainEmptyValue)
 	lastBlockNumber, _ := strconv.ParseUint(lastBlockNumberValue, 10, 64)
-	return &checkpointInfo{isChainEmpty, lastBlockNumber}, nil
+	return &checkpointInfo{false, lastBlockNumber}, nil
 
 }
 
