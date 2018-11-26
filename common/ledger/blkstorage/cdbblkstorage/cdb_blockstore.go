@@ -29,36 +29,34 @@ import (
 )
 
 type cdbBlockStore struct {
-	blockStore        *couchdb.CouchDatabase
-	ledgerID          string
-	cpInfoSig         chan struct{}
-	cpInfoMtx         *sync.RWMutex
-	cpInfo            *checkpointInfo
-	cp                *checkpoint
-	bcInfo            atomic.Value
-	blockIndexEnabled bool
+	blockStore *couchdb.CouchDatabase
+	ledgerID   string
+	cpInfoSig  chan struct{}
+	cpInfoMtx  *sync.RWMutex
+	cpInfo     *checkpointInfo
+	cp         *checkpoint
+	bcInfo     atomic.Value
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
-func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, blockIndexEnabled bool) *cdbBlockStore {
+func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBlockStore {
 	cp := newCheckpoint(blockStore)
 
-	cdbBlkStore := &cdbBlockStore{
-		blockStore:        blockStore,
-		ledgerID:          ledgerID,
-		cpInfoSig:         make(chan struct{}),
-		cpInfoMtx:         &sync.RWMutex{},
-		cp:                cp,
-		blockIndexEnabled: blockIndexEnabled,
+	cdbBlockStore := &cdbBlockStore{
+		blockStore: blockStore,
+		ledgerID:   ledgerID,
+		cpInfoSig:  make(chan struct{}),
+		cpInfoMtx:  &sync.RWMutex{},
+		cp:         cp,
 	}
 
 	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
-	cpInfo, err := cdbBlkStore.cp.getCheckpointInfo()
+	cpInfo, err := cdbBlockStore.cp.getCheckpointInfo()
 	if err != nil {
 		panic(fmt.Sprintf("Could not get block file info for current block file from db: %s", err))
 	}
 	if ledgerconfig.IsCommitter() {
-		err = cdbBlkStore.cp.saveCurrentInfo(cpInfo)
+		err = cdbBlockStore.cp.saveCurrentInfo(cpInfo)
 		if err != nil {
 			panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
 		}
@@ -68,12 +66,12 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, blockI
 	if err != nil {
 		panic(fmt.Sprintf("Unable to retrieve blockchain info from DB: %s", err))
 	}
-	cdbBlkStore.bcInfo.Store(bi)
+	cdbBlockStore.bcInfo.Store(bi)
 
 	// Update the manager with the checkpoint info and the file writer
-	cdbBlkStore.cpInfo = cpInfo
+	cdbBlockStore.cpInfo = cpInfo
 
-	return cdbBlkStore
+	return cdbBlockStore
 }
 
 // AddBlock adds a new block
@@ -181,16 +179,10 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 			"` + blockHeaderField + `.` + blockHashField + `": {
 				"$eq": "%s"
 			}
-		}%s
+		},
+		"use_index": ["_design/` + blockHashIndexDoc + `", "` + blockHashIndexName + `"]
 	}`
-
-	addHashIndex := ""
-	if s.blockIndexEnabled {
-		addHashIndex += `,
-		"use_index": ["_design/` + blockHashIndexDoc + `", "` + blockHashIndexName + `"]`
-	}
-
-	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, blockHashHex, addHashIndex))
+	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, blockHashHex))
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
@@ -302,16 +294,10 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 					"$eq": "%s"
 				}
 			}
-		}%s
+		},
+		"use_index": ["_design/` + blockTxnIndexDoc + `", "` + blockTxnIndexName + `"]
 	}`
-
-	addTxnIndex := ""
-	if s.blockIndexEnabled {
-		addTxnIndex += `,
-		"use_index": ["_design/` + blockTxnIndexDoc + `", "` + blockTxnIndexName + `"]`
-	}
-
-	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, txID, addTxnIndex))
+	block, err := retrieveBlockQuery(s.blockStore, fmt.Sprintf(queryFmt, txID))
 	if err != nil {
 		// note: allow ErrNotFoundInIndex to pass through
 		return nil, err
