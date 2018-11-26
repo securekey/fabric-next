@@ -17,14 +17,19 @@ import (
 )
 
 const (
-	lsccNamespace = "lscc"
+	loadCommittedVersionsQueueLen = 1
 )
 
 type cachedStateStore struct {
-	stateStore      statedb.VersionedDB
-	bulkOptimizable statedb.BulkOptimizable
-	indexCapable    statedb.IndexCapable
-	ledgerID        string
+	stateStore              statedb.VersionedDB
+	bulkOptimizable         statedb.BulkOptimizable
+	indexCapable            statedb.IndexCapable
+	ledgerID                string
+	loadCommittedVersionsCh chan *loadCommittedVersionsData
+}
+
+type loadCommittedVersionsData struct {
+	keys []*statedb.CompositeKey
 }
 
 func newCachedBlockStore(stateStore statedb.VersionedDB, ledgerID string) *cachedStateStore {
@@ -32,12 +37,33 @@ func newCachedBlockStore(stateStore statedb.VersionedDB, ledgerID string) *cache
 	indexCapable, _ := stateStore.(statedb.IndexCapable)
 
 	s := cachedStateStore{
-		stateStore:      stateStore,
-		ledgerID:        ledgerID,
-		bulkOptimizable: bulkOptimizable,
-		indexCapable:    indexCapable,
+		stateStore:              stateStore,
+		ledgerID:                ledgerID,
+		bulkOptimizable:         bulkOptimizable,
+		indexCapable:            indexCapable,
+		loadCommittedVersionsCh: make(chan *loadCommittedVersionsData, loadCommittedVersionsQueueLen),
 	}
+
+	go s.loadCommittedVersions()
+
 	return &s
+}
+
+// loadCommittedVersions go routine to load committed versions
+func (c *cachedStateStore) loadCommittedVersions() {
+	const panicMsg = "load committed versions failure"
+
+	for {
+		select {
+		case data := <-c.loadCommittedVersionsCh:
+			logger.Debugf("load committed versions for keys [%v]", data.keys)
+			err := c.bulkOptimizable.LoadCommittedVersions(data.keys)
+			if err != nil {
+				logger.Errorf("LoadCommittedVersions failed [%v, %s]", data.keys, err)
+				panic(panicMsg)
+			}
+		}
+	}
 }
 
 // Open implements method in VersionedDB interface
@@ -114,7 +140,8 @@ func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
 	// TODO: Read height from local index.
 	// TODO: Populate height cache into next level (couchDB).
-	return c.bulkOptimizable.LoadCommittedVersions(keys)
+	c.loadCommittedVersionsCh <- &loadCommittedVersionsData{keys: keys}
+	return nil
 }
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)
