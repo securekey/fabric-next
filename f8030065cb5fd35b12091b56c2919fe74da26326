@@ -37,6 +37,24 @@
     },
     {
       "key": {
+        "uuid": "ab65126e_ad604d30",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T20:33:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "e4277fc6_7f491687",
+      "revId": "f8030065cb5fd35b12091b56c2919fe74da26326",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "f1f9d00c_2668ff83",
         "filename": "core/ledger/kvledger/kv_ledger.go",
         "patchSetId": 2
@@ -66,6 +84,24 @@
       "side": 1,
       "message": "you mean do only the first part of func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) \n\nand ignore the second part? (ie don\u0027t execute:\n\tif !ledgerconfig.IsCommitter() {\n\t\t// Update pvt data cache\n\t\tpvtCache, err :\u003d getPrivateDataCache(l.ledgerID)\n\t\tif err !\u003d nil {\n\t\t\treturn err\n\t\t}\n\t\terr \u003d pvtCache.Prepare(block.Header.Number, validPvtData)\n\t\tif err !\u003d nil {\n\t\t\treturn err\n\t\t}\n\t\terr \u003d pvtCache.Commit()\n\t\tif err !\u003d nil {\n\t\t\treturn err\n\t\t}\n\t}\n)",
       "parentUuid": "f1f9d00c_2668ff83",
+      "revId": "f8030065cb5fd35b12091b56c2919fe74da26326",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "13d2496e_c070df7c",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 206,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T20:33:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "6c833a6b_9ffb6879",
       "revId": "f8030065cb5fd35b12091b56c2919fe74da26326",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
