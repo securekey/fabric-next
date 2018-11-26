@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "8bf1ad7a_27b0f63d",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 203,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:59:04Z",
+      "side": 1,
+      "message": "these two variables must be declared outside the if block",
+      "range": {
+        "startLine": 202,
+        "startChar": 1,
+        "endLine": 203,
+        "endChar": 44
+      },
+      "revId": "3d35dd3ee9b19a1dd9d701fc874c13ca80a86c58",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
