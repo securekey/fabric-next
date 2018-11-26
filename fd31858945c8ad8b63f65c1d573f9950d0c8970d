@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "834f58d6_e15d5d37",
+        "filename": "core/ledger/kvledger/cache.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:43:19Z",
+      "side": 1,
+      "message": "it was from a mid-way refactoring, they\u0027re not needed anymore. will remove them..",
+      "parentUuid": "7adc31e8_eeface7e",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "764a1287_5d0429fe",
         "filename": "core/ledger/kvledger/kv_ledger.go",
         "patchSetId": 3
@@ -30,6 +48,24 @@
       "writtenOn": "2018-11-26T21:22:33Z",
       "side": 1,
       "message": "non need to declare err",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "08357075_35cf32d5",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 192,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:43:19Z",
+      "side": 1,
+      "message": "will remove",
+      "parentUuid": "764a1287_5d0429fe",
       "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
@@ -53,6 +89,24 @@
     },
     {
       "key": {
+        "uuid": "c78e1ddb_1b0875fa",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 194,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:43:19Z",
+      "side": 1,
+      "message": "will update",
+      "parentUuid": "0a99dcf8_fdb8ab25",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "2aa22101_eea276d8",
         "filename": "core/ledger/kvledger/kv_ledger.go",
         "patchSetId": 3
@@ -64,6 +118,24 @@
       "writtenOn": "2018-11-26T21:22:33Z",
       "side": 1,
       "message": "no need to declare blockAndPvtdata",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "bdd48d22_410d231e",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 197,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:43:19Z",
+      "side": 1,
+      "message": "it is used in an if assignment at line 203 below, the content of the variable will be lost outside of the if statement",
+      "parentUuid": "2aa22101_eea276d8",
       "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
@@ -87,6 +159,24 @@
     },
     {
       "key": {
+        "uuid": "796e46ed_d475a0fa",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 206,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:43:19Z",
+      "side": 1,
+      "message": "will refactor",
+      "parentUuid": "6eab9437_dfdedc9f",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "f1dc9ac2_72bfc084",
         "filename": "core/ledger/kvledger/kv_ledger.go",
         "patchSetId": 3
@@ -98,6 +188,24 @@
       "writtenOn": "2018-11-26T21:22:33Z",
       "side": 1,
       "message": "return nil",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "111456ac_76b852e2",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 211,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-26T21:43:19Z",
+      "side": 1,
+      "message": "will replace",
+      "parentUuid": "f1dc9ac2_72bfc084",
       "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
