@@ -555,21 +555,19 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 }
 
 // EnsureFullCommit calls _ensure_full_commit for explicit fsync
-func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) {
+func (dbclient *CouchDatabase) EnsureFullCommit() error {
 
 	if metrics.IsDebug() {
 		stopWatch := metrics.RootScope.Timer("couchdb_ensureFullCommit_time").Start()
 		defer stopWatch.Stop()
 	}
-	logger.Debugf("Entering EnsureFullCommit()")
 
 	dbResponse, err := dbclient.dbOperation("/_ensure_full_commit")
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	if dbResponse.Ok == true {
-		logger.Debugf("_ensure_full_commit database %s ", dbclient.DBName)
+	if !dbResponse.Ok {
+		return errors.New("ensure full commit failed")
 	}
 
 	//Check to see if autoWarmIndexes is enabled
@@ -587,15 +585,7 @@ func (dbclient *CouchDatabase) EnsureFullCommit() (*DBOperationResponse, error) 
 
 	}
 
-	logger.Debugf("Exiting EnsureFullCommit()")
-
-	if dbResponse.Ok == true {
-
-		return dbResponse, nil
-
-	}
-
-	return dbResponse, fmt.Errorf("Error syncing database")
+	return nil
 }
 
 func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, error) {
@@ -996,7 +986,7 @@ func populateCouchDocFromMultipartReader(multipartReader *multipart.Reader, couc
 //startKey and endKey can also be empty strings.  If startKey and endKey are empty, all documents are returned
 //This function provides a limit option to specify the max number of entries and is supplied by config.
 //Skip is reserved for possible future future use.
-func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip int) ([]*QueryResult, error) {
+func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip int, descending bool) ([]*QueryResult, error) {
 
 	logger.Debugf("Entering ReadDocRange()  startKey=%s, endKey=%s", startKey, endKey)
 
@@ -1005,7 +995,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 	var bulkQueryIDs []string
 	resultsMap := make(map[string]*QueryResult)
 
-	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip)
+	jsonResponse, err := dbclient.rangeQuery(startKey, endKey, limit, skip, descending)
 	if err != nil {
 		return nil, err
 	}
@@ -1058,7 +1048,7 @@ func (dbclient *CouchDatabase) ReadDocRange(startKey, endKey string, limit, skip
 
 }
 
-func (dbclient *CouchDatabase) rangeQuery(startKey, endKey string, limit, skip int) (*RangeQueryResponse, error) {
+func (dbclient *CouchDatabase) rangeQuery(startKey, endKey string, limit, skip int, descending bool) (*RangeQueryResponse, error) {
 	rangeURL, err := url.Parse(dbclient.CouchInstance.conf.URL)
 	if err != nil {
 		logger.Errorf("URL parse error: %s", err.Error())
@@ -1070,6 +1060,7 @@ func (dbclient *CouchDatabase) rangeQuery(startKey, endKey string, limit, skip i
 	queryParms.Set("limit", strconv.Itoa(limit))
 	queryParms.Add("skip", strconv.Itoa(skip))
 	queryParms.Add("include_docs", "true")
+	queryParms.Add("descending", fmt.Sprintf("%t", descending))
 	queryParms.Add("inclusive_end", "false") // endkey should be exclusive to be consistent with goleveldb
 
 	//Append the startKey if provided

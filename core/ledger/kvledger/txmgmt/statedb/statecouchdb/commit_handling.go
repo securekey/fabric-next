@@ -6,8 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 package statecouchdb
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/pkg/errors"
 
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -169,10 +170,9 @@ func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
 }
 
 func (f *nsFlusher) execute() error {
-	dbResponse, err := f.db.EnsureFullCommit()
-	if err != nil || dbResponse.Ok != true {
-		logger.Errorf("Failed to perform full commit\n")
-		return errors.New("Failed to perform full commit")
+	err := f.db.EnsureFullCommit()
+	if err != nil {
+		return errors.WithMessage(err, "Failed to perform full commit")
 	}
 	return nil
 }

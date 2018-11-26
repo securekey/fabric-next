@@ -343,7 +343,7 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 		}
 		return nil, err
 	}
-	queryResult, err := db.ReadDocRange(startKey, endKey, queryLimit, querySkip)
+	queryResult, err := db.ReadDocRange(startKey, endKey, queryLimit, querySkip, false)
 	if err != nil {
 		logger.Debugf("Error calling ReadDocRange(): %s\n", err.Error())
 		return nil, err

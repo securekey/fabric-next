@@ -114,8 +114,8 @@ func (s *Store) SetUnderConstructionFlag(ledgerID string) error {
 		return errors.WithMessage(err, "update of metadata in CouchDB failed [%s]")
 	}
 
-	dbResponse, err := s.db.EnsureFullCommit()
-	if err != nil || dbResponse.Ok != true {
+	err = s.db.EnsureFullCommit()
+	if err != nil {
 		logger.Errorf("full commit failed [%s]", err)
 		return errors.WithMessage(err, "full commit failed")
 	}
@@ -137,9 +137,8 @@ func (s *Store) UnsetUnderConstructionFlag() error {
 		return errors.WithMessage(err, "update of metadata in CouchDB failed [%s]")
 	}
 
-	dbResponse, err := s.db.EnsureFullCommit()
-	if err != nil || dbResponse.Ok != true {
-		logger.Errorf("full commit failed [%s]", err)
+	err = s.db.EnsureFullCommit()
+	if err != nil {
 		return errors.WithMessage(err, "full commit failed")
 	}
 

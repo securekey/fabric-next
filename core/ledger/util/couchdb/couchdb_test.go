@@ -178,7 +178,7 @@ func TestBadCouchDBInstance(t *testing.T) {
 	testutil.AssertError(t, err, "Error should have been thrown with VerifyCouchConfig and invalid connection")
 
 	//Test EnsureFullCommit with bad connection
-	_, err = badDB.EnsureFullCommit()
+	err = badDB.EnsureFullCommit()
 	testutil.AssertError(t, err, "Error should have been thrown with EnsureFullCommit and invalid connection")
 
 	//Test DropDatabase with bad connection
@@ -198,7 +198,7 @@ func TestBadCouchDBInstance(t *testing.T) {
 	testutil.AssertError(t, err, "Error should have been thrown with DeleteDoc and invalid connection")
 
 	//Test ReadDocRange with bad connection
-	_, err = badDB.ReadDocRange("1", "2", 1000, 0)
+	_, err = badDB.ReadDocRange("1", "2", 1000, 0, false)
 	testutil.AssertError(t, err, "Error should have been thrown with ReadDocRange and invalid connection")
 
 	//Test QueryDocuments with bad connection
@@ -272,7 +272,7 @@ func TestDBCreateEnsureFullCommit(t *testing.T) {
 	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
 
 	//Ensure a full commit
-	_, commiterr := db.EnsureFullCommit()
+	commiterr := db.EnsureFullCommit()
 	testutil.AssertNoError(t, commiterr, fmt.Sprintf("Error when trying to ensure a full commit"))
 }
 
@@ -719,7 +719,7 @@ func TestPrefixScan(t *testing.T) {
 	_, _, geterr := db.ReadDoc(endKey)
 	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to get lastkey"))
 
-	results, geterr := db.ReadDocRange(startKey, endKey, 1000, 0)
+	results, geterr := db.ReadDocRange(startKey, endKey, 1000, 0, false)
 	testutil.AssertNoError(t, geterr, fmt.Sprintf("Error when trying to perform a range scan"))
 	testutil.AssertEquals(t, len(results), 3)
 	testutil.AssertEquals(t, results[0].ID, string(0)+string(10)+string(0))
@@ -1262,7 +1262,7 @@ func TestRichQuery(t *testing.T) {
 	testutil.AssertEquals(t, len(queryResult), 6)
 
 	//Test a range query ---------------------------------------------------------------------------------------------
-	queryResult, err = db.ReadDocRange("marble02", "marble06", 10000, 0)
+	queryResult, err = db.ReadDocRange("marble02", "marble06", 10000, 0, false)
 	testutil.AssertNoError(t, err, fmt.Sprintf("Error when attempting to execute a range query"))
 
 	//There should be 4 results
