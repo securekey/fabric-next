@@ -198,27 +198,27 @@ func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeK
 	committedDataCache := newVersionCache()
 	for _, compositeKey := range notPreloaded {
 		ns, key := compositeKey.Namespace, compositeKey.Key
-		committedDataCache.setVerAndRev(ns, key, nil, "")
+		committedDataCache.setVer(ns, key, nil)
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
 	}
 	//nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
-	nsMetadataMap := make(map[string][]*couchdb.DocMetadata)
-	logger.Debugf("nsKeysMap=%s", nsKeysMap)
-	logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
-	for ns, nsMetadata := range nsMetadataMap {
-		for _, keyMetadata := range nsMetadata {
-			// TODO - why would version be ever zero if loaded from db?
-			if len(keyMetadata.Version) != 0 {
-				committedDataCache.setVerAndRev(ns, keyMetadata.ID, createVersionHeightFromVersionString(keyMetadata.Version), keyMetadata.Rev)
-			}
-		}
-	}
+	//nsMetadataMap := make(map[string][]*couchdb.DocMetadata)
+	//logger.Debugf("nsKeysMap=%s", nsKeysMap)
+	//logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
+	//for ns, nsMetadata := range nsMetadataMap {
+	//	for _, keyMetadata := range nsMetadata {
+	//		// TODO - why would version be ever zero if loaded from db?
+	//		if len(keyMetadata.Version) != 0 {
+	//			committedDataCache.setVerAndRev(ns, keyMetadata.ID, createVersionHeightFromVersionString(keyMetadata.Version), keyMetadata.Rev)
+	//		}
+	//	}
+	//}
 	vdb.verCacheLock.Lock()
 	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = committedDataCache
 	for key, height := range preLoaded {
-		vdb.committedDataCache.setVerAndRev(key.Namespace, key.Key, height, "")
+		vdb.committedDataCache.setVer(key.Namespace, key.Key, height)
 	}
 	return nil
 }

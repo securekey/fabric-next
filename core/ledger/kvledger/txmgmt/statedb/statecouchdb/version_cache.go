@@ -42,12 +42,28 @@ func (c *versionsCache) getVersion(ns, key string) (*version.Height, bool) {
 // the bulkload in anticipation, because, in a typical workload, it is expected to be a good overlap
 // between the read-set and the write-set. During the commit, we load missing revisions for
 // any additional writes in the write-sets corresponding to which there were no reads in the read-sets
-func (c *versionsCache) setVerAndRev(ns, key string, ver *version.Height, rev string) {
+//func (c *versionsCache) setVerAndRev(ns, key string, ver *version.Height, rev string) {
+//	_, ok := c.vers[ns]
+//	if !ok {
+//		c.vers[ns] = make(nsVersions)
+//		c.revs[ns] = make(nsRevisions)
+//	}
+//	c.vers[ns][key] = ver
+//	c.revs[ns][key] = rev
+//}
+
+func (c *versionsCache) setVer(ns, key string, ver *version.Height) {
 	_, ok := c.vers[ns]
 	if !ok {
 		c.vers[ns] = make(nsVersions)
-		c.revs[ns] = make(nsRevisions)
 	}
 	c.vers[ns][key] = ver
+}
+
+func (c *versionsCache) setRev(ns, key string, rev string) {
+	_, ok := c.revs[ns]
+	if !ok {
+		c.revs[ns] = make(nsRevisions)
+	}
 	c.revs[ns][key] = rev
 }
