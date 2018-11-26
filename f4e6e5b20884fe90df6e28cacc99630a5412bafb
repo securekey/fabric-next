@@ -22,6 +22,30 @@
       "revId": "f4e6e5b20884fe90df6e28cacc99630a5412bafb",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f2b45226_4cc63523",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 117,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-26T18:45:28Z",
+      "side": 1,
+      "message": "Yes, I noticed that afterwards, thanks",
+      "parentUuid": "1f813fd5_f34fcd3a",
+      "range": {
+        "startLine": 117,
+        "startChar": 27,
+        "endLine": 117,
+        "endChar": 48
+      },
+      "revId": "f4e6e5b20884fe90df6e28cacc99630a5412bafb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
