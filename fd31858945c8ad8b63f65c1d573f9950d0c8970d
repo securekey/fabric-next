@@ -1,0 +1,123 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7adc31e8_eeface7e",
+        "filename": "core/ledger/kvledger/cache.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "Any reason to return block and txpvtdata?",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "764a1287_5d0429fe",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 192,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "non need to declare err",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "0a99dcf8_fdb8ab25",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 194,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "more explicit message such as  \"block number is zero, nothing to do for non-durable cache\"",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "2aa22101_eea276d8",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 197,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "no need to declare blockAndPvtdata",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "6eab9437_dfdedc9f",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 206,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "return values not used except for error",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f1dc9ac2_72bfc084",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 211,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "return nil",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "17733d60_8dd35a71",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 210,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T21:22:33Z",
+      "side": 1,
+      "message": "You are missing check for non-durable before PutPrivateNotDurable \nCondition: validatedTx.Level2ExpiringBlock \u003c\u003d validatedTx.Level1ExpiringBlock",
+      "revId": "fd31858945c8ad8b63f65c1d573f9950d0c8970d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
