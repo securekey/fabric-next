@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ba4072df_413a1454",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T18:21:26Z",
+      "side": 1,
+      "message": "commit watcher should be in the end",
+      "revId": "f8030065cb5fd35b12091b56c2919fe74da26326",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "f1f9d00c_2668ff83",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 206,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-26T18:21:26Z",
+      "side": 1,
+      "message": "An optimization of this would be to cache non-durable only. Right now you are caching everything (state, durable and non-durable private data)\n for the last BTL blocks.",
+      "revId": "f8030065cb5fd35b12091b56c2919fe74da26326",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
