@@ -47,7 +47,7 @@ func TestNotCreateCouchGlobalChangesDB(t *testing.T) {
 	db := CouchDatabase{CouchInstance: couchInstance, DBName: "_global_changes"}
 
 	//Retrieve the info for the new database and make sure the name matches
-	_, _, errdb := db.GetDatabaseInfo()
+	_, errdb := db.GetDatabaseInfo()
 	testutil.AssertNotNil(t, errdb)
 }
 

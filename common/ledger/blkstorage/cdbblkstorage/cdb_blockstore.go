@@ -28,47 +28,40 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 )
 
+type cdbBlock struct {
+	ID  string
+	Doc *couchdb.CouchDoc
+}
+
 type cdbBlockStore struct {
-	blockStore *couchdb.CouchDatabase
-	ledgerID   string
-	cpInfoSig  chan struct{}
-	cpInfoMtx  *sync.RWMutex
-	cpInfo     *checkpointInfo
-	cp         *checkpoint
-	bcInfo     atomic.Value
+	blockStore        *couchdb.CouchDatabase
+	ledgerID          string
+	cpInfo            checkpointInfo
+	pendingBlock      cdbBlock
+	cpInfoSig         chan struct{}
+	cpInfoMtx         *sync.RWMutex
+	bcInfo            atomic.Value
 }
 
 // newCDBBlockStore constructs block store based on CouchDB
 func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string) *cdbBlockStore {
-	cp := newCheckpoint(blockStore)
-
 	cdbBlockStore := &cdbBlockStore{
-		blockStore: blockStore,
-		ledgerID:   ledgerID,
-		cpInfoSig:  make(chan struct{}),
-		cpInfoMtx:  &sync.RWMutex{},
-		cp:         cp,
+		blockStore:        blockStore,
+		ledgerID:          ledgerID,
+		cpInfoSig:         make(chan struct{}),
+		cpInfoMtx:         &sync.RWMutex{},
 	}
 
-	// cp = checkpointInfo, retrieve from the database the last block number that was written to that db.
-	cpInfo, err := cdbBlockStore.cp.getCheckpointInfo()
+	cpInfo, err := retrieveCheckpointInfo(blockStore)
 	if err != nil {
-		panic(fmt.Sprintf("Could not get block file info for current block file from db: %s", err))
-	}
-	if ledgerconfig.IsCommitter() {
-		err = cdbBlockStore.cp.saveCurrentInfo(cpInfo)
-		if err != nil {
-			panic(fmt.Sprintf("Could not save cpInfo info to db: %s", err))
-		}
+		panic(fmt.Sprintf("Could not get block info from db: %s", err))
 	}
 
-	bi, err := createBlockchainInfo(blockStore, cpInfo)
+	bi, err := createBlockchainInfo(blockStore, &cpInfo)
 	if err != nil {
 		panic(fmt.Sprintf("Unable to retrieve blockchain info from DB: %s", err))
 	}
 	cdbBlockStore.bcInfo.Store(bi)
-
-	// Update the manager with the checkpoint info and the file writer
 	cdbBlockStore.cpInfo = cpInfo
 
 	return cdbBlockStore
@@ -80,33 +73,22 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 		// Nothing else to do if not a committer
 		return nil
 	}
+
 	if metrics.IsDebug() {
 		// Measure the whole
 		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_addBlock_time").Start()
 		defer stopWatch.Stop()
 	}
 
-	logger.Debugf("Storing block %d", block.Header.Number)
-	err := s.storeBlock(block)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *cdbBlockStore) storeBlock(block *common.Block) error {
-	doc, err := blockToCouchDoc(block)
+	logger.Debugf("Preparing block for storage %d", block.Header.Number)
+	pendingDoc, err := blockToCouchDoc(block)
 	if err != nil {
 		return errors.WithMessage(err, "converting block to couchDB document failed")
 	}
 
-	id := blockNumberToKey(block.GetHeader().GetNumber())
-	rev, err := s.blockStore.UpdateDoc(id, "", doc)
-	if err != nil {
-		return errors.WithMessage(err, "adding block to couchDB failed")
-	}
-	logger.Debugf("block added to couchDB [%d, %s]", block.GetHeader().GetNumber(), rev)
+	s.pendingBlock.ID = blockNumberToKey(block.GetHeader().GetNumber())
+	s.pendingBlock.Doc = pendingDoc
+
 	return nil
 }
 
@@ -119,18 +101,20 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 		defer stopWatch.Stop()
 	}
 
-	//Update the checkpoint info with the results of adding the new block
-	newCPInfo := &checkpointInfo{
-		isChainEmpty:    false,
-		lastBlockNumber: block.Header.Number}
-
 	if ledgerconfig.IsCommitter() {
-		logger.Debugf("Saving checkpoint info for block %d", block.Header.Number)
 		//save the checkpoint information in the database
-		err := s.cp.saveCurrentInfo(newCPInfo)
+		rev, err := s.blockStore.UpdateDoc(s.pendingBlock.ID, "", s.pendingBlock.Doc)
 		if err != nil {
-			return errors.WithMessage(err, "adding cpInfo to couchDB failed")
+			return errors.WithMessage(err, "adding block to couchDB failed")
 		}
+
+		dbResponse, err := s.blockStore.EnsureFullCommit()
+		if err != nil || dbResponse.Ok != true {
+			logger.Errorf("full commit failed [%s]", err)
+			return errors.WithMessage(err, "full commit failed")
+		}
+
+		logger.Debugf("block stored to couchDB [%d, %s]", block.GetHeader().GetNumber(), rev)
 	} else {
 		logger.Debugf("Not saving checkpoint info for block %d since I'm not a committer. Just publishing the block.", block.Header.Number)
 	}
@@ -140,6 +124,9 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 	s.bcInfo.Store(newBcInfo)
 
 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
+	newCPInfo := checkpointInfo{
+		isChainEmpty:    false,
+		lastBlockNumber: block.Header.Number}
 	s.updateCheckpoint(newCPInfo)
 
 	return nil
@@ -360,7 +347,7 @@ func extractTxnBlockPos(block *common.Block, txnID string) (int, error) {
 func (s *cdbBlockStore) Shutdown() {
 }
 
-func (s *cdbBlockStore) updateCheckpoint(cpInfo *checkpointInfo) {
+func (s *cdbBlockStore) updateCheckpoint(cpInfo checkpointInfo) {
 	s.cpInfoMtx.Lock()
 	defer s.cpInfoMtx.Unlock()
 	s.cpInfo = cpInfo
