@@ -10,16 +10,16 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/confighistory"
 	"github.com/hyperledger/fabric/core/ledger/confighistory/cdbconfighistory"
-
-	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/history/historydb/historydbprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 )
@@ -123,6 +123,11 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 		logger.Errorf("Error in opening a new empty ledger. Unsetting under construction flag. Err: %s", err)
 		panicOnErr(provider.runCleanup(ledgerID), "Error while running cleanup for ledger id [%s]", ledgerID)
 		panicOnErr(provider.idStore.UnsetUnderConstructionFlag(), "Error while unsetting under construction flag")
+		return nil, err
+	}
+	txFlags := util.TxValidationFlags(genesisBlock.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	if err := lgr.ValidateMVCC(genesisBlock, txFlags, util.TxFilterAcceptAll); err != nil {
+		lgr.Close()
 		return nil, err
 	}
 	if err := lgr.ValidateBlockWithPvtData(&ledger.BlockAndPvtData{

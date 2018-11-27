@@ -170,13 +170,20 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		return nil, nil, errors.New("Block header is nil")
 	}
 
-	logger.Infof("[%s] Validating block [%d]", c.ChainID, block.Header.Number)
+	logger.Debugf("[%s] Starting first phase validation of block %d against committed data...", c.ChainID, block.Header.Number)
+
+	begin := time.Now()
 
 	err := c.Validator.Validate(block, resultsChan)
 	if err != nil {
 		logger.Errorf("Validation failed: %+v", err)
 		return nil, nil, err
 	}
+
+	logger.Debugf("[%s] ... finished first phase validation of block %d against committed data in %s", c.ChainID, block.Header.Number, time.Since(begin))
+	logger.Debugf("[%s] Starting final phase validation of block %d and private data...", c.ChainID, block.Header.Number)
+
+	begin = time.Now()
 
 	blockAndPvtData := &ledger.BlockAndPvtData{
 		Block:        block,
@@ -260,6 +267,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	if err != nil {
 		return nil, nil, err
 	}
+	logger.Debugf("[%s] ... finished final phase validation of block %d and private data in %s", c.ChainID, blockAndPvtData.Block.Header.Number, time.Since(begin))
 
 	return blockAndPvtData, privateInfo.txns, nil
 }
