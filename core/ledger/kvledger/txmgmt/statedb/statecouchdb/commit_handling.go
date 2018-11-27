@@ -53,6 +53,12 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 		if nsRevs == nil {
 			nsRevs = make(nsRevisions)
 		}
+		vdb.verWSetCacheLock.RLock()
+		nsWSetRevs := vdb.committedWSetDataCache.revs[ns]
+		vdb.verWSetCacheLock.RUnlock()
+		for k, v := range nsWSetRevs {
+			nsRevs[k] = v
+		}
 		// for each namespace, construct one builder with the corresponding couchdb handle and couch revisions
 		// that are already loaded into cache (during validation phase)
 		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{ns: ns, updates: nsUpdates, db: db, revisions: nsRevs, keyIndex: keyIndex})
@@ -190,11 +196,11 @@ func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex,
 	for key := range nsUpdates {
 		_, ok := revisions[key]
 		if !ok {
+			logger.Warningf("key %s not found in revisions going to search in keyIndex", key)
 			_, exists, err := keyIndex.GetMetadata(&statekeyindex.CompositeKey{Namespace: ns, Key: key})
 			if err != nil {
 				return err
 			}
-
 			if !exists {
 				revisions[key] = ""
 			} else {
@@ -202,7 +208,9 @@ func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex,
 			}
 		}
 	}
-	logger.Debugf("Pulling revisions for the [%d] keys for namsespace [%s] that were not part of the readset", len(missingKeys), db.DBName)
+	if len(missingKeys) > 0 {
+		logger.Warningf("Pulling revisions for the keys [%s] for namsespace [%s] that were not part of the readset", missingKeys, db.DBName)
+	}
 	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys, false)
 	if err != nil {
 		return err

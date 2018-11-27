@@ -7,6 +7,7 @@ package statebasedval
 
 import (
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -18,15 +19,28 @@ import (
 
 var logger = flogging.MustGetLogger("statebasedval")
 
+const (
+	preLoadCommittedVersionOfWSetQueueLen = 1
+)
+
 // Validator validates a tx against the latest committed state
 // and preceding valid transactions with in the same block
 type Validator struct {
-	db privacyenabledstate.DB
+	db                              privacyenabledstate.DB
+	preLoadCommittedVersionOfWSetCh chan *preLoadCommittedVersionOfWSetData
+}
+
+type preLoadCommittedVersionOfWSetData struct {
+	block   *valinternal.Block
+	pvtdata map[uint64]*ledger.TxPvtData
 }
 
 // NewValidator constructs StateValidator
 func NewValidator(db privacyenabledstate.DB) *Validator {
-	return &Validator{db}
+	v := &Validator{db: db,
+		preLoadCommittedVersionOfWSetCh: make(chan *preLoadCommittedVersionOfWSetData, preLoadCommittedVersionOfWSetQueueLen)}
+	go v.preLoadCommittedVersionOfWSet()
+	return v
 }
 
 // preLoadCommittedVersionOfRSet loads committed version of all keys in each
@@ -76,7 +90,7 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block) erro
 
 	// Load committed version of all keys into a cache
 	if len(pubKeys) > 0 || len(hashedKeys) > 0 {
-		err := v.db.LoadCommittedVersionsOfPubAndHashedKeys(pubKeys, hashedKeys)
+		err := v.db.LoadCommittedVersionsOfPubAndHashedKeys(pubKeys, hashedKeys, nil, false)
 		if err != nil {
 			return err
 		}
@@ -85,8 +99,102 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block) erro
 	return nil
 }
 
+// preLoadCommittedVersionOfWSet loads committed version of all keys in each
+// transaction's write set into a cache.
+func (v *Validator) preLoadCommittedVersionOfWSet() {
+
+	const panicMsg = "pre load committed version of write set failure"
+
+	for {
+		select {
+		case data := <-v.preLoadCommittedVersionOfWSetCh:
+			// Collect both public and hashed keys in read sets of all transactions in a given block
+			var pubKeys []*statedb.CompositeKey
+			var hashedKeys []*privacyenabledstate.HashedCompositeKey
+			var pvtKeys []*privacyenabledstate.PvtdataCompositeKey
+
+			// pubKeysMap and hashedKeysMap are used to avoid duplicate entries in the
+			// pubKeys and hashedKeys. Though map alone can be used to collect keys in
+			// read sets and pass as an argument in LoadCommittedVersionOfPubAndHashedKeys(),
+			// array is used for better code readability. On the negative side, this approach
+			// might use some extra memory.
+			pubKeysMap := make(map[statedb.CompositeKey]interface{})
+			hashedKeysMap := make(map[privacyenabledstate.HashedCompositeKey]interface{})
+			pvtKeysMap := make(map[privacyenabledstate.PvtdataCompositeKey]interface{})
+
+			for _, tx := range data.block.Txs {
+				for _, nsRWSet := range tx.RWSet.NsRwSets {
+					for _, kvWrite := range nsRWSet.KvRwSet.Writes {
+						compositeKey := statedb.CompositeKey{
+							Namespace: nsRWSet.NameSpace,
+							Key:       kvWrite.Key,
+						}
+						if _, ok := pubKeysMap[compositeKey]; !ok {
+							pubKeysMap[compositeKey] = nil
+							pubKeys = append(pubKeys, &compositeKey)
+						}
+
+					}
+					for _, colHashedRwSet := range nsRWSet.CollHashedRwSets {
+						for _, kvHashedWrite := range colHashedRwSet.HashedRwSet.HashedWrites {
+							hashedCompositeKey := privacyenabledstate.HashedCompositeKey{
+								Namespace:      nsRWSet.NameSpace,
+								CollectionName: colHashedRwSet.CollectionName,
+								KeyHash:        string(kvHashedWrite.KeyHash),
+							}
+							if _, ok := hashedKeysMap[hashedCompositeKey]; !ok {
+								hashedKeysMap[hashedCompositeKey] = nil
+								hashedKeys = append(hashedKeys, &hashedCompositeKey)
+							}
+						}
+					}
+				}
+			}
+			for _, txPvtdata := range data.pvtdata {
+				pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
+				if err != nil {
+					logger.Errorf("TxPvtRwSetFromProtoMsg failed %s", err)
+					panic(panicMsg)
+				}
+				for _, nsPvtdata := range pvtRWSet.NsPvtRwSet {
+					for _, collPvtRwSets := range nsPvtdata.CollPvtRwSets {
+						ns := nsPvtdata.NameSpace
+						coll := collPvtRwSets.CollectionName
+						if err != nil {
+							logger.Errorf("collPvtRwSets.CollectionName failed %s", err)
+							panic(panicMsg)
+						}
+						for _, write := range collPvtRwSets.KvRwSet.Writes {
+							pvtCompositeKey := privacyenabledstate.PvtdataCompositeKey{
+								Namespace:      ns,
+								Key:            write.Key,
+								CollectionName: coll,
+							}
+							if _, ok := pvtKeysMap[pvtCompositeKey]; !ok {
+								pvtKeysMap[pvtCompositeKey] = nil
+								pvtKeys = append(pvtKeys, &pvtCompositeKey)
+							}
+						}
+					}
+				}
+
+			}
+
+			// Load committed version of all keys into a cache
+			if len(pubKeys) > 0 || len(hashedKeys) > 0 {
+				err := v.db.LoadCommittedVersionsOfPubAndHashedKeys(pubKeys, hashedKeys, pvtKeys, true)
+				if err != nil {
+					logger.Errorf("LoadCommittedVersionsOfPubAndHashedKeys failed %s", err)
+					panic(panicMsg)
+				}
+			}
+		}
+	}
+
+}
+
 // ValidateAndPrepareBatch implements method in Validator interface
-func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCValidation bool) (*valinternal.PubAndHashUpdates, error) {
+func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCValidation bool, pvtdata map[uint64]*ledger.TxPvtData) (*valinternal.PubAndHashUpdates, error) {
 	// Check whether statedb implements BulkOptimizable interface. For now,
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.
@@ -95,6 +203,8 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
 		if err != nil {
 			return nil, err
 		}
+
+		v.preLoadCommittedVersionOfWSetCh <- &preLoadCommittedVersionOfWSetData{block, pvtdata}
 	}
 
 	updates := valinternal.NewPubAndHashUpdates()

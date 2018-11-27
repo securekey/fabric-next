@@ -26,7 +26,7 @@ type DBProvider interface {
 type DB interface {
 	statedb.VersionedDB
 	IsBulkOptimizable() bool
-	LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey, hashedKeys []*HashedCompositeKey) error
+	LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey, hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey, wset bool) error
 	GetCachedKeyHashVersion(namespace, collection string, keyHash []byte) (*version.Height, bool)
 	ClearCachedVersions()
 	GetChaincodeEventListener() cceventmgmt.ChaincodeLifecycleEventListener

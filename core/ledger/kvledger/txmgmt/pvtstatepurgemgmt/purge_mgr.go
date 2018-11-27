@@ -268,7 +268,7 @@ func (p *purgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) {
 	for k := range expInfoMap {
 		hashedKeys = append(hashedKeys, k)
 	}
-	p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
+	p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys, nil, false)
 }
 
 func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {

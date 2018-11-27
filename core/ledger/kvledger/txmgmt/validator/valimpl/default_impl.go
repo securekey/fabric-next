@@ -49,7 +49,7 @@ func (impl *DefaultImpl) ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAn
 		return nil, err
 	}
 
-	if pubAndHashUpdates, err = impl.InternalValidator.ValidateAndPrepareBatch(internalBlock, doMVCCValidation); err != nil {
+	if pubAndHashUpdates, err = impl.InternalValidator.ValidateAndPrepareBatch(internalBlock, doMVCCValidation, blockAndPvtdata.BlockPvtData); err != nil {
 		return nil, err
 	}
 	logger.Debug("validating rwset...")
