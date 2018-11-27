@@ -344,12 +344,8 @@ func (l *kvLedger) NewHistoryQueryExecutor() (ledger.HistoryQueryExecutor, error
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("kvledger_CommitWithPvtData_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("kvledger_CommitWithPvtData_time")
+	defer stopWatch()
 
 	var err error
 	block := pvtdataAndBlock.Block
@@ -425,12 +421,8 @@ func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtD
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("kvledger_GetPvtDataAndBlockByNum_time")
+	defer stopWatch()
 
 	blockAndPvtdata, err := l.blockStore.GetPvtDataAndBlockByNum(blockNum, filter)
 	l.blockAPIsRWLock.RLock()
@@ -441,12 +433,8 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
 // GetPvtDataByNum returns only the pvt data  corresponding to the given block number
 // The pvt data is filtered by the list of 'collections' supplied
 func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataByNum_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("kvledger_GetPvtDataByNum_time")
+	defer stopWatch()
 
 	pvtdata, err := l.blockStore.GetPvtDataByNum(blockNum, filter)
 	l.blockAPIsRWLock.RLock()

@@ -321,9 +321,7 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	}
 
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
-	if metrics.IsDebug() {
-		metrics.RootScope.Counter("cachestatestore_getstate_cache_request_miss").Inc(1)
-	}
+	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
 	return kv.VersionedValue, nil
 }
 
@@ -362,9 +360,7 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 		return nil, err
 	}
 	if len(queryResult) != 0 {
-		if metrics.IsDebug() {
-			metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_miss").Inc(1)
-		}
+		metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_miss")
 	}
 
 	logger.Debugf("Exiting GetStateRangeScanIterator")
@@ -401,11 +397,8 @@ func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIt
 
 // ApplyUpdates implements method in VersionedDB interface
 func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("statecouchdb_ApplyUpdates_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("statecouchdb_ApplyUpdates_time")
+	defer stopWatch()
 
 	// TODO a note about https://jira.hyperledger.org/browse/FAB-8622
 	// the function `Apply update can be split into three functions. Each carrying out one of the following three stages`.

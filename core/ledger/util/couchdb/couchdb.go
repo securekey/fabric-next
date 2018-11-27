@@ -591,11 +591,8 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 //UpdateDoc method provides a function to update or create a document, id and byte array. The revision must be provided
 //for document updates.
 func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_saveDoc_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("couchdb_saveDoc_time")
+	defer stopWatch()
 
 	logger.Debugf("Entering SaveDoc()  id=[%s]", id)
 
@@ -1420,11 +1417,8 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 	//URL to execute the view function associated with the index
 	indexURL.Path = dbclient.DBName + "/_design/" + designdoc + "/_view/" + indexname
 
-	if metrics.IsDebug() {
-		timer := metrics.RootScope.Timer("couchdb_WarmIndex")
-		stopWatch := timer.Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("couchdb_WarmIndex")
+	defer stopWatch()
 
 	queryParms := indexURL.Query()
 	//Query parameter that allows the execution of the URL to return immediately
@@ -1447,10 +1441,8 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 
 // Warms up all indexes.
 func (db *CouchDatabase) doAllIndexWarmup() {
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_allIndexWarmup_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("couchdb_allIndexWarmup_time")
+	defer stopWatch()
 	//Retrieve all indexes
 	listResult, err := db.ListIndex()
 	if err != nil {
@@ -1932,10 +1924,8 @@ func (err *dbResponseError) Error() string {
 func (couchInstance *CouchInstance) handleRequest(method, connectURL string, data []byte, rev string,
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
 
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_handleRequest_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("couchdb_handleRequest_time")
+	defer stopWatch()
 
 	logger.Debugf("Entering handleRequest()  method=%s  url=%v", method, connectURL)
 
