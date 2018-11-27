@@ -74,11 +74,8 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		panic("calling Prepare on a peer that is not a committer")
 	}
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_prepare_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_time")
+	defer stopWatch()
 
 	if s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
@@ -105,11 +102,8 @@ func (s *store) Commit() error {
 		panic("calling Commit on a peer that is not a committer")
 	}
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_commit_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_time")
+	defer stopWatch()
 
 	if !s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
@@ -131,11 +125,9 @@ func (s *store) Commit() error {
 }
 
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_initLastCommittedBlock_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_initLastCommittedBlock_time")
+	defer stopWatch()
+
 	if !(s.isEmpty && !s.batchPending) {
 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
 	}
@@ -152,11 +144,8 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 }
 
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_getPvtDataByBlockNum_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_getPvtDataByBlockNum_time")
+	defer stopWatch()
 
 	logger.Debugf("Get private data for block [%d] from DB [%s], filter=%#v", blockNum, s.db.DBName, filter)
 	if s.isEmpty {

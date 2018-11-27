@@ -93,9 +93,7 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
 	dbItr.Prev()
-	if metrics.IsDebug() {
-		metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_hit").Inc(1)
-	}
+	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
 	return newKVScanner(namespace, dbItr, c), nil
 }
 

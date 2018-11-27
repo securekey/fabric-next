@@ -164,11 +164,8 @@ type nsFlusher struct {
 }
 
 func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("statecouchdb_ensureFullCommit_time")
+	defer stopWatch()
 
 	var flushers []batch
 	for _, db := range dbs {

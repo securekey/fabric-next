@@ -24,29 +24,23 @@ func (s *store) Persist(txid string, blockHeight uint64, privateSimulationResult
 }
 
 func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *pb.TxPvtReadWriteSetWithConfigInfo) error {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("memtransientdata_persistwithconfig_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("memtransientdata_persistwithconfig_time")
+	defer stopWatch()
+
 	return s.persistWithConfigDB(txid, blockHeight, privateSimulationResultsWithConfig)
 }
 
 func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("memtransientdata_gettxpvtrwsetbytxid_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("memtransientdata_gettxpvtrwsetbytxid_time")
+	defer stopWatch()
+
 	return s.getTxPvtRWSetByTxidDB(txid, filter, endorsers)
 }
 
 func (s *store) PurgeByTxids(txids []string) error {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("memtransientdata_purgebytxids_time").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("memtransientdata_purgebytxids_time")
+	defer stopWatch()
+
 	return s.purgeByTxidsDB(txids)
 }
 
