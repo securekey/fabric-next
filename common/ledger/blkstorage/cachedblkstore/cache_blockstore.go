@@ -67,11 +67,8 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 
 // AddBlock adds a new block
 func (s *cachedBlockStore) AddBlock(block *common.Block) error {
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cached_block_store_add_block_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("cached_block_store_add_block_duration")
+	defer stopWatch()
 
 	err := s.blockCache.AddBlock(block)
 	if err != nil {

@@ -252,3 +252,21 @@ func create(opts Opts) (rootScope tally.Scope, e error) {
 	}
 	return
 }
+
+// StopWatch starts a stopwatch for the given timerName in debug mode.
+// Returns a function that is used to stop the stopwatch.
+func StopWatch(timerName string) func() {
+	if IsDebug() {
+		stopWatch := RootScope.Timer(timerName).Start()
+
+		return func() {stopWatch.Stop()}
+	}
+	return func() {}
+}
+
+// IncrementCounter increments the metrics counter in debug mode
+func IncrementCounter(counterName string) {
+	if IsDebug() {
+		RootScope.Counter(counterName).Inc(1)
+	}
+}
