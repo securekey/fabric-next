@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+	ledgerutil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 )
@@ -411,15 +412,14 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	return nil
 }
 
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (l *kvLedger) ValidateMVCC(block *common.Block, txFlags ledgerutil.TxValidationFlags, filter ledgerutil.TxFilter) error {
+	return l.txtmgmt.ValidateMVCC(block, txFlags, filter)
+}
+
 // ValidateBlockWithPvtData validate commit with pvt data
 func (l *kvLedger) ValidateBlockWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
-	logger.Debugf("[%s] Validating state for block [%d]", l.ledgerID, pvtdataAndBlock.Block.Header.Number)
-	err := l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
-	if err != nil {
-		return err
-	}
-	//debug.PrintStack()
-	return nil
+	return l.txtmgmt.ValidateAndPrepare(pvtdataAndBlock, true)
 }
 
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.

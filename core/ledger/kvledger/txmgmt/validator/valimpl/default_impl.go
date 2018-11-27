@@ -14,6 +14,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/statebasedval"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valinternal"
+	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/peer"
 )
 
 var logger = flogging.MustGetLogger("valimpl")
@@ -30,8 +33,35 @@ type DefaultImpl struct {
 
 // NewStatebasedValidator constructs a validator that internally manages statebased validator and in addition
 // handles the tasks that are agnostic to a particular validation scheme such as parsing the block and handling the pvt data
-func NewStatebasedValidator(txmgr txmgr.TxMgr, db privacyenabledstate.DB) validator.Validator {
-	return &DefaultImpl{txmgr, db, statebasedval.NewValidator(db)}
+func NewStatebasedValidator(channelID string, txmgr txmgr.TxMgr, db privacyenabledstate.DB) validator.Validator {
+	return &DefaultImpl{txmgr, db, statebasedval.NewValidator(channelID, db)}
+}
+
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (impl *DefaultImpl) ValidateMVCC(block *common.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
+	logger.Debugf("ValidateMVCC - Block number = [%d]", block.Header.Number)
+
+	internalBlock, err := preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, true, txsFilter)
+	if err != nil {
+		return err
+	}
+
+	for txIndex := range block.Data.Data {
+		if txsFilter.IsValid(txIndex) {
+			// Mark the transaction as not validated so that we know that the first phase (distributed) validation
+			// has completed validating all transactions and that none are missed
+			txsFilter.SetFlag(txIndex, peer.TxValidationCode_NOT_VALIDATED)
+		}
+	}
+
+	if err = impl.InternalValidator.ValidateMVCC(internalBlock, txsFilter, acceptTx); err != nil {
+		return err
+	}
+
+	postprocessProtoBlock(block, txsFilter, internalBlock, acceptTx)
+	logger.Debugf("ValidateMVCC completed for block %d", block.Header.Number)
+
+	return nil
 }
 
 // ValidateAndPrepareBatch implements the function in interface validator.Validator
@@ -44,21 +74,23 @@ func (impl *DefaultImpl) ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAn
 	var pvtUpdates *privacyenabledstate.PvtUpdateBatch
 	var err error
 
-	logger.Debug("preprocessing ProtoBlock...")
-	if internalBlock, err = preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, doMVCCValidation); err != nil {
+	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+
+	logger.Debugf("preprocessing ProtoBlock for block %d...", block.Header.Number)
+	if internalBlock, err = preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, doMVCCValidation, txsFilter); err != nil {
 		return nil, err
 	}
 
 	if pubAndHashUpdates, err = impl.InternalValidator.ValidateAndPrepareBatch(internalBlock, doMVCCValidation, blockAndPvtdata.BlockPvtData); err != nil {
 		return nil, err
 	}
-	logger.Debug("validating rwset...")
+	logger.Debugf("validating rwset for block %d...", block.Header.Number)
 	if pvtUpdates, err = validateAndPreparePvtBatch(internalBlock, blockAndPvtdata.BlockPvtData); err != nil {
 		return nil, err
 	}
-	logger.Debug("postprocessing ProtoBlock...")
-	postprocessProtoBlock(block, internalBlock)
-	logger.Debug("ValidateAndPrepareBatch() complete")
+	logger.Debugf("postprocessing ProtoBlock for block %d...", block.Header.Number)
+	postprocessProtoBlock(block, txsFilter, internalBlock, util.TxFilterAcceptAll)
+	logger.Debugf("ValidateAndPrepareBatch() for block %d complete", block.Header.Number)
 	return &privacyenabledstate.UpdateBatch{
 		PubUpdates:  pubAndHashUpdates.PubUpdates,
 		HashUpdates: pubAndHashUpdates.HashUpdates,
