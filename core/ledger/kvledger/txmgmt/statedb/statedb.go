@@ -195,7 +195,12 @@ func (batch *UpdateBatch) RemoveUpdates(ns string) {
 // where the UpdateBatch represents the union of the modifications performed by the preceding valid transactions in the same block
 // (Assuming Group commit approach where we commit all the updates caused by a block together).
 func (batch *UpdateBatch) GetRangeScanIterator(ns string, startKey string, endKey string) ResultsIterator {
-	return newNsIterator(ns, startKey, endKey, batch)
+	return newNsIterator(ns, startKey, endKey, batch, false)
+}
+
+// GetRangeScanIteratorIncludingEndKey is the same as GetRangeScanIterator except that it includes endKey in the result set
+func (batch *UpdateBatch) GetRangeScanIteratorIncludingEndKey(ns string, startKey string, endKey string) ResultsIterator {
+	return newNsIterator(ns, startKey, endKey, batch, true)
 }
 
 func (batch *UpdateBatch) getOrCreateNsUpdates(ns string) *nsUpdates {
@@ -215,7 +220,7 @@ type nsIterator struct {
 	lastIndex  int
 }
 
-func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch) *nsIterator {
+func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch, includeEndKey bool) *nsIterator {
 	nsUpdates, ok := batch.updates[ns]
 	if !ok {
 		return &nsIterator{}
@@ -232,6 +237,9 @@ func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch
 		lastIndex = len(sortedKeys)
 	} else {
 		lastIndex = sort.SearchStrings(sortedKeys, endKey)
+		if includeEndKey {
+			lastIndex++
+		}
 	}
 	return &nsIterator{ns, nsUpdates, sortedKeys, nextIndex, lastIndex}
 }

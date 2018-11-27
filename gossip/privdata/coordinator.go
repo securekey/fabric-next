@@ -170,13 +170,21 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		return nil, nil, errors.New("Block header is nil")
 	}
 
-	logger.Infof("[%s] Validating block [%d]", c.ChainID, block.Header.Number)
+	// FIXME: Change to Debug
+	logger.Infof("[%s] Starting first phase validation of %d transactions in block %d against committed data...", c.ChainID, len(block.Data.Data), block.Header.Number)
+
+	begin := time.Now()
 
 	err := c.Validator.Validate(block, resultsChan)
 	if err != nil {
 		logger.Errorf("Validation failed: %+v", err)
 		return nil, nil, err
 	}
+
+	// FIXME: Change to Debug
+	logger.Infof("[%s] ... finished first phase validation of %d transactions in block %d against committed data in %s. Starting second phase...", c.ChainID, len(block.Data.Data), block.Header.Number, time.Since(begin))
+
+	begin2 := time.Now()
 
 	blockAndPvtData := &ledger.BlockAndPvtData{
 		Block:        block,
@@ -260,6 +268,9 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	if err != nil {
 		return nil, nil, err
 	}
+	// FIXME: Change to Debug
+	logger.Infof("[%s] ... finished second phase validation of %d transactions in block %d in %s", c.ChainID, len(block.Data.Data), blockAndPvtData.Block.Header.Number, time.Since(begin2))
+	logger.Infof("[%s] Finished validating %d transactions in block %d in %s", c.ChainID, len(block.Data.Data), blockAndPvtData.Block.Header.Number, time.Since(begin))
 
 	return blockAndPvtData, privateInfo.txns, nil
 }
