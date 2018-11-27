@@ -134,6 +134,25 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 	}
 	return nil
 }
+
+func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
+	preloaded := make(map[*statedb.CompositeKey]*version.Height)
+	for _, key := range keys {
+		_, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
+		}
+		if found {
+			preloaded[key] = version.NewHeight(0, 0)
+		}
+	}
+	err := c.bulkOptimizable.LoadWSetCommittedVersions(keys, preloaded)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)
 }
