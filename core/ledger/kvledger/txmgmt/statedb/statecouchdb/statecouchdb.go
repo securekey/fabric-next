@@ -307,8 +307,20 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		},
 	}
 
-	// Put retrieved KV from DB to the cache
-	statedb.UpdateKVCache(0, validatedTxOp, nil, nil, vdb.chainName)
+	// Put retrieved KV from DB to the cache & index
+	//Index update in background
+	go func() {
+		indexUpdates, indexDeletes := statedb.PrepareIndexUpdates(validatedTxOp, nil, nil)
+		err := statedb.ApplyIndexUpdates(indexUpdates, indexDeletes, vdb.chainName)
+		if err != nil {
+			logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", vdb.chainName, err)
+		}
+	}()
+
+	//cache update
+	go func() {
+		statedb.UpdateKVCache(0, validatedTxOp, nil, nil, false)
+	}()
 
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 	if metrics.IsDebug() {

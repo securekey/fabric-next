@@ -45,6 +45,7 @@ type kvLedger struct {
 	historyDB              historydb.HistoryDB
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
+	txmgmtRWLock           *sync.RWMutex
 
 	commitDone chan *ledger.BlockAndPvtData
 	shutdownCh chan struct{}
@@ -70,6 +71,7 @@ func newKVLedger(
 		blockStore:      blockStore,
 		historyDB:       historyDB,
 		blockAPIsRWLock: &sync.RWMutex{},
+		txmgmtRWLock:    &sync.RWMutex{},
 		commitDone:      make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
 		shutdownCh:      make(chan struct{}),
 		doneCh:          make(chan struct{}),
@@ -115,7 +117,7 @@ func newKVLedger(
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDone)
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDone, l.txmgmtRWLock)
 	return err
 }
 
