@@ -98,6 +98,37 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	if !ok {
 		return nil
 	}
+	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, nil)
+	pubKeys = append(pubKeys, deriveKeys...)
+
+	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*version.Height))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
+func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
+	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey) error {
+
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if !ok {
+		return nil
+	}
+	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, pvtKeys)
+	pubKeys = append(pubKeys, deriveKeys...)
+	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *CommonStorageDB) deriveHashedKeysAndPvtKeys(hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey) []*statedb.CompositeKey {
+	deriveKeys := make([]*statedb.CompositeKey, 0)
 	// Here, hashedKeys are merged into pubKeys to get a combined set of keys for combined loading
 	for _, key := range hashedKeys {
 		ns := DeriveHashedDataNs(key.Namespace, key.CollectionName)
@@ -108,18 +139,20 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 		} else {
 			keyHashStr = key.KeyHash
 		}
-		pubKeys = append(pubKeys, &statedb.CompositeKey{
+		deriveKeys = append(deriveKeys, &statedb.CompositeKey{
 			Namespace: ns,
 			Key:       keyHashStr,
 		})
 	}
-
-	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*version.Height))
-	if err != nil {
-		return err
+	for _, key := range pvtKeys {
+		ns := DerivePvtDataNs(key.Namespace, key.CollectionName)
+		deriveKeys = append(deriveKeys, &statedb.CompositeKey{
+			Namespace: ns,
+			Key:       key.Key,
+		})
 	}
+	return deriveKeys
 
-	return nil
 }
 
 // ClearCachedVersions implements corresponding function in interface DB
