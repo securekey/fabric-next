@@ -29,6 +29,7 @@ import (
 )
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -44,6 +45,9 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 		return err
 	}
 
+	l.txmgmtRWLock.Lock()
+	defer l.txmgmtRWLock.Unlock()
+
 	// Update the 'non-durable' cache only
 	statedb.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
 
@@ -51,6 +55,7 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 }
 
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -66,6 +71,9 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	if err != nil {
 		return err
 	}
+
+	l.txmgmtRWLock.Lock()
+	defer l.txmgmtRWLock.Unlock()
 
 	// Update the cache
 	err = statedb.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
