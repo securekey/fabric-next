@@ -94,6 +94,23 @@
     },
     {
       "key": {
+        "uuid": "cdd0e77c_822f23c7",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 33,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-27T16:18:02Z",
+      "side": 1,
+      "message": "can this name be changed to \"blockAndPvtData\"? And please add a comment?",
+      "revId": "d33349a7aa5a96d84cce48052d1d9340d4ffd36d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "0cd18d6b_482625e2",
         "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
         "patchSetId": 2
