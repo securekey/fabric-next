@@ -19,6 +19,7 @@ package committer
 import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/events/producer"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
@@ -47,6 +48,9 @@ type PeerLedgerSupport interface {
 	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
 
 	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+
+	// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+	ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 
 	ValidateBlockWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
@@ -124,6 +128,11 @@ func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvt
 	lc.postCommit(blockAndPvtData.Block)
 
 	return nil
+}
+
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (lc *LedgerCommitter) ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
+	return lc.PeerLedgerSupport.ValidateMVCC(block, txFlags, filter)
 }
 
 // ValidateBlock validate block

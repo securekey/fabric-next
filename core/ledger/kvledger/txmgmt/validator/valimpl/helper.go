@@ -89,10 +89,9 @@ func validatePvtdata(tx *valinternal.Transaction, pvtdata *ledger.TxPvtData) err
 // preprocessProtoBlock parses the proto instance of block into 'Block' structure.
 // The retuned 'Block' structure contains only transactions that are endorser transactions and are not alredy marked as invalid
 func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, value []byte) error,
-	block *common.Block, doMVCCValidation bool) (*valinternal.Block, error) {
+	block *common.Block, doMVCCValidation bool, txsFilter util.TxValidationFlags) (*valinternal.Block, error) {
 	b := &valinternal.Block{Num: block.Header.Number}
 	// Committer validator has already set validation flags based on well formed tran checks
-	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	for txIndex, envBytes := range block.Data.Data {
 		var env *common.Envelope
 		var chdr *common.ChannelHeader
@@ -105,10 +104,12 @@ func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, val
 		}
 		if txsFilter.IsInvalid(txIndex) {
 			// Skipping invalid transaction
-			logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
-				" marked as invalid by committer. Reason code [%s]",
-				chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
-				txsFilter.Flag(txIndex).String())
+			if txsFilter.Flag(txIndex) != peer.TxValidationCode_NOT_VALIDATED {
+				logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
+					" marked as invalid by committer. Reason code [%s]",
+					chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
+					txsFilter.Flag(txIndex).String())
+			}
 			continue
 		}
 		if err != nil {
@@ -203,12 +204,14 @@ func validateWriteset(txRWSet *rwsetutil.TxRwSet, validateKVFunc func(key string
 }
 
 // postprocessProtoBlock updates the proto block's validation flags (in metadata) by the results of validation process
-func postprocessProtoBlock(block *common.Block, validatedBlock *valinternal.Block) {
-	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+func postprocessProtoBlock(block *common.Block, txsFilter util.TxValidationFlags, validatedBlock *valinternal.Block, acceptTx util.TxFilter) {
 	for _, tx := range validatedBlock.Txs {
+		if !acceptTx(tx.IndexInBlock) {
+			continue
+		}
+		logger.Debugf("postprocessProtoBlock - Setting TxStatus for block %d and index %d to %s", block.Header.Number, tx.IndexInBlock, tx.ValidationCode)
 		txsFilter.SetFlag(tx.IndexInBlock, tx.ValidationCode)
 	}
-	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsFilter
 }
 
 func addPvtRWSetToPvtUpdateBatch(pvtRWSet *rwsetutil.TxPvtRwSet, pvtUpdateBatch *privacyenabledstate.PvtUpdateBatch, ver *version.Height) {
