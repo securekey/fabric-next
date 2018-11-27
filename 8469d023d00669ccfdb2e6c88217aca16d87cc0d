@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "4ef91345_37245682",
+        "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 94,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T15:56:14Z",
+      "side": 1,
+      "message": "I would make this two functions in the interface and have them call the common portion as a sub-function (i.e., rather than adding a boolean in the interface).",
+      "range": {
+        "startLine": 94,
+        "startChar": 26,
+        "endLine": 94,
+        "endChar": 65
+      },
+      "revId": "8469d023d00669ccfdb2e6c88217aca16d87cc0d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
