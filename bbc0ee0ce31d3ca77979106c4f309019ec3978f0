@@ -2,6 +2,121 @@
   "comments": [
     {
       "key": {
+        "uuid": "d9c5be57_992dc49c",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 61,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-27T21:25:40Z",
+      "side": 1,
+      "message": "it\u0027s probably better to extract this code into a separate function and do:\nvdb.verWSetCacheLock.RLock()\ndefer vdb.verWSetCacheLock.RLock()",
+      "range": {
+        "startLine": 56,
+        "startChar": 2,
+        "endLine": 61,
+        "endChar": 32
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ff454e97_6fa150b3",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 465,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-27T21:25:40Z",
+      "side": 1,
+      "message": "why remove the defer?",
+      "range": {
+        "startLine": 465,
+        "startChar": 1,
+        "endLine": 465,
+        "endChar": 26
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "287b976e_75be5f06",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 138,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-27T21:25:40Z",
+      "side": 1,
+      "message": "it\u0027s probably better to extract into separate function",
+      "range": {
+        "startLine": 128,
+        "startChar": 5,
+        "endLine": 138,
+        "endChar": 6
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b489aae9_2d0e2ed8",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 151,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-27T21:25:40Z",
+      "side": 1,
+      "message": "idem",
+      "range": {
+        "startLine": 139,
+        "startChar": 5,
+        "endLine": 151,
+        "endChar": 6
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "19878be3_119dc09d",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 178,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-27T21:25:40Z",
+      "side": 1,
+      "message": "looks similar to line 140 above.. extract in a separate function call the same function at both places is cleaner",
+      "range": {
+        "startLine": 168,
+        "startChar": 6,
+        "endLine": 178,
+        "endChar": 7
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "295d7f7b_f02541f2",
         "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
         "patchSetId": 4
