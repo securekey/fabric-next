@@ -2,6 +2,98 @@
   "comments": [
     {
       "key": {
+        "uuid": "39776716_d14abbab",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 147,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T16:11:07Z",
+      "side": 1,
+      "message": "if not found, the rev is \"\"",
+      "range": {
+        "startLine": 147,
+        "startChar": 2,
+        "endLine": 147,
+        "endChar": 3
+      },
+      "revId": "d33349a7aa5a96d84cce48052d1d9340d4ffd36d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a923485b_3a9784e1",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 199,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T16:11:07Z",
+      "side": 1,
+      "message": "The !exists case will end up with two warning messages.",
+      "range": {
+        "startLine": 199,
+        "startChar": 3,
+        "endLine": 199,
+        "endChar": 18
+      },
+      "revId": "d33349a7aa5a96d84cce48052d1d9340d4ffd36d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5613e220_51f2033e",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 212,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T16:11:07Z",
+      "side": 1,
+      "message": "this part of the log message is now misleading.",
+      "range": {
+        "startLine": 212,
+        "startChar": 75,
+        "endLine": 212,
+        "endChar": 108
+      },
+      "revId": "d33349a7aa5a96d84cce48052d1d9340d4ffd36d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "cabb6c92_16c440dd",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 228,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T16:11:07Z",
+      "side": 1,
+      "message": "where are you filtering out keys that do not exist in the index? should happen prior to the retrieveMetadata call.",
+      "range": {
+        "startLine": 228,
+        "startChar": 24,
+        "endLine": 228,
+        "endChar": 49
+      },
+      "revId": "d33349a7aa5a96d84cce48052d1d9340d4ffd36d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "0cd18d6b_482625e2",
         "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
         "patchSetId": 2
