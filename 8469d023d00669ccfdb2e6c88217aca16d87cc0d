@@ -22,6 +22,57 @@
       "revId": "8469d023d00669ccfdb2e6c88217aca16d87cc0d",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b92a5889_82576651",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 58,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-27T16:08:26Z",
+      "side": 1,
+      "message": "the normal pattern is to immediately defer the unlock right after the line that acquires it",
+      "revId": "8469d023d00669ccfdb2e6c88217aca16d87cc0d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "882d3547_6431ed4a",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 199,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-27T16:08:26Z",
+      "side": 1,
+      "message": "should be debug?",
+      "revId": "8469d023d00669ccfdb2e6c88217aca16d87cc0d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "559c5e94_2ec650f1",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statedb.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 67,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-11-27T16:08:26Z",
+      "side": 1,
+      "message": "please add docs for this",
+      "revId": "8469d023d00669ccfdb2e6c88217aca16d87cc0d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
