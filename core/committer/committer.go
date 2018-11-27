@@ -18,6 +18,7 @@ package committer
 
 import (
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 )
 
@@ -34,6 +35,9 @@ type Committer interface {
 
 	// CommitWithPvtData block and private data into the ledger
 	CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error
+
+	// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+	ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 
 	// ValidateBlock validate block
 	ValidateBlock(blockAndPvtData *ledger.BlockAndPvtData) error

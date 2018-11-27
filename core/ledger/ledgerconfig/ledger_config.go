@@ -50,7 +50,8 @@ const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confRoles = "ledger.roles"
-const confValidationTimeout = "ledger.blockchain.validation.timeout"
+const confValidationMinWaitTime = "ledger.blockchain.validation.minwaittime"
+const confValidationWaitTimePerTx = "ledger.blockchain.validation.waittimepertx"
 
 // TODO: couchDB config should be in a common section rather than being under state.
 const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
@@ -60,7 +61,8 @@ const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout
 
 const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
 
-const defaultValidationTimeout = 50 * time.Millisecond
+const defaultValidationMinWaitTime = 50 * time.Millisecond
+const defaultValidationWaitTimePerTx = 5 * time.Millisecond
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
@@ -465,11 +467,24 @@ func CouchDBHTTPTraceEnabled() bool {
 	return viper.GetBool(confCouchDBHTTPTraceEnabled)
 }
 
-// GetValidationTimeout is the timeout while waiting for Tx validation responses from validators
-func GetValidationTimeout() time.Duration {
-	timeout := viper.GetDuration(confValidationTimeout)
+// GetValidationWaitTimePerTx is used by the committer in distributed validation and is the time
+// per transaction to wait for validation responses from other validators.
+// For example, if there are 20 transactions to validate and ValidationWaitTimePerTx=100ms
+// then the committer will wait 20*50ms for responses from other validators.
+func GetValidationWaitTimePerTx() time.Duration {
+	timeout := viper.GetDuration(confValidationWaitTimePerTx)
 	if timeout == 0 {
-		return defaultValidationTimeout
+		return defaultValidationWaitTimePerTx
+	}
+	return timeout
+}
+
+// GetValidationMinWaitTime is used by the committer in distributed validation and is the minimum
+// time to wait for Tx validation responses from other validators.
+func GetValidationMinWaitTime() time.Duration {
+	timeout := viper.GetDuration(confValidationMinWaitTime)
+	if timeout == 0 {
+		return defaultValidationMinWaitTime
 	}
 	return timeout
 }

@@ -8,8 +8,6 @@ package lockbasedtxmgr
 import (
 	"sync"
 
-	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -19,6 +17,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valimpl"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/uber-go/tally"
 )
@@ -83,10 +84,9 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 		return nil, err
 	}
 	txmgr.pvtdataPurgeMgr = &pvtdataPurgeMgr{pvtstatePurgeMgr, false}
-	txmgr.validator = valimpl.NewStatebasedValidator(txmgr, db)
+	txmgr.validator = valimpl.NewStatebasedValidator(ledgerid, txmgr, db)
 
 	go txmgr.committer()
-
 	return txmgr, nil
 }
 
@@ -122,11 +122,22 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 	return s, nil
 }
 
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (txmgr *LockBasedTxMgr) ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
+	err := txmgr.validator.ValidateMVCC(block, txFlags, filter)
+	if err != nil {
+		txmgr.reset()
+		return err
+	}
+	return nil
+}
+
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error {
 	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
 	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
-	logger.Debugf("Validating new block with num trans = [%d]", len(blockAndPvtdata.Block.Data.Data))
+
+	logger.Debugf("Validating new block %d with num trans = [%d]", blockAndPvtdata.Block.Header.Number, len(blockAndPvtdata.Block.Data.Data))
 	batch, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
 		txmgr.reset()
@@ -203,6 +214,7 @@ func (txmgr *LockBasedTxMgr) ShouldRecover(lastAvailableBlock uint64) (bool, uin
 func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
 	block := blockAndPvtdata.Block
 	logger.Debugf("Constructing updateSet for the block %d", block.Header.Number)
+	// FIXME: Will this work with distributed validation???
 	if err := txmgr.ValidateAndPrepare(blockAndPvtdata, false); err != nil {
 		return err
 	}
