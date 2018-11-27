@@ -64,6 +64,7 @@ type BulkOptimizable interface {
 	// Load all heights for 'keys' from the data store in bulk and store in cache for later retrieval.
 	// Merge the pre-loaded key-heights into the cache.
 	LoadCommittedVersions(keys []*CompositeKey, preLoaded map[*CompositeKey]*version.Height) error
+	LoadWSetCommittedVersions(keys []*CompositeKey, keysExist []*CompositeKey) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()
 }

@@ -69,14 +69,16 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type VersionedDB struct {
-	couchInstance      *couchdb.CouchInstance
-	couchCheckpointRev string
-	metadataDB         *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
-	chainName          string                            // The name of the chain/channel.
-	namespaceDBs       map[string]*couchdb.CouchDatabase // One database per deployed chaincode.
-	committedDataCache *versionsCache                    // Used as a local cache during bulk processing of a block.
-	verCacheLock       sync.RWMutex
-	mux                sync.RWMutex
+	couchInstance          *couchdb.CouchInstance
+	couchCheckpointRev     string
+	metadataDB             *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
+	chainName              string                            // The name of the chain/channel.
+	namespaceDBs           map[string]*couchdb.CouchDatabase // One database per deployed chaincode.
+	committedDataCache     *versionsCache                    // Used as a local cache during bulk processing of a block.
+	verCacheLock           sync.RWMutex
+	mux                    sync.RWMutex
+	committedWSetDataCache *versionsCache // Used as a local cache during bulk processing of a block.
+	verWSetCacheLock       sync.RWMutex
 }
 
 // newVersionedDB constructs an instance of VersionedDB
@@ -91,7 +93,7 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 	}
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
 	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}}, nil
+		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: newVersionCache()}, nil
 }
 
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
@@ -220,6 +222,40 @@ func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeK
 	for key, height := range preLoaded {
 		vdb.committedDataCache.setVer(key.Namespace, key.Key, height)
 	}
+	return nil
+}
+
+func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey) error {
+	vdb.verWSetCacheLock.Lock()
+	defer vdb.verWSetCacheLock.Unlock()
+	nsKeysMap := map[string][]string{}
+	committedWSetDataCache := newVersionCache()
+	for _, compositeKey := range keys {
+		ns, key := compositeKey.Namespace, compositeKey.Key
+		committedWSetDataCache.setRev(ns, key, "")
+		logger.Debugf("Load into version cache: %s~%s", ns, key)
+	}
+
+	for _, compositeKey := range keysExist {
+		ns, key := compositeKey.Namespace, compositeKey.Key
+		nsKeysMap[ns] = append(nsKeysMap[ns], key)
+	}
+
+	if len(nsKeysMap) > 0 {
+		nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
+		logger.Debugf("nsKeysMap=%s", nsKeysMap)
+		logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
+		if err != nil {
+			return err
+		}
+		for ns, nsMetadata := range nsMetadataMap {
+			for _, keyMetadata := range nsMetadata {
+				logger.Debugf("Load into version cache: %s~%s", ns, keyMetadata.ID)
+				committedWSetDataCache.setRev(ns, keyMetadata.ID, keyMetadata.Rev)
+			}
+		}
+	}
+	vdb.committedWSetDataCache = committedWSetDataCache
 	return nil
 }
 
@@ -425,8 +461,8 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 func (vdb *VersionedDB) ClearCachedVersions() {
 	logger.Debugf("Clear Cache")
 	vdb.verCacheLock.Lock()
-	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = newVersionCache()
+	vdb.verCacheLock.Unlock()
 }
 
 // Open implements method in VersionedDB interface

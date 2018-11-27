@@ -16,10 +16,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
-const (
-	lsccNamespace = "lscc"
-)
-
 type cachedStateStore struct {
 	stateStore      statedb.VersionedDB
 	bulkOptimizable statedb.BulkOptimizable
@@ -134,6 +130,29 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 	}
 	return nil
 }
+
+func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey) error {
+	keysExist = make([]*statedb.CompositeKey, 0)
+	keysNotExist := make([]*statedb.CompositeKey, 0)
+	for _, key := range keys {
+		_, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
+		}
+		if found {
+			keysExist = append(keysExist, key)
+		} else {
+			keysNotExist = append(keysNotExist, key)
+
+		}
+	}
+	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)
 }
