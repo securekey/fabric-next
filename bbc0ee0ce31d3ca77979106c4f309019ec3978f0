@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "295d7f7b_f02541f2",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T21:21:12Z",
+      "side": 1,
+      "message": "should only be run by the committer.",
+      "range": {
+        "startLine": 208,
+        "startChar": 2,
+        "endLine": 208,
+        "endChar": 71
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
