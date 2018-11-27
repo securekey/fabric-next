@@ -158,7 +158,7 @@ type GossipStateProviderImpl struct {
 
 	// Queue of payloads which wasn't acquired yet
 	payloads           PayloadsBuffer
-	validationPayloads PayloadsBuffer
+	validationPayloads chan *proto.Payload
 
 	ledger ledgerResources
 
@@ -250,7 +250,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		// Create a queue for payload received
 		payloads:           NewPayloadsBuffer(height),
-		validationPayloads: NewPayloadsBuffer(height),
+		validationPayloads: make(chan *proto.Payload),
 
 		ledger: ledger,
 
@@ -579,8 +579,8 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 
 	if ledgerconfig.IsCommitter() {
 		if partiallyValidated {
-			// FIXME: Change to Debug
-			logger.Infof("[%s] Partially validated block [%d] received - sending to response channel", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+			// FIXME: Need to ensure that the block came from a peer in our org - otherwise can't trust it
+			logger.Debugf("[%s] Partially validated block [%d] received - sending to response channel", s.chainID, dataMsg.Payload.SeqNum)
 			s.validationResponseChan <- &txvalidator.ValidationResults{
 				BlockNumber: block.Header.Number,
 				TxFlags:     block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER],
@@ -592,13 +592,13 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 			}
 		}
 	} else if fullyValidated {
+		// FIXME: Need to ensure that the block came from a peer in our org - otherwise can't trust it
 		logger.Debugf("[%s] Fully validated block [%d] received with %d transactions. Adding to payload buffer.", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
 		if err := s.addPayload(dataMsg.Payload, nonBlocking); err != nil {
 			logger.Warningf("[%s] Block [%d] received from gossip wasn't added to payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
 		}
 	} else if unvalidated {
-		// FIXME: Change to Debug
-		logger.Infof("[%s] Unvalidated block [%d] received with %d transaction(s).", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+		logger.Debugf("[%s] Unvalidated block [%d] received with %d transaction(s).", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
 		if err := s.addValidationPayload(dataMsg.Payload); err != nil {
 			logger.Warningf("[%s] Block [%d] received from gossip wasn't added to validation payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
 		}
@@ -658,30 +658,27 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 					}
 				}
 			}
-		case <-s.validationPayloads.Ready():
-			logger.Debugf("[%s] Ready to validate payloads (blocks), next block number is = [%d]", s.chainID, s.validationPayloads.Next())
-			// Collect all subsequent payloads
-			for payload := s.validationPayloads.Pop(); payload != nil; payload = s.validationPayloads.Pop() {
-				rawBlock := &common.Block{}
-				if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
-					logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
-					continue
-				}
-				if rawBlock.Data == nil || rawBlock.Header == nil {
-					logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)",
-						payload.SeqNum, rawBlock.Header, rawBlock.Data)
-					continue
-				}
+		case payload := <-s.validationPayloads:
+			logger.Debugf("[%s] Received unvalidated blocks %d", s.chainID, payload.SeqNum)
+			rawBlock := &common.Block{}
+			if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
+				logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+				continue
+			}
+			if rawBlock.Data == nil || rawBlock.Header == nil {
+				logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)",
+					payload.SeqNum, rawBlock.Header, rawBlock.Data)
+				continue
+			}
 
-				if rawBlock.Header.Number == s.blockPublisher.LedgerHeight() {
-					// FIXME: Change to Debug
-					logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
-					s.ledger.ValidatePartialBlock(rawBlock)
-				} else {
-					// FIXME: Change to Debug
-					logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, payload.SeqNum, len(rawBlock.Data.Data), s.blockPublisher.LedgerHeight())
-					s.pendingValidations.Add(rawBlock)
-				}
+			if rawBlock.Header.Number == s.blockPublisher.LedgerHeight() {
+				// FIXME: Change to Debug
+				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
+				s.ledger.ValidatePartialBlock(rawBlock)
+			} else {
+				// FIXME: Change to Debug
+				logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, payload.SeqNum, len(rawBlock.Data.Data), s.blockPublisher.LedgerHeight())
+				s.pendingValidations.Add(rawBlock)
 			}
 		case <-s.stopCh:
 			s.stopCh <- struct{}{}
@@ -981,8 +978,8 @@ func (s *GossipStateProviderImpl) addValidationPayload(payload *proto.Payload) e
 		return nil
 	}
 
-	logger.Debugf("[%s] Adding block %d to validation payload buffer.", s.chainID, payload.SeqNum)
-	s.validationPayloads.Push(payload)
+	logger.Debugf("[%s] Sending block %d to validation payload channel.", s.chainID, payload.SeqNum)
+	s.validationPayloads <- payload
 	return nil
 }
 
@@ -1107,8 +1104,6 @@ func (s *GossipStateProviderImpl) gossipBlock(block *common.Block, blockPvtData 
 		logger.Errorf("[%s] Error verifying block with sequnce number %d, due to %s", s.chainID, blockNum, err)
 	}
 
-	numberOfPeers := len(s.mediator.PeersOfChannel(common2.ChainID(s.chainID)))
-
 	pvtDataCollections := make(util.PvtDataCollections, 0)
 	for _, value := range blockPvtData {
 		pvtDataCollections = append(pvtDataCollections, &ledger.TxPvtData{SeqInBlock: value.SeqInBlock, WriteSet: value.WriteSet})
@@ -1123,7 +1118,7 @@ func (s *GossipStateProviderImpl) gossipBlock(block *common.Block, blockPvtData 
 	// Use payload to create gossip message
 	gossipMsg := createGossipMsg(s.chainID, payload)
 
-	logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", s.chainID, blockNum, numberOfPeers)
+	logger.Debugf("[%s] Gossiping block %d", s.chainID, blockNum)
 	s.mediator.GossipAdapter.Gossip(gossipMsg)
 }
 
