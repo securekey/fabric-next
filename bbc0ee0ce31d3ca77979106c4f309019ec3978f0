@@ -22,6 +22,29 @@
       "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "fbf3f4e8_ae797347",
+        "filename": "core/ledger/kvledger/txmgmt/validator/valinternal/val_internal.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 20,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-27T21:23:02Z",
+      "side": 1,
+      "message": "this data isn\u0027t needed by validation - it\u0027s only for commit.\n\nis there a different place we can kick the rev cache population so we don\u0027t change the validation interface?",
+      "range": {
+        "startLine": 20,
+        "startChar": 62,
+        "endLine": 20,
+        "endChar": 98
+      },
+      "revId": "bbc0ee0ce31d3ca77979106c4f309019ec3978f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
