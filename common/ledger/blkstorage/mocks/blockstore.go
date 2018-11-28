@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	cledger "github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 )
@@ -118,7 +119,7 @@ func (mock *MockBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum
 }
 
 // BlockStore.RetrieveTxByID()
-func (mock *MockBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+func (mock *MockBlockStore) RetrieveTxByID(txID string, hints ...cledger.SearchHint) (*common.Envelope, error) {
 	panic("implement me")
 }
 

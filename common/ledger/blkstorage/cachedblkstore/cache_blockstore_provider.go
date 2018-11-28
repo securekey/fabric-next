@@ -60,7 +60,6 @@ func (p *CachedBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.B
 		return nil, err
 	}
 
-
 	blockCache, err := p.cacheProvider.OpenBlockCache(ledgerid)
 	if err != nil {
 		return nil, err
