@@ -102,8 +102,8 @@ func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
 }
 
 type expiryInfo struct {
-	json jsonValue
-	purgeKeys []string
+	json       jsonValue
+	purgeKeys  []string
 	expiryKeys []string
 }
 
@@ -125,7 +125,7 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 
 		if !expiryBlockCounted[expiryEntry.key.expiringBlk] {
 			ei.expiryKeys = append(ei.expiryKeys, blockNumberToKey(expiryEntry.key.expiringBlk))
-			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + expiryEntry.key.expiringBlk % purgeInterval)
+			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + expiryEntry.key.expiringBlk%purgeInterval)
 			ei.purgeKeys = append(ei.purgeKeys, purgedAt)
 			expiryBlockCounted[expiryEntry.key.expiringBlk] = true
 		}
@@ -189,10 +189,6 @@ func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata, rev string)
 	}
 
 	// TODO: is full sync needed after saving the metadata doc (will recovery work)?
-	err = db.EnsureFullCommit()
-	if err != nil {
-		return "", errors.WithMessage(err, "full commit failed")
-	}
 
 	return rev, nil
 }

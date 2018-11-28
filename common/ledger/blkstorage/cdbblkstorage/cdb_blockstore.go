@@ -110,11 +110,6 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 			return errors.WithMessage(err, "adding block to couchDB failed")
 		}
 
-		err = s.blockStore.EnsureFullCommit()
-		if err != nil {
-			return errors.WithMessage(err, "full commit failed")
-		}
-
 		logger.Debugf("block stored to couchDB [%d, %s]", block.GetHeader().GetNumber(), rev)
 	} else {
 		logger.Debugf("Not saving checkpoint info for block %d since I'm not a committer. Just publishing the block.", block.Header.Number)

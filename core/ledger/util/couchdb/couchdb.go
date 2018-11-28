@@ -551,41 +551,6 @@ func (dbclient *CouchDatabase) DropDatabase() (*DBOperationResponse, error) {
 	}
 
 	return dbResponse, fmt.Errorf("Error dropping database")
-
-}
-
-// EnsureFullCommit calls _ensure_full_commit for explicit fsync
-func (dbclient *CouchDatabase) EnsureFullCommit() error {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_ensureFullCommit_time").Start()
-		defer stopWatch.Stop()
-	}
-
-	dbResponse, err := dbclient.dbOperation("/_ensure_full_commit")
-	if err != nil {
-		return err
-	}
-	if !dbResponse.Ok {
-		return errors.New("ensure full commit failed")
-	}
-
-	//Check to see if autoWarmIndexes is enabled
-	//If autoWarmIndexes is enabled, indexes will be refreshed after the number of blocks
-	//in GetWarmIndexesAfterNBlocks() have been committed to the state database
-	//Check to see if the number of blocks committed exceeds the threshold for index warming
-	//Use a go routine to launch WarmIndexAllIndexes(), this will execute as a background process
-	if ledgerconfig.IsAutoWarmIndexesEnabled() {
-
-		if dbclient.IndexWarmCounter >= ledgerconfig.GetWarmIndexesAfterNBlocks() {
-			go dbclient.runWarmIndexAllIndexes()
-			dbclient.IndexWarmCounter = 0
-		}
-		dbclient.IndexWarmCounter++
-
-	}
-
-	return nil
 }
 
 func (dbclient *CouchDatabase) dbOperation(op string) (*DBOperationResponse, error) {
@@ -1480,41 +1445,55 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 
 }
 
-//runWarmIndexAllIndexes is a wrapper for WarmIndexAllIndexes to catch and report any errors
-func (dbclient *CouchDatabase) runWarmIndexAllIndexes() {
-
-	err := dbclient.WarmIndexAllIndexes()
-	if err != nil {
-		logger.Errorf("Error detected during WarmIndexAllIndexes(): %s", err.Error())
+// Warms up all indexes.
+func (db *CouchDatabase) doAllIndexWarmup() {
+	if metrics.IsDebug() {
+		stopWatch := metrics.RootScope.Timer("couchdb_allIndexWarmup_time").Start()
+		defer stopWatch.Stop()
 	}
-
-}
-
-//WarmIndexAllIndexes method provides a function for warming all indexes for a database
-func (dbclient *CouchDatabase) WarmIndexAllIndexes() error {
-
-	logger.Debugf("Entering WarmIndexAllIndexes()")
-
 	//Retrieve all indexes
-	listResult, err := dbclient.ListIndex()
+	listResult, err := db.ListIndex()
 	if err != nil {
-		return err
+		logger.Errorf("failed to list all indexes - aborting warmup due to error: %s", err)
+		return
 	}
-
 	//For each index definition, execute an index refresh
 	for _, elem := range listResult {
-
-		err := dbclient.WarmIndex(elem.DesignDocument, elem.Name)
+		err := db.WarmIndex(elem.DesignDocument, elem.Name)
 		if err != nil {
-			return err
+			logger.Errorf(
+				"failed to warm up ddoc=%s index=%s - aborting warmup due to error: %s",
+				elem.DesignDocument, elem.Name, err)
+			return
 		}
 
 	}
+}
 
-	logger.Debugf("Exiting WarmIndexAllIndexes()")
-
-	return nil
-
+// WarmUpAllIndexes 'warms up' all indexes in this database in a background routine.
+//
+// This is a no-op if the "ledger.state.couchDBConfig.autoWarmIndexes" configuration is set to 'false', otherwise
+// it is enabled by default. Also, the indexes are warmed up only after the threshold number of blocks defined by
+// "ledger.state.couchDBConfig.warmIndexesAfterNBlocks" is reached.
+func (dbclient *CouchDatabase) WarmUpAllIndexes() {
+	logger.Debugf("Entering WarmUpAllIndexes()")
+	//Check to see if autoWarmIndexes is enabled
+	//If autoWarmIndexes is enabled, indexes will be refreshed after the number of blocks
+	//in GetWarmIndexesAfterNBlocks() have been committed to the state database
+	//Check to see if the number of blocks committed exceeds the threshold for index warming
+	//Use a go routine to launch doAllIndexWarmup(), this will execute as a background process
+	if ledgerconfig.IsAutoWarmIndexesEnabled() {
+		logger.Debugf("autoWarmIndexes enabled")
+		if dbclient.IndexWarmCounter >= ledgerconfig.GetWarmIndexesAfterNBlocks() {
+			logger.Debugf(
+				"index warmup triggered: indexWarmCounter=%d, warmIndexersAfterNBlocks=%d",
+				dbclient.IndexWarmCounter, ledgerconfig.GetWarmIndexesAfterNBlocks())
+			go dbclient.doAllIndexWarmup()
+			dbclient.IndexWarmCounter = 0
+		}
+		dbclient.IndexWarmCounter++
+	}
+	logger.Debugf("Exiting WarmUpAllIndexes()")
 }
 
 //GetDatabaseSecurity method provides function to retrieve the security config for a database
