@@ -13,28 +13,57 @@ import (
 )
 
 type blockCache struct {
-	blockByNumber map[uint64]*common.Block
-	mutex         sync.Mutex
+	blocks []*common.Block
+	mutex  sync.RWMutex
 }
 
 func newBlockCache() *blockCache {
-	return &blockCache{
-		blockByNumber: make(map[uint64]*common.Block),
-	}
+	return &blockCache{}
 }
 
+// Add adds the given block to the cache
 func (b *blockCache) Add(block *common.Block) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	b.blockByNumber[block.Header.Number] = block
+	b.blocks = append(b.blocks, block)
 }
 
+// Remove removes the given block number and also all blocks before that
+// Returns the block for the given number or nil if not found
 func (b *blockCache) Remove(blockNum uint64) *common.Block {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	block, ok := b.blockByNumber[blockNum]
-	if ok {
-		delete(b.blockByNumber, blockNum)
+
+	var blocksToRemove []uint64
+	var block *common.Block
+	for _, blk := range b.blocks {
+		if blk.Header.Number <= blockNum {
+			if blk.Header.Number == blockNum {
+				block = blk
+			}
+			blocksToRemove = append(blocksToRemove, blk.Header.Number)
+		}
 	}
+
+	for _, num := range blocksToRemove {
+		b.remove(num)
+	}
+
 	return block
+}
+
+// Size returns the size of the cache
+func (b *blockCache) Size() int {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+	return len(b.blocks)
+}
+
+func (b *blockCache) remove(blockNum uint64) {
+	for i, blk := range b.blocks {
+		if blk.Header.Number == blockNum {
+			b.blocks = append(b.blocks[:i], b.blocks[i+1:]...)
+			return
+		}
+	}
 }

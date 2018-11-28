@@ -302,6 +302,7 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledge
 	logger.Infof("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
 
 	start := time.Now()
+	timeoutChan := time.After(timeout)
 
 	for {
 		select {
@@ -327,7 +328,7 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledge
 					return nil
 				}
 			}
-		case <-time.After(timeout):
+		case <-timeoutChan:
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Timed out after %s waiting for validation response for block %d", v.ChainID, timeout, blockNumber)
 			return nil
