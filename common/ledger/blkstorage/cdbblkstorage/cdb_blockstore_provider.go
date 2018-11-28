@@ -59,7 +59,7 @@ func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerID string) (blkstorage.Bloc
 }
 
 func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, blockIndexEnabled bool) (blkstorage.BlockStore, error) {
-	blockStoreDB, err := createCommitterBlockStoreDB(couchInstance, blockStoreDBName)
+	blockStoreDB, err := createCommitterBlockStoreDB(couchInstance, blockStoreDBName, blockIndexEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -67,15 +67,17 @@ func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID st
 	return newCDBBlockStore(blockStoreDB, ledgerID, blockIndexEnabled), nil
 }
 
-func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string, blockIndexEnabled bool) (*couchdb.CouchDatabase, error) {
 	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	err = createBlockStoreIndices(db)
-	if err != nil {
-		return nil, err
+	if blockIndexEnabled {
+		err = createBlockStoreIndices(db)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return db, nil
 }
