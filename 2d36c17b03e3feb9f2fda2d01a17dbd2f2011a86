@@ -22,6 +22,30 @@
       "revId": "2d36c17b03e3feb9f2fda2d01a17dbd2f2011a86",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "4442ceaa_dc94d1ba",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 44,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-28T23:26:47Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "6911c031_f3eaa365",
+      "range": {
+        "startLine": 44,
+        "startChar": 1,
+        "endLine": 44,
+        "endChar": 23
+      },
+      "revId": "2d36c17b03e3feb9f2fda2d01a17dbd2f2011a86",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
