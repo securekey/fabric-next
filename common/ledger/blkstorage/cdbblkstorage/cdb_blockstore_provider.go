@@ -59,7 +59,7 @@ func (p *CDBBlockstoreProvider) OpenBlockStore(ledgerID string) (blkstorage.Bloc
 }
 
 func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, blockIndexEnabled bool) (blkstorage.BlockStore, error) {
-	blockStoreDB, err := createCommitterBlockStoreDB(couchInstance, blockStoreDBName)
+	blockStoreDB, err := createCommitterBlockStoreDB(couchInstance, blockStoreDBName, blockIndexEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -67,21 +67,23 @@ func createCommitterBlockStore(couchInstance *couchdb.CouchInstance, ledgerID st
 	return newCDBBlockStore(blockStoreDB, ledgerID, blockIndexEnabled), nil
 }
 
-func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+func createCommitterBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string, blockIndexEnabled bool) (*couchdb.CouchDatabase, error) {
 	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	err = createBlockStoreIndices(db)
-	if err != nil {
-		return nil, err
+	if blockIndexEnabled {
+		err = createBlockStoreIndices(db)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return db, nil
 }
 
 func createBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blockStoreDBName string, blockIndexEnabled bool) (blkstorage.BlockStore, error) {
-	blockStoreDB, err := createBlockStoreDB(couchInstance, blockStoreDBName)
+	blockStoreDB, err := createBlockStoreDB(couchInstance, blockStoreDBName, blockIndexEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +91,7 @@ func createBlockStore(couchInstance *couchdb.CouchInstance, ledgerID string, blo
 	return newCDBBlockStore(blockStoreDB, ledgerID, blockIndexEnabled), nil
 }
 
-func createBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+func createBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string, blockIndexEnabled bool) (*couchdb.CouchDatabase, error) {
 	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
@@ -103,12 +105,14 @@ func createBlockStoreDB(couchInstance *couchdb.CouchInstance, dbName string) (*c
 		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
 	}
 
-	indexExists, err := db.IndexDesignDocExistsWithRetry(blockHashIndexDoc)
-	if err != nil {
-		return nil, err
-	}
-	if !indexExists {
-		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
+	if blockIndexEnabled {
+		indexExists, err := db.IndexDesignDocExistsWithRetry(blockHashIndexDoc)
+		if err != nil {
+			return nil, err
+		}
+		if !indexExists {
+			return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
+		}
 	}
 
 	return db, nil
