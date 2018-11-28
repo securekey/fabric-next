@@ -7,7 +7,7 @@ package cdbblkstorage
 
 import (
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"strings"
+	"github.com/hyperledger/fabric/protos/common"
 )
 
 // checkpointInfo
@@ -18,30 +18,39 @@ type checkpointInfo struct {
 
 //Get the current checkpoint information that is stored in the database
 func retrieveCheckpointInfo(db *couchdb.CouchDatabase) (checkpointInfo, error) {
-	results, err := db.ReadDocRange("", "", numIndexDocs + 1, 0, true)
+	info, err := db.GetDatabaseInfo()
 	if err != nil {
 		return checkpointInfo{}, err
 	}
 
-	var result *couchdb.QueryResult
+	var lastBlock *common.Block
+	for i := 1; i <= min(info.DocCount, numMetaDocs + 1); i++ {
+		doc, _, err := db.ReadDoc(blockNumberToKey(uint64(info.DocCount - i)))
+		if err != nil {
+			return checkpointInfo{}, err
+		}
 
-	for _, r := range results {
-		if !strings.HasPrefix(r.ID, "_") {
-			result = r
+		if doc != nil {
+			lastBlock, err = couchDocToBlock(doc)
+			if err != nil {
+				return checkpointInfo{}, err
+			}
 		}
 	}
 
-	if result == nil {
+	if lastBlock == nil {
 		return checkpointInfo{isChainEmpty: true}, nil
-	}
-
-	block, err := couchAttachmentsToBlock(result.Attachments)
-	if err != nil {
-		return checkpointInfo{}, err
 	}
 
 	return checkpointInfo{
 		isChainEmpty: false,
-		lastBlockNumber: block.GetHeader().GetNumber(),
+		lastBlockNumber: lastBlock.GetHeader().GetNumber(),
 	}, nil
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

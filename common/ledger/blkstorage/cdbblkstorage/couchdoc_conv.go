@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
@@ -23,18 +22,17 @@ import (
 
 // block document
 const (
-	idField              = "_id"
-	lastBlockNumberField = "lastBlockNumber"
-	blockHashField       = "hash"
-	blockTxnIDsField     = "transaction_ids"
-	blockHashIndexName   = "by_hash"
-	blockHashIndexDoc    = "indexHash"
-	blockTxnIndexName    = "by_id"
-	blockTxnIndexDoc     = "indexTxn"
-	blockAttachmentName  = "block"
-	blockKeyPrefix       = ""
-	blockHeaderField     = "header"
-	numIndexDocs         = 2
+	idField             = "_id"
+	blockHashField      = "hash"
+	blockTxnIDsField    = "transaction_ids"
+	blockHashIndexName  = "by_hash"
+	blockHashIndexDoc   = "indexHash"
+	blockTxnIndexName   = "by_id"
+	blockTxnIndexDoc    = "indexTxn"
+	blockAttachmentName = "block"
+	blockKeyPrefix      = ""
+	blockHeaderField    = "header"
+	numMetaDocs         = 2
 )
 
 const blockHashIndexDef = `
@@ -169,17 +167,6 @@ func couchAttachmentsToBlock(attachments []*couchdb.AttachmentInfo) (*common.Blo
 	return &block, nil
 }
 
-func couchDocToCheckpointInfo(doc *couchdb.CouchDoc) (*checkpointInfo, error) {
-	v, err := couchDocToJSON(doc)
-	if err != nil {
-		return nil, errors.Wrapf(err, "couchDocToJSON return error")
-	}
-	lastBlockNumberValue, _ := v[lastBlockNumberField].(string)
-	lastBlockNumber, _ := strconv.ParseUint(lastBlockNumberValue, 10, 64)
-	return &checkpointInfo{false, lastBlockNumber}, nil
-
-}
-
 func blockNumberToKey(blockNum uint64) string {
 	return blockKeyPrefix + strconv.FormatUint(blockNum, 10)
 }
@@ -199,22 +186,4 @@ func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block,
 	}
 
 	return couchAttachmentsToBlock(results[0].Attachments)
-}
-
-func couchDocToJSON(doc *couchdb.CouchDoc) (jsonValue, error) {
-	return jsonValueToJSON(doc.JSONValue)
-}
-
-func jsonValueToJSON(jsonValue []byte) (jsonValue, error) {
-	// create a generic map unmarshal the json
-	jsonResult := make(map[string]interface{})
-	decoder := json.NewDecoder(bytes.NewBuffer(jsonValue))
-	decoder.UseNumber()
-
-	err := decoder.Decode(&jsonResult)
-	if err != nil {
-		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
-	}
-
-	return jsonResult, nil
 }
