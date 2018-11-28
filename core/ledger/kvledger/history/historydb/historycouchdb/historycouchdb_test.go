@@ -626,7 +626,7 @@ func newCouchDbClient(def *couchdb.CouchDBDef, dbname string) *couchdb.CouchData
 	instance, err := couchdb.CreateCouchInstance(
 		def.URL, def.Username, def.Password,
 		def.MaxRetries, def.MaxRetriesOnStartup,
-		def.RequestTimeout,
+		def.RequestTimeout, false,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("cannot create couchdb instance. error: %s", err))
