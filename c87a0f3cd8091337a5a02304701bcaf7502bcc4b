@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "2c6ff601_eb289e52",
+        "filename": "core/ledger/kvledger/cache.go",
+        "patchSetId": 7
+      },
+      "lineNbr": 85,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-28T20:59:56Z",
+      "side": 1,
+      "message": "the range queries need to be fixed prior before we can update indexes in the background",
+      "range": {
+        "startLine": 85,
+        "startChar": 9,
+        "endLine": 85,
+        "endChar": 34
+      },
+      "revId": "c87a0f3cd8091337a5a02304701bcaf7502bcc4b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
