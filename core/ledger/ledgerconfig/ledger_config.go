@@ -472,11 +472,10 @@ func CouchDBHTTPTraceEnabled() bool {
 // For example, if there are 20 transactions to validate and ValidationWaitTimePerTx=100ms
 // then the committer will wait 20*50ms for responses from other validators.
 func GetValidationWaitTimePerTx() time.Duration {
-	timeout := viper.GetDuration(confValidationWaitTimePerTx)
-	if timeout == 0 {
-		return defaultValidationWaitTimePerTx
+	if viper.IsSet(confValidationWaitTimePerTx) {
+		return viper.GetDuration(confValidationWaitTimePerTx)
 	}
-	return timeout
+	return defaultValidationWaitTimePerTx
 }
 
 // GetValidationMinWaitTime is used by the committer in distributed validation and is the minimum

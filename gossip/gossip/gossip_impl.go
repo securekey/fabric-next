@@ -667,7 +667,7 @@ func (g *gossipServiceImpl) getPeersToSendTo(membership []discovery.NetworkMembe
 	committers, endorsers := g.categorizeMembershipByRole(membership)
 
 	if len(committers) > criteria.MaxPeers {
-		g.logger.Infof("The number of committers %d, exceeds criteria.MaxPeers %d. Adjusting MaxPeers to %d so that (if possible) each committer gets the private data", len(committers), criteria.MaxPeers, len(committers))
+		g.logger.Debugf("The number of committers %d, exceeds criteria.MaxPeers %d. Adjusting MaxPeers to %d so that (if possible) each committer gets the private data", len(committers), criteria.MaxPeers, len(committers))
 	}
 
 	// First select as many committers as possible. Note that it may not be possible to send to all
