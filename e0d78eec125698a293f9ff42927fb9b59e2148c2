@@ -68,6 +68,30 @@
       "revId": "e0d78eec125698a293f9ff42927fb9b59e2148c2",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "066ee454_04451c44",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 316,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-28T16:29:36Z",
+      "side": 1,
+      "message": "As discussed, removed index update.",
+      "parentUuid": "02b046f5_2cbd3a76",
+      "range": {
+        "startLine": 316,
+        "startChar": 0,
+        "endLine": 316,
+        "endChar": 3
+      },
+      "revId": "e0d78eec125698a293f9ff42927fb9b59e2148c2",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
