@@ -98,25 +98,15 @@ func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
-// UpdateKVCache will purge non durable data from the cache for the given blockNumber and update all caches with the
-// provided validatedTxOps, validatedPvtData and validatedPvtHashData and update leveldb indexes for the given ledgerID
-func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData, ledgerID string) error {
-	kvCacheMtx.Lock()
-	defer kvCacheMtx.Unlock()
-
-	purgeNonDurable(blockNumber)
+func PrepareIndexUpdates(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) ([]*statekeyindex.IndexUpdate, []statekeyindex.CompositeKey) {
 
 	var indexUpdates []*statekeyindex.IndexUpdate
-	var deletedIndexKeys []statekeyindex.CompositeKey
+	var indexDeletes []statekeyindex.CompositeKey
 
 	for _, v := range validatedTxOps {
-		kvCache, _ := getKVCache(v.ChId, v.Namespace)
 		if v.IsDeleted {
-			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
-			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 		} else {
-			newTx := v.ValidatedTx
-			kvCache.Put(&newTx)
 			indexUpdate := statekeyindex.IndexUpdate{
 				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace},
 				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
@@ -127,13 +117,9 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 
 	for _, v := range validatedPvtData {
 		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
-		kvCache, _ := getKVCache(v.ChId, namespace)
 		if v.IsDeleted {
-			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
-			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
 		} else {
-			newTx := v
-			kvCache.PutPrivate(&newTx)
 			indexUpdate := statekeyindex.IndexUpdate{
 				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
 				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
@@ -144,13 +130,9 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 
 	for _, v := range validatedPvtHashData {
 		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
-		kvCache, _ := getKVCache(v.ChId, namespace)
 		if v.IsDeleted {
-			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
-			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
 		} else {
-			newTx := v
-			kvCache.PutPrivate(&newTx)
 			indexUpdate := statekeyindex.IndexUpdate{
 				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
 				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
@@ -158,6 +140,11 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
+
+	return indexUpdates, indexDeletes
+}
+
+func ApplyIndexUpdates(indexUpdates []*statekeyindex.IndexUpdate, indexDeletes []statekeyindex.CompositeKey, ledgerID string) error {
 
 	//Add key index in leveldb
 	if len(indexUpdates) > 0 {
@@ -172,18 +159,60 @@ func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validated
 	}
 
 	// Delete key index in leveldb
-	if len(deletedIndexKeys) > 0 {
+	if len(indexDeletes) > 0 {
 		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
 		if err != nil {
 			return err
 		}
-		err = stateKeyIndex.DeleteIndex(deletedIndexKeys)
+		err = stateKeyIndex.DeleteIndex(indexDeletes)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// UpdateKVCache will purge non durable data from the cache for the given blockNumber and update all caches with the
+// provided validatedTxOps, validatedPvtData and validatedPvtHashData and update leveldb indexes for the given ledgerID
+func UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData, pin bool) {
+	kvCacheMtx.Lock()
+	defer kvCacheMtx.Unlock()
+
+	purgeNonDurable(blockNumber)
+
+	for _, v := range validatedTxOps {
+		kvCache, _ := getKVCache(v.ChId, v.Namespace)
+		if v.IsDeleted {
+			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
+		} else {
+			newTx := v.ValidatedTx
+			kvCache.Put(&newTx, pin)
+		}
+	}
+
+	for _, v := range validatedPvtData {
+		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
+		if v.IsDeleted {
+			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
+		} else {
+			newTx := v
+			kvCache.PutPrivate(&newTx, pin)
+		}
+	}
+
+	for _, v := range validatedPvtHashData {
+		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
+		kvCache, _ := getKVCache(v.ChId, namespace)
+		if v.IsDeleted {
+			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
+		} else {
+			newTx := v
+			kvCache.PutPrivate(&newTx, pin)
+		}
+	}
+
 }
 
 // UpdateNonDurableKVCache will purge non durable data from the cache for the given blockNumber then update it with non durable
@@ -326,7 +355,7 @@ func (c *KVCache) getNonDurable(key string) (*ValidatedPvtData, bool) {
 	return nil, false
 }
 
-func (c *KVCache) Put(validatedTx *ValidatedTx) {
+func (c *KVCache) Put(validatedTx *ValidatedTx, pin bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -335,13 +364,15 @@ func (c *KVCache) Put(validatedTx *ValidatedTx) {
 	if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 		(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 		c.validatedTxCache.Add(validatedTx.Key, validatedTx)
-		c.pinnedTx[validatedTx.Key] = validatedTx
+		if pin {
+			c.pinnedTx[validatedTx.Key] = validatedTx
+		}
 	}
 }
 
 // PutPrivate will add the validateTx to the 'permanent' lru cache (if level2 Block height > level1 Block)
 // or to the 'non-durable' cache otherwise
-func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
+func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData, pin bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -353,7 +384,9 @@ func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
 			(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 			newTx := validatedTx.ValidatedTxOp.ValidatedTx
 			c.validatedTxCache.Add(validatedTx.Key, &newTx)
-			c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
+			if pin {
+				c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
+			}
 		}
 		return
 	}
