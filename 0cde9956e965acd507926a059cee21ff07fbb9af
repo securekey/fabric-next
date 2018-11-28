@@ -69,6 +69,30 @@
       "revId": "0cde9956e965acd507926a059cee21ff07fbb9af",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "341f7364_647133d5",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-28T17:05:40Z",
+      "side": 1,
+      "message": "specifically txmgr.commitRWLock\n\n(e.g., it\u0027s used in NewQueryExecutor, NewTxSimulator, (txmgr *LockBasedTxMgr) committer(), ...)",
+      "parentUuid": "c53db366_90521d52",
+      "range": {
+        "startLine": 74,
+        "startChar": 2,
+        "endLine": 74,
+        "endChar": 35
+      },
+      "revId": "0cde9956e965acd507926a059cee21ff07fbb9af",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
