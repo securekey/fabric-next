@@ -261,6 +261,7 @@ func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, 
 
 // GetVersion implements method in VersionedDB interface
 func (vdb *VersionedDB) GetVersion(namespace string, key string) (*version.Height, error) {
+	panic("unreachable (the logic moved to cached state store)")
 	returnVersion, keyFound := vdb.GetCachedVersion(namespace, key)
 	if !keyFound {
 		// This if block get executed only during simulation because during commit
@@ -299,14 +300,6 @@ func (vdb *VersionedDB) BytesKeySuppoted() bool {
 // GetState implements method in VersionedDB interface
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
-	if versionedValue, ok := statedb.GetFromKVCache(vdb.chainName, namespace, key); ok {
-		logger.Debugf("state retrieved from cache. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
-		if metrics.IsDebug() {
-			metrics.RootScope.Counter("cachestatestore_getstate_cache_request_hit").Inc(1)
-		}
-		return versionedValue, nil
-	}
-
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
 		if isDBNotFoundForEndorser(err) {
@@ -327,25 +320,6 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		return nil, err
 	}
 
-	validatedTx := statedb.ValidatedTx{
-		Key:          key,
-		Value:        kv.VersionedValue.Value,
-		BlockNum:     kv.VersionedValue.Version.BlockNum,
-		IndexInBlock: int(kv.VersionedValue.Version.TxNum),
-	}
-
-	validatedTxOp := []statedb.ValidatedTxOp{
-		{
-			Namespace:   namespace,
-			ChId:        vdb.chainName,
-			IsDeleted:   false,
-			ValidatedTx: validatedTx,
-		},
-	}
-
-	// Put retrieved KV from DB to the cache
-	statedb.UpdateKVCache(0, validatedTxOp, nil, nil, vdb.chainName)
-
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 	if metrics.IsDebug() {
 		metrics.RootScope.Counter("cachestatestore_getstate_cache_request_miss").Inc(1)
@@ -355,6 +329,8 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 
 // GetStateMultipleKeys implements method in VersionedDB interface
 func (vdb *VersionedDB) GetStateMultipleKeys(namespace string, keys []string) ([]*statedb.VersionedValue, error) {
+	panic("unreachable, (the logic moved to cached state store)")
+
 	vals := make([]*statedb.VersionedValue, len(keys))
 	for i, key := range keys {
 		val, err := vdb.GetState(namespace, key)
