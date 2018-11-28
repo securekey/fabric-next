@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "69e45b65_65b0bcb6",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/updates_validator.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 42,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-11-28T19:06:23Z",
+      "side": 1,
+      "message": "I\u0027m going to have another commit to change it to debug - this shouldn\u0027t be hit too often",
+      "parentUuid": "c7f097ae_4970590b",
+      "range": {
+        "startLine": 42,
+        "startChar": 2,
+        "endLine": 42,
+        "endChar": 14
+      },
+      "revId": "2eb1cf39fbb6dbafdfb3cdf7892b4ed89bac0482",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "83ec84cc_abd4e0c9",
         "filename": "gossip/privdata/coordinator.go",
         "patchSetId": 6
@@ -36,6 +60,30 @@
       "writtenOn": "2018-11-28T19:02:55Z",
       "side": 1,
       "message": "are these supposed to be Info in this merge?",
+      "range": {
+        "startLine": 174,
+        "startChar": 1,
+        "endLine": 174,
+        "endChar": 13
+      },
+      "revId": "2eb1cf39fbb6dbafdfb3cdf7892b4ed89bac0482",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "70adbe58_023dcecc",
+        "filename": "gossip/privdata/coordinator.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 174,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-11-28T19:06:23Z",
+      "side": 1,
+      "message": "Yes, I want to see how long the validations take so that we can tweak the timeouts",
+      "parentUuid": "83ec84cc_abd4e0c9",
       "range": {
         "startLine": 174,
         "startChar": 1,
