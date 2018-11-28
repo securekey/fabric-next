@@ -177,10 +177,6 @@ func TestBadCouchDBInstance(t *testing.T) {
 	_, err = badCouchDBInstance.VerifyCouchConfig()
 	testutil.AssertError(t, err, "Error should have been thrown with VerifyCouchConfig and invalid connection")
 
-	//Test EnsureFullCommit with bad connection
-	err = badDB.EnsureFullCommit()
-	testutil.AssertError(t, err, "Error should have been thrown with EnsureFullCommit and invalid connection")
-
 	//Test DropDatabase with bad connection
 	_, err = badDB.DropDatabase()
 	testutil.AssertError(t, err, "Error should have been thrown with DropDatabase and invalid connection")
@@ -270,10 +266,6 @@ func TestDBCreateEnsureFullCommit(t *testing.T) {
 	//Save the test document
 	_, saveerr := db.SaveDoc("2", "", &CouchDoc{JSONValue: assetJSON, Attachments: nil})
 	testutil.AssertNoError(t, saveerr, fmt.Sprintf("Error when trying to save a document"))
-
-	//Ensure a full commit
-	commiterr := db.EnsureFullCommit()
-	testutil.AssertNoError(t, commiterr, fmt.Sprintf("Error when trying to ensure a full commit"))
 }
 
 func TestDBBadDatabaseName(t *testing.T) {

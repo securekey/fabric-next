@@ -8,9 +8,6 @@ package statecouchdb
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
@@ -164,31 +161,10 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 	return nil
 }
 
-// nsFlusher implements `batch` interface and a batch executes the function `couchdb.EnsureFullCommit()` for the given namespace
-type nsFlusher struct {
-	db *couchdb.CouchDatabase
-}
-
-func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("statecouchdb_ensureFullCommit_time").Start()
-		defer stopWatch.Stop()
-	}
-
-	var flushers []batch
+func (vdb *VersionedDB) warmupAllIndexes(dbs []*couchdb.CouchDatabase) {
 	for _, db := range dbs {
-		flushers = append(flushers, &nsFlusher{db})
+		db.WarmUpAllIndexes()
 	}
-	return executeBatches(flushers)
-}
-
-func (f *nsFlusher) execute() error {
-	err := f.db.EnsureFullCommit()
-	if err != nil {
-		return errors.WithMessage(err, "Failed to perform full commit")
-	}
-	return nil
 }
 
 func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex, revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
