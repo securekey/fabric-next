@@ -35,6 +35,7 @@ func retrieveCheckpointInfo(db *couchdb.CouchDatabase) (checkpointInfo, error) {
 			if err != nil {
 				return checkpointInfo{}, err
 			}
+			break
 		}
 	}
 
