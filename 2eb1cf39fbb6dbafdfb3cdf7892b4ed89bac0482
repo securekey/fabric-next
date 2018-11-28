@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c7f097ae_4970590b",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/updates_validator.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 42,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-28T19:02:55Z",
+      "side": 1,
+      "message": "Should this be Infof in this merge?",
+      "range": {
+        "startLine": 42,
+        "startChar": 2,
+        "endLine": 42,
+        "endChar": 14
+      },
+      "revId": "2eb1cf39fbb6dbafdfb3cdf7892b4ed89bac0482",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "83ec84cc_abd4e0c9",
+        "filename": "gossip/privdata/coordinator.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 174,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-28T19:02:55Z",
+      "side": 1,
+      "message": "are these supposed to be Info in this merge?",
+      "range": {
+        "startLine": 174,
+        "startChar": 1,
+        "endLine": 174,
+        "endChar": 13
+      },
+      "revId": "2eb1cf39fbb6dbafdfb3cdf7892b4ed89bac0482",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
