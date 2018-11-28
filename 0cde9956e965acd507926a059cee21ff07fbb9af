@@ -22,6 +22,30 @@
       "revId": "0cde9956e965acd507926a059cee21ff07fbb9af",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3f3dca2d_0fad65a7",
+        "filename": "core/ledger/kvledger/cache.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 94,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-11-28T16:56:40Z",
+      "side": 1,
+      "message": "Both are in background, I can move cache before index.",
+      "parentUuid": "eae761c8_4b100a63",
+      "range": {
+        "startLine": 87,
+        "startChar": 0,
+        "endLine": 94,
+        "endChar": 4
+      },
+      "revId": "0cde9956e965acd507926a059cee21ff07fbb9af",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
