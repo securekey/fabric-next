@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/hex"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -27,6 +28,14 @@ func TestAddBlock(t *testing.T) {
 
 	err := cbs.AddBlock(b)
 	assert.NoError(t, err, "block should have been added successfully")
+
+	err = cbs.CheckpointBlock(b)
+	assert.NoError(t, err, "block should have been checkpointed successfully")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500 * time.Millisecond)
+	defer cancel()
+	cbs.blockStore.WaitForBlock(ctx, blockNumber)
+
 	assert.Equal(t, b, cbs.blockStore.(*mockBlockStoreWithCheckpoint).LastBlockAdd, "block should have been added to store")
 	assert.Equal(t, b, cbs.blockIndex.(*mocks.MockBlockIndex).LastBlockAdd, "block should have been added to index")
 
@@ -43,6 +52,11 @@ func TestCheckpointBlock(t *testing.T) {
 
 	err := cbs.CheckpointBlock(b)
 	assert.NoError(t, err, "block should have been checkpointed successfully")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500 * time.Millisecond)
+	defer cancel()
+	cbs.blockStore.WaitForBlock(ctx, blockNumber)
+
 	assert.Equal(t, b, cbs.blockStore.(*mockBlockStoreWithCheckpoint).LastBlockCheckpoint, "block should have been checkpointed to store")
 }
 

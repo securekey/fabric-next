@@ -30,6 +30,11 @@ type CDBBlockstoreProvider struct {
 func NewProvider(blockIndexEnabled bool) (blkstorage.BlockStoreProvider, error) {
 	logger.Debugf("constructing CouchDB block storage provider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
+
+	return newProvider(couchDBDef, blockIndexEnabled)
+}
+
+func newProvider(couchDBDef *couchdb.CouchDBDef, blockIndexEnabled bool) (blkstorage.BlockStoreProvider, error) {
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
 	if err != nil {
