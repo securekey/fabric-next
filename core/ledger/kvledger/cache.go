@@ -29,6 +29,7 @@ import (
 )
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -44,6 +45,9 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 		return err
 	}
 
+	l.txmgmtRWLock.Lock()
+	defer l.txmgmtRWLock.Unlock()
+
 	// Update the 'non-durable' cache only
 	statedb.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
 
@@ -51,6 +55,7 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 }
 
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -67,11 +72,26 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 		return err
 	}
 
-	// Update the cache
-	err = statedb.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
-	if err != nil {
-		return err
-	}
+	go func() {
+		//Cache update with pinning
+		l.txmgmtRWLock.Lock()
+		defer l.txmgmtRWLock.Unlock()
+
+		// Update the cache
+		statedb.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
+	}()
+
+	//Index update in background
+	go func() {
+		l.txmgmtRWLock.RLock()
+		defer l.txmgmtRWLock.RUnlock()
+		indexUpdates, indexDeletes := statedb.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
+		err := statedb.ApplyIndexUpdates(indexUpdates, indexDeletes, l.ledgerID)
+		if err != nil {
+			logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
+			panic(err)
+		}
+	}()
 
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
