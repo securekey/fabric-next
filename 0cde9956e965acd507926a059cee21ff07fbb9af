@@ -46,6 +46,29 @@
       "revId": "0cde9956e965acd507926a059cee21ff07fbb9af",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "c53db366_90521d52",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 5
+      },
+      "lineNbr": 74,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-28T16:58:26Z",
+      "side": 1,
+      "message": "I\u0027m not understanding this new lock. The idea was to acquire the existing lock that is for simulations.",
+      "range": {
+        "startLine": 74,
+        "startChar": 2,
+        "endLine": 74,
+        "endChar": 35
+      },
+      "revId": "0cde9956e965acd507926a059cee21ff07fbb9af",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
