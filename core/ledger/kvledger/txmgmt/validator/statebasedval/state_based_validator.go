@@ -144,10 +144,6 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 			pvtKeysMap := make(map[privacyenabledstate.PvtdataCompositeKey]interface{})
 
 			for i, tx := range data.block.Txs {
-				if !data.txFilter(i) {
-					continue
-				}
-
 				for _, nsRWSet := range tx.RWSet.NsRwSets {
 					logger.Debugf("Pre-loading %d write sets for Tx index %d in block %d", len(nsRWSet.KvRwSet.Writes), i, data.block.Num)
 					for _, kvWrite := range nsRWSet.KvRwSet.Writes {
@@ -209,7 +205,7 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 			}
 
 			// Load committed version of all keys into a cache
-			if len(pubKeys) > 0 || len(hashedKeys) > 0 {
+			if len(pubKeys) > 0 || len(hashedKeys) > 0 || len(pvtKeys) > 0 {
 				err := v.db.LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys, hashedKeys, pvtKeys)
 				if err != nil {
 					logger.Errorf("LoadCommittedVersionsOfPubAndHashedKeys failed %s", err)
@@ -235,7 +231,6 @@ func (v *Validator) ValidateMVCC(block *valinternal.Block, txsFilter util.TxVali
 		if err != nil {
 			return err
 		}
-		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: block, txFilter: acceptTx}
 	}
 
 	var txs []*valinternal.Transaction
@@ -302,8 +297,8 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.
 	if v.db.IsBulkOptimizable() {
-		// Just preload the private data since the block has already been preloaded during MVCC validation
-		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: &valinternal.Block{Num: block.Num}, pvtdata: pvtdata}
+		// preload the block data and private data
+		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: block, pvtdata: pvtdata}
 	}
 
 	updates := valinternal.NewPubAndHashUpdates()
