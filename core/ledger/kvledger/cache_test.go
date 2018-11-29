@@ -29,7 +29,10 @@ func TestFistLevelCacheExpiryBlock(t *testing.T) {
 	testutil.AssertEquals(t, r, uint64(4))
 
 	r = getFirstLevelCacheExpiryBlock(1, 0)
-	testutil.AssertEquals(t, r, uint64(math.MaxUint64))
+	testutil.AssertEquals(t, r, uint64(122))
+
+	r = getFirstLevelCacheExpiryBlock(1, math.MaxUint64)
+	testutil.AssertEquals(t, r, uint64(122))
 
 }
 

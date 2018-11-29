@@ -351,6 +351,7 @@ func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData) {
 		// Add to the cache if the existing version is older
 		if (found && exitingKeyVal.BlockNum < validatedTx.BlockNum) ||
 			(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
+			logger.Debugf("Adding key[%s] to durable private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
 			newTx := validatedTx.ValidatedTxOp.ValidatedTx
 			c.validatedTxCache.Add(validatedTx.Key, &newTx)
 			c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx

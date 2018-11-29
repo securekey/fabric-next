@@ -121,7 +121,7 @@ func TestKVCachePrivate(t *testing.T) {
 
 	purgeNonDurable(0)
 
-	// Check that first key has been moved to LRU
+	// Check that first key is permanent (LRU) cache
 	theKey := fmt.Sprintf("%s-%d", "Key", 0)
 
 	// first key is stored in 'permanent' cache hence missing in 'non-durable'
@@ -149,10 +149,5 @@ func TestKVCachePrivate(t *testing.T) {
 	pvtData, ok = kvCache.getNonDurable(theKey)
 	testutil.AssertEquals(t, ok, false)
 	testutil.AssertNil(t, pvtData)
-
-	// second key has not been moved to lru since level1=level2
-	validatedTx, ok = kvCache.Get(theKey)
-	testutil.AssertEquals(t, ok, false)
-	testutil.AssertNil(t, validatedTx)
 
 }
