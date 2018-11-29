@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "81349862_20fce3d6",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statedb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 72,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-29T20:34:48Z",
+      "side": 1,
+      "message": "please create story for this - this doesn\u0027t smell good.",
+      "range": {
+        "startLine": 72,
+        "startChar": 1,
+        "endLine": 72,
+        "endChar": 39
+      },
+      "revId": "a7d08b143e7ec4f07e3d76101a941178d44b799e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
