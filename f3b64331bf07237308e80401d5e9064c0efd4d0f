@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "28ed0d8e_fc526271",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 71,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-29T20:33:38Z",
+      "side": 1,
+      "message": "docs is being created but not stored to a pending variable... and then it\u0027s not being store to the DB in commitDB.\n\nConfused.",
+      "range": {
+        "startLine": 71,
+        "startChar": 2,
+        "endLine": 71,
+        "endChar": 31
+      },
+      "revId": "f3b64331bf07237308e80401d5e9064c0efd4d0f",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
