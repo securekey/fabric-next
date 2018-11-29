@@ -20,6 +20,7 @@ func TestMarshalMetadata(t *testing.T) {
 	em := Metadata{
 		BlockNumber: 1,
 		TxNumber:    2,
+		CouchDbRev:  "12345",
 	}
 
 	eb, err := MarshalMetadata(&em)
