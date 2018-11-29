@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package statecachedstore
 
 import (
+	"sync"
+
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -176,7 +178,7 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 	return nil
 }
 
-func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey) error {
+func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
 	keysExist = make([]*statedb.CompositeKey, 0)
 	keysNotExist := make([]*statedb.CompositeKey, 0)
 	for _, key := range keys {
@@ -191,11 +193,15 @@ func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKe
 
 		}
 	}
-	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist)
+	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func (c *cachedStateStore) GetWSetCacheLock() *sync.RWMutex {
+	return c.bulkOptimizable.GetWSetCacheLock()
 }
 
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {

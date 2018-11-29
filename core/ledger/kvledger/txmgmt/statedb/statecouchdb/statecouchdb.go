@@ -77,8 +77,8 @@ type VersionedDB struct {
 	committedDataCache     *versionsCache                    // Used as a local cache during bulk processing of a block.
 	verCacheLock           sync.RWMutex
 	mux                    sync.RWMutex
-	committedWSetDataCache *versionsCache // Used as a local cache during bulk processing of a block.
-	verWSetCacheLock       sync.RWMutex
+	committedWSetDataCache map[uint64]*versionsCache // Used as a local cache during bulk processing of a block.
+	verWSetCacheLock       *sync.RWMutex
 }
 
 // newVersionedDB constructs an instance of VersionedDB
@@ -93,7 +93,7 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 	}
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
 	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: newVersionCache()}, nil
+		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
 }
 
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
@@ -225,9 +225,11 @@ func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeK
 	return nil
 }
 
-func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey) error {
-	vdb.verWSetCacheLock.Lock()
-	defer vdb.verWSetCacheLock.Unlock()
+func (vdb *VersionedDB) GetWSetCacheLock() *sync.RWMutex {
+	return vdb.verWSetCacheLock
+}
+
+func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
 	nsKeysMap := map[string][]string{}
 	committedWSetDataCache := newVersionCache()
 	for _, compositeKey := range keys {
@@ -254,8 +256,9 @@ func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, 
 				committedWSetDataCache.setRev(ns, keyMetadata.ID, keyMetadata.Rev)
 			}
 		}
+
 	}
-	vdb.committedWSetDataCache = committedWSetDataCache
+	vdb.committedWSetDataCache[blockNum] = committedWSetDataCache
 	return nil
 }
 
@@ -415,7 +418,7 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 	// and keep it in memory
 	var updateBatches []batch
 	var err error
-	if updateBatches, err = vdb.buildCommitters(updates); err != nil {
+	if updateBatches, err = vdb.buildCommitters(updates, height.BlockNum); err != nil {
 		return err
 	}
 	// stage 2 - ApplyUpdates push the changes to the DB
