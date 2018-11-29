@@ -458,6 +458,7 @@ func (c *KVCache) MustRemove(key string) {
 
 	c.validatedTxCache.Remove(key)
 	delete(c.nonDurablePvtCache, key)
+	delete(c.pinnedTx, key)
 }
 
 // Remove from the cache if the blockNum and indexInBlock are bigger than the corresponding values in the cache
@@ -466,11 +467,12 @@ func (c *KVCache) Remove(key string, blockNum uint64, indexInBlock int) {
 	defer c.mutex.Unlock()
 
 	exitingKeyVal, found := c.get(key)
-	// Remove from the cache if the existing version is older
+	// Remove from all the caches if the existing version is older
 	if (found && exitingKeyVal.BlockNum < blockNum) ||
 		(found && exitingKeyVal.BlockNum == blockNum && exitingKeyVal.IndexInBlock < indexInBlock) {
 		c.validatedTxCache.Remove(key)
 		delete(c.nonDurablePvtCache, key)
+		delete(c.pinnedTx, key)
 	}
 }
 
