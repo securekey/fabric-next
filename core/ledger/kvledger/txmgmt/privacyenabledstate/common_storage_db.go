@@ -17,6 +17,8 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
+	"sync"
+
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
@@ -109,9 +111,18 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	return nil
 }
 
+func (s *CommonStorageDB) GetWSetCacheLock() *sync.RWMutex {
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if !ok {
+		return nil
+	}
+	//TODO find better way to acquire lock not through interface
+	return bulkOptimizable.GetWSetCacheLock()
+}
+
 // LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
 func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
-	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey) error {
+	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey, blockNum uint64) error {
 
 	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
 	if !ok {
@@ -119,7 +130,7 @@ func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []
 	}
 	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, pvtKeys)
 	pubKeys = append(pubKeys, deriveKeys...)
-	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil)
+	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil, blockNum)
 	if err != nil {
 		return err
 	}

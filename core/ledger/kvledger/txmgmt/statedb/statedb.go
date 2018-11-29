@@ -8,6 +8,8 @@ package statedb
 import (
 	"sort"
 
+	"sync"
+
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
@@ -64,9 +66,11 @@ type BulkOptimizable interface {
 	// Load all heights for 'keys' from the data store in bulk and store in cache for later retrieval.
 	// Merge the pre-loaded key-heights into the cache.
 	LoadCommittedVersions(keys []*CompositeKey, preLoaded map[*CompositeKey]*version.Height) error
-	LoadWSetCommittedVersions(keys []*CompositeKey, keysExist []*CompositeKey) error
+	LoadWSetCommittedVersions(keys []*CompositeKey, keysExist []*CompositeKey, blockNum uint64) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()
+	//TODO find better way to acquire lock
+	GetWSetCacheLock() *sync.RWMutex
 }
 
 //IndexCapable interface provides additional functions for
