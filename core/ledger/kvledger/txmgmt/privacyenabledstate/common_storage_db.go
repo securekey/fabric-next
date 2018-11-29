@@ -17,6 +17,8 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 
+	"sync"
+
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
@@ -107,6 +109,15 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	}
 
 	return nil
+}
+
+func (s *CommonStorageDB) GetWSetCacheLock() *sync.RWMutex {
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if !ok {
+		return nil
+	}
+	//TODO find better way to acquire lock not through interface
+	return bulkOptimizable.GetWSetCacheLock()
 }
 
 // LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB

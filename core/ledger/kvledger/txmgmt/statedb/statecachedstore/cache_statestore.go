@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package statecachedstore
 
 import (
+	"sync"
+
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -196,6 +198,10 @@ func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKe
 		return err
 	}
 	return nil
+}
+
+func (c *cachedStateStore) GetWSetCacheLock() *sync.RWMutex {
+	return c.bulkOptimizable.GetWSetCacheLock()
 }
 
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {

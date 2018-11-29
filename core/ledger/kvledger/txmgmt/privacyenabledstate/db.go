@@ -8,6 +8,7 @@ package privacyenabledstate
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -38,6 +39,8 @@ type DB interface {
 	GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error)
 	ExecuteQueryOnPrivateData(namespace, collection, query string) (statedb.ResultsIterator, error)
 	ApplyPrivacyAwareUpdates(updates *UpdateBatch, height *version.Height) error
+	//TODO find better way to acquire lock
+	GetWSetCacheLock() *sync.RWMutex
 }
 
 // PvtdataCompositeKey encloses Namespace, CollectionName and Key components
