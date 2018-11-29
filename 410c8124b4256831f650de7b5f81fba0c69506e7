@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ef221296_91eeabb7",
+        "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 130,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-29T18:41:50Z",
+      "side": 1,
+      "message": "this happen just when peer start",
+      "range": {
+        "startLine": 130,
+        "startChar": 8,
+        "endLine": 130,
+        "endChar": 14
+      },
+      "revId": "410c8124b4256831f650de7b5f81fba0c69506e7",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
