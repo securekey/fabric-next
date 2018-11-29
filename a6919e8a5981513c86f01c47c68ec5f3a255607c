@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f5d9e5f6_eb2d6179",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 176,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-29T19:54:40Z",
+      "side": 1,
+      "message": "need to update this and remove Commit from blockPvtDataResponse below",
+      "range": {
+        "startLine": 176,
+        "startChar": 15,
+        "endLine": 176,
+        "endChar": 55
+      },
+      "revId": "a6919e8a5981513c86f01c47c68ec5f3a255607c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
