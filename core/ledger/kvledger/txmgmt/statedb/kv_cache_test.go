@@ -13,12 +13,15 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 )
 
+const N_LOOP = 500
+const N_PVT_LOOP = 2
+
 func TestKVCache(t *testing.T) {
 	InitKVCache()
 
 	kvCache, _ := GetKVCache("MyCh", "LSCC")
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < N_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
 		theValue := fmt.Sprintf("%s-%d", "Val", i)
 		theBlockNum := uint64(i / 100)
@@ -47,7 +50,7 @@ func TestKVCache(t *testing.T) {
 
 	kvCache2, _ := GetKVCache("MyCh", "VSCC")
 
-	for i := 0; i < 500; i++ {
+	for i := 0; i < N_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
 		theValue := fmt.Sprintf("%s-%d", "Val", i)
 		theBlockNum := uint64(i / 100)
@@ -74,7 +77,7 @@ func TestKVCache(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 500; i++ {
+	for i := 0; i < N_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
 		kvCache.MustRemove(theKey)
 		_, ok := kvCache.Get(theKey)
@@ -93,7 +96,7 @@ func TestKVCachePrivate(t *testing.T) {
 
 	kvCache, _ := GetKVCache("MyCh", "LSCC")
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < N_PVT_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
 		theValue := fmt.Sprintf("%s-%d", "Val", i)
 		theBlockNum := uint64(i / 100)
