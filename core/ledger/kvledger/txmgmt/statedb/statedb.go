@@ -8,6 +8,8 @@ package statedb
 import (
 	"sort"
 
+	"sync"
+
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
@@ -67,6 +69,7 @@ type BulkOptimizable interface {
 	LoadWSetCommittedVersions(keys []*CompositeKey, keysExist []*CompositeKey) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()
+	GetWSetCacheLock() *sync.RWMutex
 }
 
 //IndexCapable interface provides additional functions for

@@ -117,6 +117,8 @@ func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []
 	if !ok {
 		return nil
 	}
+	bulkOptimizable.GetWSetCacheLock().Lock()
+	defer bulkOptimizable.GetWSetCacheLock().Unlock()
 	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, pvtKeys)
 	pubKeys = append(pubKeys, deriveKeys...)
 	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil)
