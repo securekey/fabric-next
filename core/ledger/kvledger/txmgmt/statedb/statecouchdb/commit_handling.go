@@ -2,7 +2,6 @@
 Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
-
 package statecouchdb
 
 import (
@@ -32,12 +31,11 @@ type subNsCommitter struct {
 }
 
 // buildCommitters build the batches of type subNsCommitter. This functions processes different namespaces in parallel
-func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, error) {
+func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch, blockNum uint64) ([]batch, error) {
 	keyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(vdb.chainName)
 	if err != nil {
 		return nil, err
 	}
-
 	namespaces := updates.GetUpdatedNamespaces()
 	var nsCommitterBuilder []batch
 	for _, ns := range namespaces {
@@ -50,16 +48,20 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 		if nsRevs == nil {
 			nsRevs = make(nsRevisions)
 		}
-		vdb.verWSetCacheLock.RLock()
-		nsWSetRevs := vdb.committedWSetDataCache.revs[ns]
+		vdb.GetWSetCacheLock().RLock()
+		nsWSetRevs := vdb.committedWSetDataCache[blockNum].revs[ns]
 		for k, v := range nsWSetRevs {
 			nsRevs[k] = v
 		}
-		vdb.verWSetCacheLock.RUnlock()
+		vdb.committedWSetDataCache[blockNum-1] = nil
+		vdb.GetWSetCacheLock().RUnlock()
 		// for each namespace, construct one builder with the corresponding couchdb handle and couch revisions
 		// that are already loaded into cache (during validation phase)
 		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{ns: ns, updates: nsUpdates, db: db, revisions: nsRevs, keyIndex: keyIndex})
 	}
+	vdb.GetWSetCacheLock().Lock()
+	vdb.committedWSetDataCache[blockNum] = nil
+	vdb.GetWSetCacheLock().Unlock()
 	if err := executeBatches(nsCommitterBuilder); err != nil {
 		return nil, err
 	}
@@ -112,7 +114,6 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 		batchUpdateDocument := updateDocument
 		batchUpdateDocs = append(batchUpdateDocs, batchUpdateDocument.CouchDoc)
 	}
-
 	// Do the bulk update into couchdb. Note that this will do retries if the entire bulk update fails or times out
 	batchUpdateResp, err := db.BatchUpdateDocuments(batchUpdateDocs)
 	if err != nil {
@@ -147,12 +148,10 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				// Note that this will do retries as needed
 				_, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
 			}
-
 			// If the single document update or delete returns an error, then throw the error
 			if err != nil {
 				errorString := fmt.Sprintf("Error occurred while saving document ID = %v  Error: %s  Reason: %s\n",
 					respDoc.ID, respDoc.Error, respDoc.Reason)
-
 				logger.Errorf(errorString)
 				return fmt.Errorf(errorString)
 			}
@@ -160,13 +159,11 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 	}
 	return nil
 }
-
 func (vdb *VersionedDB) warmupAllIndexes(dbs []*couchdb.CouchDatabase) {
 	for _, db := range dbs {
 		db.WarmUpAllIndexes()
 	}
 }
-
 func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex, revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
 	var missingKeys []string
 	for key := range nsUpdates {
