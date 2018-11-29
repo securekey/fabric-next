@@ -60,20 +60,65 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 
 // GetState implements method in VersionedDB interface
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
+	if versionedValue, ok := statedb.GetFromKVCache(c.ledgerID, namespace, key); ok {
+		logger.Infof("state retrieved from cache. ns=%s, chainName=%s, key=%s", namespace, c.ledgerID, key)
+		if metrics.IsDebug() {
+			metrics.RootScope.Counter("cachestatestore_getstate_cache_request_hit").Inc(1)
+		}
+		return versionedValue, nil
+	}
+	versionedValue, err := c.stateStore.GetState(namespace, key)
 
-	//TODO Add call to the cache interface first before go to db
-	//TODO We will change it when Reza code is ready
-	return c.stateStore.GetState(namespace, key)
+	if versionedValue != nil && err == nil {
+		validatedTx := statedb.ValidatedTx{
+			Key:          key,
+			Value:        versionedValue.Value,
+			BlockNum:     versionedValue.Version.BlockNum,
+			IndexInBlock: int(versionedValue.Version.TxNum),
+		}
+
+		validatedTxOp := []statedb.ValidatedTxOp{
+			{
+				Namespace:   namespace,
+				ChId:        c.ledgerID,
+				IsDeleted:   false,
+				ValidatedTx: validatedTx,
+			},
+		}
+
+		// Put retrieved KV from DB to the cache
+		statedb.UpdateKVCache(0, validatedTxOp, nil, nil, c.ledgerID)
+	}
+
+	return versionedValue, err
 }
 
 // GetVersion implements method in VersionedDB interface
 func (c *cachedStateStore) GetVersion(namespace string, key string) (*version.Height, error) {
-	return c.stateStore.GetVersion(namespace, key)
+	returnVersion, keyFound := c.GetCachedVersion(namespace, key)
+	if !keyFound {
+		// This if block get executed only during simulation because during commit
+		// we always call `LoadCommittedVersions` before calling `GetVersion`
+		vv, err := c.GetState(namespace, key)
+		if err != nil || vv == nil {
+			return nil, err
+		}
+		returnVersion = vv.Version
+	}
+	return returnVersion, nil
 }
 
 // GetStateMultipleKeys implements method in VersionedDB interface
 func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string) ([]*statedb.VersionedValue, error) {
-	return c.stateStore.GetStateMultipleKeys(namespace, keys)
+	vals := make([]*statedb.VersionedValue, len(keys))
+	for i, key := range keys {
+		val, err := c.GetState(namespace, key)
+		if err != nil {
+			return nil, err
+		}
+		vals[i] = val
+	}
+	return vals, nil
 }
 
 // GetStateRangeScanIterator implements method in VersionedDB interface
