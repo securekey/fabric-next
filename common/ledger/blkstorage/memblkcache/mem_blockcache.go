@@ -25,6 +25,7 @@ type blockCache struct {
 	numberToHash    map[uint64]string
 	txnLocs         map[string]*txnLoc
 	numberToTxnIDs  map[uint64][]string
+	configBlockNum  uint64
 	mtx             sync.RWMutex
 }
 
@@ -35,6 +36,7 @@ func newBlockCache(blockCacheSize int) *blockCache {
 	numberToHash := make(map[uint64]string)
 	txns := make(map[string]*txnLoc)
 	numberToTxnIDs := make(map[uint64][]string)
+	configBlockNum := uint64(0)
 	mtx := sync.RWMutex{}
 
 	c := blockCache{
@@ -44,6 +46,7 @@ func newBlockCache(blockCacheSize int) *blockCache {
 		numberToHash,
 		txns,
 		numberToTxnIDs,
+		configBlockNum,
 		mtx,
 	}
 
@@ -87,8 +90,47 @@ func (c *blockCache) OnBlockStored(blockNum uint64) bool {
 		return false
 	}
 
+	if blockNum == 0 {
+		return c.onGenesisBlockStored(b)
+	}
+
+	if utils.IsConfigBlock(b)  {
+		return c.onConfigBlockStored(b)
+	}
+
+	return c.onBlockStored(b)
+}
+
+func (c *blockCache) onGenesisBlockStored(block *common.Block) bool {
+	// Keep the genesis block in memory (by leaving in pinnedBlocks)
+	// TODO: Determine if this is really needed.
+	return true
+}
+
+func (c *blockCache) onConfigBlockStored(block *common.Block) bool {
+	if c.configBlockNum == 0 {
+		// Keep the latest config block in memory (by leaving in pinnedBlocks)
+		c.configBlockNum = block.GetHeader().GetNumber()
+
+		return true
+	}
+
+	// Unpin the previous config block
+	oldBlock, ok := c.pinnedBlocks[c.configBlockNum]
+	if !ok {
+		return false
+	}
+
+	c.configBlockNum = block.GetHeader().GetNumber()
+
+	return c.onBlockStored(oldBlock)
+}
+
+func (c *blockCache) onBlockStored(block *common.Block) bool {
+	blockNum := block.GetHeader().GetNumber()
+
 	delete(c.pinnedBlocks, blockNum)
-	c.blocks.Add(blockNum, b)
+	c.blocks.Add(blockNum, block)
 	return true
 }
 
