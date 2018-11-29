@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package cdbpvtdata
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,8 +18,6 @@ import (
 
 const (
 	idField                    = "_id"
-	revField                   = "_rev"
-	blockNumberField           = "block_number"
 	expiryBlockNumbersField    = "expiry_block_numbers"
 	purgeBlockNumbersField     = "purge_block_numbers"
 	purgeIntervalField         = "purge_interval"
@@ -28,11 +25,9 @@ const (
 	purgeBlockNumbersIndexDoc  = "indexPurgeBlockNumber"
 	dataField                  = "data"
 	expiryField                = "expiry"
-	metadataKey                = "metadata"
-	commitField                = "commit"
-	pendingCommitField         = "pending"
 	blockKeyPrefix             = ""
 	blockNumberBase            = 10
+	numMetaDocs                = 2
 )
 
 const purgeBlockNumbersIndexDef = `
@@ -108,9 +103,12 @@ type expiryInfo struct {
 }
 
 func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64) (*expiryInfo, error) {
-	var ei expiryInfo
+	ei := expiryInfo{
+		json: make(jsonValue),
+		purgeKeys: make([]string, 0),
+		expiryKeys: make([]string, 0),
+	}
 
-	ei.json = make(jsonValue)
 	expiryBlockCounted := make(map[uint64]bool)
 
 	for _, expiryEntry := range expiryEntries {
@@ -136,87 +134,45 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 	return &ei, nil
 }
 
-func createMetadataDoc(rev string, pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
-	jsonMap := make(jsonValue)
-	jsonMap[idField] = metadataKey
-	if rev != "" {
-		jsonMap[revField] = rev
-	}
-
-	commitMap := make(jsonValue)
-	commitMap[pendingCommitField] = pendingCommit
-	commitMap[blockNumberField] = lastBlockNumber
-	jsonMap[commitField] = commitMap
-
-	jsonBytes, err := jsonMap.toBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
-
-	return &couchDoc, nil
-}
-
-func couchValueToJSON(value []byte) (jsonValue, error) {
-	// create a generic map unmarshal the json
-	jsonResult := make(map[string]interface{})
-	decoder := json.NewDecoder(bytes.NewBuffer(value))
-	decoder.UseNumber()
-
-	err := decoder.Decode(&jsonResult)
-	if err != nil {
-		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
-	}
-
-	return jsonResult, nil
-}
-
 type metadata struct {
 	pending           bool
 	lastCommitedBlock uint64
 }
 
-func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata, rev string) (string, error) {
-	doc, err := createMetadataDoc(rev, m.pending, m.lastCommitedBlock)
+func lookupMetadata(db *couchdb.CouchDatabase) (metadata, bool, error) {
+	info, err := db.GetDatabaseInfo()
 	if err != nil {
-		return "", err
+		return metadata{}, false, err
 	}
 
-	rev, err = db.SaveDoc(metadataKey, rev, doc)
-	if err != nil {
-		return "", err
+	var lastBlockNum uint64
+	var found bool
+
+	mc := min(info.DocCount, numMetaDocs+1)
+	for i := 1; i <= mc; i++ {
+		doc, _, e := db.ReadDoc(blockNumberToKey(uint64(info.DocCount - i)))
+		if e != nil {
+			return metadata{}, false, err
+		}
+
+		if doc != nil {
+			var lastPvtDataResp *blockPvtDataResponse
+			err = json.Unmarshal(doc.JSONValue, lastPvtDataResp)
+			if err != nil {
+				return metadata{}, false, errors.Wrapf(err, "block from couchDB document could not be unmarshaled")
+			}
+			lastBlockNum = uint64(info.DocCount - i)
+			found = true
+			break
+		}
 	}
 
-	// TODO: is full sync needed after saving the metadata doc (will recovery work)?
-
-	return rev, nil
-}
-
-type metadataResponse struct {
-	Commit struct {
-		Pending     bool   `json:"pending"`
-		BlockNumber uint64 `json:"block_number"`
-	} `json:"commit"`
-}
-
-func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
-	doc, _, err := db.ReadDoc(metadataKey)
-	if err != nil {
-		return nil, false, errors.WithMessage(err, "private data metadata retrieval failed")
-	}
-	if doc == nil {
-		return nil, false, nil
+	if !found {
+		return metadata{}, false, nil
 	}
 
-	var mr metadataResponse
-	err = json.Unmarshal(doc.JSONValue, &mr)
-	if err != nil {
-		return nil, false, errors.WithMessage(err, "private data metadata is invalid")
-	}
-
-	m := metadata{mr.Commit.Pending, mr.Commit.BlockNumber}
-	return &m, true, nil
+	m := metadata{false, lastBlockNum}
+	return m, true, nil
 }
 
 type blockPvtDataResponse struct {
@@ -294,4 +250,11 @@ func NewErrNotFoundInIndex() *NotFoundInIndexErr {
 
 func (err *NotFoundInIndexErr) Error() string {
 	return "Entry not found in index"
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
