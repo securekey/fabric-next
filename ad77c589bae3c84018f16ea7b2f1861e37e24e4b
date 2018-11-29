@@ -46,6 +46,30 @@
       "revId": "ad77c589bae3c84018f16ea7b2f1861e37e24e4b",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b2824b88_05f8a996",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 190,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-29T16:51:26Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d28e83e1_7114b583",
+      "range": {
+        "startLine": 190,
+        "startChar": 3,
+        "endLine": 190,
+        "endChar": 18
+      },
+      "revId": "ad77c589bae3c84018f16ea7b2f1861e37e24e4b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
