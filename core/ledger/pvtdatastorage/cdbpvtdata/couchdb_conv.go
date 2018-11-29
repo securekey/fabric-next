@@ -19,7 +19,6 @@ import (
 
 const (
 	idField                    = "_id"
-	revField                   = "_rev"
 	blockNumberField           = "block_number"
 	expiryBlockNumbersField    = "expiry_block_numbers"
 	purgeBlockNumbersField     = "purge_block_numbers"
@@ -33,6 +32,7 @@ const (
 	pendingCommitField         = "pending"
 	blockKeyPrefix             = ""
 	blockNumberBase            = 10
+	numMetaDocs                = 2
 )
 
 const purgeBlockNumbersIndexDef = `
@@ -51,7 +51,7 @@ func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry, blockNumber uint64, purgeInterval uint64) (*couchdb.CouchDoc, error) {
+func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry, blockNumber uint64, purgeInterval uint64, pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 	jsonMap[idField] = blockNumberToKey(blockNumber)
 	jsonMap[purgeIntervalField] = strconv.FormatUint(purgeInterval, 10)
@@ -69,6 +69,11 @@ func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry,
 	jsonMap[expiryField] = ei.json
 	jsonMap[purgeBlockNumbersField] = ei.purgeKeys
 	jsonMap[expiryBlockNumbersField] = ei.expiryKeys
+	// metadata embedded in the pvt block
+	commitMap := make(jsonValue)
+	commitMap[pendingCommitField] = pendingCommit
+	commitMap[blockNumberField] = lastBlockNumber
+	jsonMap[commitField] = commitMap
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
@@ -102,8 +107,8 @@ func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
 }
 
 type expiryInfo struct {
-	json jsonValue
-	purgeKeys []string
+	json       jsonValue
+	purgeKeys  []string
 	expiryKeys []string
 }
 
@@ -125,7 +130,7 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 
 		if !expiryBlockCounted[expiryEntry.key.expiringBlk] {
 			ei.expiryKeys = append(ei.expiryKeys, blockNumberToKey(expiryEntry.key.expiringBlk))
-			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + expiryEntry.key.expiringBlk % purgeInterval)
+			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + expiryEntry.key.expiringBlk%purgeInterval)
 			ei.purgeKeys = append(ei.purgeKeys, purgedAt)
 			expiryBlockCounted[expiryEntry.key.expiringBlk] = true
 		}
@@ -134,28 +139,6 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 	// TODO: sort string slices numerically.
 
 	return &ei, nil
-}
-
-func createMetadataDoc(rev string, pendingCommit bool, lastBlockNumber uint64) (*couchdb.CouchDoc, error) {
-	jsonMap := make(jsonValue)
-	jsonMap[idField] = metadataKey
-	if rev != "" {
-		jsonMap[revField] = rev
-	}
-
-	commitMap := make(jsonValue)
-	commitMap[pendingCommitField] = pendingCommit
-	commitMap[blockNumberField] = lastBlockNumber
-	jsonMap[commitField] = commitMap
-
-	jsonBytes, err := jsonMap.toBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
-
-	return &couchDoc, nil
 }
 
 func couchValueToJSON(value []byte) (jsonValue, error) {
@@ -177,26 +160,6 @@ type metadata struct {
 	lastCommitedBlock uint64
 }
 
-func updateCommitMetadataDoc(db *couchdb.CouchDatabase, m *metadata, rev string) (string, error) {
-	doc, err := createMetadataDoc(rev, m.pending, m.lastCommitedBlock)
-	if err != nil {
-		return "", err
-	}
-
-	rev, err = db.SaveDoc(metadataKey, rev, doc)
-	if err != nil {
-		return "", err
-	}
-
-	// TODO: is full sync needed after saving the metadata doc (will recovery work)?
-	err = db.EnsureFullCommit()
-	if err != nil {
-		return "", errors.WithMessage(err, "full commit failed")
-	}
-
-	return rev, nil
-}
-
 type metadataResponse struct {
 	Commit struct {
 		Pending     bool   `json:"pending"`
@@ -204,23 +167,36 @@ type metadataResponse struct {
 	} `json:"commit"`
 }
 
-func lookupMetadata(db *couchdb.CouchDatabase) (*metadata, bool, error) {
-	doc, _, err := db.ReadDoc(metadataKey)
+func lookupMetadata(db *couchdb.CouchDatabase) (metadata, bool, error) {
+	info, err := db.GetDatabaseInfo()
 	if err != nil {
-		return nil, false, errors.WithMessage(err, "private data metadata retrieval failed")
-	}
-	if doc == nil {
-		return nil, false, nil
+		return metadata{}, false, err
 	}
 
-	var mr metadataResponse
-	err = json.Unmarshal(doc.JSONValue, &mr)
-	if err != nil {
-		return nil, false, errors.WithMessage(err, "private data metadata is invalid")
+	var mr *metadataResponse
+	mc := min(info.DocCount, numMetaDocs+1)
+	for i := 1; i <= mc; i++ {
+		doc, _, e := db.ReadDoc(blockNumberToKey(uint64(info.DocCount - i)))
+		if e != nil {
+			return metadata{}, false, err
+		}
+
+		if doc != nil {
+			var pr blockPvtDataResponse
+			err = json.Unmarshal(doc.JSONValue, &pr)
+			if err != nil {
+				return metadata{}, false, err
+			}
+			mr = &pr.Commit
+		}
+	}
+
+	if mr == nil {
+		return metadata{pending: true}, false, nil
 	}
 
 	m := metadata{mr.Commit.Pending, mr.Commit.BlockNumber}
-	return &m, true, nil
+	return m, true, nil
 }
 
 type blockPvtDataResponse struct {
@@ -231,6 +207,7 @@ type blockPvtDataResponse struct {
 	ExpiryBlocks  []string          `json:"expiry_block_numbers"`
 	Data          map[string][]byte `json:"data"`
 	Expiry        map[string][]byte `json:"expiry"`
+	Commit        metadataResponse
 }
 
 func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataResponse, error) {
@@ -298,4 +275,11 @@ func NewErrNotFoundInIndex() *NotFoundInIndexErr {
 
 func (err *NotFoundInIndexErr) Error() string {
 	return "Entry not found in index"
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
