@@ -40,6 +40,7 @@ type stateKeyIndex struct {
 type Metadata struct {
 	BlockNumber uint64
 	TxNumber    uint64
+	DBTag       string
 }
 
 type IndexUpdate struct {
@@ -55,6 +56,11 @@ func MarshalMetadata(m *Metadata) ([]byte, error) {
 		return nil, err
 	}
 	err = buffer.EncodeVarint(m.TxNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	err = buffer.EncodeStringBytes(m.DBTag)
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +82,15 @@ func UnmarshalMetadata(b []byte) (Metadata, error) {
 		return Metadata{}, err
 	}
 
+	cdbRev, err := buffer.DecodeStringBytes()
+	if err != nil {
+		return Metadata{}, err
+	}
+
 	return Metadata{
 		BlockNumber: blockNumber,
 		TxNumber:    txNumber,
+		DBTag:       cdbRev,
 	}, nil
 }
 
