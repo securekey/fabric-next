@@ -383,7 +383,7 @@ func (c *KVCache) addNonDurable(validatedTx *ValidatedPvtData) {
 			c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
 			c.addKeyToExpiryMap(validatedTx.Level1ExpiringBlock, validatedTx.Key)
 			if len(c.nonDurablePvtCache) > ledgerconfig.GetKVCacheNonDurableSize() {
-				logger.Warningf("Expiring cache size[%d] is over limit[%d]", len(c.nonDurablePvtCache), ledgerconfig.GetKVCacheNonDurableSize())
+				logger.Warningf("Expiring cache size[%d] is over limit[%d] for cache[%s]", len(c.nonDurablePvtCache), ledgerconfig.GetKVCacheNonDurableSize(), c.cacheName)
 			}
 			return
 		}
