@@ -127,13 +127,13 @@ func (c *cachedPvtDataStore) Commit() error {
 }
 
 func (c *cachedPvtDataStore) InitLastCommittedBlock(blockNum uint64) error {
-	logger.Infof("**** InitLastCommittedBlock blockNum %d", blockNum)
+	logger.Debugf("InitLastCommittedBlock blockNum %d", blockNum)
 	isEmpty, err := c.pvtDataCache.IsEmpty()
 	if err != nil {
 		return err
 	}
 	if isEmpty {
-		logger.Infof("**** InitLastCommittedBlock in cache blockNum %d", blockNum)
+		logger.Debugf("InitLastCommittedBlock in cache blockNum %d", blockNum)
 		err := c.pvtDataCache.InitLastCommittedBlock(blockNum)
 		if err != nil {
 			return errors.WithMessage(err, "InitLastCommittedBlock pvtdata in cache failed")
@@ -144,7 +144,7 @@ func (c *cachedPvtDataStore) InitLastCommittedBlock(blockNum uint64) error {
 		return err
 	}
 	if isEmpty {
-		logger.Infof("**** InitLastCommittedBlock in pvtDataStore blockNum %d", blockNum)
+		logger.Debugf("InitLastCommittedBlock in pvtDataStore blockNum %d", blockNum)
 		return c.pvtDataStore.InitLastCommittedBlock(blockNum)
 	}
 	return nil

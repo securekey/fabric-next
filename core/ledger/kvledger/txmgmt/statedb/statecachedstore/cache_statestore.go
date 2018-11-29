@@ -61,7 +61,7 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 // GetState implements method in VersionedDB interface
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	if versionedValue, ok := statedb.GetFromKVCache(c.ledgerID, namespace, key); ok {
-		logger.Infof("state retrieved from cache. ns=%s, chainName=%s, key=%s", namespace, c.ledgerID, key)
+		logger.Debugf("[%s] state retrieved from cache [ns=%s, key=%s]", c.ledgerID, namespace, key)
 		if metrics.IsDebug() {
 			metrics.RootScope.Counter("cachestatestore_getstate_cache_request_hit").Inc(1)
 		}
