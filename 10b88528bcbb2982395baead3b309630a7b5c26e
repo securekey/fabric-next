@@ -16,6 +16,24 @@
       "revId": "10b88528bcbb2982395baead3b309630a7b5c26e",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "635eff84_f7a2f943",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-11-29T20:07:50Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "8e7ca877_a8f46d52",
+      "revId": "10b88528bcbb2982395baead3b309630a7b5c26e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
