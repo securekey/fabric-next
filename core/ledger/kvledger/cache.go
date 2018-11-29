@@ -260,16 +260,18 @@ func min(x, y uint64) uint64 {
 }
 
 func getFirstLevelCacheExpiryBlock(blockNum, policyBTL uint64) uint64 {
+
 	btl := policyBTL
-	if policyBTL == 0 || blockNum > math.MaxUint64-(min(ledgerconfig.GetKVCacheBlocksToLive(), btl)+1) {
-		return math.MaxUint64
+	if policyBTL == 0 {
+		btl = math.MaxUint64
 	}
+
 	return blockNum + min(ledgerconfig.GetKVCacheBlocksToLive(), btl) + 1
 }
 
 func getSecondLevelCacheExpiryBlock(blockNum, policyBTL uint64) uint64 {
 
-	if policyBTL == 0 || blockNum > math.MaxUint64-(policyBTL+1) {
+	if policyBTL == 0 || policyBTL == math.MaxUint64 ||  blockNum > math.MaxUint64-(policyBTL+1) {
 		return math.MaxUint64
 	}
 
