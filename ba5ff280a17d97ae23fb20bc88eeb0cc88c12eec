@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "13e34247_c3675072",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 120,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-29T15:53:30Z",
+      "side": 0,
+      "message": "this call creates metadata document only, so I removed it.. not sure if it needs to be replaced with something else",
+      "range": {
+        "startLine": 120,
+        "startChar": 8,
+        "endLine": 120,
+        "endChar": 18
+      },
+      "revId": "ba5ff280a17d97ae23fb20bc88eeb0cc88c12eec",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
