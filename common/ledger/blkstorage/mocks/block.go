@@ -153,3 +153,32 @@ func NewTransactionWithMockKey(txID string, key string, validationCode peer.TxVa
 		Transaction:    txn,
 	}
 }
+
+func CreateSimpleConfigBlock(blockNum uint64) *common.Block {
+	const txID = "12345"
+	return CreateBlock(blockNum, newConfigTransaction(txID, peer.TxValidationCode_VALID))
+}
+
+func newConfigTransaction(txID string, validationCode peer.TxValidationCode) *Transaction {
+	const namespace = "test_namespace"
+	writes := []*kvrwset.KVWrite{{Key: "some_key", IsDelete: false, Value: []byte("some_value")}}
+
+	hdr := common.ChannelHeader{
+		ChannelId: "some_channel",
+		TxId:      txID,
+		Type:      int32(common.HeaderType_CONFIG),
+	}
+	txn := 	CreateTransaction(
+		&rwsetutil.NsRwSet{
+			NameSpace: namespace,
+			KvRwSet: &kvrwset.KVRWSet{
+				Writes: writes,
+			},
+		})
+
+	return &Transaction{
+		ChannelHeader:  &hdr,
+		ValidationCode: validationCode,
+		Transaction:    txn,
+	}
+}
