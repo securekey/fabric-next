@@ -2,6 +2,29 @@
   "comments": [
     {
       "key": {
+        "uuid": "e9050b23_d465f4a8",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 119,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-29T19:54:40Z",
+      "side": 1,
+      "message": "wonder why on err is returning nil? \nwhy not skip this block instead?",
+      "range": {
+        "startLine": 119,
+        "startChar": 3,
+        "endLine": 119,
+        "endChar": 13
+      },
+      "revId": "ad77c589bae3c84018f16ea7b2f1861e37e24e4b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "d77f9880_4f46b068",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
         "patchSetId": 1
