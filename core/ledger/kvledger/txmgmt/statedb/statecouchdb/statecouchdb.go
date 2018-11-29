@@ -472,9 +472,9 @@ func (vdb *VersionedDB) ensureFullCommitAndRecordSavepoint(height *version.Heigh
 		}
 		dbs = append(dbs, db)
 	}
-	if err := vdb.ensureFullCommit(dbs); err != nil {
-		return err
-	}
+
+	vdb.warmupAllIndexes(dbs)
+
 	// construct savepoint document and save
 	savepointCouchDoc, err := encodeSavepoint(height)
 	if err != nil {
