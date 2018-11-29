@@ -117,11 +117,6 @@ func (s *store) Commit() error {
 	committingBlockNum := s.nextBlockNum()
 	logger.Debugf("Committing private data for block [%d]", committingBlockNum)
 
-	err := s.commitDB(committingBlockNum)
-	if err != nil {
-		return err
-	}
-
 	s.batchPending = false
 	s.isEmpty = false
 	s.lastCommittedBlock = committingBlockNum
@@ -138,11 +133,6 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	}
 	if !(s.isEmpty && !s.batchPending) {
 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
-	}
-
-	err := s.updateCommitMetadata(false, blockNum)
-	if err != nil {
-		return err
 	}
 
 	s.isEmpty = false
@@ -269,11 +259,6 @@ func (s *store) Rollback() error {
 	}
 
 	err = s.db.DeleteDoc(id, rev)
-	if err != nil {
-		return err
-	}
-
-	err = s.updateCommitMetadata(false, s.lastCommittedBlock)
 	if err != nil {
 		return err
 	}
