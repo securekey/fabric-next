@@ -22,6 +22,30 @@
       "revId": "b8bbe12f57c721d21f7c9ddc665f390dec47906c",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9bcd58e2_924f5172",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-29T19:54:40Z",
+      "side": 1,
+      "message": "DONE, but still fails to create channel..",
+      "parentUuid": "b1753c46_fee79059",
+      "range": {
+        "startLine": 72,
+        "startChar": 0,
+        "endLine": 75,
+        "endChar": 46
+      },
+      "revId": "b8bbe12f57c721d21f7c9ddc665f390dec47906c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
