@@ -20,9 +20,8 @@ import (
 )
 
 type store struct {
-	db               *couchdb.CouchDatabase
-	couchMetadataRev string
-	purgeInterval    uint64
+	db            *couchdb.CouchDatabase
+	purgeInterval uint64
 
 	commonStore
 }
@@ -36,7 +35,7 @@ func newStore(db *couchdb.CouchDatabase) (*store, error) {
 	if ledgerconfig.IsCommitter() {
 		err := s.initState()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithMessage(err, "newStore failed")
 		}
 	}
 
@@ -62,37 +61,14 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	if len(pvtData) > 0 {
 		dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, fmt.Sprintf("prepare store Entries for CouchDB failed [%d]", blockNum))
 		}
 
 		blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, fmt.Sprintf("create block CouchDB doc failed [%d]", blockNum))
 		}
 		docs = append(docs, blockDoc)
-	}
-
-	// TODO: see if we should save a call by not updating metadata when block has no private data.
-	metadataDoc, err := createMetadataDoc(s.couchMetadataRev, true, s.lastCommittedBlock)
-	if err != nil {
-		return err
-	}
-	docs = append(docs, metadataDoc)
-
-	revs, err := s.db.CommitDocuments(docs)
-	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
-	}
-
-	s.couchMetadataRev = revs[metadataKey]
-
-	return nil
-}
-
-func (s *store) commitDB(committingBlockNum uint64) error {
-	err := s.updateCommitMetadata(false, committingBlockNum)
-	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in commit [%d]", committingBlockNum))
 	}
 
 	return nil
@@ -139,7 +115,7 @@ func (s *store) purgeExpiredDataDB(maxBlkNum uint64, expiryEntries []*expiryEntr
 	if len(docs) > 0 {
 		_, err := s.db.BatchUpdateDocuments(docs)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, fmt.Sprintf("BatchUpdateDocuments failed for [%d] documents", len(docs)))
 		}
 	}
 	return nil
@@ -187,19 +163,4 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 		return nil, err
 	}
 	return &couchdb.CouchDoc{JSONValue: jsonBytes}, nil
-}
-
-func (s *store) updateCommitMetadata(pending bool, blockNum uint64) error {
-	m := metadata{
-		pending:           pending,
-		lastCommitedBlock: blockNum,
-	}
-
-	rev, err := updateCommitMetadataDoc(s.db, &m, s.couchMetadataRev)
-	if err != nil {
-		return err
-	}
-
-	s.couchMetadataRev = rev
-	return nil
 }
