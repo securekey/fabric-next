@@ -10,9 +10,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
-
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"strconv"
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -21,8 +20,8 @@ import (
 
 type store struct {
 	db               *couchdb.CouchDatabase
-	couchMetadataRev string
 	purgeInterval    uint64
+	pendingDocs      []*couchdb.CouchDoc
 
 	commonStore
 }
@@ -52,48 +51,38 @@ func (s *store) initState() error {
 	s.isEmpty = !ok
 	if ok {
 		s.lastCommittedBlock = m.lastCommitedBlock
-		s.batchPending = m.pending
 	}
 	return nil
 }
 
 func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	var docs []*couchdb.CouchDoc
-	if len(pvtData) > 0 {
-		dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
-		if err != nil {
-			return err
-		}
-
-		blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
-		if err != nil {
-			return err
-		}
-		docs = append(docs, blockDoc)
+	if s.pendingDocs != nil {
+		return errors.New("previous commit is pending")
 	}
 
-	// TODO: see if we should save a call by not updating metadata when block has no private data.
-	metadataDoc, err := createMetadataDoc(s.couchMetadataRev, true, s.lastCommittedBlock)
+	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
 		return err
 	}
-	docs = append(docs, metadataDoc)
 
-	revs, err := s.db.CommitDocuments(docs)
+	blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
 	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
+		return err
 	}
-
-	s.couchMetadataRev = revs[metadataKey]
+	s.pendingDocs = append(s.pendingDocs, blockDoc)
 
 	return nil
 }
 
 func (s *store) commitDB(committingBlockNum uint64) error {
-	err := s.updateCommitMetadata(false, committingBlockNum)
-	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("private data commit metadata update failed in commit [%d]", committingBlockNum))
+	if s.pendingDocs == nil {
+		return errors.New("no commit is pending")
 	}
+	_, err := s.db.CommitDocuments(s.pendingDocs)
+	if err != nil {
+		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", committingBlockNum))
+	}
+	s.pendingDocs = nil
 
 	return nil
 }
@@ -139,7 +128,7 @@ func (s *store) purgeExpiredDataDB(maxBlkNum uint64, expiryEntries []*expiryEntr
 	if len(docs) > 0 {
 		_, err := s.db.BatchUpdateDocuments(docs)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, fmt.Sprintf("BatchUpdateDocuments failed for [%d] documents", len(docs)))
 		}
 	}
 	return nil
@@ -187,19 +176,4 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 		return nil, err
 	}
 	return &couchdb.CouchDoc{JSONValue: jsonBytes}, nil
-}
-
-func (s *store) updateCommitMetadata(pending bool, blockNum uint64) error {
-	m := metadata{
-		pending:           pending,
-		lastCommitedBlock: blockNum,
-	}
-
-	rev, err := updateCommitMetadataDoc(s.db, &m, s.couchMetadataRev)
-	if err != nil {
-		return err
-	}
-
-	s.couchMetadataRev = rev
-	return nil
 }
