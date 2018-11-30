@@ -126,11 +126,11 @@ type Config struct {
 
 	SkipBlockVerification bool // Should we skip verifying block messages or not
 
-	PublishCertPeriod        time.Duration // Time from startup certificates are included in Alive messages
-	PublishStateInfoInterval time.Duration // Determines frequency of pushing state info messages to peers
-	RequestStateInfoInterval time.Duration // Determines frequency of pulling state info messages from peers
-
-	TLSCerts *common.TLSCertificates // TLS certificates of the peer
+	PublishCertPeriod        time.Duration           // Time from startup certificates are included in Alive messages
+	PublishStateInfoInterval time.Duration           // Determines frequency of pushing state info messages to peers
+	RequestStateInfoInterval time.Duration           // Determines frequency of pulling state info messages from peers
+	BlockExpirationInterval  time.Duration           // Specifies how long a gossiped block will live in the message store
+	TLSCerts                 *common.TLSCertificates // TLS certificates of the peer
 
 	InternalEndpoint string // Endpoint we publish to peers in our organization
 	ExternalEndpoint string // Peer publishes this endpoint instead of SelfEndpoint to foreign organizations
