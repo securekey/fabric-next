@@ -593,7 +593,7 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchDoc) (string, error) {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_saveDoc_time").Start()
+		stopWatch := metrics.RootScope.Timer("couchdb_saveDoc_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -1448,7 +1448,7 @@ func (dbclient *CouchDatabase) WarmIndex(designdoc, indexname string) error {
 // Warms up all indexes.
 func (db *CouchDatabase) doAllIndexWarmup() {
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_allIndexWarmup_time").Start()
+		stopWatch := metrics.RootScope.Timer("couchdb_allIndexWarmup_duration").Start()
 		defer stopWatch.Stop()
 	}
 	//Retrieve all indexes
@@ -1933,7 +1933,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 	multipartBoundary string, maxRetries int, keepConnectionOpen bool) (*http.Response, error) {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("couchdb_handleRequest_time").Start()
+		stopWatch := metrics.RootScope.Timer("couchdb_handleRequest_duration").Start()
 		defer stopWatch.Stop()
 	}
 

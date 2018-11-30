@@ -78,7 +78,7 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_addBlock_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_addBlock_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -99,7 +99,7 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_checkpointBlock_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_checkpointBlock_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -132,7 +132,7 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_getBlockchainInfo_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_getBlockchainInfo_duration").Start()
 		defer stopWatch.Stop()
 	}
 	return s.bcInfo.Load().(*common.BlockchainInfo), nil
@@ -142,7 +142,7 @@ func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
 func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlocks_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlocks_duration").Start()
 		defer stopWatch.Stop()
 	}
 	return newBlockItr(s, startNum), nil
@@ -152,7 +152,7 @@ func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator,
 func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByHash_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByHash_duration").Start()
 		defer stopWatch.Stop()
 	}
 	blockHashHex := hex.EncodeToString(blockHash)
@@ -184,7 +184,7 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByNumber_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByNumber_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -227,7 +227,7 @@ func retrieveBlockByNumber(blockStore *couchdb.CouchDatabase, blockNum uint64) (
 func (s *cdbBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*common.Envelope, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByID_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByID_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -244,7 +244,7 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*c
 func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByBlockNumTranNum_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxByBlockNumTranNum_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -272,7 +272,7 @@ func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Enve
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByTxID_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveBlockByTxID_duration").Start()
 		defer stopWatch.Stop()
 	}
 	const queryFmt = `
@@ -305,7 +305,7 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxValidationCodeByTxID_time").Start()
+		stopWatch := metrics.RootScope.Timer("blkstorage_couchdb_retrieveTxValidationCodeByTxID_duration").Start()
 		defer stopWatch.Stop()
 	}
 	block, err := s.RetrieveBlockByTxID(txID)

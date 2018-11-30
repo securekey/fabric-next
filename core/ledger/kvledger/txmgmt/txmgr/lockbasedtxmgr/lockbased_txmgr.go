@@ -99,10 +99,10 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
 	qe := newQueryExecutor(txmgr, txid)
-	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_wait_time").Start()
+	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_wait_duration").Start()
 	txmgr.commitRWLock.RLock()
 	stopWatch.Stop()
-	txmgr.StopWatch = metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_time").Start()
+	txmgr.StopWatch = metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_duration").Start()
 	txmgr.StopWatchAccess = "1"
 	return qe, nil
 }
@@ -114,10 +114,10 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 	if err != nil {
 		return nil, err
 	}
-	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_wait_time").Start()
+	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_wait_duration").Start()
 	txmgr.commitRWLock.RLock()
 	stopWatch.Stop()
-	txmgr.StopWatch1 = metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_time").Start()
+	txmgr.StopWatch1 = metrics.RootScope.Timer("lockbasedtxmgr_NewTxSimulator_commitRWLock_RLock_duration").Start()
 	txmgr.StopWatch1Access = "1"
 	return s, nil
 }
@@ -237,14 +237,14 @@ func (txmgr *LockBasedTxMgr) committer() {
 			var commitWatch tally.Stopwatch
 			if metrics.IsDebug() {
 				// Measure the whole
-				commitWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_time").Start()
+				commitWatch = metrics.RootScope.Timer("lockbasedtxmgr_Commit_duration").Start()
 			}
 
 			// When using the purge manager for the first block commit after peer start, the asynchronous function
 			// 'PrepareForExpiringKeys' is invoked in-line. However, for the subsequent blocks commits, this function is invoked
 			// in advance for the next block
 			if !txmgr.pvtdataPurgeMgr.usedOnce {
-				stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_PrepareForExpiringKeys_time").Start()
+				stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_PrepareForExpiringKeys_duration").Start()
 				txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(tx.blockNum())
 				txmgr.pvtdataPurgeMgr.usedOnce = true
 				stopWatch.Stop()
@@ -258,7 +258,7 @@ func (txmgr *LockBasedTxMgr) committer() {
 				panic(panicMsg)
 			}
 
-			purgeWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_time").Start()
+			purgeWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_DeleteExpiredAndUpdateBookkeeping_duration").Start()
 			if err := txmgr.pvtdataPurgeMgr.DeleteExpiredAndUpdateBookkeeping(
 				tx.batch.PvtUpdates, tx.batch.HashUpdates); err != nil {
 				logger.Errorf("failed to delete expired and update booking : %s", err)
@@ -267,13 +267,13 @@ func (txmgr *LockBasedTxMgr) committer() {
 			}
 			purgeWatch.Stop()
 
-			lockWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_commitRWLock_time").Start()
+			lockWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_commitRWLock_duration").Start()
 			txmgr.commitRWLock.Lock()
 			lockWatch.Stop()
 			logger.Debugf("Write lock acquired for committing updates to state database")
 
 			commitHeight := version.NewHeight(tx.blockNum(), tx.maxTxNumber())
-			applyUpdateWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_ApplyPrivacyAwareUpdates_time").Start()
+			applyUpdateWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_ApplyPrivacyAwareUpdates_duration").Start()
 			if err := txmgr.db.ApplyPrivacyAwareUpdates(tx.batch, commitHeight); err != nil {
 				logger.Errorf("failed to apply updates : %s", err)
 				txmgr.commitRWLock.Unlock()
@@ -284,7 +284,7 @@ func (txmgr *LockBasedTxMgr) committer() {
 			logger.Debugf("Updates committed to state database")
 
 			// purge manager should be called (in this call the purge mgr removes the expiry entries from schedules) after committing to statedb
-			blkCommitWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_BlockCommitDone_time").Start()
+			blkCommitWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_BlockCommitDone_duration").Start()
 			if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
 				logger.Errorf("failed to purge expiry entries from schedules : %s", err)
 				txmgr.commitRWLock.Unlock()
@@ -295,12 +295,12 @@ func (txmgr *LockBasedTxMgr) committer() {
 
 			// In the case of error state listeners will not recieve this call - instead a peer panic is caused by the ledger upon receiveing
 			// an error from this function
-			updateListnWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_updateStateListeners_time").Start()
+			updateListnWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_updateStateListeners_duration").Start()
 			txmgr.updateStateListeners(tx)
 			updateListnWatch.Stop()
 
 			//clean up and prepare for expiring keys
-			clearWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_defer_time").Start()
+			clearWatch := metrics.RootScope.Timer("lockbasedtxmgr_Commit_defer_duration").Start()
 			txmgr.clearCache()
 			txmgr.pvtdataPurgeMgr.PrepareForExpiringKeys(forExpiry)
 			logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
@@ -336,7 +336,7 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
 func (txmgr *LockBasedTxMgr) updateStateListeners(tx *current) {
 
 	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_time").Start()
+		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_duration").Start()
 		defer stopWatch.Stop()
 	}
 

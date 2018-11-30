@@ -76,7 +76,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_prepare_time").Start()
+		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_prepare_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -107,7 +107,7 @@ func (s *store) Commit() error {
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_commit_time").Start()
+		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_commit_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -133,7 +133,7 @@ func (s *store) Commit() error {
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_initLastCommittedBlock_time").Start()
+		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_initLastCommittedBlock_duration").Start()
 		defer stopWatch.Stop()
 	}
 	if !(s.isEmpty && !s.batchPending) {
@@ -154,7 +154,7 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_getPvtDataByBlockNum_time").Start()
+		stopWatch := metrics.RootScope.Timer("pvtdatastorage_couchdb_getPvtDataByBlockNum_duration").Start()
 		defer stopWatch.Stop()
 	}
 

@@ -218,7 +218,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	var waitingForMissingKeysStopWatch tally.Stopwatch
 	if metrics.IsDebug() {
 		metrics.RootScope.Gauge("privdata_gossipMissingKeys").Update(float64(len(privateInfo.missingKeys)))
-		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_time").Start()
+		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_duration").Start()
 	}
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
 		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)

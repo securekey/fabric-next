@@ -347,7 +347,7 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("kvledger_CommitWithPvtData_time").Start()
+		stopWatch := metrics.RootScope.Timer("kvledger_CommitWithPvtData_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -428,7 +428,7 @@ func (l *kvLedger) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsC
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_time").Start()
+		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataAndBlockByNum_duration").Start()
 		defer stopWatch.Stop()
 	}
 
@@ -444,7 +444,7 @@ func (l *kvLedger) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilte
 
 	if metrics.IsDebug() {
 		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataByNum_time").Start()
+		stopWatch := metrics.RootScope.Timer("kvledger_GetPvtDataByNum_duration").Start()
 		defer stopWatch.Stop()
 	}
 
