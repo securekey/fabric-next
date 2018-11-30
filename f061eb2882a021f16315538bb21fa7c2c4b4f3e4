@@ -1,0 +1,73 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "12fb68af_17b7a558",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 28,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-30T16:57:28Z",
+      "side": 1,
+      "message": "Comment removed by: Baha Shaaban",
+      "range": {
+        "startLine": 27,
+        "startChar": 1,
+        "endLine": 28,
+        "endChar": 29
+      },
+      "revId": "f061eb2882a021f16315538bb21fa7c2c4b4f3e4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e4b14d13_f71c5c73",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 83,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-30T16:57:28Z",
+      "side": 1,
+      "message": "currently preparing docs here",
+      "range": {
+        "startLine": 78,
+        "startChar": 1,
+        "endLine": 83,
+        "endChar": 14
+      },
+      "revId": "f061eb2882a021f16315538bb21fa7c2c4b4f3e4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "694182c2_49a7c0fc",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 98,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-30T16:57:28Z",
+      "side": 1,
+      "message": "and committing them here then resetting docs..\n\nI could be wrong, but creating channels is still failing",
+      "range": {
+        "startLine": 93,
+        "startChar": 1,
+        "endLine": 98,
+        "endChar": 39
+      },
+      "revId": "f061eb2882a021f16315538bb21fa7c2c4b4f3e4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
