@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "8e00cd4e_fd7bda6d",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statekeyindex/statekeyindex.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-30T16:04:59Z",
+      "side": 1,
+      "message": "This seems too specific (Metadata struct is not CouchDB specific). Maybe more generically it\u0027s a DBTag or DBRev or some such.",
+      "range": {
+        "startLine": 93,
+        "startChar": 2,
+        "endLine": 93,
+        "endChar": 12
+      },
+      "revId": "bcd1c087937ea0b822378e8573652ab816d7e9e1",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
