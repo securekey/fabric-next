@@ -117,6 +117,30 @@
       "revId": "8d3cba195d61c738a9252215af33da4d3fe068b8",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "948adbe0_cc8abd38",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 676,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-11-30T21:13:28Z",
+      "side": 1,
+      "message": "This hasn\u0027t been updated yet. I\u0027ll add a story.",
+      "parentUuid": "8a3b86dd_52b26f9b",
+      "range": {
+        "startLine": 676,
+        "startChar": 29,
+        "endLine": 676,
+        "endChar": 60
+      },
+      "revId": "8d3cba195d61c738a9252215af33da4d3fe068b8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
