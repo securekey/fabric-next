@@ -22,19 +22,18 @@ type blocksItr struct {
 
 func newBlockItr(cachedBlockStore *cachedBlockStore, startBlockNum uint64) *blocksItr {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &blocksItr{cachedBlockStore, cachedBlockStore.blockStore.LastBlockNumber(), startBlockNum, ctx, cancel}
+	return &blocksItr{cachedBlockStore, cachedBlockStore.LastBlockNumber(), startBlockNum, ctx, cancel}
 }
 
 // Next moves the cursor to next block and returns true iff the iterator is not exhausted
 func (itr *blocksItr) Next() (ledger.QueryResult, error) {
-	bs := itr.cachedBlockStore.blockStore
-
 	if itr.maxBlockNumAvailable < itr.blockNumToRetrieve {
-		itr.maxBlockNumAvailable = bs.WaitForBlock(itr.ctx, itr.blockNumToRetrieve)
+		itr.maxBlockNumAvailable = itr.cachedBlockStore.WaitForBlock(itr.ctx, itr.blockNumToRetrieve)
 	}
-	// If we still haven't met the condition, the iterator has been closed.
-	if itr.maxBlockNumAvailable < itr.blockNumToRetrieve {
+	select {
+	case <-itr.ctx.Done():
 		return nil, nil
+	default:
 	}
 
 	nextBlock, err := itr.cachedBlockStore.RetrieveBlockByNumber(itr.blockNumToRetrieve)

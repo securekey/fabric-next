@@ -30,9 +30,10 @@ func (itr *blocksItr) Next() (ledger.QueryResult, error) {
 	if itr.maxBlockNumAvailable < itr.blockNumToRetrieve {
 		itr.maxBlockNumAvailable = itr.cdbBlockStore.WaitForBlock(itr.ctx, itr.blockNumToRetrieve)
 	}
-	// If we still haven't met the condition, the iterator has been closed.
-	if itr.maxBlockNumAvailable < itr.blockNumToRetrieve {
+	select {
+	case <-itr.ctx.Done():
 		return nil, nil
+	default:
 	}
 
 	nextBlock, err := itr.cdbBlockStore.RetrieveBlockByNumber(itr.blockNumToRetrieve)
