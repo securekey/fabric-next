@@ -16,6 +16,24 @@
       "revId": "edf12eb39120903ab8ebc8b9968776035e321f22",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "d566777b_6a0e761a",
+        "filename": "core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go",
+        "patchSetId": 8
+      },
+      "lineNbr": 211,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-11-30T16:16:19Z",
+      "side": 1,
+      "message": "sorry, never mind there\u0027s no return",
+      "parentUuid": "c1089486_23e13224",
+      "revId": "edf12eb39120903ab8ebc8b9968776035e321f22",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
