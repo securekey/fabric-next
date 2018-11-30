@@ -42,6 +42,7 @@ It has these top-level messages:
 	PvtDataPayload
 	Acknowledgement
 	Chaincode
+	ValidationResultsMessage
 */
 package gossip
 
@@ -309,6 +310,7 @@ type GossipMessage struct {
 	//	*GossipMessage_PrivateReq
 	//	*GossipMessage_PrivateRes
 	//	*GossipMessage_PrivateData
+	//	*GossipMessage_ValidationResultsMsg
 	Content isGossipMessage_Content `protobuf_oneof:"content"`
 }
 
@@ -317,7 +319,9 @@ func (m *GossipMessage) String() string            { return proto.CompactTextStr
 func (*GossipMessage) ProtoMessage()               {}
 func (*GossipMessage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
 
-type isGossipMessage_Content interface{ isGossipMessage_Content() }
+type isGossipMessage_Content interface {
+	isGossipMessage_Content()
+}
 
 type GossipMessage_AliveMsg struct {
 	AliveMsg *AliveMessage `protobuf:"bytes,5,opt,name=alive_msg,json=aliveMsg,oneof"`
@@ -382,28 +386,32 @@ type GossipMessage_PrivateRes struct {
 type GossipMessage_PrivateData struct {
 	PrivateData *PrivateDataMessage `protobuf:"bytes,25,opt,name=private_data,json=privateData,oneof"`
 }
+type GossipMessage_ValidationResultsMsg struct {
+	ValidationResultsMsg *ValidationResultsMessage `protobuf:"bytes,50,opt,name=validation_results_msg,json=validationResultsMsg,oneof"`
+}
 
-func (*GossipMessage_AliveMsg) isGossipMessage_Content()         {}
-func (*GossipMessage_MemReq) isGossipMessage_Content()           {}
-func (*GossipMessage_MemRes) isGossipMessage_Content()           {}
-func (*GossipMessage_DataMsg) isGossipMessage_Content()          {}
-func (*GossipMessage_Hello) isGossipMessage_Content()            {}
-func (*GossipMessage_DataDig) isGossipMessage_Content()          {}
-func (*GossipMessage_DataReq) isGossipMessage_Content()          {}
-func (*GossipMessage_DataUpdate) isGossipMessage_Content()       {}
-func (*GossipMessage_Empty) isGossipMessage_Content()            {}
-func (*GossipMessage_Conn) isGossipMessage_Content()             {}
-func (*GossipMessage_StateInfo) isGossipMessage_Content()        {}
-func (*GossipMessage_StateSnapshot) isGossipMessage_Content()    {}
-func (*GossipMessage_StateInfoPullReq) isGossipMessage_Content() {}
-func (*GossipMessage_StateRequest) isGossipMessage_Content()     {}
-func (*GossipMessage_StateResponse) isGossipMessage_Content()    {}
-func (*GossipMessage_LeadershipMsg) isGossipMessage_Content()    {}
-func (*GossipMessage_PeerIdentity) isGossipMessage_Content()     {}
-func (*GossipMessage_Ack) isGossipMessage_Content()              {}
-func (*GossipMessage_PrivateReq) isGossipMessage_Content()       {}
-func (*GossipMessage_PrivateRes) isGossipMessage_Content()       {}
-func (*GossipMessage_PrivateData) isGossipMessage_Content()      {}
+func (*GossipMessage_AliveMsg) isGossipMessage_Content()             {}
+func (*GossipMessage_MemReq) isGossipMessage_Content()               {}
+func (*GossipMessage_MemRes) isGossipMessage_Content()               {}
+func (*GossipMessage_DataMsg) isGossipMessage_Content()              {}
+func (*GossipMessage_Hello) isGossipMessage_Content()                {}
+func (*GossipMessage_DataDig) isGossipMessage_Content()              {}
+func (*GossipMessage_DataReq) isGossipMessage_Content()              {}
+func (*GossipMessage_DataUpdate) isGossipMessage_Content()           {}
+func (*GossipMessage_Empty) isGossipMessage_Content()                {}
+func (*GossipMessage_Conn) isGossipMessage_Content()                 {}
+func (*GossipMessage_StateInfo) isGossipMessage_Content()            {}
+func (*GossipMessage_StateSnapshot) isGossipMessage_Content()        {}
+func (*GossipMessage_StateInfoPullReq) isGossipMessage_Content()     {}
+func (*GossipMessage_StateRequest) isGossipMessage_Content()         {}
+func (*GossipMessage_StateResponse) isGossipMessage_Content()        {}
+func (*GossipMessage_LeadershipMsg) isGossipMessage_Content()        {}
+func (*GossipMessage_PeerIdentity) isGossipMessage_Content()         {}
+func (*GossipMessage_Ack) isGossipMessage_Content()                  {}
+func (*GossipMessage_PrivateReq) isGossipMessage_Content()           {}
+func (*GossipMessage_PrivateRes) isGossipMessage_Content()           {}
+func (*GossipMessage_PrivateData) isGossipMessage_Content()          {}
+func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
 
 func (m *GossipMessage) GetContent() isGossipMessage_Content {
 	if m != nil {
@@ -580,6 +588,13 @@ func (m *GossipMessage) GetPrivateData() *PrivateDataMessage {
 	return nil
 }
 
+func (m *GossipMessage) GetValidationResultsMsg() *ValidationResultsMessage {
+	if x, ok := m.GetContent().(*GossipMessage_ValidationResultsMsg); ok {
+		return x.ValidationResultsMsg
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*GossipMessage) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _GossipMessage_OneofMarshaler, _GossipMessage_OneofUnmarshaler, _GossipMessage_OneofSizer, []interface{}{
@@ -604,6 +619,7 @@ func (*GossipMessage) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer)
 		(*GossipMessage_PrivateReq)(nil),
 		(*GossipMessage_PrivateRes)(nil),
 		(*GossipMessage_PrivateData)(nil),
+		(*GossipMessage_ValidationResultsMsg)(nil),
 	}
 }
 
@@ -714,6 +730,11 @@ func _GossipMessage_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *GossipMessage_PrivateData:
 		b.EncodeVarint(25<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.PrivateData); err != nil {
+			return err
+		}
+	case *GossipMessage_ValidationResultsMsg:
+		b.EncodeVarint(50<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ValidationResultsMsg); err != nil {
 			return err
 		}
 	case nil:
@@ -894,6 +915,14 @@ func _GossipMessage_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.
 		err := b.DecodeMessage(msg)
 		m.Content = &GossipMessage_PrivateData{msg}
 		return true, err
+	case 50: // content.validation_results_msg
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ValidationResultsMessage)
+		err := b.DecodeMessage(msg)
+		m.Content = &GossipMessage_ValidationResultsMsg{msg}
+		return true, err
 	default:
 		return false, nil
 	}
@@ -1006,6 +1035,11 @@ func _GossipMessage_OneofSizer(msg proto.Message) (n int) {
 	case *GossipMessage_PrivateData:
 		s := proto.Size(x.PrivateData)
 		n += proto.SizeVarint(25<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *GossipMessage_ValidationResultsMsg:
+		s := proto.Size(x.ValidationResultsMsg)
+		n += proto.SizeVarint(50<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -1891,6 +1925,31 @@ func (m *Chaincode) GetMetadata() []byte {
 	return nil
 }
 
+// ValidationResultsMessage is the message containing block validation results
+type ValidationResultsMessage struct {
+	SeqNum  uint64 `protobuf:"varint,1,opt,name=seq_num,json=seqNum" json:"seq_num,omitempty"`
+	TxFlags []byte `protobuf:"bytes,2,opt,name=txFlags,proto3" json:"txFlags,omitempty"`
+}
+
+func (m *ValidationResultsMessage) Reset()                    { *m = ValidationResultsMessage{} }
+func (m *ValidationResultsMessage) String() string            { return proto.CompactTextString(m) }
+func (*ValidationResultsMessage) ProtoMessage()               {}
+func (*ValidationResultsMessage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{34} }
+
+func (m *ValidationResultsMessage) GetSeqNum() uint64 {
+	if m != nil {
+		return m.SeqNum
+	}
+	return 0
+}
+
+func (m *ValidationResultsMessage) GetTxFlags() []byte {
+	if m != nil {
+		return m.TxFlags
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*Envelope)(nil), "gossip.Envelope")
 	proto.RegisterType((*SecretEnvelope)(nil), "gossip.SecretEnvelope")
@@ -1926,6 +1985,7 @@ func init() {
 	proto.RegisterType((*PvtDataPayload)(nil), "gossip.PvtDataPayload")
 	proto.RegisterType((*Acknowledgement)(nil), "gossip.Acknowledgement")
 	proto.RegisterType((*Chaincode)(nil), "gossip.Chaincode")
+	proto.RegisterType((*ValidationResultsMessage)(nil), "gossip.ValidationResultsMessage")
 	proto.RegisterEnum("gossip.PullMsgType", PullMsgType_name, PullMsgType_value)
 	proto.RegisterEnum("gossip.GossipMessage_Tag", GossipMessage_Tag_name, GossipMessage_Tag_value)
 }
@@ -2115,6 +2175,7 @@ var fileDescriptor0 = []byte{
 	0x6e, 0x82, 0xa0, 0x48, 0x64, 0x9f, 0x2d, 0xf0, 0xd1, 0x21, 0x28, 0xff, 0xc2, 0x89, 0x50, 0x32,
 	0x50, 0xb5, 0xa0, 0x2c, 0x12, 0x46, 0x9c, 0x48, 0x77, 0x85, 0x9b, 0x0e, 0x2b, 0xd1, 0x68, 0x98,
 	0xdd, 0x2a, 0x49, 0x4b, 0xce, 0xd8, 0x94, 0x3e, 0x3e, 0x7e, 0xd0, 0x47, 0x5e, 0x95, 0x5d, 0x56,
+	0x43, 0x62, 0x15, 0x2a, 0xe8, 0x09, 0x34, 0xe3, 0x2b, 0xdf, 0xf6, 0x5d, 0x09, 0xc4, 0x1d, 0xab,
 	0x66, 0x88, 0xdc, 0x04, 0x04, 0xbb, 0xaa, 0x78, 0x65, 0x89, 0x6e, 0x55, 0x73, 0xf3, 0x26, 0x97,
 	0x16, 0x85, 0xda, 0x2d, 0x4c, 0x44, 0xb9, 0x7e, 0x0b, 0xdd, 0x98, 0x90, 0xc4, 0xf6, 0x5d, 0x42,
 	0xb9, 0xcf, 0xef, 0x8d, 0x27, 0xd5, 0x36, 0x3c, 0x21, 0x24, 0x99, 0xa4, 0x32, 0x71, 0x8d, 0xb8,
@@ -2129,7 +2190,6 @@ var fileDescriptor0 = []byte{
 	0x91, 0xab, 0xa8, 0x0f, 0x1d, 0x49, 0x1e, 0xce, 0x86, 0xf6, 0x5b, 0xeb, 0xb8, 0x5f, 0x47, 0xeb,
 	0xd0, 0x56, 0x0a, 0x96, 0x64, 0x34, 0xca, 0x48, 0xfc, 0x3f, 0x0d, 0xf4, 0xbc, 0x22, 0xd1, 0x1e,
 	0xe8, 0xdc, 0x0f, 0x09, 0xe3, 0x38, 0x8c, 0x25, 0xe2, 0xb6, 0x0f, 0xfa, 0xe5, 0x17, 0x3a, 0xf3,
-	0x43, 0x62, 0x15, 0x2a, 0xe8, 0x09, 0x34, 0xe3, 0x2b, 0xdf, 0xf6, 0x5d, 0x09, 0xc4, 0x1d, 0xab,
 	0x11, 0x5f, 0xf9, 0x13, 0x17, 0x7d, 0x06, 0xed, 0x14, 0xa7, 0xed, 0xe9, 0xe1, 0xc0, 0xa8, 0x4b,
 	0x19, 0xa4, 0xac, 0xe9, 0xe1, 0x40, 0x74, 0x68, 0x9c, 0x44, 0x31, 0x49, 0xb8, 0x4f, 0x58, 0x8a,
 	0xc8, 0xa8, 0x48, 0x50, 0x26, 0xb1, 0x4a, 0x5a, 0xe6, 0x8f, 0x1a, 0x40, 0x21, 0x42, 0xbf, 0x84,

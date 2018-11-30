@@ -34,19 +34,22 @@ func (b *blockCache) Remove(blockNum uint64) *common.Block {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	var blocksToRemove []uint64
 	var block *common.Block
-	for _, blk := range b.blocks {
+	removeToIndex := -1
+	for i := 0; i < len(b.blocks); i++ {
+		blk := b.blocks[i]
 		if blk.Header.Number <= blockNum {
+			removeToIndex = i
 			if blk.Header.Number == blockNum {
 				block = blk
+				break
 			}
-			blocksToRemove = append(blocksToRemove, blk.Header.Number)
 		}
 	}
 
-	for _, num := range blocksToRemove {
-		b.remove(num)
+	if removeToIndex >= 0 {
+		// Since blocks are added in order, remove all blocks before i
+		b.blocks = b.blocks[removeToIndex+1:]
 	}
 
 	return block
@@ -57,13 +60,4 @@ func (b *blockCache) Size() int {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
 	return len(b.blocks)
-}
-
-func (b *blockCache) remove(blockNum uint64) {
-	for i, blk := range b.blocks {
-		if blk.Header.Number == blockNum {
-			b.blocks = append(b.blocks[:i], b.blocks[i+1:]...)
-			return
-		}
-	}
 }
