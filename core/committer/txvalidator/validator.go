@@ -22,10 +22,10 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
-	gossipcommon "github.com/hyperledger/fabric/gossip/common"
-	"github.com/hyperledger/fabric/gossip/discovery"
+	"github.com/hyperledger/fabric/gossip/comm"
 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
 	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
+	"github.com/hyperledger/fabric/gossip/roleutil"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protos/common"
 	gossipproto "github.com/hyperledger/fabric/protos/gossip"
@@ -90,6 +90,7 @@ type TxValidator struct {
 	Vscc          vsccValidator
 	gossip        gossip2.Gossip
 	mvccValidator mvccValidator
+	roleUtil      *roleutil.RoleUtil
 }
 
 var logger *logging.Logger // package-level logger
@@ -124,6 +125,7 @@ func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemCh
 		Vscc:          newVSCCValidator(chainID, support, sccp, pluginValidator),
 		gossip:        gossip,
 		mvccValidator: mvccValidator,
+		roleUtil:      roleutil.NewRoleUtil(chainID, gossip),
 	}
 }
 
@@ -137,6 +139,9 @@ type ValidationResults struct {
 	BlockNumber uint64
 	TxFlags     ledgerUtil.TxValidationFlags
 	Err         error
+	// Endpoint is the endpoint of the peer that provided the results.
+	// Empty means local peer.
+	Endpoint string
 }
 
 // Validate performs the validation of a block. The validation
@@ -251,6 +256,12 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 // ValidatePartial partially validates the block and sends the validation results over Gossip
 // NOTE: This function should only be called by validators and not committers.
 func (v *TxValidator) ValidatePartial(block *common.Block) {
+	committer, err := v.roleUtil.Committer(false)
+	if err != nil {
+		logger.Errorf("[%s] Unable to get the committing peer to send the validation response to: %s", v.ChainID, err)
+		return
+	}
+
 	txFlags, numValidated, err := v.validate(block, v.getTxFilter())
 	if err != nil {
 		// Error while validating. Don't send the result over Gossip - in this case the committer will
@@ -273,8 +284,12 @@ func (v *TxValidator) ValidatePartial(block *common.Block) {
 		return
 	}
 
-	logger.Debugf("[%s] ... gossiping validation response for %d transactions in block %d", v.ChainID, numValidated, block.Header.Number)
-	v.gossip.Gossip(msg)
+	logger.Debugf("[%s] ... gossiping validation response for %d transactions in block %d to the committer: [%s]", v.ChainID, numValidated, block.Header.Number, committer.Endpoint)
+
+	v.gossip.Send(msg, &comm.RemotePeer{
+		Endpoint: committer.Endpoint,
+		PKIID:    committer.PKIid,
+	})
 }
 
 func (v *TxValidator) validateRemaining(block *common.Block, notValidated map[int]struct{}, resultsChan chan *ValidationResults) {
@@ -476,124 +491,34 @@ func allValidated(txsfltr ledgerUtil.TxValidationFlags) bool {
 }
 
 func (v *TxValidator) createValidationResponseGossipMsg(block *common.Block, txFlags ledgerUtil.TxValidationFlags) (*gossipproto.GossipMessage, error) {
-	data, err := proto.Marshal(newValidationResponse(block, txFlags))
-	if err != nil {
-		logger.Errorf("[%s] Error serializing validation response with sequence number %d: %s", v.ChainID, block.Header.Number, err)
-		return nil, err
-	}
-
 	return &gossipproto.GossipMessage{
 		Nonce:   0,
 		Tag:     gossipproto.GossipMessage_CHAN_AND_ORG,
 		Channel: []byte(v.ChainID),
-		Content: &gossipproto.GossipMessage_DataMsg{
-			DataMsg: &gossipproto.DataMessage{
-				Payload: &gossipproto.Payload{
-					Data:   data,
-					SeqNum: block.Header.Number,
-				},
+		Content: &gossipproto.GossipMessage_ValidationResultsMsg{
+			ValidationResultsMsg: &gossipproto.ValidationResultsMessage{
+				SeqNum:  block.Header.Number,
+				TxFlags: txFlags,
 			},
 		},
 	}, nil
 }
 
-func newValidationResponse(block *common.Block, txFlags ledgerUtil.TxValidationFlags) *common.Block {
-	utils.InitBlockMetadata(block)
-	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txFlags
-	return block
-}
-
-type member struct {
-	discovery.NetworkMember
-	mspID string
-}
-
-func (v *TxValidator) getValidators() []*member {
-	selfMember := v.getSelf()
-	localMSPID := selfMember.mspID
-	identityInfo := v.gossip.IdentityInfo()
-	mapByID := identityInfo.ByID()
-
-	var peers []*member
-	for _, m := range v.gossip.PeersOfChannel(gossipcommon.ChainID(v.ChainID)) {
-		if m.Properties == nil {
-			logger.Debugf("[%s] Not adding peer [%s] as a validator since it does not have any properties", v.ChainID, m.Endpoint)
-			continue
-		}
-
-		roles := gossipimpl.Roles(m.Properties.Roles)
-		if !roles.HasRole(ledgerconfig.ValidatorRole) && !roles.HasRole(ledgerconfig.CommitterRole) {
-			logger.Debugf("[%s] Not adding peer [%s] as a validator since it does not have the committer nor the validator role", v.ChainID, m.Endpoint)
-			continue
-		}
-
-		identity, ok := mapByID[string(m.PKIid)]
-		if !ok {
-			logger.Warningf("[%s] Not adding peer [%s] as a validator since unable to determine MSP ID from PKIID for [%s]", v.ChainID, m.Endpoint)
-			continue
-		}
-
-		mspID := string(identity.Organization)
-		if mspID != localMSPID {
-			logger.Debugf("[%s] Not adding peer [%s] from MSP [%s] as a validator since it is not part of the local msp [%s]", v.ChainID, m.Endpoint, mspID, localMSPID)
-			continue
-		}
-
-		peers = append(peers, &member{
-			NetworkMember: m,
-			mspID:         mspID,
-		})
-	}
-
-	if ledgerconfig.IsCommitter() || ledgerconfig.IsValidator() {
-		peers = append(peers, v.getSelf())
-	}
-
-	sortedValidators := validators(peers)
-	sort.Sort(sortedValidators)
-
-	return sortedValidators
-}
-
-func (v *TxValidator) getSelf() *member {
-	self := v.gossip.SelfMembershipInfo()
-	self.Properties = &gossipproto.Properties{
-		Roles: ledgerconfig.RolesAsString(),
-	}
-
-	identityInfo := v.gossip.IdentityInfo()
-	mapByID := identityInfo.ByID()
-
-	var mspID string
-	selfIdentity, ok := mapByID[string(self.PKIid)]
-	if ok {
-		mspID = string(selfIdentity.Organization)
-	} else {
-		logger.Warningf("[%s] Unable to determine MSP ID from PKIID for self", v.ChainID)
-	}
-
-	return &member{
-		NetworkMember: self,
-		mspID:         mspID,
-	}
-}
-
 func (v *TxValidator) getTxFilter() util.TxFilter {
-	validators := v.getValidators()
+	sortedValidators := validators(v.roleUtil.Validators(true))
+	sort.Sort(sortedValidators)
 
 	if logger.IsEnabledFor(logging.DEBUG) {
 		logger.Debugf("[%s] All validators:", v.ChainID)
-		for _, m := range validators {
-			logger.Debugf("- [%s], MSPID [%s], - Roles: %s", m.Endpoint, m.mspID, m.Properties.Roles)
+		for _, m := range sortedValidators {
+			logger.Debugf("- [%s], MSPID [%s], - Roles: %s", m.Endpoint, m.MSPID, m.Properties.Roles)
 		}
 	}
 
-	selfMember := v.getSelf()
-
 	return func(txIdx int) bool {
-		validatorForTx := validators[txIdx%len(validators)]
+		validatorForTx := sortedValidators[txIdx%len(sortedValidators)]
 		logger.Debugf("[%s] Validator for TxIdx [%d] is [%s]", v.ChainID, txIdx, validatorForTx.Endpoint)
-		return validatorForTx.Endpoint == selfMember.Endpoint
+		return validatorForTx.Local
 	}
 }
 
@@ -977,7 +902,7 @@ func (ds *dynamicCapabilities) V1_2Validation() bool {
 	return ds.support.Capabilities().V1_2Validation()
 }
 
-type validators []*member
+type validators []*roleutil.Member
 
 func (p validators) Len() int {
 	return len(p)

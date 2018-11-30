@@ -168,6 +168,11 @@ func (m *GossipMessage) IsDataMsg() bool {
 	return m.GetDataMsg() != nil
 }
 
+// IsValidationResultsMsg returns whether this GossipMessage is a validation results message
+func (m *GossipMessage) IsValidationResultsMsg() bool {
+	return m.GetValidationResultsMsg() != nil
+}
+
 // IsStateInfoPullRequestMsg returns whether this GossipMessage is a stateInfoPullRequest
 func (m *GossipMessage) IsStateInfoPullRequestMsg() bool {
 	return m.GetStateInfoPullReq() != nil
@@ -283,6 +288,14 @@ func (m *GossipMessage) IsTagLegal() error {
 		return fmt.Errorf("Undefined tag")
 	}
 	if m.IsDataMsg() {
+		if m.Tag != GossipMessage_CHAN_AND_ORG {
+			return fmt.Errorf("Tag should be %s", GossipMessage_Tag_name[int32(GossipMessage_CHAN_AND_ORG)])
+		}
+		return nil
+	}
+
+	if m.IsValidationResultsMsg() {
+		// Validation results should only be coming from peers in the same channe and org as the local peer
 		if m.Tag != GossipMessage_CHAN_AND_ORG {
 			return fmt.Errorf("Tag should be %s", GossipMessage_Tag_name[int32(GossipMessage_CHAN_AND_ORG)])
 		}
