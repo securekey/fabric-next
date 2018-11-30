@@ -209,6 +209,7 @@ func initializeBootstrapChannel(conf *localconfig.TopLevel, lf blockledger.Facto
 	if err != nil {
 		logger.Fatal("Failed to parse chain ID from genesis block:", err)
 	}
+	logger.Errorf("Creating bootstrap channel [%s]", chainID)
 	gl, err := lf.GetOrCreate(chainID)
 	if err != nil {
 		logger.Fatal("Failed to create the system chain:", err)

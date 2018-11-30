@@ -48,6 +48,7 @@ type FileLedger struct {
 // file ledger
 type FileLedgerBlockStore interface {
 	AddBlock(block *cb.Block) error
+	CheckpointBlock(block *cb.Block) error
 	GetBlockchainInfo() (*cb.BlockchainInfo, error)
 	RetrieveBlocks(startBlockNumber uint64) (ledger.ResultsIterator, error)
 }
@@ -136,9 +137,15 @@ func (fl *FileLedger) Height() uint64 {
 // Append a new block to the ledger
 func (fl *FileLedger) Append(block *cb.Block) error {
 	err := fl.blockStore.AddBlock(block)
-	if err == nil {
-		close(fl.signal)
-		fl.signal = make(chan struct{})
+	if err != nil {
+		return err
 	}
-	return err
+	err = fl.blockStore.CheckpointBlock(block)
+	if err != nil {
+		return err
+	}
+
+	close(fl.signal)
+	fl.signal = make(chan struct{})
+	return nil
 }

@@ -107,7 +107,9 @@ type Registrar struct {
 }
 
 func getConfigTx(reader blockledger.Reader) *cb.Envelope {
+	logger.Errorf("**** height [%d]", reader.Height()-1)
 	lastBlock := blockledger.GetBlock(reader, reader.Height()-1)
+	logger.Errorf("**** lastBlock [%#v]", lastBlock)
 	index, err := utils.GetLastConfigIndexFromBlock(lastBlock)
 	if err != nil {
 		logger.Panicf("Chain did not have appropriately encoded last config in its latest block: %s", err)

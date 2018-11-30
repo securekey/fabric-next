@@ -17,6 +17,10 @@ limitations under the License.
 package fileledger
 
 import (
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
@@ -67,12 +71,21 @@ func (flf *fileLedgerFactory) Close() {
 
 // New creates a new ledger factory
 func New(directory string) blockledger.Factory {
+	logger.Warningf("Using cache [%s]", directory)
+	blockCacheSize := ledgerconfig.GetBlockCacheSize()
+
+	// TODO: Move the fsblkstorage index to ldbblkindex package.
+	blockStorage := fsblkstorage.NewProvider(fsblkstorage.NewConf(directory, -1),
+		&blkstorage.IndexConfig{AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}})
+
+	blockIndex := ldbblkindex.NewProvider(ldbblkindex.NewConf(directory),
+		&blkstorage.IndexConfig{AttrsToIndex: []blkstorage.IndexableAttr{}})
+
+	blockCache := memblkcache.NewProvider(blockCacheSize)
+
 	return &fileLedgerFactory{
-		blkstorageProvider: fsblkstorage.NewProvider(
-			fsblkstorage.NewConf(directory, -1),
-			&blkstorage.IndexConfig{
-				AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}},
-		),
+		blkstorageProvider: cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache),
 		ledgers: make(map[string]blockledger.ReadWriter),
 	}
 }
+
