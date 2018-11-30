@@ -17,6 +17,9 @@ limitations under the License.
 package fileledger
 
 import (
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
@@ -67,12 +70,17 @@ func (flf *fileLedgerFactory) Close() {
 
 // New creates a new ledger factory
 func New(directory string) blockledger.Factory {
+	logger.Warningf("Using cache [%s]", directory)
+	blockCacheSize := ledgerconfig.GetBlockCacheSize()
+
+	blockStorage := fsblkstorage.NewProvider(fsblkstorage.NewConf(directory, -1),
+		&blkstorage.IndexConfig{AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}})
+
+	blockCache := memblkcache.NewProvider(blockCacheSize)
+
 	return &fileLedgerFactory{
-		blkstorageProvider: fsblkstorage.NewProvider(
-			fsblkstorage.NewConf(directory, -1),
-			&blkstorage.IndexConfig{
-				AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}},
-		),
+		blkstorageProvider: cachedblkstore.NewProvider(blockStorage, &noopIndexProvider{}, blockCache),
 		ledgers: make(map[string]blockledger.ReadWriter),
 	}
 }
+
