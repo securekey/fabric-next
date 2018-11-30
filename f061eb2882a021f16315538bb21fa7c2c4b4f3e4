@@ -48,6 +48,29 @@
     },
     {
       "key": {
+        "uuid": "a9e7300f_624e9a3e",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 89,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-30T17:32:24Z",
+      "side": 1,
+      "message": "these functions are not called in parallel.",
+      "range": {
+        "startLine": 88,
+        "startChar": 1,
+        "endLine": 89,
+        "endChar": 31
+      },
+      "revId": "f061eb2882a021f16315538bb21fa7c2c4b4f3e4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "694182c2_49a7c0fc",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
         "patchSetId": 6
