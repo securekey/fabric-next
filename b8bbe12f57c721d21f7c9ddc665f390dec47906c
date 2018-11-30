@@ -63,6 +63,24 @@
       "revId": "b8bbe12f57c721d21f7c9ddc665f390dec47906c",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "3eda3933_c017febb",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 281,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-30T02:12:49Z",
+      "side": 1,
+      "message": "don\u0027t wanna add yet another dependency :)",
+      "parentUuid": "3390bd1e_fad079b1",
+      "revId": "b8bbe12f57c721d21f7c9ddc665f390dec47906c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
