@@ -22,6 +22,30 @@
       "revId": "8d3cba195d61c738a9252215af33da4d3fe068b8",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3d71d175_61984da5",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-11-30T20:47:46Z",
+      "side": 1,
+      "message": "The committer is (currently) the leader so it\u0027s getting the blocks from the orderer. I guess if we want to make another peer the leader then I should also Gossip the block to the committer. I\u0027ll make the change.",
+      "parentUuid": "785b6e45_2c91990c",
+      "range": {
+        "startLine": 11,
+        "startChar": 42,
+        "endLine": 11,
+        "endChar": 65
+      },
+      "revId": "8d3cba195d61c738a9252215af33da4d3fe068b8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
