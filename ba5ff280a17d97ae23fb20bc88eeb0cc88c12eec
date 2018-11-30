@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "704f4327_3706db7a",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 82,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-11-30T02:12:49Z",
+      "side": 0,
+      "message": "mistake, thought it was calling commitDB() below which only updates commitMetadata.. will re-apply again",
+      "parentUuid": "c62f70cc_0e9bbdec",
+      "range": {
+        "startLine": 82,
+        "startChar": 14,
+        "endLine": 82,
+        "endChar": 34
+      },
+      "revId": "ba5ff280a17d97ae23fb20bc88eeb0cc88c12eec",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "13e34247_c3675072",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
         "patchSetId": 1
