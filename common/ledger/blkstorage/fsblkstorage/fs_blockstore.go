@@ -17,6 +17,7 @@ limitations under the License.
 package fsblkstorage
 
 import (
+	"context"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
@@ -96,4 +97,13 @@ func (store *fsBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxV
 func (store *fsBlockStore) Shutdown() {
 	logger.Debugf("closing fs blockStore:%s", store.id)
 	store.fileMgr.close()
+}
+
+
+func (store *fsBlockStore) LastBlockNumber() uint64 {
+	return store.fileMgr.lastBlockNumber()
+}
+
+func (store *fsBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
+	return store.fileMgr.waitForBlock(ctx, blockNum)
 }

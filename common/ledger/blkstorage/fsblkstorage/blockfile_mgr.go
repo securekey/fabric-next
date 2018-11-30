@@ -17,6 +17,7 @@ limitations under the License.
 package fsblkstorage
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sync"
@@ -50,7 +51,8 @@ type blockfileMgr struct {
 	db                *leveldbhelper.DBHandle
 	index             index
 	cpInfo            *checkpointInfo
-	cpInfoCond        *sync.Cond
+	cpInfoSig         chan struct{}
+	cpInfoMtx         sync.RWMutex
 	currentFileWriter *blockfileWriter
 	bcInfo            atomic.Value
 }
@@ -105,7 +107,13 @@ func newBlockfileMgr(id string, conf *Conf, indexConfig *blkstorage.IndexConfig,
 		panic(fmt.Sprintf("Error: %s", err))
 	}
 	// Instantiate the manager, i.e. blockFileMgr structure
-	mgr := &blockfileMgr{rootDir: rootDir, conf: conf, db: indexStore}
+	mgr := &blockfileMgr{
+		rootDir:   rootDir,
+		conf:      conf,
+		db:        indexStore,
+		cpInfoSig: make(chan struct{}),
+		cpInfoMtx: sync.RWMutex{},
+	}
 
 	// cp = checkpointInfo, retrieve from the database the file suffix or number of where blocks were stored.
 	// It also retrieves the current size of that file and the last block number that was written to that file.
@@ -149,9 +157,6 @@ func newBlockfileMgr(id string, conf *Conf, indexConfig *blkstorage.IndexConfig,
 	// Update the manager with the checkpoint info and the file writer
 	mgr.cpInfo = cpInfo
 	mgr.currentFileWriter = currentFileWriter
-	// Create a checkpoint condition (event) variable, for the  goroutine waiting for
-	// or announcing the occurrence of an event.
-	mgr.cpInfoCond = sync.NewCond(&sync.Mutex{})
 
 	// init BlockchainInfo for external API's
 	bcInfo := &common.BlockchainInfo{
@@ -428,11 +433,12 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
 }
 
 func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
-	mgr.cpInfoCond.L.Lock()
-	defer mgr.cpInfoCond.L.Unlock()
+	mgr.cpInfoMtx.Lock()
+	defer mgr.cpInfoMtx.Unlock()
 	mgr.cpInfo = cpInfo
 	logger.Debugf("Broadcasting about update checkpointInfo: %s", mgr.cpInfo)
-	mgr.cpInfoCond.Broadcast()
+	close(mgr.cpInfoSig)
+	mgr.cpInfoSig = make(chan struct{})
 }
 
 // CheckpointBlock is not implemented for file-based block storage
@@ -603,6 +609,39 @@ func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
 		return err
 	}
 	return nil
+}
+
+func (mgr *blockfileMgr) lastBlockNumber() uint64 {
+	mgr.cpInfoMtx.RLock()
+	defer mgr.cpInfoMtx.RUnlock()
+
+	return mgr.cpInfo.lastBlockNumber
+}
+
+func (mgr *blockfileMgr) waitForBlock(ctx context.Context, blockNum uint64) uint64 {
+	var lastBlockNumber uint64
+
+BlockLoop:
+	for {
+		mgr.cpInfoMtx.RLock()
+		lastBlockNumber = mgr.cpInfo.lastBlockNumber
+		sigCh := mgr.cpInfoSig
+		mgr.cpInfoMtx.RUnlock()
+
+		if lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break BlockLoop
+		case <-sigCh:
+		}
+	}
+
+	logger.Debugf("finished waiting for blocks [%d, %d]", lastBlockNumber, blockNum)
+	return lastBlockNumber
 }
 
 // scanForLastCompleteBlock scan a given block file and detects the last offset in the file
