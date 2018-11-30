@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0507ffc5_7b7216ee",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 7
+      },
+      "lineNbr": 62,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-11-30T00:53:11Z",
+      "side": 1,
+      "message": "why not just create setter and getter of the cache itself (which locks internally)? why expose the lock instead?",
+      "range": {
+        "startLine": 62,
+        "startChar": 24,
+        "endLine": 62,
+        "endChar": 28
+      },
+      "revId": "9aed8eb91f84ebf4ceb5019902f19ac7ac566bc4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
