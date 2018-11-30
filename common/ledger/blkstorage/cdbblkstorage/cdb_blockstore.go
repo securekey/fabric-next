@@ -39,7 +39,7 @@ type cdbBlockStore struct {
 	cpInfo            checkpointInfo
 	pendingBlock      cdbBlock
 	cpInfoSig         chan struct{}
-	cpInfoMtx         *sync.RWMutex
+	cpInfoMtx         sync.RWMutex
 	bcInfo            atomic.Value
 	blockIndexEnabled bool
 }
@@ -50,7 +50,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, blockI
 		blockStore:        blockStore,
 		ledgerID:          ledgerID,
 		cpInfoSig:         make(chan struct{}),
-		cpInfoMtx:         &sync.RWMutex{},
+		cpInfoMtx:         sync.RWMutex{},
 		blockIndexEnabled: blockIndexEnabled,
 	}
 

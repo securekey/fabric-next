@@ -21,6 +21,7 @@ type CachedBlockstoreProvider struct {
 	cacheProvider   blkstorage.BlockCacheProvider
 }
 
+// TODO: merge into BlockStore interface
 type blockStoreWithCheckpoint interface {
 	blkstorage.BlockStore
 	WaitForBlock(ctx context.Context, blockNum uint64) uint64

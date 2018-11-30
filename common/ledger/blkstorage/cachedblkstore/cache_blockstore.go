@@ -9,6 +9,7 @@ package cachedblkstore
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/hyperledger/fabric/common/ledger"
@@ -32,6 +33,8 @@ type cachedBlockStore struct {
 	blockCache blkstorage.BlockCache
 
 	bcInfo         atomic.Value
+	cpInfoSig      chan struct{}
+	cpInfoMtx      sync.RWMutex
 	blockStoreCh   chan *common.Block
 	checkpointCh   chan *common.Block
 	writerClosedCh chan struct{}
@@ -43,6 +46,8 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 		blockStore:     blockStore,
 		blockIndex:     blockIndex,
 		blockCache:     blockCache,
+		cpInfoSig:      make(chan struct{}),
+		cpInfoMtx:      sync.RWMutex{},
 		blockStoreCh:   make(chan *common.Block, blockStorageQueueLen),
 		checkpointCh:   make(chan *common.Block, blockStorageQueueLen),
 		writerClosedCh: make(chan struct{}),
@@ -70,6 +75,7 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 
 	blockNumber := block.GetHeader().GetNumber()
 	if blockNumber != 0 {
+		// Wait for underlying storage to complete commit on previous block.
 		logger.Debugf("waiting for previous block to checkpoint [%d]", blockNumber-checkpointBlockInterval)
 		s.blockStore.WaitForBlock(context.Background(), blockNumber-checkpointBlockInterval)
 		logger.Debugf("ready to store incoming block [%d]", blockNumber)
@@ -263,6 +269,38 @@ func (s *cachedBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxV
 	// TODO: make an explicit cache for txn validation codes?
 	return s.blockIndex.RetrieveTxValidationCodeByTxID(txID)
 }
+
+func (s *cachedBlockStore) LastBlockNumber() uint64 {
+	bci := s.bcInfo.Load().(*common.BlockchainInfo)
+	return bci.GetHeight() - 1
+}
+
+func (s *cachedBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
+	var lastBlockNumber uint64
+
+BlockLoop:
+	for {
+		s.cpInfoMtx.RLock()
+		sigCh := s.cpInfoSig
+		lastBlockNumber := s.LastBlockNumber()
+		s.cpInfoMtx.RUnlock()
+
+		if lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break BlockLoop
+		case <-sigCh:
+		}
+	}
+
+	logger.Debugf("finished waiting for blocks [%d, %d]", lastBlockNumber, blockNum)
+	return lastBlockNumber
+}
+
 
 func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValidationCode {
 	blockMetadata := block.GetMetadata()
