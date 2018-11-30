@@ -756,6 +756,10 @@ func (flbs fileLedgerBlockStore) AddBlock(*common.Block) error {
 	return nil
 }
 
+func (flbs fileLedgerBlockStore) CheckpointBlock(*common.Block) error {
+	return nil
+}
+
 func (flbs fileLedgerBlockStore) RetrieveBlocks(startBlockNumber uint64) (commonledger.ResultsIterator, error) {
 	return flbs.GetBlocksIterator(startBlockNumber)
 }
