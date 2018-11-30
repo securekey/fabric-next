@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -181,13 +182,12 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 
 	txFlags, numValidated, err := v.validate(block, v.getTxFilter())
 	if err == nil {
-		mergeValidationFlags(block.Header.Number, txsfltr, txFlags)
-
-		done := allValidated(txsfltr)
+		flags := newTxFlags(block.Header.Number, txsfltr)
+		done := flags.merge(txFlags)
 		if done {
 			logger.Debugf("[%s] Committer has validated all %d transactions in block %d", v.ChainID, len(block.Data.Data), block.Header.Number)
 		} else {
-			err = v.waitForValidationResults(block.Header.Number, txsfltr, resultsChan, getValidationWaitTime(numValidated))
+			err = v.waitForValidationResults(block.Header.Number, flags, resultsChan, getValidationWaitTime(numValidated))
 			if err != nil {
 				logger.Warningf("[%s] Got error in validation response for block %d: %s", v.ChainID, block.Header.Number, err)
 			}
@@ -206,7 +206,7 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 				go v.validateRemaining(block, notValidated, resultsChan)
 
 				// Wait forever for a response
-				err = v.waitForValidationResults(block.Header.Number, txsfltr, resultsChan, time.Hour)
+				err = v.waitForValidationResults(block.Header.Number, flags, resultsChan, time.Hour)
 				if err != nil {
 					logger.Warningf("[%s] Got error validating remaining transactions in block %d: %s", v.ChainID, block.Header.Number, err)
 				}
@@ -312,9 +312,8 @@ func (v *TxValidator) validateRemaining(block *common.Block, notValidated map[in
 	}
 }
 
-func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledgerUtil.TxValidationFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
-	// FIXME: Change to Debug
-	logger.Infof("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
+func (v *TxValidator) waitForValidationResults(blockNumber uint64, flags *txFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
+	logger.Debugf("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
 
 	start := time.Now()
 	timeoutChan := time.After(timeout)
@@ -323,21 +322,20 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledge
 		select {
 		case result := <-resultsChan:
 			// FIXME: Change to Debug
-			logger.Infof("[%s] Got results for block %d", v.ChainID, result.BlockNumber)
+			logger.Infof("[%s] Got results from [%s] for block %d after %s", v.ChainID, result.Endpoint, result.BlockNumber, time.Since(start))
+
 			if result.BlockNumber < blockNumber {
 				// FIXME: Change to Debug
-				logger.Infof("[%s] Discarding validation results for block %d since we're waiting on block %d", v.ChainID, result.BlockNumber, blockNumber)
+				logger.Infof("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
 			} else if result.BlockNumber > blockNumber {
 				// This shouldn't be possible
-				logger.Warningf("[%s] Discarding validation results for block %d since we're waiting on block %d", v.ChainID, result.BlockNumber, blockNumber)
+				logger.Warningf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
 			} else {
 				if result.Err != nil {
-					logger.Infof("[%s] Received error in validation results for block %d: %s", v.ChainID, result.BlockNumber, result.Err)
+					logger.Infof("[%s] Received error in validation results from [%s] peer for block %d: %s", v.ChainID, result.Endpoint, result.BlockNumber, result.Err)
 					return result.Err
 				}
-
-				mergeValidationFlags(blockNumber, txsfltr, result.TxFlags)
-				if allValidated(txsfltr) {
+				if flags.merge(result.TxFlags) {
 					// FIXME: Change to Debug
 					logger.Infof("[%s] Block %d is all validated. Done waiting %s for responses.", v.ChainID, blockNumber, time.Since(start))
 					return nil
@@ -351,18 +349,33 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, txsfltr ledge
 	}
 }
 
-func mergeValidationFlags(blockNumber uint64, target, source ledgerUtil.TxValidationFlags) {
+type txFlags struct {
+	mutex       sync.Mutex
+	flags       ledgerUtil.TxValidationFlags
+	blockNumber uint64
+}
+
+func newTxFlags(blockNumber uint64, flags ledgerUtil.TxValidationFlags) *txFlags {
+	return &txFlags{blockNumber: blockNumber, flags: flags}
+}
+
+// merge merges the given flags and returns true if all of the flags have been validated
+func (f *txFlags) merge(source ledgerUtil.TxValidationFlags) bool {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
 	for i, flag := range source {
 		if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
 			continue
 		}
-		currentFlag := target.Flag(i)
+		currentFlag := f.flags.Flag(i)
 		if currentFlag == peer.TxValidationCode_NOT_VALIDATED {
-			target.SetFlag(i, peer.TxValidationCode(flag))
+			f.flags.SetFlag(i, peer.TxValidationCode(flag))
 		} else {
-			logger.Warningf("TxValidation flag at index [%d] for block number %d is already set to %s and attempting to set it to %s. The flag will not be changed.", i, blockNumber, currentFlag, peer.TxValidationCode(flag))
+			logger.Debugf("TxValidation flag at index [%d] for block number %d is already set to %s and attempting to set it to %s. The flag will not be changed.", i, f.blockNumber, currentFlag, peer.TxValidationCode(flag))
 		}
 	}
+	return allValidated(f.flags)
 }
 
 func (v *TxValidator) validate(block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
