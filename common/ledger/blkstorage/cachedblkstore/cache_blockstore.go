@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
@@ -32,7 +31,7 @@ type cachedBlockStore struct {
 	blockIndex blkstorage.BlockIndex
 	blockCache blkstorage.BlockCache
 
-	bcInfo         atomic.Value
+	bcInfo         *common.BlockchainInfo
 	cpInfoSig      chan struct{}
 	cpInfoMtx      sync.RWMutex
 	blockStoreCh   chan *common.Block
@@ -58,7 +57,7 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 	if err != nil {
 		return nil, err
 	}
-	s.bcInfo.Store(curBcInfo)
+	s.bcInfo = curBcInfo
 
 	go s.blockWriter()
 
@@ -88,10 +87,8 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 func (s *cachedBlockStore) CheckpointBlock(block *common.Block) error {
 	s.checkpointCh <- block
 
-	updatedBcInfo := createBlockchainInfo(block)
-	s.bcInfo.Store(updatedBcInfo)
-
 	s.cpInfoMtx.Lock()
+	s.bcInfo = createBlockchainInfo(block)
 	close(s.cpInfoSig)
 	s.cpInfoSig = make(chan struct{})
 	s.cpInfoMtx.Unlock()
@@ -147,7 +144,9 @@ func (s *cachedBlockStore) blockWriter() {
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cachedBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	return s.bcInfo.Load().(*common.BlockchainInfo), nil
+	s.cpInfoMtx.RLock()
+	defer s.cpInfoMtx.RUnlock()
+	return s.bcInfo, nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
@@ -277,8 +276,9 @@ func (s *cachedBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxV
 }
 
 func (s *cachedBlockStore) LastBlockNumber() uint64 {
-	bci := s.bcInfo.Load().(*common.BlockchainInfo)
-	return bci.GetHeight() - 1
+	s.cpInfoMtx.RLock()
+	defer s.cpInfoMtx.RUnlock()
+	return s.bcInfo.GetHeight() - 1
 }
 
 func (s *cachedBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
@@ -288,7 +288,7 @@ BlockLoop:
 	for {
 		s.cpInfoMtx.RLock()
 		sigCh := s.cpInfoSig
-		lastBlockNumber := s.LastBlockNumber()
+		lastBlockNumber := s.bcInfo.GetHeight() - 1
 		s.cpInfoMtx.RUnlock()
 
 		if lastBlockNumber >= blockNum {
