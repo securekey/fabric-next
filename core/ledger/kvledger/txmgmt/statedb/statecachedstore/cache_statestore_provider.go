@@ -32,7 +32,7 @@ func NewProvider(dbProvider statedb.VersionedDBProvider, stateKeyIndexProvider s
 // GetDBHandle gets the handle to a named database
 func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.VersionedDB, error) {
 
-	dbProvider, err := provider.dbProvider.GetDBHandle(dbName)
+	vdb, err := provider.dbProvider.GetDBHandle(dbName)
 	if err != nil {
 		return nil, errors.Wrap(err, "dbProvider GetDBHandle failed")
 	}
@@ -42,7 +42,7 @@ func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.Version
 		return nil, errors.Wrapf(err, "failed to open the stateindex for db %s", dbName)
 	}
 
-	return newCachedBlockStore(dbProvider, stateIdx, dbName), nil
+	return newCachedStateStore(vdb, stateIdx, dbName), nil
 }
 
 // Close cleans up the Provider
