@@ -64,9 +64,7 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	if versionedValue, ok := statedb.GetFromKVCache(c.ledgerID, namespace, key); ok {
 		logger.Debugf("[%s] state retrieved from cache [ns=%s, key=%s]", c.ledgerID, namespace, key)
-		if metrics.IsDebug() {
-			metrics.RootScope.Counter("cachestatestore_getstate_cache_request_hit").Inc(1)
-		}
+		metrics.IncrementCounter("cachestatestore_getstate_cache_request_hit")
 		return versionedValue, nil
 	}
 	versionedValue, err := c.stateStore.GetState(namespace, key)
@@ -136,9 +134,7 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
 	dbItr.Prev()
-	if metrics.IsDebug() {
-		metrics.RootScope.Counter("cachestatestore_getstaterangescaniterator_cache_request_hit").Inc(1)
-	}
+	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
 	return newKVScanner(namespace, dbItr, c), nil
 }
 

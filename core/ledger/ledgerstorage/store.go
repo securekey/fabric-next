@@ -158,12 +158,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("ledgerstorage_CommitWithPvtData_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("ledgerstorage_CommitWithPvtData_duration")
+	defer stopWatch()
 
 	blockNum := blockAndPvtdata.Block.Header.Number
 	s.rwlock.Lock()
@@ -191,9 +187,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		}
 		writtenToPvtStore = true
 	} else {
-		if metrics.IsDebug() {
-			metrics.RootScope.Counter("ledgerstorage_CommitWithPvtData_SkipCount").Inc(1)
-		}
+		metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
 	}
 
@@ -211,12 +205,8 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataAndBlockByNum_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataAndBlockByNum_duration")
+	defer stopWatch()
 
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
@@ -237,12 +227,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
 // A nil filter does not filter any results
 func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("ledgerstorage_GetPvtDataByNum_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataByNum_duration")
+	defer stopWatch()
 
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()

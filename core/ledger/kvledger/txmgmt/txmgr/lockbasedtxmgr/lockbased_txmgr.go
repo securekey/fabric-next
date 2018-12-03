@@ -334,11 +334,8 @@ func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []st
 }
 
 func (txmgr *LockBasedTxMgr) updateStateListeners(tx *current) {
-
-	if metrics.IsDebug() {
-		stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_updateStateListenersTimer_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("lockbasedtxmgr_updateStateListenersTimer_duration")
+	defer stopWatch()
 
 	for _, l := range tx.listeners {
 		l.StateCommitDone(txmgr.ledgerid)

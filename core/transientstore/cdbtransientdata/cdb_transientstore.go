@@ -255,11 +255,8 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 	}
 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_next_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("cdbtransientdata_couchdb_next_duration")
+	defer stopWatch()
 
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {
@@ -309,11 +306,8 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
 	}
 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
 
-	if metrics.IsDebug() {
-		// Measure the whole
-		stopWatch := metrics.RootScope.Timer("cdbtransientdata_couchdb_nextwithconfig_duration").Start()
-		defer stopWatch.Stop()
-	}
+	stopWatch := metrics.StopWatch("cdbtransientdata_couchdb_nextwithconfig_duration")
+	defer stopWatch()
 
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {
