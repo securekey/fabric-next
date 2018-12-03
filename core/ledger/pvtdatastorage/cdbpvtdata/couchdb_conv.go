@@ -104,8 +104,8 @@ type expiryInfo struct {
 
 func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64) (*expiryInfo, error) {
 	ei := expiryInfo{
-		json: make(jsonValue),
-		purgeKeys: make([]string, 0),
+		json:       make(jsonValue),
+		purgeKeys:  make([]string, 0),
 		expiryKeys: make([]string, 0),
 	}
 
@@ -148,7 +148,7 @@ func lookupMetadata(db *couchdb.CouchDatabase) (metadata, bool, error) {
 	var lastBlockNum uint64
 	var found bool
 
-	mc := min(info.DocCount, numMetaDocs+1)
+	mc := min(info.DocCount, numMetaDocs)
 	for i := 1; i <= mc; i++ {
 		doc, _, e := db.ReadDoc(blockNumberToKey(uint64(info.DocCount - i)))
 		if e != nil {
