@@ -189,7 +189,6 @@ func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKe
 
 		}
 	}
-	logger.Infof("*** LoadWSetCommittedVersions keysNotExist %s keysExist %s blockNum %d", keysNotExist, keysExist, blockNum)
 	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
 	if err != nil {
 		return err
