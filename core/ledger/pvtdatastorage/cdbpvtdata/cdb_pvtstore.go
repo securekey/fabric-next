@@ -20,9 +20,9 @@ import (
 )
 
 type store struct {
-	db               *couchdb.CouchDatabase
-	purgeInterval    uint64
-	pendingDocs      []*couchdb.CouchDoc
+	db            *couchdb.CouchDatabase
+	purgeInterval uint64
+	pendingDocs   []*couchdb.CouchDoc
 
 	commonStore
 }
@@ -44,14 +44,14 @@ func newStore(db *couchdb.CouchDatabase) (*store, error) {
 }
 
 func (s *store) initState() error {
-	m, ok, err := lookupMetadata(s.db)
+	lastCommittedBlock, ok, err := lookupLastBlock(s.db)
 	if err != nil {
 		return err
 	}
 
 	s.isEmpty = !ok
 	if ok {
-		s.lastCommittedBlock = m.lastCommitedBlock
+		s.lastCommittedBlock = lastCommittedBlock
 	}
 	return nil
 }
