@@ -45,7 +45,7 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 	}
 
 	// Update the 'non-durable' cache only
-	statedb.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
+	l.kvCacheProvider.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
 
 	return nil
 }
@@ -68,7 +68,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	}
 
 	// Update the cache
-	err = statedb.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
+	err = l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
 	if err != nil {
 		return err
 	}

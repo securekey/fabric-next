@@ -92,6 +92,10 @@ func (s *CommonStorageDB) IsBulkOptimizable() bool {
 	return ok
 }
 
+func (s *CommonStorageDB) UpdateKVCache() {
+
+}
+
 // LoadCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
 func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
 	hashedKeys []*HashedCompositeKey) error {

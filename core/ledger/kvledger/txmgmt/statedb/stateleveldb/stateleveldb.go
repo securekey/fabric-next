@@ -48,13 +48,19 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type versionedDB struct {
+	kvCacheProvider *statedb.KVCacheProvider
 	db     *leveldbhelper.DBHandle
 	dbName string
 }
 
 // newVersionedDB constructs an instance of VersionedDB
 func newVersionedDB(db *leveldbhelper.DBHandle, dbName string) *versionedDB {
-	return &versionedDB{db, dbName}
+	kvCacheProvider := statedb.NewKVCacheProvider()
+	return &versionedDB{kvCacheProvider, db, dbName}
+}
+
+func (vdb *versionedDB) GetKVCacheProvider() (*statedb.KVCacheProvider) {
+	return vdb.kvCacheProvider
 }
 
 // Open implements method in VersionedDB interface

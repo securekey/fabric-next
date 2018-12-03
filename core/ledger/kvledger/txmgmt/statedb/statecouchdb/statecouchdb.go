@@ -69,6 +69,7 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type VersionedDB struct {
+	kvCacheProvider        *statedb.KVCacheProvider
 	couchInstance          *couchdb.CouchInstance
 	couchCheckpointRev     string
 	metadataDB             *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
@@ -91,8 +92,10 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 	if err != nil {
 		return nil, err
 	}
+
+	kvCacheProvider := statedb.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
-	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
+	return &VersionedDB{kvCacheProvider: kvCacheProvider, couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
 		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
 }
 
@@ -140,6 +143,10 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 	}
 
 	return db, nil
+}
+
+func (vdb *VersionedDB) GetKVCacheProvider() (* statedb.KVCacheProvider) {
+	return vdb.kvCacheProvider
 }
 
 // getNamespaceDBHandle gets the handle to a named chaincode database

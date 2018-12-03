@@ -25,6 +25,8 @@ type VersionedDBProvider interface {
 
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
+	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
+	GetKVCacheProvider() (*KVCacheProvider)
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
 	GetState(namespace string, key string) (*VersionedValue, error)
 	// GetVersion gets the version for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
