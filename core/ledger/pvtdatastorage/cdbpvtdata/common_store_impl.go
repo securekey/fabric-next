@@ -257,6 +257,7 @@ func (s *store) Rollback() error {
 	}
 
 	s.batchPending = false
+	s.pendingDocs = nil
 	return nil
 }
 

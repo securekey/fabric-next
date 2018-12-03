@@ -104,8 +104,8 @@ type expiryInfo struct {
 
 func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64) (*expiryInfo, error) {
 	ei := expiryInfo{
-		json: make(jsonValue),
-		purgeKeys: make([]string, 0),
+		json:       make(jsonValue),
+		purgeKeys:  make([]string, 0),
 		expiryKeys: make([]string, 0),
 	}
 
@@ -135,7 +135,6 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 }
 
 type metadata struct {
-	pending           bool
 	lastCommitedBlock uint64
 }
 
@@ -156,12 +155,18 @@ func lookupMetadata(db *couchdb.CouchDatabase) (metadata, bool, error) {
 		}
 
 		if doc != nil {
-			var lastPvtDataResp *blockPvtDataResponse
-			err = json.Unmarshal(doc.JSONValue, lastPvtDataResp)
-			if err != nil {
-				return metadata{}, false, errors.Wrapf(err, "block from couchDB document could not be unmarshaled")
-			}
 			lastBlockNum = uint64(info.DocCount - i)
+			var lastPvtDataResp blockPvtDataResponse
+			er := json.Unmarshal(doc.JSONValue, &lastPvtDataResp)
+			if er != nil {
+				// unmarshal metadata with blockPvtDataResponse will fail
+				// do not return an error if the doc is metadata
+				if info.DocCount-i+1 == numMetaDocs {
+					return metadata{lastBlockNum}, true, nil
+				}
+				// otherwise, db has corrupt data, return error
+				return metadata{}, false, errors.Wrapf(er, "block from couchDB document could not be unmarshaled")
+			}
 			found = true
 			break
 		}
@@ -171,7 +176,7 @@ func lookupMetadata(db *couchdb.CouchDatabase) (metadata, bool, error) {
 		return metadata{}, false, nil
 	}
 
-	m := metadata{false, lastBlockNum}
+	m := metadata{lastBlockNum}
 	return m, true, nil
 }
 
