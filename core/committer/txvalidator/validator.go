@@ -79,7 +79,7 @@ type vsccValidator interface {
 }
 
 type mvccValidator interface {
-	ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 }
 
 // implementation of Validator interface, keeps
@@ -95,6 +95,9 @@ type TxValidator struct {
 }
 
 var logger *logging.Logger // package-level logger
+
+// ignoreCancel is a cancel function that does nothing
+var ignoreCancel = func() {}
 
 func init() {
 	// Init logger with module name
@@ -120,6 +123,7 @@ type blockValidationResult struct {
 func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemChaincodeProvider, pm PluginMapper, gossip gossip2.Gossip, mvccValidator mvccValidator) *TxValidator {
 	// Encapsulates interface implementation
 	pluginValidator := NewPluginValidator(pm, support.Ledger(), &dynamicDeserializer{support: support}, &dynamicCapabilities{support: support})
+
 	return &TxValidator{
 		ChainID:       chainID,
 		Support:       support,
@@ -180,14 +184,14 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 	// array of txids
 	txidArray := make([]string, len(block.Data.Data))
 
-	txFlags, numValidated, err := v.validate(block, v.getTxFilter())
+	txFlags, numValidated, err := v.validate(context.Background(), block, v.getTxFilter())
 	if err == nil {
 		flags := newTxFlags(block.Header.Number, txsfltr)
 		done := flags.merge(txFlags)
 		if done {
 			logger.Debugf("[%s] Committer has validated all %d transactions in block %d", v.ChainID, len(block.Data.Data), block.Header.Number)
 		} else {
-			err = v.waitForValidationResults(block.Header.Number, flags, resultsChan, getValidationWaitTime(numValidated))
+			err = v.waitForValidationResults(ignoreCancel, block.Header.Number, flags, resultsChan, getValidationWaitTime(numValidated))
 			if err != nil {
 				logger.Warningf("[%s] Got error in validation response for block %d: %s", v.ChainID, block.Header.Number, err)
 			}
@@ -202,11 +206,13 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 			}
 
 			if len(notValidated) > 0 {
+				ctx, cancel := context.WithCancel(context.Background())
+
 				// Haven't received results for some of the transactions. Validate the remaining ones.
-				go v.validateRemaining(block, notValidated, resultsChan)
+				go v.validateRemaining(ctx, block, notValidated, resultsChan)
 
 				// Wait forever for a response
-				err = v.waitForValidationResults(block.Header.Number, flags, resultsChan, time.Hour)
+				err = v.waitForValidationResults(cancel, block.Header.Number, flags, resultsChan, time.Hour)
 				if err != nil {
 					logger.Warningf("[%s] Got error validating remaining transactions in block %d: %s", v.ChainID, block.Header.Number, err)
 				}
@@ -262,11 +268,11 @@ func (v *TxValidator) ValidatePartial(block *common.Block) {
 		return
 	}
 
-	txFlags, numValidated, err := v.validate(block, v.getTxFilter())
+	txFlags, numValidated, err := v.validate(context.Background(), block, v.getTxFilter())
 	if err != nil {
 		// Error while validating. Don't send the result over Gossip - in this case the committer will
 		// revalidate the unvalidated transactions.
-		logger.Warningf("[%s] Got error in validation of block %d: %s", v.ChainID, block.Header.Number, err)
+		logger.Infof("[%s] Got error in validation of block %d: %s", v.ChainID, block.Header.Number, err)
 		return
 	}
 
@@ -292,10 +298,8 @@ func (v *TxValidator) ValidatePartial(block *common.Block) {
 	})
 }
 
-func (v *TxValidator) validateRemaining(block *common.Block, notValidated map[int]struct{}, resultsChan chan *ValidationResults) {
-	// FIXME: Change to Debug
-	logger.Infof("[%s] Validating %d transactions in block %d that were not validated ...", v.ChainID, len(notValidated), block.Header.Number)
-	txFlags, numValidated, err := v.validate(block,
+func (v *TxValidator) validateRemaining(ctx context.Context, block *common.Block, notValidated map[int]struct{}, resultsChan chan *ValidationResults) {
+	txFlags, numValidated, err := v.validate(ctx, block,
 		func(txIdx int) bool {
 			_, ok := notValidated[txIdx]
 			return ok
@@ -312,7 +316,7 @@ func (v *TxValidator) validateRemaining(block *common.Block, notValidated map[in
 	}
 }
 
-func (v *TxValidator) waitForValidationResults(blockNumber uint64, flags *txFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
+func (v *TxValidator) waitForValidationResults(cancel context.CancelFunc, blockNumber uint64, flags *txFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
 	logger.Debugf("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
 
 	start := time.Now()
@@ -324,22 +328,19 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, flags *txFlag
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Got results from [%s] for block %d after %s", v.ChainID, result.Endpoint, result.BlockNumber, time.Since(start))
 
-			if result.BlockNumber < blockNumber {
+			done, err := v.handleResults(blockNumber, flags, result)
+			if err != nil {
+				logger.Infof("[%s] Received error in validation results from [%s] peer for block %d: %s", v.ChainID, result.Endpoint, result.BlockNumber, err)
+				return err
+			}
+
+			if done {
+				// Cancel any background validations
+				cancel()
+
 				// FIXME: Change to Debug
-				logger.Infof("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
-			} else if result.BlockNumber > blockNumber {
-				// This shouldn't be possible
-				logger.Warningf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
-			} else {
-				if result.Err != nil {
-					logger.Infof("[%s] Received error in validation results from [%s] peer for block %d: %s", v.ChainID, result.Endpoint, result.BlockNumber, result.Err)
-					return result.Err
-				}
-				if flags.merge(result.TxFlags) {
-					// FIXME: Change to Debug
-					logger.Infof("[%s] Block %d is all validated. Done waiting %s for responses.", v.ChainID, blockNumber, time.Since(start))
-					return nil
-				}
+				logger.Infof("[%s] Block %d is all validated. Done waiting %s for responses.", v.ChainID, blockNumber, time.Since(start))
+				return nil
 			}
 		case <-timeoutChan:
 			// FIXME: Change to Debug
@@ -347,6 +348,30 @@ func (v *TxValidator) waitForValidationResults(blockNumber uint64, flags *txFlag
 			return nil
 		}
 	}
+}
+
+func (v *TxValidator) handleResults(blockNumber uint64, flags *txFlags, result *ValidationResults) (done bool, err error) {
+	if result.BlockNumber < blockNumber {
+		logger.Debugf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
+		return false, nil
+	}
+
+	if result.BlockNumber > blockNumber {
+		// This shouldn't be possible
+		logger.Warningf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
+		return false, nil
+	}
+
+	if result.Err != nil {
+		if result.Err == context.Canceled {
+			// Ignore this error
+			logger.Debugf("[%s] Validation was canceled in [%s] peer for block %d", v.ChainID, result.Endpoint, result.BlockNumber)
+			return false, nil
+		}
+		return true, result.Err
+	}
+
+	return flags.merge(result.TxFlags), nil
 }
 
 type txFlags struct {
@@ -378,28 +403,25 @@ func (f *txFlags) merge(source ledgerUtil.TxValidationFlags) bool {
 	return allValidated(f.flags)
 }
 
-func (v *TxValidator) validate(block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
+func (v *TxValidator) validate(ctx context.Context, block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
 	// First phase validation includes validating the block for proper structure, no duplicate transactions, signatures.
 	logger.Debugf("[%s] Starting phase 1 validation of block %d ...", v.ChainID, block.Header.Number)
-	txFlags, numValidated, err := v.validateBlock(block, shouldValidate)
+	txFlags, numValidated, err := v.validateBlock(ctx, block, shouldValidate)
 	if logger.IsEnabledFor(logging.DEBUG) {
 		logger.Debugf("[%s] ... finished phase 1 validation of block %d. Flags: %s", v.ChainID, block.Header.Number, flagsToString(txFlags))
 	}
 	if err != nil {
-		logger.Errorf("[%s] Got error in phase1 validation of block %d: %s", v.ChainID, block.Header.Number, err)
 		return nil, 0, err
 	}
 
 	// Second phase validation validates the transactions for MVCC conflicts against committed data.
 	logger.Debugf("[%s] Starting phase 2 validation of block %d ...", v.ChainID, block.Header.Number)
-	err = v.mvccValidator.ValidateMVCC(block, txFlags, shouldValidate)
+	err = v.mvccValidator.ValidateMVCC(ctx, block, txFlags, shouldValidate)
 	logger.Debugf("[%s] ... finished validation of block %d.", v.ChainID, block.Header.Number)
 	if err != nil {
-		logger.Errorf("[%s] Got error in phase 2 validation of block %d: %s", v.ChainID, block.Header.Number, err)
 		return nil, 0, err
 	}
 
-	// FIXME: Change to debug
 	if logger.IsEnabledFor(logging.DEBUG) {
 		logger.Debugf("[%s] Returning flags from phase1 validation of block %d: %s", v.ChainID, block.Header.Number, flagsToString(txFlags))
 	}
@@ -407,7 +429,7 @@ func (v *TxValidator) validate(block *common.Block, shouldValidate util.TxFilter
 	return txFlags, numValidated, nil
 }
 
-func (v *TxValidator) validateBlock(block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
+func (v *TxValidator) validateBlock(ctx context.Context, block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
 	logger.Debugf("[%s] Validating block %d ...", v.ChainID, block.Header.Number)
 
 	var err error
@@ -429,9 +451,10 @@ func (v *TxValidator) validateBlock(block *common.Block, shouldValidate util.TxF
 		}
 	}
 
-	results := make(chan *blockValidationResult)
+	results := make(chan *blockValidationResult, 10)
 
 	go func() {
+		n := 0
 		for tIdx, d := range block.Data.Data {
 			_, ok := transactions[tIdx]
 			if !ok {
@@ -439,7 +462,21 @@ func (v *TxValidator) validateBlock(block *common.Block, shouldValidate util.TxF
 			}
 
 			// ensure that we don't have too many concurrent validation workers
-			v.Support.Acquire(context.Background(), 1)
+			err := v.Support.Acquire(ctx, 1)
+			if err != nil {
+				// Probably canceled
+				// FIXME: Change to Debug
+				logger.Infof("Unable to acquire semaphore after submitting %d of %d validation requests for block %d: %s", n, len(transactions), block.Header.Number, err)
+
+				// Send error responses for the remaining transactions
+				for ; n < len(transactions); n++ {
+					results <- &blockValidationResult{err: err}
+				}
+				return
+			}
+
+			n++
+
 			logger.Debugf("[%s] Validating tx index [%d] in block %d ...", v.ChainID, tIdx, block.Header.Number)
 			go func(index int, data []byte) {
 				defer v.Support.Release(1)
@@ -464,11 +501,16 @@ func (v *TxValidator) validateBlock(block *common.Block, shouldValidate util.TxF
 			// if there is an error, we buffer its value, wait for
 			// all workers to complete validation and then return
 			// the error from the first tx in this block that returned an error
-			logger.Debugf("got terminal error %s for idx %d", res.err, res.tIdx)
-
 			if err == nil || res.tIdx < errPos {
 				err = res.err
 				errPos = res.tIdx
+
+				if err == context.Canceled {
+					// FIXME: Change to Debug
+					logger.Infof("Validation of block %d was canceled", block.Header.Number)
+				} else {
+					logger.Warningf("Got error %s for idx %d", err, res.tIdx)
+				}
 			}
 		} else {
 			// if there was no error, we set the txsfltr and we set the

@@ -21,11 +21,12 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
+	"golang.org/x/net/context"
 )
 
 // Validator validates the transactions present in a block and returns a batch that should be used to update the state
 type Validator interface {
-	ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 	ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) (*privacyenabledstate.UpdateBatch, error)
 }
 

@@ -416,8 +416,7 @@ func (s *GossipStateProviderImpl) validationResultsMessage(msg proto.ReceivedMes
 		return
 	}
 
-	// FIXME: Change to Debug
-	logger.Infof("[%s] Validation Results message for block [%d] received - sending to response channel", s.chainID, validationResultsMsg.SeqNum)
+	logger.Debugf("[%s] Validation Results message for block [%d] received - sending to response channel", s.chainID, validationResultsMsg.SeqNum)
 	s.validationResponseChan <- &txvalidator.ValidationResults{
 		BlockNumber: validationResultsMsg.SeqNum,
 		TxFlags:     validationResultsMsg.TxFlags,
