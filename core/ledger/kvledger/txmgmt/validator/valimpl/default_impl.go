@@ -17,6 +17,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"golang.org/x/net/context"
 )
 
 var logger = flogging.MustGetLogger("valimpl")
@@ -38,7 +39,7 @@ func NewStatebasedValidator(channelID string, txmgr txmgr.TxMgr, db privacyenabl
 }
 
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-func (impl *DefaultImpl) ValidateMVCC(block *common.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
+func (impl *DefaultImpl) ValidateMVCC(ctx context.Context, block *common.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
 	logger.Debugf("ValidateMVCC - Block number = [%d]", block.Header.Number)
 
 	internalBlock, err := preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, true, txsFilter)
@@ -54,7 +55,7 @@ func (impl *DefaultImpl) ValidateMVCC(block *common.Block, txsFilter util.TxVali
 		}
 	}
 
-	if err = impl.InternalValidator.ValidateMVCC(internalBlock, txsFilter, acceptTx); err != nil {
+	if err = impl.InternalValidator.ValidateMVCC(ctx, internalBlock, txsFilter, acceptTx); err != nil {
 		return err
 	}
 

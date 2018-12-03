@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/uber-go/tally"
+	"golang.org/x/net/context"
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
@@ -123,8 +124,8 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 }
 
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-func (txmgr *LockBasedTxMgr) ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
-	err := txmgr.validator.ValidateMVCC(block, txFlags, filter)
+func (txmgr *LockBasedTxMgr) ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
+	err := txmgr.validator.ValidateMVCC(ctx, block, txFlags, filter)
 	if err != nil {
 		txmgr.reset()
 		return err

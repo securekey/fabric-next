@@ -223,7 +223,7 @@ type validationResponse struct {
 }
 
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-func (v *Validator) ValidateMVCC(block *valinternal.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
+func (v *Validator) ValidateMVCC(ctx context.Context, block *valinternal.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
 	// Check whether statedb implements BulkOptimizable interface. For now,
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.
@@ -248,12 +248,23 @@ func (v *Validator) ValidateMVCC(block *valinternal.Block, txsFilter util.TxVali
 		txs = append(txs, tx)
 	}
 
-	responseChan := make(chan *validationResponse)
+	responseChan := make(chan *validationResponse, 10)
 
 	go func() {
-		for _, tx := range txs {
+		for i, tx := range txs {
 			// ensure that we don't have too many concurrent validation workers
-			v.semaphore.Acquire(context.Background(), 1)
+			err := v.semaphore.Acquire(ctx, 1)
+			if err != nil {
+				// Probably canceled
+				// FIXME: Change to Debug
+				logger.Infof("Unable to acquire semaphore after submitting %d of %d MVCC validation requests for block %d: %s", i, len(txs), block.Num, err)
+
+				// Send error responses for the remaining transactions
+				for ; i < len(txs); i++ {
+					responseChan <- &validationResponse{err: err}
+				}
+				return
+			}
 
 			go func(tx *valinternal.Transaction) {
 				defer v.semaphore.Release(1)
@@ -282,9 +293,15 @@ func (v *Validator) ValidateMVCC(block *valinternal.Block, txsFilter util.TxVali
 	var err error
 	for i := 0; i < len(txs); i++ {
 		response := <-responseChan
-		if response.err != nil {
-			logger.Warningf("Error in MVCC validation of block [%d] at TxIdx [%d]: %s", block.Num, response.txIdx, response.err)
+
+		if err == nil && response.err != nil {
 			// Just set the error and wait for all responses
+			if response.err == context.Canceled {
+				// FIXME: Change to Debug
+				logger.Infof("MVCC validation of block %d was canceled", block.Num)
+			} else {
+				logger.Warningf("Error in MVCC validation of block [%d]: %s", block.Num, response.err)
+			}
 			err = response.err
 		}
 	}
@@ -446,7 +463,6 @@ func (v *Validator) validateKVReadMVCC(ns string, kvRead *kvrwset.KVRead) (bool,
 // or in the updates (by a preceding valid transaction in the current block)
 func (v *Validator) validateKVRead(ns string, kvRead *kvrwset.KVRead, updates *privacyenabledstate.PubUpdateBatch) (bool, error) {
 	if updates.Exists(ns, kvRead.Key) {
-		// FIXME: Change to Debug
 		logger.Infof("Returning invalid since there were updates to [%s]", kvRead.Key)
 		return false, nil
 	}
