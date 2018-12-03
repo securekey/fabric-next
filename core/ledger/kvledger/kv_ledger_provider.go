@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -126,7 +127,7 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 		return nil, err
 	}
 	txFlags := util.TxValidationFlags(genesisBlock.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	if err := lgr.ValidateMVCC(genesisBlock, txFlags, util.TxFilterAcceptAll); err != nil {
+	if err := lgr.ValidateMVCC(context.Background(), genesisBlock, txFlags, util.TxFilterAcceptAll); err != nil {
 		lgr.Close()
 		return nil, err
 	}
