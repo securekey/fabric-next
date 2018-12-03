@@ -9,11 +9,11 @@ package cachedblkstore
 import (
 	"context"
 	"fmt"
-	"github.com/hyperledger/fabric/common/metrics"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
+	"github.com/hyperledger/fabric/common/metrics"
 	cledger "github.com/hyperledger/fabric/core/ledger"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
