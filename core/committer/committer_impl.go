@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 //--------!!!IMPORTANT!!-!!IMPORTANT!!-!!IMPORTANT!!---------
@@ -50,7 +51,7 @@ type PeerLedgerSupport interface {
 	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-	ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 
 	ValidateBlockWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
@@ -131,8 +132,8 @@ func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvt
 }
 
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-func (lc *LedgerCommitter) ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
-	return lc.PeerLedgerSupport.ValidateMVCC(block, txFlags, filter)
+func (lc *LedgerCommitter) ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
+	return lc.PeerLedgerSupport.ValidateMVCC(ctx, block, txFlags, filter)
 }
 
 // ValidateBlock validate block

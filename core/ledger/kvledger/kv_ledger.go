@@ -31,6 +31,7 @@ import (
 	ledgerutil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"golang.org/x/net/context"
 )
 
 var logger = flogging.MustGetLogger("kvledger")
@@ -409,8 +410,8 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 }
 
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-func (l *kvLedger) ValidateMVCC(block *common.Block, txFlags ledgerutil.TxValidationFlags, filter ledgerutil.TxFilter) error {
-	return l.txtmgmt.ValidateMVCC(block, txFlags, filter)
+func (l *kvLedger) ValidateMVCC(ctx context.Context, block *common.Block, txFlags ledgerutil.TxValidationFlags, filter ledgerutil.TxFilter) error {
+	return l.txtmgmt.ValidateMVCC(ctx, block, txFlags, filter)
 }
 
 // ValidateBlockWithPvtData validate commit with pvt data

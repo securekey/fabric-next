@@ -13,12 +13,13 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/peer"
+	"golang.org/x/net/context"
 )
 
 // InternalValidator is supposed to validate the transactions based on public data and hashes present in a block
 // and returns a batch that should be used to update the state
 type InternalValidator interface {
-	ValidateMVCC(block *Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error
+	ValidateMVCC(ctx context.Context, block *Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error
 	ValidateAndPrepareBatch(block *Block, doMVCCValidation bool, pvtdata map[uint64]*ledger.TxPvtData) (*PubAndHashUpdates, error)
 }
 
