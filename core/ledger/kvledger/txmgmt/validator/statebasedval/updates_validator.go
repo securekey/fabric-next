@@ -38,11 +38,9 @@ func (v *rangeQueryUpdatesValidator) validate() (bool, error) {
 
 	versionedKV := result.(*statedb.VersionedKV)
 	if versionedKV.Value == nil {
-		// FIXME: Change to Debug
-		logger.Infof("Returning invalid since key was deleted: %+v", versionedKV)
+		logger.Debugf("Returning invalid since key was deleted: %+v", versionedKV)
 	} else {
-		// FIXME: Change to Debug
-		logger.Infof("Returning invalid since there was an update to %+v", versionedKV)
+		logger.Debugf("Returning invalid since there was an update to %+v", versionedKV)
 	}
 	return false, nil
 }
