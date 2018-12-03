@@ -9,6 +9,7 @@ package cachedblkstore
 import (
 	"context"
 	"fmt"
+	"github.com/hyperledger/fabric/common/metrics"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger"
@@ -66,6 +67,12 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 
 // AddBlock adds a new block
 func (s *cachedBlockStore) AddBlock(block *common.Block) error {
+	if metrics.IsDebug() {
+		// Measure the whole
+		stopWatch := metrics.RootScope.Timer("cached_block_store_add_block_duration").Start()
+		defer stopWatch.Stop()
+	}
+
 	err := s.blockCache.AddBlock(block)
 	if err != nil {
 		blockNumber := block.GetHeader().GetNumber()
