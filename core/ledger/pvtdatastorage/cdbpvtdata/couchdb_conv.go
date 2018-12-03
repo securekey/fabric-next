@@ -27,7 +27,7 @@ const (
 	expiryField                = "expiry"
 	blockKeyPrefix             = ""
 	blockNumberBase            = 10
-	numMetaDocs                = 1
+	numMetaDocs                = 0
 )
 
 const purgeBlockNumbersIndexDef = `
@@ -104,8 +104,8 @@ type expiryInfo struct {
 
 func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64) (*expiryInfo, error) {
 	ei := expiryInfo{
-		json: make(jsonValue),
-		purgeKeys: make([]string, 0),
+		json:       make(jsonValue),
+		purgeKeys:  make([]string, 0),
 		expiryKeys: make([]string, 0),
 	}
 
