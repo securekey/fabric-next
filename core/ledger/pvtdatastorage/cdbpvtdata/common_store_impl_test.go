@@ -30,7 +30,7 @@ func TestEmptyStore(t *testing.T) {
 	assert := assert.New(t)
 	store := env.TestStore
 	testEmpty(true, assert, store)
-	testPendingBatch(false, assert, store)
+	testPendingBatch(false, assert, store, false)
 }
 
 func TestMetadata(t *testing.T) {
@@ -46,7 +46,7 @@ func TestMetadata(t *testing.T) {
 	assert := assert.New(t)
 	store := env.TestStore
 	testEmpty(true, assert, store)
-	testPendingBatch(false, assert, store)
+	testPendingBatch(false, assert, store, false)
 
 	testData := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
@@ -56,14 +56,14 @@ func TestMetadata(t *testing.T) {
 	isEmpty, err := store.IsEmpty()
 	assert.NoError(err)
 	assert.True(isEmpty)
-	testLastCommittedBlockHeight(0, assert, store)
+	testLastCommittedBlockHeight(0, assert, store, false)
 
 	// no pvt data with block 0
 	assert.NoError(store.Prepare(0, nil))
-	testPendingBatch(true, assert, store)
+	testPendingBatch(true, assert, store, false)
 	assert.NoError(store.Commit())
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(1, assert, store)
+	testPendingBatch(false, assert, store, false)
+	testLastCommittedBlockHeight(1, assert, store, false)
 
 	isEmpty, err = store.IsEmpty()
 	assert.NoError(err)
@@ -71,34 +71,34 @@ func TestMetadata(t *testing.T) {
 
 	// pvt data with block 1 - commit
 	assert.NoError(store.Prepare(1, testData))
-	testPendingBatch(true, assert, store)
-	testLastCommittedBlockHeight(1, assert, store)
+	testPendingBatch(true, assert, store, false)
+	testLastCommittedBlockHeight(1, assert, store, false)
 	assert.NoError(store.Commit())
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(2, assert, store)
+	testPendingBatch(false, assert, store, false)
+	testLastCommittedBlockHeight(2, assert, store, false)
 
 	// pvt data with block 2 - rollback
 	assert.NoError(store.Prepare(2, testData))
-	testPendingBatch(true, assert, store)
+	testPendingBatch(true, assert, store, false)
 	assert.NoError(store.Rollback())
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(2, assert, store)
+	testPendingBatch(false, assert, store, false)
+	testLastCommittedBlockHeight(1, assert, store, false)
 
 	// write pvt data for block 2
-	assert.NoError(store.Prepare(2, testData))
-	testPendingBatch(true, assert, store)
-	testLastCommittedBlockHeight(2, assert, store)
+	assert.NoError(store.Prepare(1, testData))
+	testPendingBatch(true, assert, store, false)
+	testLastCommittedBlockHeight(1, assert, store, false)
 	assert.NoError(store.Commit())
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(3, assert, store)
+	testPendingBatch(false, assert, store, false)
+	testLastCommittedBlockHeight(2, assert, store, false)
 
 	// write pvt data for block 3 (no data)
-	assert.NoError(store.Prepare(3, nil))
-	testPendingBatch(true, assert, store)
-	testLastCommittedBlockHeight(3, assert, store)
+	assert.NoError(store.Prepare(2, nil))
+	testPendingBatch(true, assert, store, false)
+	testLastCommittedBlockHeight(2, assert, store, false)
 	assert.NoError(store.Commit())
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(4, assert, store)
+	testPendingBatch(false, assert, store, false)
+	testLastCommittedBlockHeight(3, assert, store, false)
 }
 
 func TestStoreBasicCommitAndRetrieval(t *testing.T) {
@@ -334,20 +334,59 @@ func TestInitLastCommittedBlock(t *testing.T) {
 	assert.NoError(store.InitLastCommittedBlock(existingLastBlockNum))
 
 	testEmpty(false, assert, store)
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(existingLastBlockNum+1, assert, store)
+	testPendingBatch(false, assert, store, true)
+	testLastCommittedBlockHeight(existingLastBlockNum+1, assert, store, true)
 
 	env.CloseAndReopen()
 	testEmpty(false, assert, store)
-	testPendingBatch(false, assert, store)
-	testLastCommittedBlockHeight(existingLastBlockNum+1, assert, store)
+	testPendingBatch(false, assert, store, true)
+	testLastCommittedBlockHeight(existingLastBlockNum+1, assert, store, true)
 
 	err := store.InitLastCommittedBlock(30)
 	_, ok := err.(*pvtdatastorage.ErrIllegalCall)
 	assert.True(ok)
 }
 
-// TODO Add tests for simulating a crash between calls `Prepare` and `Commit`/`Rollback`
+func TestRestartStore(t *testing.T) {
+	testRestart(t, "ledgera")
+	testRestart(t, "ledgerb")
+}
+
+func testRestart(t *testing.T, ledgerID string) {
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 0)
+	cs.SetBTL("ns-1", "coll-2", 0)
+	cs.SetBTL("ns-2", "coll-1", 0)
+	cs.SetBTL("ns-2", "coll-2", 0)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+	env := NewTestStoreEnv(t, ledgerID, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	s := env.TestStore
+
+	// no pvt data with block 0
+	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Commit())
+
+	testDataForBlk := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+	}
+
+	assert.NoError(s.Prepare(1, testDataForBlk))
+	assert.NoError(s.Commit())
+	testLastCommittedBlockHeight(2, assert, s, false)
+
+	for i := 2; i < 25; i++ {
+		env.CloseAndReopen()
+		s = env.TestStore
+
+		assert.NoError(s.Prepare(uint64(i), nil))
+		assert.NoError(s.Commit())
+		testLastCommittedBlockHeight(uint64(i+1), assert, s, false)
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 func testEmpty(expectedEmpty bool, assert *assert.Assertions, store pvtdatastorage.Store) {
 	isEmpty, err := store.IsEmpty()
@@ -355,35 +394,21 @@ func testEmpty(expectedEmpty bool, assert *assert.Assertions, store pvtdatastora
 	assert.Equal(expectedEmpty, isEmpty)
 }
 
-func testPendingBatch(expectedPending bool, assert *assert.Assertions, s pvtdatastorage.Store) {
+func testPendingBatch(expectedPending bool, assert *assert.Assertions, s pvtdatastorage.Store, initLastCommitted bool) {
 	hasPendingBatch, err := s.HasPendingBatch()
 	assert.NoError(err)
 	assert.Equal(expectedPending, hasPendingBatch)
-
-	isEmpty, err := s.IsEmpty()
-	assert.NoError(err)
-
-	if !isEmpty {
-		m, ok, err := lookupMetadata(s.(*store).db)
-		assert.NoError(err)
-		assert.True(ok)
-		assert.Equal(expectedPending, m.pending)
-	}
 }
 
-func testLastCommittedBlockHeight(expectedBlockHt uint64, assert *assert.Assertions, s pvtdatastorage.Store) {
+func testLastCommittedBlockHeight(expectedBlockHt uint64, assert *assert.Assertions, s pvtdatastorage.Store, initLastCommitted bool) {
 	blkHt, err := s.LastCommittedBlockHeight()
 	assert.NoError(err)
 	assert.Equal(expectedBlockHt, blkHt)
 
 	isEmpty, err := s.IsEmpty()
 	assert.NoError(err)
-
-	if !isEmpty {
-		m, ok, err := lookupMetadata(s.(*store).db)
-		assert.NoError(err)
-		assert.True(ok)
-		assert.Equal(expectedBlockHt, m.lastCommitedBlock+1)
+	if expectedBlockHt > 0 {
+		assert.False(isEmpty)
 	}
 }
 

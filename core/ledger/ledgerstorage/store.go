@@ -17,7 +17,6 @@ limitations under the License.
 package ledgerstorage
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
@@ -36,7 +35,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
-	cachedpvtdatastore "github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cachedpvtdatastore"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cachedpvtdatastore"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cdbpvtdata"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/mempvtdatacache"
 )
@@ -254,18 +253,10 @@ func (s *Store) getPvtDataByNumWithoutLock(blockNum uint64, filter ledger.PvtNsC
 // to follow the normal course
 func (s *Store) init() error {
 	if !ledgerconfig.IsCommitter() {
-		if initialized, err := s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {
-			return err
-		}
-		return nil
+		return s.initPvtdataStoreFromExistingBlockchain()
 	}
 
-	var initialized bool
-	var err error
-	if initialized, err = s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {
-		return err
-	}
-	return s.syncPvtdataStoreWithBlockStore()
+	return nil
 }
 
 // initPvtdataStoreFromExistingBlockchain updates the initial state of the pvtdata store
@@ -275,61 +266,24 @@ func (s *Store) init() error {
 // Under this scenario, the pvtdata store is brought upto the point as if it has
 // processed existng blocks with no pvt data. This function returns true if the
 // above mentioned condition is found to be true and pvtdata store is successfully updated
-func (s *Store) initPvtdataStoreFromExistingBlockchain() (bool, error) {
+func (s *Store) initPvtdataStoreFromExistingBlockchain() error {
 	var bcInfo *common.BlockchainInfo
 	var pvtdataStoreEmpty bool
 	var err error
 
 	if bcInfo, err = s.BlockStore.GetBlockchainInfo(); err != nil {
-		return false, err
-	}
-	if pvtdataStoreEmpty, err = s.pvtdataStore.IsEmpty(); err != nil {
-		return false, err
-	}
-	if pvtdataStoreEmpty && bcInfo.Height > 0 {
-		if err = s.pvtdataStore.InitLastCommittedBlock(bcInfo.Height - 1); err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-	return false, nil
-}
-
-// syncPvtdataStoreWithBlockStore checks whether the block storage and pvt data store are in sync
-// this is called when the store instance is constructed and handed over for the use.
-// this check whether there is a pending batch (possibly from a previous system crash)
-// of pvt data that was not committed. If a pending batch exists, the check is made
-// whether the associated block was successfully committed in the block storage (before the crash)
-// or not. If the block was committed, the private data batch is committed
-// otherwise, the pvt data batch is rolledback
-func (s *Store) syncPvtdataStoreWithBlockStore() error {
-	var pendingPvtbatch bool
-	var err error
-	if pendingPvtbatch, err = s.pvtdataStore.HasPendingBatch(); err != nil {
 		return err
 	}
-	if !pendingPvtbatch {
+	if _, err = s.pvtdataStore.IsEmpty(); err != nil {
+		return err
+	}
+	if bcInfo.Height > 0 {
+		if err = s.pvtdataStore.InitLastCommittedBlock(bcInfo.Height - 1); err != nil {
+			return err
+		}
 		return nil
 	}
-	var bcInfo *common.BlockchainInfo
-	var pvtdataStoreHt uint64
-
-	if bcInfo, err = s.GetBlockchainInfo(); err != nil {
-		return err
-	}
-	if pvtdataStoreHt, err = s.pvtdataStore.LastCommittedBlockHeight(); err != nil {
-		return err
-	}
-
-	if bcInfo.Height == pvtdataStoreHt {
-		return s.pvtdataStore.Rollback()
-	}
-
-	if bcInfo.Height == pvtdataStoreHt+1 {
-		return s.pvtdataStore.Commit()
-	}
-
-	return fmt.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)
+	return nil
 }
 
 func constructPvtdataMap(pvtdata []*ledger.TxPvtData) map[uint64]*ledger.TxPvtData {
