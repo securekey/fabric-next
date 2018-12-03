@@ -344,7 +344,9 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	}
 
 	// Put retrieved KV from DB to the cache
-	statedb.UpdateKVCache(0, validatedTxOp, nil, nil, vdb.chainName)
+	go func() {
+		statedb.UpdateKVCache(0, validatedTxOp, nil, nil, false)
+	}()
 
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 	if metrics.IsDebug() {
