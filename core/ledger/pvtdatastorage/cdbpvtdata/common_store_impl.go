@@ -133,6 +133,24 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 
 	s.isEmpty = false
 	s.lastCommittedBlock = blockNum
+
+	// delete all documents above blockNum
+	// assumption: each document in the block store has 1 pvt document created up to blockNum
+	// any pvt doc above blockNum is probably due to a prior inconsistent db write.
+	for i := blockNum; ; i++ {
+		doc, rev, err := s.db.ReadDoc(blockNumberToKey(i))
+		if err != nil {
+			return err
+		}
+		if doc == nil {
+			break
+		}
+		err = s.db.DeleteDoc(blockNumberToKey(i), rev)
+		if err != nil {
+			return err
+		}
+	}
+
 	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
 	return nil
 }
@@ -245,18 +263,9 @@ func (s *store) Rollback() error {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to rollback")
 	}
 
-	id := blockNumberToKey(s.lastCommittedBlock + 1)
-	_, rev, err := s.db.ReadDoc(id)
-	if err != nil {
-		return err
-	}
-
-	err = s.db.DeleteDoc(id, rev)
-	if err != nil {
-		return err
-	}
-
+	// reset in memory pending metadata
 	s.batchPending = false
+	s.pendingDocs = nil
 	return nil
 }
 
@@ -325,19 +334,23 @@ func (s *store) getLastCommittedBlock() (uint64, error) {
 		return s.lastCommittedBlock, nil
 	}
 	logger.Debugf("I am not a committer so looking up last committed block from meta data for [%s]", s.db.DBName)
-	return s.getLastCommittedBlockFromMetaData()
+	return s.getLastCommittedBlockFromPvtStore()
 }
 
-func (s *store) getLastCommittedBlockFromMetaData() (uint64, error) {
-	m, ok, err := lookupMetadata(s.db)
+func (s *store) getLastCommittedBlockFromPvtStore() (uint64, error) {
+	lastCommittedBlock, ok, err := lookupLastBlock(s.db)
 	if err != nil {
-		logger.Errorf("Error looking up meta data for [%s]: %s", s.db.DBName, err)
+		logger.Errorf("Error looking up last committed block for [%s]: %s", s.db.DBName, err)
 		return 0, err
 	}
 	if !ok {
-		logger.Debugf("Meta data for [%s] is empty", s.db.DBName)
+		logger.Debugf("data for [%s] is empty", s.db.DBName)
 		return 0, nil
 	}
-	logger.Debugf("Returning lastCommittedBlock %d from meta data for [%s]", m.lastCommitedBlock, s.db.DBName)
-	return m.lastCommitedBlock + 1, nil
+	if lastCommittedBlock > s.lastCommittedBlock {
+		logger.Errorf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
+		return 0, errors.Errorf("")
+	}
+	logger.Debugf("Returning lastCommittedBlock %d for [%s]", lastCommittedBlock, s.db.DBName)
+	return lastCommittedBlock + 1, nil
 }
