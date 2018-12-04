@@ -241,6 +241,8 @@ func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, 
 	for _, compositeKey := range keysExist {
 		ns, key := compositeKey.Namespace, compositeKey.Key
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
+		// in case if we didn't find key metadata in couchdb
+		committedWSetDataCache.setRev(ns, key, "")
 	}
 
 	if len(nsKeysMap) > 0 {
