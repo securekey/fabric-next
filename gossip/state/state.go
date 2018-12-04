@@ -931,6 +931,12 @@ func (s *GossipStateProviderImpl) hasRequiredHeight(height uint64) func(peer dis
 
 // AddPayload add new payload into state.
 func (s *GossipStateProviderImpl) AddPayload(payload *proto.Payload) error {
+	if !ledgerconfig.IsCommitter() {
+		// Only the committer processes the payload from the orderer.
+		// Other roles receive the block via gossip.
+		return nil
+	}
+
 	blockingMode := blocking
 	if viper.GetBool("peer.gossip.nonBlockingCommitMode") {
 		blockingMode = false
