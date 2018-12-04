@@ -1,0 +1,44 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "327e1300_4d4e1e7a",
+        "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-04T14:40:48Z",
+      "side": 1,
+      "message": "Needs a function commit (since it\u0027s exported).\n\nAlso needs a comment on why this is empty.",
+      "revId": "e42f320284e58bbf7dfbf251d95df7c26c255dcb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c218d187_0b4ede75",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache_provider.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 6,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-04T14:40:48Z",
+      "side": 1,
+      "message": "I think the cache implementation should be in its own package.",
+      "range": {
+        "startLine": 6,
+        "startChar": 8,
+        "endLine": 6,
+        "endChar": 15
+      },
+      "revId": "e42f320284e58bbf7dfbf251d95df7c26c255dcb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
