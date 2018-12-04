@@ -46,6 +46,30 @@
       "revId": "2e6de4c172f1ba66a5b1d6ff567b953312b88df6",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "2d1a49dc_86d6c942",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 124,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-04T17:50:45Z",
+      "side": 1,
+      "message": "Hmmm.... So is this case actually possible - how does it happen? If it can happen, are we sure we shouldn\u0027t create a new metadata instance?",
+      "parentUuid": "98c5e082_b4b272d9",
+      "range": {
+        "startLine": 124,
+        "startChar": 2,
+        "endLine": 124,
+        "endChar": 12
+      },
+      "revId": "2e6de4c172f1ba66a5b1d6ff567b953312b88df6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
