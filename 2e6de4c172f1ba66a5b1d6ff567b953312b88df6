@@ -22,6 +22,30 @@
       "revId": "2e6de4c172f1ba66a5b1d6ff567b953312b88df6",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "98c5e082_b4b272d9",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 124,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-04T14:55:48Z",
+      "side": 1,
+      "message": "you\u0027re right - I\u0027ll add a safeguard in the later logic",
+      "parentUuid": "9bb13e23_c715e7a2",
+      "range": {
+        "startLine": 124,
+        "startChar": 2,
+        "endLine": 124,
+        "endChar": 12
+      },
+      "revId": "2e6de4c172f1ba66a5b1d6ff567b953312b88df6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
