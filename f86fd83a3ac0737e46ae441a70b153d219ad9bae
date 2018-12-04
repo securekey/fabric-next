@@ -1,0 +1,44 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "cbc7f50d_7be0b58f",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 9
+      },
+      "lineNbr": 50,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-04T14:47:33Z",
+      "side": 1,
+      "message": "This lock really belongs to lockbasedtxmgr.\n\nInstead of creating the lock here and passing it in, add an interface to lockbasedtxmgr to achieve this goal.",
+      "revId": "f86fd83a3ac0737e46ae441a70b153d219ad9bae",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "bbad570c_1f38c273",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 9
+      },
+      "lineNbr": 50,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-04T14:47:33Z",
+      "side": 1,
+      "message": "FYI: no need for pointer when creating this implementation owns the object.",
+      "range": {
+        "startLine": 50,
+        "startChar": 24,
+        "endLine": 50,
+        "endChar": 25
+      },
+      "revId": "f86fd83a3ac0737e46ae441a70b153d219ad9bae",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
