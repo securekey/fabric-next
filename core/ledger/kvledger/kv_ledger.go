@@ -381,8 +381,6 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 
 		elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 
-		// KEEP EVEN WHEN metrics.debug IS OFF
-		metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
 		logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
 
 		startCommitState := time.Now()
@@ -407,6 +405,9 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		}
 
 		elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
+
+		// KEEP EVEN WHEN metrics.debug IS OFF
+		metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
 
 		logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
 			l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
