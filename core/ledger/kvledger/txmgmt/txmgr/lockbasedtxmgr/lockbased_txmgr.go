@@ -40,7 +40,7 @@ type LockBasedTxMgr struct {
 	pvtdataPurgeMgr  *pvtdataPurgeMgr
 	validator        validator.Validator
 	stateListeners   []ledger.StateListener
-	commitRWLock     *sync.RWMutex
+	commitRWLock     sync.RWMutex
 	current          *current
 	StopWatch        tally.Stopwatch
 	StopWatchAccess  string
@@ -69,7 +69,7 @@ func (c *current) maxTxNumber() uint64 {
 
 // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
 func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
-	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, commitDone chan *ledger.BlockAndPvtData, rwLock *sync.RWMutex) (*LockBasedTxMgr, error) {
+	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, commitDone chan *ledger.BlockAndPvtData) (*LockBasedTxMgr, error) {
 	db.Open()
 	txmgr := &LockBasedTxMgr{
 		ledgerid:       ledgerid,
@@ -79,7 +79,6 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 		commitDone:     commitDone,
 		shutdownCh:     make(chan struct{}),
 		doneCh:         make(chan struct{}),
-		commitRWLock:   rwLock,
 	}
 	pvtstatePurgeMgr, err := pvtstatepurgemgmt.InstantiatePurgeMgr(ledgerid, db, btlPolicy, bookkeepingProvider)
 	if err != nil {
@@ -345,6 +344,22 @@ func (txmgr *LockBasedTxMgr) updateStateListeners(tx *current) {
 
 func (txmgr *LockBasedTxMgr) reset() {
 	txmgr.current = nil
+}
+
+func (txmgr *LockBasedTxMgr) RLock() {
+	txmgr.commitRWLock.RLock()
+}
+
+func (txmgr *LockBasedTxMgr) RUnlock() {
+	txmgr.commitRWLock.RUnlock()
+}
+
+func (txmgr *LockBasedTxMgr) Lock() {
+	txmgr.commitRWLock.Lock()
+}
+
+func (txmgr *LockBasedTxMgr) Unlock() {
+	txmgr.commitRWLock.Unlock()
 }
 
 // pvtdataPurgeMgr wraps the actual purge manager and an additional flag 'usedOnce'

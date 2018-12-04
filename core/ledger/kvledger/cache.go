@@ -45,8 +45,8 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 		return err
 	}
 
-	l.txmgmtRWLock.Lock()
-	defer l.txmgmtRWLock.Unlock()
+	l.txtmgmt.Lock()
+	defer l.txtmgmt.Unlock()
 
 	// Update the 'non-durable' cache only
 	l.kvCacheProvider.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
@@ -73,14 +73,14 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	}
 
 	//Cache update with pinning
-	l.txmgmtRWLock.Lock()
+	l.txtmgmt.Lock()
 	l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
-	l.txmgmtRWLock.Unlock()
+	l.txtmgmt.Unlock()
 
 	//Index update in background
 	go func() {
-		l.txmgmtRWLock.RLock()
-		defer l.txmgmtRWLock.RUnlock()
+		l.txtmgmt.RLock()
+		defer l.txtmgmt.RUnlock()
 		indexUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
 		err := l.kvCacheProvider.ApplyIndexUpdates(indexUpdates, indexDeletes, l.ledgerID)
 		if err != nil {

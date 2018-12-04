@@ -249,8 +249,9 @@ func (p *KVCacheProvider) ApplyIndexUpdates(indexUpdates []*statekeyindex.IndexU
 	return nil
 }
 
-//GetRangeFromKVCache returns key range from cache and a flag to indicate of all keys are found in cache
-func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey string) ([]string, bool) {
+//GetRangeFromKVCache returns key range from cache under given startKey(inclusive) and endKey(exclusive) range
+//TODO possible memory issues if empty start/end key used in case of huge cache
+func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey string) []string {
 
 	p.kvCacheMtx.RLock()
 	defer p.kvCacheMtx.RUnlock()
@@ -258,14 +259,13 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 	kvCache, _ := p.GetKVCache(chId, namespace)
 	sortedKeys := util.GetSortedKeys(kvCache.keys)
 	var keyRange []string
-	var foundStartKey, foundEndKey bool
+	foundStartKey := startKey == ""
 
 	for _, k := range sortedKeys {
 		if k == startKey {
 			foundStartKey = true
 		}
 		if k == endKey {
-			foundEndKey = true
 			//exclude end key and end the range
 			break
 		}
@@ -275,5 +275,5 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 
 	}
 
-	return keyRange, foundEndKey
+	return keyRange
 }
