@@ -29,6 +29,7 @@ import (
 )
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -44,6 +45,9 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 		return err
 	}
 
+	l.txmgmtRWLock.Lock()
+	defer l.txmgmtRWLock.Unlock()
+
 	// Update the 'non-durable' cache only
 	l.kvCacheProvider.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
 
@@ -51,6 +55,7 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 }
 
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -67,11 +72,22 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 		return err
 	}
 
-	// Update the cache
-	err = l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, l.ledgerID)
-	if err != nil {
-		return err
-	}
+	//Cache update with pinning
+	l.txmgmtRWLock.Lock()
+	l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
+	l.txmgmtRWLock.Unlock()
+
+	//Index update in background
+	go func() {
+		l.txmgmtRWLock.RLock()
+		defer l.txmgmtRWLock.RUnlock()
+		indexUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
+		err := l.kvCacheProvider.ApplyIndexUpdates(indexUpdates, indexDeletes, l.ledgerID)
+		if err != nil {
+			logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
+			panic(err)
+		}
+	}()
 
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
@@ -271,7 +287,7 @@ func getFirstLevelCacheExpiryBlock(blockNum, policyBTL uint64) uint64 {
 
 func getSecondLevelCacheExpiryBlock(blockNum, policyBTL uint64) uint64 {
 
-	if policyBTL == 0 || policyBTL == math.MaxUint64 ||  blockNum > math.MaxUint64-(policyBTL+1) {
+	if policyBTL == 0 || policyBTL == math.MaxUint64 || blockNum > math.MaxUint64-(policyBTL+1) {
 		return math.MaxUint64
 	}
 

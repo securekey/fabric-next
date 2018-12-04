@@ -18,6 +18,8 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
+var defVal struct{}
+
 type cachedStateStore struct {
 	vdb             statedb.VersionedDB
 	bulkOptimizable statedb.BulkOptimizable
@@ -60,7 +62,7 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 	return c.vdb.BytesKeySuppoted()
 }
 
-func (c *cachedStateStore) GetKVCacheProvider() (* statedb.KVCacheProvider) {
+func (c *cachedStateStore) GetKVCacheProvider() *statedb.KVCacheProvider {
 	return c.vdb.GetKVCacheProvider()
 }
 
@@ -91,7 +93,9 @@ func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.Vers
 		}
 
 		// Put retrieved KV from DB to the cache
-		c.vdb.GetKVCacheProvider().UpdateKVCache(0, validatedTxOp, nil, nil, c.ledgerID)
+		go func() {
+			c.vdb.GetKVCacheProvider().UpdateKVCache(0, validatedTxOp, nil, nil, false)
+		}()
 	}
 
 	return versionedValue, err
@@ -129,17 +133,29 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // startKey is inclusive
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+
+	//get key range from cache
+	keyRange, foundAllKeys := c.vdb.GetKVCacheProvider().GetRangeFromKVCache(c.ledgerID, namespace, startKey, endKey)
+	if foundAllKeys {
+		//if found all keys inside range in cache, no need to go to db
+		return newKVScanner(namespace, keyRange, nil, c), nil
+	}
+
+	//some keys are missing from cache, so need db iterator too to find tail of range
 	dbItr, err := c.vdb.GetKVCacheProvider().GetLeveLDBIterator(namespace, startKey, endKey, c.ledgerID)
 	if err != nil {
 		return nil, err
 	}
+
 	if !dbItr.Next() {
 		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
 		return c.vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
+
 	dbItr.Prev()
 	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
-	return newKVScanner(namespace, dbItr, c), nil
+
+	return newKVScanner(namespace, keyRange, dbItr, c), nil
 }
 
 // ExecuteQuery implements method in VersionedDB interface
@@ -220,20 +236,23 @@ func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fi
 
 type kvScanner struct {
 	namespace        string
+	keyRange         []string
 	dbItr            iterator.Iterator
 	cachedStateStore *cachedStateStore
+	index            int
+	searchedKeys     map[string]struct{}
 }
 
-func newKVScanner(namespace string, dbItr iterator.Iterator, cachedStateStore *cachedStateStore) *kvScanner {
-	return &kvScanner{namespace, dbItr, cachedStateStore}
+func newKVScanner(namespace string, keyRange []string, dbItr iterator.Iterator, cachedStateStore *cachedStateStore) *kvScanner {
+	return &kvScanner{namespace, keyRange, dbItr, cachedStateStore, 0, make(map[string]struct{})}
 }
 
 func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
-	if !scanner.dbItr.Next() {
+
+	key, found := scanner.key()
+	if !found {
 		return nil, nil
 	}
-	dbKey := scanner.dbItr.Key()
-	_, key := statekeyindex.SplitCompositeKey(dbKey)
 
 	versionedValue, err := scanner.cachedStateStore.GetState(scanner.namespace, key)
 	if err != nil {
@@ -245,6 +264,33 @@ func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 		VersionedValue: *versionedValue}, nil
 }
 
+//key fetches next available key from key range if not found then falls back to db iterator.
+//flag will return false if key not found anywhere to indicate end of range
+func (scanner *kvScanner) key() (string, bool) {
+	if scanner.index < len(scanner.keyRange) {
+		key := scanner.keyRange[scanner.index]
+		scanner.searchedKeys[key] = defVal
+		scanner.index++
+		return key, true
+	} else if scanner.dbItr != nil && scanner.dbItr.Next() {
+		dbKey := scanner.dbItr.Key()
+		_, key := statekeyindex.SplitCompositeKey(dbKey)
+		//to avoid duplicates
+		_, found := scanner.searchedKeys[key]
+		if !found {
+			return key, true
+		} else {
+			return scanner.key()
+		}
+	} else {
+		return "", false
+	}
+}
+
 func (scanner *kvScanner) Close() {
-	scanner.dbItr.Release()
+	if scanner.dbItr != nil {
+		scanner.dbItr.Release()
+	}
+	scanner.keyRange = nil
+	scanner.searchedKeys = nil
 }
