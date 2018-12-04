@@ -26,7 +26,7 @@ type VersionedDBProvider interface {
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
 	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
-	GetKVCacheProvider() (*KVCacheProvider)
+	GetKVCacheProvider() *KVCacheProvider
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
 	GetState(namespace string, key string) (*VersionedValue, error)
 	// GetVersion gets the version for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
@@ -38,6 +38,13 @@ type VersionedDB interface {
 	// endKey is exclusive
 	// The returned ResultsIterator contains results of type *VersionedKV
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
+
+	// GetNonDurableStateRangeScanIterator returns an iterator that contains all the key-values between given key ranges.
+	// startKey is inclusive
+	// endKey is exclusive
+	// The returned ResultsIterator contains results of type *VersionedKV
+	GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
+
 	// ExecuteQuery executes the given query and returns an iterator that contains results of type *VersionedKV.
 	ExecuteQuery(namespace, query string) (ResultsIterator, error)
 	// ApplyUpdates applies the batch to the underlying db.

@@ -230,6 +230,11 @@ func (s *CommonStorageDB) GetPrivateDataRangeScanIterator(namespace, collection,
 	return s.GetStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
 }
 
+// GetNonDurablePrivateDataRangeScanIterator implements corresponding function in interface DB
+func (s *CommonStorageDB) GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error) {
+	return s.GetNonDurableStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
+}
+
 // ExecuteQueryOnPrivateData implements corresponding function in interface DB
 func (s CommonStorageDB) ExecuteQueryOnPrivateData(namespace, collection, query string) (statedb.ResultsIterator, error) {
 	return s.ExecuteQuery(DerivePvtDataNs(namespace, collection), query)

@@ -49,8 +49,8 @@ func (provider *VersionedDBProvider) Close() {
 // VersionedDB implements VersionedDB interface
 type versionedDB struct {
 	kvCacheProvider *statedb.KVCacheProvider
-	db     *leveldbhelper.DBHandle
-	dbName string
+	db              *leveldbhelper.DBHandle
+	dbName          string
 }
 
 // newVersionedDB constructs an instance of VersionedDB
@@ -59,7 +59,7 @@ func newVersionedDB(db *leveldbhelper.DBHandle, dbName string) *versionedDB {
 	return &versionedDB{kvCacheProvider, db, dbName}
 }
 
-func (vdb *versionedDB) GetKVCacheProvider() (*statedb.KVCacheProvider) {
+func (vdb *versionedDB) GetKVCacheProvider() *statedb.KVCacheProvider {
 	return vdb.kvCacheProvider
 }
 
@@ -135,6 +135,10 @@ func (vdb *versionedDB) GetStateRangeScanIterator(namespace string, startKey str
 	}
 	dbItr := vdb.db.GetIterator(compositeStartKey, compositeEndKey)
 	return newKVScanner(namespace, dbItr), nil
+}
+
+func (vdb *versionedDB) GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 }
 
 // ExecuteQuery implements method in VersionedDB interface
