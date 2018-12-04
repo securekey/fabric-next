@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package blocksprovider
 
 import (
+	"fmt"
+	"github.com/hyperledger/fabric/common/metrics"
 	"math"
 	"sync/atomic"
 	"time"
@@ -177,6 +179,8 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 			errorStatusCounter = 0
 			statusCounter = 0
 			blockNum := t.Block.Header.Number
+			metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(blockNum))
+
 			marshaledBlock, err := proto.Marshal(t.Block)
 			if err != nil {
 				logger.Errorf("[%s] Error serializing block with sequence number %d, due to %s", b.chainID, blockNum, err)
