@@ -127,7 +127,6 @@ func (txmgr *LockBasedTxMgr) NewTxSimulator(txid string) (ledger.TxSimulator, er
 func (txmgr *LockBasedTxMgr) ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
 	err := txmgr.validator.ValidateMVCC(ctx, block, txFlags, filter)
 	if err != nil {
-		txmgr.reset()
 		return err
 	}
 	return nil
