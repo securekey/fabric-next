@@ -12,10 +12,12 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 
 	commonledger "github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/ledger/queryresult"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
@@ -150,13 +152,30 @@ func (h *queryHelper) getPrivateDataMultipleKeys(ns, coll string, keys []string)
 	return values, nil
 }
 
-func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (commonledger.ResultsIterator, error) {
+func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string, btlPolicy pvtdatapolicy.BTLPolicy) (commonledger.ResultsIterator, error) {
 	if err := h.validateCollName(namespace, collection); err != nil {
 		return nil, err
 	}
 	if err := h.checkDone(); err != nil {
 		return nil, err
 	}
+
+	blocksToLiveInCache := ledgerconfig.GetKVCacheBlocksToLive()
+	btl, err := btlPolicy.GetBTL(namespace, collection)
+	if err != nil {
+		return nil, err
+	}
+
+	if btl != 0 && btl < blocksToLiveInCache {
+		metrics.IncrementCounter("getnondurableprivatedatarangescaniterator_cache_request_hit")
+		logger.Debugf("GetNonDurablePrivateDataRangeScanIterator namespace %s collection %s startKey %s endKey %s", namespace, collection, startKey)
+		dbItr, err := h.txmgr.db.GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
+		if err != nil {
+			return nil, err
+		}
+		return &pvtdataResultsItr{namespace, collection, dbItr}, nil
+	}
+
 	dbItr, err := h.txmgr.db.GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
 	if err != nil {
 		return nil, err

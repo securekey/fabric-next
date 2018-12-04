@@ -46,6 +46,7 @@ type LockBasedTxMgr struct {
 	StopWatchAccess  string
 	StopWatch1       tally.Stopwatch
 	StopWatch1Access string
+	btlPolicy        pvtdatapolicy.BTLPolicy
 
 	commitCh   chan *current
 	commitDone chan *ledger.BlockAndPvtData
@@ -80,6 +81,7 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 		shutdownCh:     make(chan struct{}),
 		doneCh:         make(chan struct{}),
 		commitRWLock:   rwLock,
+		btlPolicy:      btlPolicy,
 	}
 	pvtstatePurgeMgr, err := pvtstatepurgemgmt.InstantiatePurgeMgr(ledgerid, db, btlPolicy, bookkeepingProvider)
 	if err != nil {
@@ -100,7 +102,7 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 
 // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
-	qe := newQueryExecutor(txmgr, txid)
+	qe := newQueryExecutor(txmgr, txid, txmgr.btlPolicy)
 	stopWatch := metrics.RootScope.Timer("lockbasedtxmgr_NewQueryExecutor_commitRWLock_RLock_wait_duration").Start()
 	txmgr.commitRWLock.RLock()
 	stopWatch.Stop()
