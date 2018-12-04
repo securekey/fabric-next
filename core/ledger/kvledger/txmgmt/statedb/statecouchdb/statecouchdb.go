@@ -11,6 +11,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pkg/errors"
+
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -28,14 +32,15 @@ const querySkip = 0
 
 // VersionedDBProvider implements interface VersionedDBProvider
 type VersionedDBProvider struct {
-	couchInstance *couchdb.CouchInstance
-	databases     map[string]*VersionedDB
-	mux           sync.Mutex
-	openCounts    uint64
+	couchInstance         *couchdb.CouchInstance
+	databases             map[string]*VersionedDB
+	mux                   sync.Mutex
+	openCounts            uint64
+	statekeyindexProvider statekeyindex.StateKeyIndexProvider
 }
 
 // NewVersionedDBProvider instantiates VersionedDBProvider
-func NewVersionedDBProvider() (*VersionedDBProvider, error) {
+func NewVersionedDBProvider(stateidxProv statekeyindex.StateKeyIndexProvider) (*VersionedDBProvider, error) {
 	logger.Debugf("constructing CouchDB VersionedDBProvider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -43,7 +48,13 @@ func NewVersionedDBProvider() (*VersionedDBProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &VersionedDBProvider{couchInstance, make(map[string]*VersionedDB), sync.Mutex{}, 0}, nil
+	return &VersionedDBProvider{
+		couchInstance:         couchInstance,
+		databases:             make(map[string]*VersionedDB),
+		mux:                   sync.Mutex{},
+		openCounts:            0,
+		statekeyindexProvider: stateidxProv,
+	}, nil
 }
 
 // GetDBHandle gets the handle to a named database
@@ -51,9 +62,13 @@ func (provider *VersionedDBProvider) GetDBHandle(dbName string) (statedb.Version
 	provider.mux.Lock()
 	defer provider.mux.Unlock()
 	vdb := provider.databases[dbName]
+	statekeyindex, err := provider.statekeyindexProvider.OpenStateKeyIndex(dbName)
+	if err != nil {
+		return nil, err
+	}
 	if vdb == nil {
 		var err error
-		vdb, err = newVersionedDB(provider.couchInstance, dbName)
+		vdb, err = newVersionedDB(provider.couchInstance, statekeyindex, dbName)
 		if err != nil {
 			return nil, err
 		}
@@ -78,11 +93,12 @@ type VersionedDB struct {
 	verCacheLock           sync.RWMutex
 	mux                    sync.RWMutex
 	committedWSetDataCache map[uint64]*versionsCache // Used as a local cache during bulk processing of a block.
-	verWSetCacheLock       *sync.RWMutex
+	verWSetCacheLock       sync.RWMutex
+	statekeyindex          statekeyindex.StateKeyIndex
 }
 
 // newVersionedDB constructs an instance of VersionedDB
-func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*VersionedDB, error) {
+func newVersionedDB(couchInstance *couchdb.CouchInstance, stateindex statekeyindex.StateKeyIndex, dbName string) (*VersionedDB, error) {
 	// CreateCouchDatabase creates a CouchDB database object, as well as the underlying database if it does not exist
 	chainName := dbName
 	dbName = couchdb.ConstructMetadataDBName(dbName)
@@ -92,8 +108,16 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 		return nil, err
 	}
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
-	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
+	return &VersionedDB{
+		couchInstance:      couchInstance,
+		metadataDB:         metadataDB,
+		chainName:          chainName,
+		namespaceDBs:       namespaceDBMap,
+		committedDataCache: newVersionCache(),
+		mux:                sync.RWMutex{},
+		committedWSetDataCache: make(map[uint64]*versionsCache),
+		statekeyindex:          stateindex,
+	}, nil
 }
 
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
@@ -204,33 +228,29 @@ func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeK
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
 	}
-	//nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
-	//nsMetadataMap := make(map[string][]*couchdb.DocMetadata)
-	//logger.Debugf("nsKeysMap=%s", nsKeysMap)
-	//logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
-	//for ns, nsMetadata := range nsMetadataMap {
-	//	for _, keyMetadata := range nsMetadata {
-	//		// TODO - why would version be ever zero if loaded from db?
-	//		if len(keyMetadata.Version) != 0 {
-	//			committedDataCache.setVerAndRev(ns, keyMetadata.ID, createVersionHeightFromVersionString(keyMetadata.Version), keyMetadata.Rev)
-	//		}
-	//	}
-	//}
 	vdb.verCacheLock.Lock()
 	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = committedDataCache
 	for key, height := range preLoaded {
 		vdb.committedDataCache.setVer(key.Namespace, key.Key, height)
+		metadata, found, err := vdb.statekeyindex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch metadata from statekeyindex for key: %+v", key)
+		}
+		if found {
+			vdb.committedDataCache.setRev(key.Namespace, key.Key, metadata.DBTag)
+		} else {
+			logger.Warningf("metadata not found in statekeyindex for preloaded key: %+v", key)
+		}
 	}
 	return nil
 }
 
 func (vdb *VersionedDB) GetWSetCacheLock() *sync.RWMutex {
-	return vdb.verWSetCacheLock
+	return &vdb.verWSetCacheLock
 }
 
 func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
-	nsKeysMap := map[string][]string{}
 	committedWSetDataCache := newVersionCache()
 	for _, compositeKey := range keys {
 		ns, key := compositeKey.Namespace, compositeKey.Key
@@ -238,16 +258,24 @@ func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, 
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 	}
 
+	nsKeysWithNoRev := map[string][]string{}
 	for _, compositeKey := range keysExist {
 		ns, key := compositeKey.Namespace, compositeKey.Key
-		nsKeysMap[ns] = append(nsKeysMap[ns], key)
-		// in case if we didn't find key metadata in couchdb
-		committedWSetDataCache.setRev(ns, key, "")
+		metadata, found, err := vdb.statekeyindex.GetMetadata(&statekeyindex.CompositeKey{Key: key, Namespace: ns})
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch metadata from statekeyindex for key: %+v", compositeKey)
+		}
+		if found {
+			committedWSetDataCache.setRev(ns, key, metadata.DBTag)
+		} else {
+			logger.Warningf("metadata not found in statekeyindex for preloaded key: %+v", key)
+			nsKeysWithNoRev[ns] = append(nsKeysWithNoRev[ns], key)
+		}
 	}
 
-	if len(nsKeysMap) > 0 {
-		nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
-		logger.Debugf("nsKeysMap=%s", nsKeysMap)
+	if len(nsKeysWithNoRev) > 0 {
+		nsMetadataMap, err := vdb.retrieveMetadata(nsKeysWithNoRev, true)
+		logger.Debugf("nsKeysWithNoRev=%s", nsKeysWithNoRev)
 		logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
 		if err != nil {
 			return err

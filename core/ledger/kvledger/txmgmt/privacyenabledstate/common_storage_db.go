@@ -45,7 +45,7 @@ func NewCommonStorageDBProvider() (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
-		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(); err != nil {
+		if vdbProvider, err = statecouchdb.NewVersionedDBProvider(statekeyindex.NewProvider()); err != nil {
 			return nil, err
 		}
 	} else {
