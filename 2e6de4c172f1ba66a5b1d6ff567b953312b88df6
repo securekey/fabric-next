@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9bb13e23_c715e7a2",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecouchdb/commit_handling.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 124,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-04T14:54:10Z",
+      "side": 1,
+      "message": "if not found, does this lead to a panic later in the logic?\n\ne.g., keyMetadata[respDoc.ID].DBTag \u003d ...",
+      "range": {
+        "startLine": 124,
+        "startChar": 2,
+        "endLine": 124,
+        "endChar": 12
+      },
+      "revId": "2e6de4c172f1ba66a5b1d6ff567b953312b88df6",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
