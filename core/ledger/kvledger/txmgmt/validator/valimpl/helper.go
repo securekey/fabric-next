@@ -89,10 +89,14 @@ func validatePvtdata(tx *valinternal.Transaction, pvtdata *ledger.TxPvtData) err
 // preprocessProtoBlock parses the proto instance of block into 'Block' structure.
 // The retuned 'Block' structure contains only transactions that are endorser transactions and are not alredy marked as invalid
 func preprocessProtoBlock(txmgr txmgr.TxMgr, validateKVFunc func(key string, value []byte) error,
-	block *common.Block, doMVCCValidation bool, txsFilter util.TxValidationFlags) (*valinternal.Block, error) {
+	block *common.Block, doMVCCValidation bool, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) (*valinternal.Block, error) {
 	b := &valinternal.Block{Num: block.Header.Number}
 	// Committer validator has already set validation flags based on well formed tran checks
 	for txIndex, envBytes := range block.Data.Data {
+		if !acceptTx(txIndex) {
+			continue
+		}
+
 		var env *common.Envelope
 		var chdr *common.ChannelHeader
 		var payload *common.Payload

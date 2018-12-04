@@ -42,7 +42,7 @@ func NewStatebasedValidator(channelID string, txmgr txmgr.TxMgr, db privacyenabl
 func (impl *DefaultImpl) ValidateMVCC(ctx context.Context, block *common.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
 	logger.Debugf("ValidateMVCC - Block number = [%d]", block.Header.Number)
 
-	internalBlock, err := preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, true, txsFilter)
+	internalBlock, err := preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, true, txsFilter, acceptTx)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (impl *DefaultImpl) ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAn
 	txsFilter := util.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 
 	logger.Debugf("preprocessing ProtoBlock for block %d...", block.Header.Number)
-	if internalBlock, err = preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, doMVCCValidation, txsFilter); err != nil {
+	if internalBlock, err = preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, doMVCCValidation, txsFilter, util.TxFilterAcceptAll); err != nil {
 		return nil, err
 	}
 
