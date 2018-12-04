@@ -8,9 +8,10 @@ package statedb
 import (
 	"sync"
 
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
 type KVCacheProvider struct {
@@ -18,7 +19,7 @@ type KVCacheProvider struct {
 	kvCacheMtx sync.RWMutex
 }
 
-func NewKVCacheProvider() *KVCacheProvider{
+func NewKVCacheProvider() *KVCacheProvider {
 	return &KVCacheProvider{kvCacheMap: make(map[string]*KVCache), kvCacheMtx: sync.RWMutex{}}
 }
 
@@ -27,6 +28,11 @@ func (p *KVCacheProvider) getKVCache(chId string, namespace string) (*KVCache, e
 	if len(namespace) > 0 {
 		cacheName = cacheName + "_" + namespace
 	}
+
+	return p.getKVCacheByName(cacheName)
+}
+
+func (p *KVCacheProvider) getKVCacheByName(cacheName string) (*KVCache, error) {
 
 	kvCache, found := p.kvCacheMap[cacheName]
 	if !found {
@@ -53,29 +59,20 @@ func (p *KVCacheProvider) purgeNonDurable(blockNumber uint64) {
 }
 
 // UpdateKVCache will purge non durable data from the cache for the given blockNumber and update all caches with the
-// provided validatedTxOps, validatedPvtData and validatedPvtHashData and update leveldb indexes for the given ledgerID
-func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData, ledgerID string) error {
+// provided validatedTxOps, validatedPvtData and validatedPvtHashData
+func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData, pin bool) {
 	p.kvCacheMtx.Lock()
 	defer p.kvCacheMtx.Unlock()
 
 	p.purgeNonDurable(blockNumber)
 
-	var indexUpdates []*statekeyindex.IndexUpdate
-	var deletedIndexKeys []statekeyindex.CompositeKey
-
 	for _, v := range validatedTxOps {
 		kvCache, _ := p.getKVCache(v.ChId, v.Namespace)
 		if v.IsDeleted {
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
-			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
 		} else {
 			newTx := v.ValidatedTx
-			kvCache.Put(&newTx)
-			indexUpdate := statekeyindex.IndexUpdate{
-				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace},
-				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
-			}
-			indexUpdates = append(indexUpdates, &indexUpdate)
+			kvCache.Put(&newTx, pin)
 		}
 	}
 
@@ -84,15 +81,9 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 		kvCache, _ := p.getKVCache(v.ChId, namespace)
 		if v.IsDeleted {
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
-			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
 		} else {
 			newTx := v
-			kvCache.PutPrivate(&newTx)
-			indexUpdate := statekeyindex.IndexUpdate{
-				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
-				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
-			}
-			indexUpdates = append(indexUpdates, &indexUpdate)
+			kvCache.PutPrivate(&newTx, pin)
 		}
 	}
 
@@ -101,48 +92,17 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 		kvCache, _ := p.getKVCache(v.ChId, namespace)
 		if v.IsDeleted {
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
-			deletedIndexKeys = append(deletedIndexKeys, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
 		} else {
 			newTx := v
-			kvCache.PutPrivate(&newTx)
-			indexUpdate := statekeyindex.IndexUpdate{
-				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
-				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
-			}
-			indexUpdates = append(indexUpdates, &indexUpdate)
+			kvCache.PutPrivate(&newTx, pin)
 		}
 	}
 
-	//Add key index in leveldb
-	if len(indexUpdates) > 0 {
-		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
-		if err != nil {
-			return err
-		}
-		err = stateKeyIndex.AddIndex(indexUpdates)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete key index in leveldb
-	if len(deletedIndexKeys) > 0 {
-		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
-		if err != nil {
-			return err
-		}
-		err = stateKeyIndex.DeleteIndex(deletedIndexKeys)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // UpdateNonDurableKVCache will purge non durable data from the cache for the given blockNumber then update it with non durable
 // private data only (validatedPvtData and validatedPvtHashData)
-func (p *KVCacheProvider)UpdateNonDurableKVCache(blockNumber uint64, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) {
+func (p *KVCacheProvider) UpdateNonDurableKVCache(blockNumber uint64, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) {
 	p.kvCacheMtx.Lock()
 	defer p.kvCacheMtx.Unlock()
 
@@ -219,3 +179,106 @@ func (p *KVCacheProvider) GetLeveLDBIterator(namespace, startKey, endKey, ledger
 
 }
 
+func (p *KVCacheProvider) PrepareIndexUpdates(validatedTxOps []ValidatedTxOp, validatedPvtData []ValidatedPvtData, validatedPvtHashData []ValidatedPvtData) ([]*statekeyindex.IndexUpdate, []statekeyindex.CompositeKey) {
+
+	var indexUpdates []*statekeyindex.IndexUpdate
+	var indexDeletes []statekeyindex.CompositeKey
+
+	for _, v := range validatedTxOps {
+		if v.IsDeleted {
+			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace})
+		} else {
+			indexUpdate := statekeyindex.IndexUpdate{
+				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: v.Namespace},
+				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+			}
+			indexUpdates = append(indexUpdates, &indexUpdate)
+		}
+	}
+
+	for _, v := range validatedPvtData {
+		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
+		if v.IsDeleted {
+			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+		} else {
+			indexUpdate := statekeyindex.IndexUpdate{
+				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+			}
+			indexUpdates = append(indexUpdates, &indexUpdate)
+		}
+	}
+
+	for _, v := range validatedPvtHashData {
+		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
+		if v.IsDeleted {
+			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+		} else {
+			indexUpdate := statekeyindex.IndexUpdate{
+				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+			}
+			indexUpdates = append(indexUpdates, &indexUpdate)
+		}
+	}
+
+	return indexUpdates, indexDeletes
+}
+
+func (p *KVCacheProvider) ApplyIndexUpdates(indexUpdates []*statekeyindex.IndexUpdate, indexDeletes []statekeyindex.CompositeKey, ledgerID string) error {
+
+	//Add key index in leveldb
+	if len(indexUpdates) > 0 {
+		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
+		if err != nil {
+			return err
+		}
+		err = stateKeyIndex.AddIndex(indexUpdates)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete key index in leveldb
+	if len(indexDeletes) > 0 {
+		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
+		if err != nil {
+			return err
+		}
+		err = stateKeyIndex.DeleteIndex(indexDeletes)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+//GetRangeFromKVCache returns key range from cache and a flag to indicate of all keys are found in cache
+func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey string) ([]string, bool) {
+
+	p.kvCacheMtx.RLock()
+	defer p.kvCacheMtx.RUnlock()
+
+	kvCache, _ := p.GetKVCache(chId, namespace)
+	sortedKeys := util.GetSortedKeys(kvCache.keys)
+	var keyRange []string
+	var foundStartKey, foundEndKey bool
+
+	for _, k := range sortedKeys {
+		if k == startKey {
+			foundStartKey = true
+		}
+		if k == endKey {
+			foundEndKey = true
+			//exclude end key and end the range
+			break
+		}
+		if foundStartKey {
+			keyRange = append(keyRange, k)
+		}
+
+	}
+
+	return keyRange, foundEndKey
+}
