@@ -45,6 +45,8 @@ type kvLedger struct {
 	blockStore             *ledgerstorage.Store
 	txtmgmt                txmgr.TxMgr
 	historyDB              historydb.HistoryDB
+	versionedDB            privacyenabledstate.DB
+	kvCacheProvider        *statedb.KVCacheProvider
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
 
@@ -71,6 +73,8 @@ func newKVLedger(
 		ledgerID:        ledgerID,
 		blockStore:      blockStore,
 		historyDB:       historyDB,
+		versionedDB:     versionedDB,
+		kvCacheProvider: versionedDB.GetKVCacheProvider(),
 		blockAPIsRWLock: &sync.RWMutex{},
 		commitDone:      make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
 		shutdownCh:      make(chan struct{}),
@@ -493,7 +497,7 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 			}
 
 			// Update the cache
-			statedb.OnTxCommit(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
+			l.kvCacheProvider.OnTxCommit(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
 		}
 	}
 }

@@ -19,19 +19,19 @@ import (
 )
 
 type cachedStateStore struct {
-	stateStore      statedb.VersionedDB
+	vdb             statedb.VersionedDB
 	bulkOptimizable statedb.BulkOptimizable
 	indexCapable    statedb.IndexCapable
 	ledgerID        string
 	stateKeyIndex   statekeyindex.StateKeyIndex
 }
 
-func newCachedBlockStore(stateStore statedb.VersionedDB, stateKeyIndex statekeyindex.StateKeyIndex, ledgerID string) *cachedStateStore {
-	bulkOptimizable, _ := stateStore.(statedb.BulkOptimizable)
-	indexCapable, _ := stateStore.(statedb.IndexCapable)
+func newCachedStateStore(vdb statedb.VersionedDB, stateKeyIndex statekeyindex.StateKeyIndex, ledgerID string) *cachedStateStore {
+	bulkOptimizable, _ := vdb.(statedb.BulkOptimizable)
+	indexCapable, _ := vdb.(statedb.IndexCapable)
 
 	s := cachedStateStore{
-		stateStore:      stateStore,
+		vdb:             vdb,
 		ledgerID:        ledgerID,
 		bulkOptimizable: bulkOptimizable,
 		indexCapable:    indexCapable,
@@ -42,32 +42,36 @@ func newCachedBlockStore(stateStore statedb.VersionedDB, stateKeyIndex statekeyi
 
 // Open implements method in VersionedDB interface
 func (c *cachedStateStore) Open() error {
-	return c.stateStore.Open()
+	return c.vdb.Open()
 }
 
 // Close implements method in VersionedDB interface
 func (c *cachedStateStore) Close() {
-	c.stateStore.Close()
+	c.vdb.Close()
 }
 
 // ValidateKeyValue implements method in VersionedDB interface
 func (c *cachedStateStore) ValidateKeyValue(key string, value []byte) error {
-	return c.stateStore.ValidateKeyValue(key, value)
+	return c.vdb.ValidateKeyValue(key, value)
 }
 
 // BytesKeySuppoted implements method in VersionedDB interface
 func (c *cachedStateStore) BytesKeySuppoted() bool {
-	return c.stateStore.BytesKeySuppoted()
+	return c.vdb.BytesKeySuppoted()
+}
+
+func (c *cachedStateStore) GetKVCacheProvider() (* statedb.KVCacheProvider) {
+	return c.vdb.GetKVCacheProvider()
 }
 
 // GetState implements method in VersionedDB interface
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
-	if versionedValue, ok := statedb.GetFromKVCache(c.ledgerID, namespace, key); ok {
+	if versionedValue, ok := c.vdb.GetKVCacheProvider().GetFromKVCache(c.ledgerID, namespace, key); ok {
 		logger.Debugf("[%s] state retrieved from cache [ns=%s, key=%s]", c.ledgerID, namespace, key)
 		metrics.IncrementCounter("cachestatestore_getstate_cache_request_hit")
 		return versionedValue, nil
 	}
-	versionedValue, err := c.stateStore.GetState(namespace, key)
+	versionedValue, err := c.vdb.GetState(namespace, key)
 
 	if versionedValue != nil && err == nil {
 		validatedTx := statedb.ValidatedTx{
@@ -87,7 +91,7 @@ func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.Vers
 		}
 
 		// Put retrieved KV from DB to the cache
-		statedb.UpdateKVCache(0, validatedTxOp, nil, nil, c.ledgerID)
+		c.vdb.GetKVCacheProvider().UpdateKVCache(0, validatedTxOp, nil, nil, c.ledgerID)
 	}
 
 	return versionedValue, err
@@ -125,13 +129,13 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // startKey is inclusive
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
-	dbItr, err := statedb.GetLeveLDBIterator(namespace, startKey, endKey, c.ledgerID)
+	dbItr, err := c.vdb.GetKVCacheProvider().GetLeveLDBIterator(namespace, startKey, endKey, c.ledgerID)
 	if err != nil {
 		return nil, err
 	}
 	if !dbItr.Next() {
 		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
-		return c.stateStore.GetStateRangeScanIterator(namespace, startKey, endKey)
+		return c.vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}
 	dbItr.Prev()
 	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
@@ -140,17 +144,17 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 
 // ExecuteQuery implements method in VersionedDB interface
 func (c *cachedStateStore) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
-	return c.stateStore.ExecuteQuery(namespace, query)
+	return c.vdb.ExecuteQuery(namespace, query)
 }
 
 // ApplyUpdates implements method in VersionedDB interface
 func (c *cachedStateStore) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
-	return c.stateStore.ApplyUpdates(batch, height)
+	return c.vdb.ApplyUpdates(batch, height)
 }
 
 // GetLatestSavePoint implements method in VersionedDB interface
 func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
-	return c.stateStore.GetLatestSavePoint()
+	return c.vdb.GetLatestSavePoint()
 }
 
 func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {

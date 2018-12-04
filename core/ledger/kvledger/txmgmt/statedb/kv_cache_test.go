@@ -17,9 +17,9 @@ const N_LOOP = 500
 const N_PVT_LOOP = 2
 
 func TestKVCache(t *testing.T) {
-	InitKVCache()
+	provider := NewKVCacheProvider()
 
-	kvCache, _ := GetKVCache("MyCh", "LSCC")
+	kvCache, _ := provider.GetKVCache("MyCh", "LSCC")
 
 	for i := 0; i < N_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
@@ -48,7 +48,7 @@ func TestKVCache(t *testing.T) {
 		}
 	}
 
-	kvCache2, _ := GetKVCache("MyCh", "VSCC")
+	kvCache2, _ := provider.GetKVCache("MyCh", "VSCC")
 
 	for i := 0; i < N_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
@@ -92,9 +92,9 @@ func TestKVCache(t *testing.T) {
 }
 
 func TestKVCachePrivate(t *testing.T) {
-	InitKVCache()
+	provider := NewKVCacheProvider()
 
-	kvCache, _ := GetKVCache("MyCh", "LSCC")
+	kvCache, _ := provider.GetKVCache("MyCh", "LSCC")
 
 	for i := 0; i < N_PVT_LOOP; i++ {
 		theKey := fmt.Sprintf("%s-%d", "Key", i)
@@ -122,7 +122,7 @@ func TestKVCachePrivate(t *testing.T) {
 		testutil.AssertEquals(t, theValidatedTx.IndexInBlock, validatedTx.IndexInBlock)
 	}
 
-	purgeNonDurable(0)
+	provider.purgeNonDurable(0)
 
 	// Check that first key is permanent (LRU) cache
 	theKey := fmt.Sprintf("%s-%d", "Key", 0)
@@ -146,7 +146,7 @@ func TestKVCachePrivate(t *testing.T) {
 	testutil.AssertEquals(t, ok, true)
 	testutil.AssertNotNil(t, validatedTx)
 
-	purgeNonDurable(1)
+	provider.purgeNonDurable(1)
 
 	// second key has been removed from expired
 	pvtData, ok = kvCache.getNonDurable(theKey)
