@@ -39,6 +39,23 @@
       "revId": "f86fd83a3ac0737e46ae441a70b153d219ad9bae",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3840af59_faf0d521",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/kv_cache.go",
+        "patchSetId": 9
+      },
+      "lineNbr": 60,
+      "author": {
+        "id": 1000119
+      },
+      "writtenOn": "2018-12-04T19:13:45Z",
+      "side": 1,
+      "message": "This KVCache is eating too much memory and becomes too complicated. I think we can simplify the data structure and make it more efficient.\n- the keys are repeating in keys map, pinnedTx or validatedTxCache.\n- we can modify lru cache code to return the list of keys.\n- add some flag for pinned tx in same cache\n-...",
+      "revId": "f86fd83a3ac0737e46ae441a70b153d219ad9bae",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
