@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
@@ -276,4 +277,16 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 	}
 
 	return keyRange, foundEndKey
+}
+
+//GetNonDurableSortedKeys returns non durable cache sorted keys
+func (p *KVCacheProvider) GetNonDurableSortedKeys(chId, namespace string) []string {
+	p.kvCacheMtx.RLock()
+	defer p.kvCacheMtx.RUnlock()
+
+	kvCache, _ := p.GetKVCache(chId, namespace)
+	stopWatch := metrics.StopWatch("getnondurablesortedkeys_duration")
+	keys := util.GetSortedKeys(kvCache.nonDurablePvtCache)
+	stopWatch()
+	return keys
 }

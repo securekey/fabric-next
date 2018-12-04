@@ -37,6 +37,7 @@ type DB interface {
 	GetKeyHashVersion(namespace, collection string, keyHash []byte) (*version.Height, error)
 	GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([]*statedb.VersionedValue, error)
 	GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error)
+	GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error)
 	ExecuteQueryOnPrivateData(namespace, collection, query string) (statedb.ResultsIterator, error)
 	ApplyPrivacyAwareUpdates(updates *UpdateBatch, height *version.Height) error
 	//TODO find better way to acquire lock

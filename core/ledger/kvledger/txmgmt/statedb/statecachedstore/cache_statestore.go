@@ -9,6 +9,8 @@ package statecachedstore
 import (
 	"sync"
 
+	"sort"
+
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
@@ -158,6 +160,23 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 	return newKVScanner(namespace, keyRange, dbItr, c), nil
 }
 
+func (c *cachedStateStore) GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	sortedKeys := c.vdb.GetKVCacheProvider().GetNonDurableSortedKeys(c.ledgerID, namespace)
+	var nextIndex int
+	var lastIndex int
+	if startKey == "" {
+		nextIndex = 0
+	} else {
+		nextIndex = sort.SearchStrings(sortedKeys, startKey)
+	}
+	if endKey == "" {
+		lastIndex = len(sortedKeys)
+	} else {
+		lastIndex = sort.SearchStrings(sortedKeys, endKey)
+	}
+	return &nonDurableKVScanner{namespace, sortedKeys, nextIndex, lastIndex, c}, nil
+}
+
 // ExecuteQuery implements method in VersionedDB interface
 func (c *cachedStateStore) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
 	return c.vdb.ExecuteQuery(namespace, query)
@@ -293,4 +312,34 @@ func (scanner *kvScanner) Close() {
 	}
 	scanner.keyRange = nil
 	scanner.searchedKeys = nil
+}
+
+type nonDurableKVScanner struct {
+	namespace        string
+	sortedKeys       []string
+	nextIndex        int
+	lastIndex        int
+	cachedStateStore *cachedStateStore
+}
+
+// Next gives next key and versioned value. It returns a nil when exhausted
+func (s *nonDurableKVScanner) Next() (statedb.QueryResult, error) {
+	if s.nextIndex >= s.lastIndex {
+		return nil, nil
+	}
+	key := s.sortedKeys[s.nextIndex]
+	s.nextIndex++
+	versionedValue, err := s.cachedStateStore.GetState(s.namespace, key)
+	if err != nil {
+		return nil, errors.Wrapf(err, "KVScanner next get value %s %s failed", s.namespace, key)
+	}
+
+	return &statedb.VersionedKV{
+		CompositeKey:   statedb.CompositeKey{Namespace: s.namespace, Key: key},
+		VersionedValue: *versionedValue}, nil
+}
+
+// Close implements the method from QueryResult interface
+func (s *nonDurableKVScanner) Close() {
+	// do nothing
 }

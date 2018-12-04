@@ -145,7 +145,7 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 	return db, nil
 }
 
-func (vdb *VersionedDB) GetKVCacheProvider() (* statedb.KVCacheProvider) {
+func (vdb *VersionedDB) GetKVCacheProvider() *statedb.KVCacheProvider {
 	return vdb.kvCacheProvider
 }
 
@@ -377,6 +377,10 @@ func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey str
 
 	logger.Debugf("Exiting GetStateRangeScanIterator")
 	return newQueryScanner(namespace, queryResult), nil
+}
+
+func (vdb *VersionedDB) GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 }
 
 // ExecuteQuery implements method in VersionedDB interface
