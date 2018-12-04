@@ -137,11 +137,7 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
 
 	//get key range from cache
-	keyRange, foundAllKeys := c.vdb.GetKVCacheProvider().GetRangeFromKVCache(c.ledgerID, namespace, startKey, endKey)
-	if foundAllKeys {
-		//if found all keys inside range in cache, no need to go to db
-		return newKVScanner(namespace, keyRange, nil, c), nil
-	}
+	keyRange := c.vdb.GetKVCacheProvider().GetRangeFromKVCache(c.ledgerID, namespace, startKey, endKey)
 
 	//some keys are missing from cache, so need db iterator too to find tail of range
 	dbItr, err := c.vdb.GetKVCacheProvider().GetLeveLDBIterator(namespace, startKey, endKey, c.ledgerID)
@@ -149,7 +145,7 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 		return nil, err
 	}
 
-	if !dbItr.Next() {
+	if !dbItr.Next() && len(keyRange) == 0 {
 		logger.Warningf("*** GetStateRangeScanIterator namespace %s startKey %s endKey %s not found going to db", namespace, startKey, endKey)
 		return c.vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 	}

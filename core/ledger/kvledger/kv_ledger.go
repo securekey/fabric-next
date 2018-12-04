@@ -43,14 +43,12 @@ const commitWatcherQueueLen = 1
 type kvLedger struct {
 	ledgerID               string
 	blockStore             *ledgerstorage.Store
-	txtmgmt                txmgr.TxMgr
+	txtmgmt                txmgr.LockBasedTxMgr
 	historyDB              historydb.HistoryDB
 	versionedDB            privacyenabledstate.DB
 	kvCacheProvider        *statedb.KVCacheProvider
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
-	//TODO to use interface instead of using txmgr lock here
-	txmgmtRWLock *sync.RWMutex
 
 	commitDone chan *ledger.BlockAndPvtData
 	shutdownCh chan struct{}
@@ -78,7 +76,6 @@ func newKVLedger(
 		versionedDB:     versionedDB,
 		kvCacheProvider: versionedDB.GetKVCacheProvider(),
 		blockAPIsRWLock: &sync.RWMutex{},
-		txmgmtRWLock:    &sync.RWMutex{},
 		commitDone:      make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
 		shutdownCh:      make(chan struct{}),
 		doneCh:          make(chan struct{}),
@@ -124,7 +121,7 @@ func newKVLedger(
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDone, l.txmgmtRWLock)
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDone)
 	return err
 }
 

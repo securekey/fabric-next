@@ -38,6 +38,15 @@ type TxMgr interface {
 	Shutdown()
 }
 
+//LockBasedTxMgr - an extension of TxMgr interface which allows to lock/unlock txmgr rwlock
+type LockBasedTxMgr interface {
+	TxMgr
+	RLock()
+	RUnlock()
+	Lock()
+	Unlock()
+}
+
 // ErrUnsupportedTransaction is expected to be thrown if a unsupported query is performed in an update transaction
 type ErrUnsupportedTransaction struct {
 	Msg string
