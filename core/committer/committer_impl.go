@@ -20,7 +20,6 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/events/producer"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/op/go-logging"
@@ -125,9 +124,6 @@ func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvt
 		return err
 	}
 
-	// post commit actions, such as event publishing
-	lc.postCommit(blockAndPvtData.Block)
-
 	return nil
 }
 
@@ -155,22 +151,6 @@ func (lc *LedgerCommitter) ValidateBlock(blockAndPvtData *ledger.BlockAndPvtData
 // GetPvtDataAndBlockByNum retrieves private data and block for given sequence number
 func (lc *LedgerCommitter) GetPvtDataAndBlockByNum(seqNum uint64) (*ledger.BlockAndPvtData, error) {
 	return lc.PeerLedgerSupport.GetPvtDataAndBlockByNum(seqNum, nil)
-}
-
-// postCommit publish event or handle other tasks once block committed to the ledger
-func (lc *LedgerCommitter) postCommit(block *common.Block) {
-	// create/send block events *after* the block has been committed
-	bevent, fbevent, channelID, err := producer.CreateBlockEvents(block)
-	if err != nil {
-		logger.Errorf("Channel [%s] Error processing block events for block number [%d]: %+v", channelID, block.Header.Number, err)
-	} else {
-		if err := producer.Send(bevent); err != nil {
-			logger.Errorf("Channel [%s] Error sending block event for block number [%d]: %+v", channelID, block.Header.Number, err)
-		}
-		if err := producer.Send(fbevent); err != nil {
-			logger.Errorf("Channel [%s] Error sending filtered block event for block number [%d]: %+v", channelID, block.Header.Number, err)
-		}
-	}
 }
 
 // LedgerHeight returns recently committed block sequence number
