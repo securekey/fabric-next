@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "acf83e45_87229594",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl_test.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 85,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-05T14:58:00Z",
+      "side": 1,
+      "message": "will update Rollback() and the unit test for this..",
+      "parentUuid": "93178872_c6bfff85",
+      "revId": "19732b48700c03c35ea2ef4d0f3d01f18f80fcc9",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "659fe0ed_ebf23e2f",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
         "patchSetId": 3
