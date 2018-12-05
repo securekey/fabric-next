@@ -11,6 +11,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+	"github.com/pkg/errors"
 )
 
 // nsCommittersBuilder implements `batch` interface. Each batch operates on a specific namespace in the updates and
@@ -26,8 +27,12 @@ type nsCommittersBuilder struct {
 
 // subNsCommitter implements `batch` interface. Each batch commits the portion of updates within a namespace assigned to it
 type subNsCommitter struct {
+	// The namespace of the keys that this subNsCommitter will commit to the db.
+	namespace      string
 	db             *couchdb.CouchDatabase
 	batchUpdateMap map[string]*batchableDocument
+	// StateKeyIndex used to index metadata.
+	statekeyindex statekeyindex.StateKeyIndex
 }
 
 // buildCommitters build the batches of type subNsCommitter. This functions processes different namespaces in parallel
@@ -91,41 +96,50 @@ func (builder *nsCommittersBuilder) execute() error {
 		// TODO: I removed the copy of the couch document here. (It isn't clear why a copy is needed).
 		batchUpdateMap[key] = &batchableDocument{CouchDoc: couchDoc, Deleted: vv.Value == nil}
 		if len(batchUpdateMap) == maxBacthSize {
-			builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.db, batchUpdateMap})
+			builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.ns, builder.db, batchUpdateMap, builder.keyIndex})
 			batchUpdateMap = make(map[string]*batchableDocument)
 		}
 	}
 	if len(batchUpdateMap) > 0 {
-		builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.db, batchUpdateMap})
+		builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.ns, builder.db, batchUpdateMap, builder.keyIndex})
 	}
 	return nil
 }
 
 // execute implements the function in `batch` interface. This function commits the updates managed by a `subNsCommitter`
-func (committer *subNsCommitter) execute() error {
-	return commitUpdates(committer.db, committer.batchUpdateMap)
-}
-
-// commitUpdates commits the given updates to couchdb
 // TODO: this should be refactored to use a common commit function in the CouchDB package.
-func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchableDocument) error {
+func (committer *subNsCommitter) execute() error {
+	//The statekeyindex's metadata for each key will later be updated with CouchDB's _rev.
+	keyMetadata := make(map[string]*statekeyindex.Metadata)
 	//Add the documents to the batch update array
 	batchUpdateDocs := []*couchdb.CouchDoc{}
-	for _, updateDocument := range batchUpdateMap {
+	for _, updateDocument := range committer.batchUpdateMap {
 		batchUpdateDocument := updateDocument
 		batchUpdateDocs = append(batchUpdateDocs, batchUpdateDocument.CouchDoc)
+		keyval, err := couchDocToKeyValue(updateDocument.CouchDoc)
+		if err != nil {
+			return errors.Wrapf(err, "failed to convert couchDoc to keyValue: couchDoc=[%+v]", updateDocument.CouchDoc)
+		}
+		compKey := &statekeyindex.CompositeKey{Key: keyval.key, Namespace: committer.namespace}
+		metadata, found, err := committer.statekeyindex.GetMetadata(compKey)
+		if found {
+			keyMetadata[keyval.key] = &metadata
+		} else {
+			logger.Warningf("metadata for key [%+v] was unexpectedly not found in the statekeyindex", compKey)
+		}
 	}
 	// Do the bulk update into couchdb. Note that this will do retries if the entire bulk update fails or times out
-	batchUpdateResp, err := db.BatchUpdateDocuments(batchUpdateDocs)
+	batchUpdateResp, err := committer.db.BatchUpdateDocuments(batchUpdateDocs)
 	if err != nil {
 		return err
 	}
-	// IF INDIVIDUAL DOCUMENTS IN THE BULK UPDATE DID NOT SUCCEED, TRY THEM INDIVIDUALLY
-	// iterate through the response from CouchDB by document
 	for _, respDoc := range batchUpdateResp {
-		// If the document returned an error, retry the individual document
-		if respDoc.Ok != true {
-			batchUpdateDocument := batchUpdateMap[respDoc.ID]
+		if respDoc.Ok {
+			keyMetadata[respDoc.ID].DBTag = respDoc.Rev
+		} else {
+			// If the document returned an error, retry the individual document
+			// iterate through the response from CouchDB by document
+			batchUpdateDocument := committer.batchUpdateMap[respDoc.ID]
 			var err error
 			//Remove the "_rev" from the JSON before saving
 			//this will allow the CouchDB retry logic to retry revisions without encountering
@@ -142,12 +156,17 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				// If this is a deleted document, then retry the delete
 				// If the delete fails due to a document not being found (404 error),
 				// the document has already been deleted and the DeleteDoc will not return an error
-				err = db.DeleteDoc(respDoc.ID, "")
+				err = committer.db.DeleteDoc(respDoc.ID, "")
 			} else {
 				logger.Warningf("CouchDB batch document update encountered an problem. Retrying update for document ID:%s", respDoc.ID)
 				// Save the individual document to couchdb
 				// Note that this will do retries as needed
-				_, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
+				var rev string
+				rev, err = committer.db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
+				md, found := keyMetadata[respDoc.ID]
+				if found {
+					md.DBTag = rev
+				}
 			}
 			// If the single document update or delete returns an error, then throw the error
 			if err != nil {
@@ -157,6 +176,22 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				return fmt.Errorf(errorString)
 			}
 		}
+	}
+	var indexUpdates []*statekeyindex.IndexUpdate
+	for key, metadata := range keyMetadata {
+		indexUpdates = append(
+			indexUpdates,
+			&statekeyindex.IndexUpdate{
+				Key: statekeyindex.CompositeKey{
+					Namespace: committer.namespace,
+					Key:       key,
+				},
+				Value: *metadata,
+			},
+		)
+	}
+	if len(indexUpdates) > 0 {
+		return committer.statekeyindex.AddIndex(indexUpdates)
 	}
 	return nil
 }
