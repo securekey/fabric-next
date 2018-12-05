@@ -13,6 +13,7 @@ import (
 	"github.com/golang/groupcache/lru"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
 var logger = flogging.MustGetLogger("statedb")
@@ -46,16 +47,17 @@ type ValidatedPvtData struct {
 }
 
 type KVCache struct {
-	cacheName          string
-	capacity           int
-	validatedTxCache   *lru.Cache
-	nonDurablePvtCache map[string]*ValidatedPvtData
-	expiringPvtKeys    map[uint64]*list.List
-	pinnedTx           map[string]*ValidatedTx
-	keys               map[string]struct{}
-	mutex              sync.Mutex
-	hit                uint64
-	miss               uint64
+	cacheName            string
+	capacity             int
+	validatedTxCache     *lru.Cache
+	nonDurablePvtCache   map[string]*ValidatedPvtData
+	expiringPvtKeys      map[uint64]*list.List
+	pinnedTx             map[string]*ValidatedTx
+	keys                 map[string]struct{}
+	nonDurableSortedKeys []string
+	mutex                sync.Mutex
+	hit                  uint64
+	miss                 uint64
 }
 
 func DerivePvtHashDataNs(namespace, collection string) string {
@@ -76,15 +78,17 @@ func newKVCache(
 	expiringPvtKeys := make(map[uint64]*list.List)
 	pinnedTx := make(map[string]*ValidatedTx)
 	keys := make(map[string]struct{})
+	nonDurableSortedKeys := make([]string, 0)
 
 	cache := KVCache{
-		cacheName:          cacheName,
-		capacity:           cacheSize,
-		validatedTxCache:   validatedTxCache,
-		nonDurablePvtCache: nonDurablePvtCache,
-		expiringPvtKeys:    expiringPvtKeys,
-		pinnedTx:           pinnedTx,
-		keys:               keys,
+		cacheName:            cacheName,
+		capacity:             cacheSize,
+		validatedTxCache:     validatedTxCache,
+		nonDurablePvtCache:   nonDurablePvtCache,
+		expiringPvtKeys:      expiringPvtKeys,
+		pinnedTx:             pinnedTx,
+		keys:                 keys,
+		nonDurableSortedKeys: nonDurableSortedKeys,
 	}
 
 	cache.validatedTxCache.OnEvicted = cleanUpKeys(&cache)
@@ -297,6 +301,19 @@ func (c *KVCache) Clear() {
 	c.nonDurablePvtCache = nil
 	c.expiringPvtKeys = nil
 	c.keys = make(map[string]struct{})
+	c.nonDurableSortedKeys = make([]string, 0)
+}
+
+func (c *KVCache) sortNonDurableKeys() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.nonDurableSortedKeys = util.GetSortedKeys(c.nonDurablePvtCache)
+}
+
+func (c *KVCache) getNonDurableSortedKeys() []string {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.nonDurableSortedKeys
 }
 
 func (c *KVCache) Hit() uint64 {

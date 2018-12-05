@@ -8,6 +8,8 @@ package statedb
 import (
 	"sync"
 
+	"strings"
+
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
@@ -71,10 +73,11 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 			kvCache.Put(&newTx, pin)
 		}
 	}
-
+	chIDAndNamespace := make(map[string]struct{})
 	for _, v := range validatedPvtData {
 		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
 		kvCache, _ := p.getKVCache(v.ChId, namespace)
+		chIDAndNamespace[v.ChId+"!"+namespace] = defVal
 		if v.IsDeleted {
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 		} else {
@@ -93,6 +96,14 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 			kvCache.PutPrivate(&newTx, pin)
 		}
 	}
+	//Sort non durable keys in background
+	go func() {
+		for k := range chIDAndNamespace {
+			s := strings.Split(k, "!")
+			kvCache, _ := p.getKVCache(s[0], s[1])
+			kvCache.sortNonDurableKeys()
+		}
+	}()
 
 }
 
@@ -286,7 +297,7 @@ func (p *KVCacheProvider) GetNonDurableSortedKeys(chId, namespace string) []stri
 
 	kvCache, _ := p.GetKVCache(chId, namespace)
 	stopWatch := metrics.StopWatch("getnondurablesortedkeys_duration")
-	keys := util.GetSortedKeys(kvCache.nonDurablePvtCache)
+	keys := kvCache.getNonDurableSortedKeys()
 	stopWatch()
 	return keys
 }
