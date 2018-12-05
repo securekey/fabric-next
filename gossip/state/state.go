@@ -626,12 +626,15 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 		select {
 		// Wait for notification that next seq has arrived
 		case <-s.payloads.Ready():
-			// KEEP EVEN WHEN metrics.debug IS OFF
-			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
-
+			if metrics.IsDebug() {
+				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_ready", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
+			}
 			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
 			// Collect all subsequent payloads
 			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
+				// KEEP EVEN WHEN metrics.debug IS OFF
+				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(payload.GetSeqNum()))
+
 				rawBlock := &common.Block{}
 				if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
 					logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
