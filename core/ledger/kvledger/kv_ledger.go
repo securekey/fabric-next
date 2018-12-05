@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package kvledger
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -31,6 +30,7 @@ import (
 	ledgerutil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -50,9 +50,11 @@ type kvLedger struct {
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
 
-	commitDone chan *ledger.BlockAndPvtData
-	shutdownCh chan struct{}
-	doneCh     chan struct{}
+	commitDone   chan *ledger.BlockAndPvtData
+	commitCh     chan *ledger.BlockAndPvtData
+	doneWriterCh chan struct{}
+	shutdownCh   chan struct{}
+	doneCh       chan struct{}
 }
 
 // NewKVLedger constructs new `KVLedger`
@@ -77,6 +79,7 @@ func newKVLedger(
 		kvCacheProvider: versionedDB.GetKVCacheProvider(),
 		blockAPIsRWLock: &sync.RWMutex{},
 		commitDone:      make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
+		doneWriterCh:    make(chan struct{}),
 		shutdownCh:      make(chan struct{}),
 		doneCh:          make(chan struct{}),
 	}
@@ -114,6 +117,7 @@ func newKVLedger(
 	}
 
 	go l.commitWatcher(btlPolicy)
+	go l.blockWriter()
 
 	return l, nil
 }
@@ -352,66 +356,88 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	stopWatch := metrics.StopWatch("kvledger_CommitWithPvtData_duration")
 	defer stopWatch()
 
-	var err error
-	block := pvtdataAndBlock.Block
-	blockNo := pvtdataAndBlock.Block.Header.Number
-
-	startStateValidation := time.Now()
-	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
-
-	startCommitBlockStorage := time.Now()
-	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
 	l.blockAPIsRWLock.Lock()
-
-	err = l.cacheBlock(pvtdataAndBlock)
+	err := l.cacheBlock(pvtdataAndBlock)
 	if err != nil {
 		l.blockAPIsRWLock.Unlock()
 		panic(fmt.Errorf("block was not cached [%s]", err))
 	}
 	l.blockAPIsRWLock.Unlock()
 
-	if err = l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
-		return err
-	}
-
-	go func() {
-
-		elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
-
-		logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
-
-		startCommitState := time.Now()
-		logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
-		if err = l.txtmgmt.Commit(); err != nil {
-			panic(fmt.Errorf(`Error during commit to txmgr:%s`, err))
-		}
-		elapsedCommitState := time.Since(startCommitState) / time.Millisecond // duration in ms
-
-		// History database could be written in parallel with state and/or async as a future optimization,
-		// although it has not been a bottleneck...no need to clutter the log with elapsed duration.
-		if ledgerconfig.IsHistoryDBEnabled() {
-			logger.Debugf("[%s] Committing block [%d] transactions to history database", l.ledgerID, blockNo)
-			if err := l.historyDB.Commit(block); err != nil {
-				panic(fmt.Errorf(`Error during commit to history db:%s`, err))
-			}
-		}
-
-		// Set the checkpoint now that all of the data has been successfully committed
-		if err := l.blockStore.CheckpointBlock(block); err != nil {
-			panic(fmt.Errorf(`Error during checkpoint:%s`, err))
-		}
-
-		elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
-
-		// KEEP EVEN WHEN metrics.debug IS OFF
-		metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
-
-		logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
-			l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
-			elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
-	}()
+	l.commitCh <- pvtdataAndBlock
 
 	return nil
+}
+
+func (l *kvLedger) commitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) error {
+	stopWatch := metrics.StopWatch("kvledger_CommitWithPvtData_worker_duration")
+	defer stopWatch()
+
+	block := pvtdataAndBlock.Block
+	blockNo := pvtdataAndBlock.Block.Header.Number
+
+	startCommitBlockStorage := time.Now()
+	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
+
+	startStateValidation := time.Now()
+	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
+
+	if err := l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
+		return errors.WithMessage(err, `Error during commit to block store`)
+	}
+
+	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
+
+	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
+
+	startCommitState := time.Now()
+	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
+	if err := l.txtmgmt.Commit(); err != nil {
+		return errors.WithMessage(err, `Error during commit to txmgr`)
+	}
+	elapsedCommitState := time.Since(startCommitState) / time.Millisecond // duration in ms
+
+	// History database could be written in parallel with state and/or async as a future optimization,
+	// although it has not been a bottleneck...no need to clutter the log with elapsed duration.
+	if ledgerconfig.IsHistoryDBEnabled() {
+		logger.Debugf("[%s] Committing block [%d] transactions to history database", l.ledgerID, blockNo)
+		if err := l.historyDB.Commit(block); err != nil {
+			return errors.WithMessage(err, `Error during commit to history db`)
+		}
+	}
+
+	// Set the checkpoint now that all of the data has been successfully committed
+	if err := l.blockStore.CheckpointBlock(block); err != nil {
+		return errors.WithMessage(err, `Error during checkpoint`)
+	}
+
+	// TODO: Monitor that block is written (panic if not). Basically need to have blocking version of CheckpointBlock.
+
+	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
+
+	// KEEP EVEN WHEN metrics.debug IS OFF
+	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
+
+	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
+		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
+		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
+
+	return nil
+}
+
+func (l *kvLedger) blockWriter() {
+	for {
+		select {
+		case <-l.doneCh:
+			close(l.doneWriterCh)
+			return
+		case pvtdataAndBlock := <- l.commitCh:
+			err := l.commitWithPvtData(pvtdataAndBlock)
+			if err != nil {
+				panic(fmt.Sprintf("%s", err))
+			}
+		}
+	}
 }
 
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
@@ -468,6 +494,7 @@ func (l *kvLedger) GetConfigHistoryRetriever() (ledger.ConfigHistoryRetriever, e
 func (l *kvLedger) Close() {
 
 	close(l.doneCh)
+	<-l.doneWriterCh
 	<-l.shutdownCh
 
 	l.blockStore.Shutdown()
