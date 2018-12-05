@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	common2 "github.com/hyperledger/fabric/gossip/common"
+	"github.com/hyperledger/fabric/gossip/state/validationctx"
 
 	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
 	privdata2 "github.com/hyperledger/fabric/gossip/privdata"
@@ -37,6 +38,7 @@ import (
 	"github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"golang.org/x/net/context"
 )
 
 // GossipStateProvider is the interface to acquire sequences of the ledger blocks
@@ -117,7 +119,7 @@ type ledgerResources interface {
 	// ValidateBlock validate block
 	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
 
-	ValidatePartialBlock(block *common.Block)
+	ValidatePartialBlock(ctx context.Context, block *common.Block)
 
 	// StorePvtData used to persist private date into transient store
 	StorePvtData(txid string, privData *transientstore.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -181,6 +183,8 @@ type GossipStateProviderImpl struct {
 	peerLedger ledger.PeerLedger
 
 	blockPublisher *publisher
+
+	ctxProvider *validationctx.Provider
 }
 
 var logger = util.GetLogger(util.LoggingStateModule, "")
@@ -268,6 +272,8 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		peerLedger: peerLedger,
 
 		blockPublisher: newBlockPublisher(chainID, ledger, height),
+
+		ctxProvider: validationctx.NewProvider(),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -645,6 +651,12 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 						payload.SeqNum, rawBlock.Header, rawBlock.Data)
 					continue
 				}
+
+				if ledgerconfig.IsValidator() {
+					// Cancel any outstanding validation for the current block being committed
+					s.ctxProvider.Cancel(rawBlock.Header.Number)
+				}
+
 				logger.Debugf("[%s] Transferring block [%d] with %d transaction(s) to the ledger", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
 
 				// Read all private data into slice
@@ -668,7 +680,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 					unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
 					if unvalidatedBlock != nil {
 						logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
-						s.ledger.ValidatePartialBlock(unvalidatedBlock)
+						s.ledger.ValidatePartialBlock(s.ctxProvider.Create(unvalidatedBlock.Header.Number), unvalidatedBlock)
 					}
 				}
 			}
@@ -676,11 +688,13 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 			logger.Debugf("[%s] Received unvalidated block %d", s.chainID, block.Header.Number)
 
 			if block.Header.Number == s.blockPublisher.LedgerHeight() {
-				logger.Debugf("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
-				s.ledger.ValidatePartialBlock(block)
-			} else {
-				logger.Debugf("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, block.Header.Number, len(block.Data.Data), s.blockPublisher.LedgerHeight())
+				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
+				s.ledger.ValidatePartialBlock(s.ctxProvider.Create(block.Header.Number), block)
+			} else if block.Header.Number > s.blockPublisher.LedgerHeight() {
+				logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, block.Header.Number, len(block.Data.Data), s.blockPublisher.LedgerHeight())
 				s.pendingValidations.Add(block)
+			} else {
+				logger.Infof("[%s] Block [%d] will not be validated since the block has already been committed. Our ledger height is %d.", s.chainID, block.Header.Number, s.blockPublisher.LedgerHeight())
 			}
 		case <-s.stopCh:
 			s.stopCh <- struct{}{}
