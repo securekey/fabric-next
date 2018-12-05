@@ -33,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/uber-go/tally"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -89,7 +90,7 @@ type Coordinator interface {
 	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
 
 	// ValidatePartialBlock is called by the validator to validate only a subset of the transactions within the block
-	ValidatePartialBlock(block *common.Block)
+	ValidatePartialBlock(ctx context.Context, block *common.Block)
 
 	// StorePvtData used to persist private data into transient store
 	StorePvtData(txid string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -275,9 +276,9 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	return blockAndPvtData, privateInfo.txns, nil
 }
 
-func (c *coordinator) ValidatePartialBlock(block *common.Block) {
+func (c *coordinator) ValidatePartialBlock(ctx context.Context, block *common.Block) {
 	// This can be done in the background
-	go c.Validator.ValidatePartial(block)
+	go c.Validator.ValidatePartial(ctx, block)
 }
 
 // StoreBlock stores block with private data into the ledger

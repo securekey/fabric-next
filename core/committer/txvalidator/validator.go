@@ -68,7 +68,7 @@ type Support interface {
 // didn't pass validation.
 type Validator interface {
 	Validate(block *common.Block, resultsChan chan *ValidationResults) error
-	ValidatePartial(block *common.Block)
+	ValidatePartial(ctx context.Context, block *common.Block)
 }
 
 // private interface to decouple tx validator
@@ -261,14 +261,14 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 
 // ValidatePartial partially validates the block and sends the validation results over Gossip
 // NOTE: This function should only be called by validators and not committers.
-func (v *TxValidator) ValidatePartial(block *common.Block) {
+func (v *TxValidator) ValidatePartial(ctx context.Context, block *common.Block) {
 	committer, err := v.roleUtil.Committer(false)
 	if err != nil {
 		logger.Errorf("[%s] Unable to get the committing peer to send the validation response to: %s", v.ChainID, err)
 		return
 	}
 
-	txFlags, numValidated, err := v.validate(context.Background(), block, v.getTxFilter())
+	txFlags, numValidated, err := v.validate(ctx, block, v.getTxFilter())
 	if err != nil {
 		// Error while validating. Don't send the result over Gossip - in this case the committer will
 		// revalidate the unvalidated transactions.
@@ -667,7 +667,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 			_, err := v.Support.Ledger().GetTransactionByID(txID)
 			// 1) err == nil => there is already a tx in the ledger with the supplied id
 			if err == nil {
-				logger.Error("Duplicate transaction found, ", txID, ", skipping")
+				logger.Info("Duplicate transaction found, ", txID, ", skipping")
 				results <- &blockValidationResult{
 					tIdx:           tIdx,
 					validationCode: peer.TxValidationCode_DUPLICATE_TXID,
