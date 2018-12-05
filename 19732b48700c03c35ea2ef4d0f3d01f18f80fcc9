@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "659fe0ed_ebf23e2f",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 166,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-05T14:44:06Z",
+      "side": 1,
+      "message": "the only metadoc in this database - the index document - does not have a numeric ID, therefore it will never be returned by ReadDoc().",
+      "range": {
+        "startLine": 162,
+        "startChar": 5,
+        "endLine": 166,
+        "endChar": 5
+      },
+      "revId": "19732b48700c03c35ea2ef4d0f3d01f18f80fcc9",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
