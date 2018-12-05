@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ffb3fc4d_79d7877c",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 267,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-05T20:05:04Z",
+      "side": 1,
+      "message": "10?",
+      "range": {
+        "startLine": 267,
+        "startChar": 46,
+        "endLine": 267,
+        "endChar": 48
+      },
+      "revId": "04d30bab2be96dc27f54a5596d00f36f25819a3e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
