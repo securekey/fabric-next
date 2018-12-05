@@ -292,7 +292,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 	logger.Debug("Updating gossip ledger height to", height)
 	services.UpdateLedgerHeight(height, common2.ChainID(s.chainID))
 
-	s.done.Add(4)
+	s.done.Add(5)
 
 	// Listen for incoming communication
 	go s.listen()
@@ -302,6 +302,8 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 	go s.antiEntropy()
 	// Taking care of state request messages
 	go s.processStateRequests()
+	// Process validation request messages
+	go s.processValidationRequests()
 
 	return s
 }
@@ -620,6 +622,8 @@ func (s *GossipStateProviderImpl) Stop() {
 		s.ledger.Close()
 		close(s.stateRequestCh)
 		close(s.stateResponseCh)
+		close(s.validationReqChan)
+		close(s.validationResponseChan)
 		close(s.stopCh)
 	})
 }
@@ -703,22 +707,35 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 					}
 				}
 			}
+		case <-s.stopCh:
+			s.stopCh <- struct{}{}
+			logger.Debug("State provider has been stopped, finishing to push new blocks.")
+			return
+		}
+	}
+}
+
+func (s *GossipStateProviderImpl) processValidationRequests() {
+	defer s.done.Done()
+
+	for {
+		select {
 		case block := <-s.validationReqChan:
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Received validation request for block %d", s.chainID, block.Header.Number)
 
-			if block.Header.Number == s.blockPublisher.LedgerHeight() {
+			currentHeight := s.blockPublisher.LedgerHeight()
+			if block.Header.Number == currentHeight {
 				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
 				s.ledger.ValidatePartialBlock(s.ctxProvider.Create(block.Header.Number), block)
-			} else if block.Header.Number > s.blockPublisher.LedgerHeight() {
-				logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, block.Header.Number, len(block.Data.Data), s.blockPublisher.LedgerHeight())
+			} else if block.Header.Number > currentHeight {
+				logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, block.Header.Number, len(block.Data.Data), currentHeight)
 				s.pendingValidations.Add(block)
 			} else {
-				logger.Infof("[%s] Block [%d] will not be validated since the block has already been committed. Our ledger height is %d.", s.chainID, block.Header.Number, s.blockPublisher.LedgerHeight())
+				logger.Infof("[%s] Block [%d] will not be validated since the block has already been committed. Our ledger height is %d.", s.chainID, block.Header.Number, currentHeight)
 			}
 		case <-s.stopCh:
 			s.stopCh <- struct{}{}
-			logger.Debug("State provider has been stopped, finishing to push new blocks.")
 			return
 		}
 	}
