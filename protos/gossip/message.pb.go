@@ -311,6 +311,7 @@ type GossipMessage struct {
 	//	*GossipMessage_PrivateRes
 	//	*GossipMessage_PrivateData
 	//	*GossipMessage_ValidationResultsMsg
+	//	*GossipMessage_ValidationReqMsg
 	Content isGossipMessage_Content `protobuf_oneof:"content"`
 }
 
@@ -389,6 +390,9 @@ type GossipMessage_PrivateData struct {
 type GossipMessage_ValidationResultsMsg struct {
 	ValidationResultsMsg *ValidationResultsMessage `protobuf:"bytes,50,opt,name=validation_results_msg,json=validationResultsMsg,oneof"`
 }
+type GossipMessage_ValidationReqMsg struct {
+	ValidationReqMsg *DataMessage `protobuf:"bytes,51,opt,name=validation_req_msg,json=validationReqMsg,oneof"`
+}
 
 func (*GossipMessage_AliveMsg) isGossipMessage_Content()             {}
 func (*GossipMessage_MemReq) isGossipMessage_Content()               {}
@@ -412,6 +416,7 @@ func (*GossipMessage_PrivateReq) isGossipMessage_Content()           {}
 func (*GossipMessage_PrivateRes) isGossipMessage_Content()           {}
 func (*GossipMessage_PrivateData) isGossipMessage_Content()          {}
 func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
+func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
 
 func (m *GossipMessage) GetContent() isGossipMessage_Content {
 	if m != nil {
@@ -595,6 +600,13 @@ func (m *GossipMessage) GetValidationResultsMsg() *ValidationResultsMessage {
 	return nil
 }
 
+func (m *GossipMessage) GetValidationReqMsg() *DataMessage {
+	if x, ok := m.GetContent().(*GossipMessage_ValidationReqMsg); ok {
+		return x.ValidationReqMsg
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*GossipMessage) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _GossipMessage_OneofMarshaler, _GossipMessage_OneofUnmarshaler, _GossipMessage_OneofSizer, []interface{}{
@@ -620,6 +632,7 @@ func (*GossipMessage) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer)
 		(*GossipMessage_PrivateRes)(nil),
 		(*GossipMessage_PrivateData)(nil),
 		(*GossipMessage_ValidationResultsMsg)(nil),
+		(*GossipMessage_ValidationReqMsg)(nil),
 	}
 }
 
@@ -735,6 +748,11 @@ func _GossipMessage_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *GossipMessage_ValidationResultsMsg:
 		b.EncodeVarint(50<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.ValidationResultsMsg); err != nil {
+			return err
+		}
+	case *GossipMessage_ValidationReqMsg:
+		b.EncodeVarint(51<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ValidationReqMsg); err != nil {
 			return err
 		}
 	case nil:
@@ -923,6 +941,14 @@ func _GossipMessage_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.
 		err := b.DecodeMessage(msg)
 		m.Content = &GossipMessage_ValidationResultsMsg{msg}
 		return true, err
+	case 51: // content.validation_req_msg
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(DataMessage)
+		err := b.DecodeMessage(msg)
+		m.Content = &GossipMessage_ValidationReqMsg{msg}
+		return true, err
 	default:
 		return false, nil
 	}
@@ -1040,6 +1066,11 @@ func _GossipMessage_OneofSizer(msg proto.Message) (n int) {
 	case *GossipMessage_ValidationResultsMsg:
 		s := proto.Size(x.ValidationResultsMsg)
 		n += proto.SizeVarint(50<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *GossipMessage_ValidationReqMsg:
+		s := proto.Size(x.ValidationReqMsg)
+		n += proto.SizeVarint(51<<3 | proto.WireBytes)
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:

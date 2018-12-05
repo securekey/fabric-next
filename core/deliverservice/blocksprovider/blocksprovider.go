@@ -16,10 +16,8 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/gossip/api"
-	"github.com/hyperledger/fabric/gossip/comm"
 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
-	"github.com/hyperledger/fabric/gossip/roleutil"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
 	gossip_proto "github.com/hyperledger/fabric/protos/gossip"
@@ -45,12 +43,6 @@ type GossipServiceAdapter interface {
 
 	// Gossip the message across the peers
 	Gossip(msg *gossip_proto.GossipMessage)
-
-	Send(msg *gossip_proto.GossipMessage, peers ...*comm.RemotePeer)
-
-	SelfMembershipInfo() discovery.NetworkMember
-
-	IdentityInfo() api.PeerIdentitySet
 }
 
 // BlocksProvider used to read blocks from the ordering service
@@ -108,8 +100,6 @@ type blocksProviderImpl struct {
 	done int32
 
 	wrongStatusThreshold int
-
-	roleUtil *roleutil.RoleUtil
 }
 
 const wrongStatusThreshold = 10
@@ -130,7 +120,6 @@ func NewBlocksProvider(chainID string, client streamClient, gossip GossipService
 		gossip:               gossip,
 		mcs:                  mcs,
 		wrongStatusThreshold: wrongStatusThreshold,
-		roleUtil:             roleutil.NewRoleUtil(chainID, gossip),
 	}
 }
 
@@ -197,17 +186,6 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 			if err := b.gossip.AddPayload(b.chainID, payload); err != nil {
 				logger.Warningf("Block [%d] received from ordering service wasn't added to payload buffer: %v", blockNum, err)
 			}
-			if !b.isDone() {
-				validators := b.roleUtil.Validators(false)
-				if len(validators) > 0 {
-					// Gossip the unvalidated block with other validators
-					gossipMsg := createGossipMsg(b.chainID, payload)
-					logger.Debugf("[%s] Gossiping block [%d] to [%d] validator(s)", b.chainID, blockNum, len(validators))
-					b.gossip.Send(gossipMsg, asRemotePeers(validators)...)
-				} else {
-					logger.Debugf("[%s] Not gossiping block [%d] since no other validators were found", b.chainID, blockNum)
-				}
-			}
 		default:
 			logger.Warningf("[%s] Received unknown: ", b.chainID, t)
 			return
@@ -255,34 +233,9 @@ func (b *blocksProviderImpl) isDone() bool {
 	return atomic.LoadInt32(&b.done) == 1
 }
 
-func createGossipMsg(chainID string, payload *gossip_proto.Payload) *gossip_proto.GossipMessage {
-	gossipMsg := &gossip_proto.GossipMessage{
-		Nonce:   0,
-		Tag:     gossip_proto.GossipMessage_CHAN_AND_ORG,
-		Channel: []byte(chainID),
-		Content: &gossip_proto.GossipMessage_DataMsg{
-			DataMsg: &gossip_proto.DataMessage{
-				Payload: payload,
-			},
-		},
-	}
-	return gossipMsg
-}
-
 func createPayload(seqNum uint64, marshaledBlock []byte) *gossip_proto.Payload {
 	return &gossip_proto.Payload{
 		Data:   marshaledBlock,
 		SeqNum: seqNum,
 	}
-}
-
-func asRemotePeers(members []*roleutil.Member) []*comm.RemotePeer {
-	var peers []*comm.RemotePeer
-	for _, m := range members {
-		peers = append(peers, &comm.RemotePeer{
-			Endpoint: m.Endpoint,
-			PKIID:    m.PKIid,
-		})
-	}
-	return peers
 }

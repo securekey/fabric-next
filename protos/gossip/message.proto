@@ -133,6 +133,9 @@ message GossipMessage {
 
         // Contains validation results
         ValidationResultsMessage validation_results_msg = 50;
+
+        // Request for block validaton
+        DataMessage validation_req_msg = 51;
     }
 }
 

@@ -553,11 +553,16 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
 	}
 
 	if m.IsValidationResultsMsg() {
-		gc.logger.Debug("Got ValidationResults message from [%s] for block %d", msg.GetConnectionInfo().Endpoint, m.GetValidationResultsMsg().SeqNum)
+		gc.logger.Debugf("Got ValidationResults message from [%s] for block %d", msg.GetConnectionInfo().Endpoint, m.GetValidationResultsMsg().SeqNum)
 		if m.GetValidationResultsMsg().SeqNum == 0 {
 			gc.logger.Warning("ValidationResults sequence number is 0 - ", msg.GetConnectionInfo().ID)
 			return
 		}
+		gc.DeMultiplex(m)
+		return
+	}
+
+	if m.IsValidationReqMsg() {
 		gc.DeMultiplex(m)
 		return
 	}
