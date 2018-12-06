@@ -8,12 +8,14 @@ package statedb
 import (
 	"sort"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
+
 	"sync"
 
 	"github.com/hyperledger/fabric/core/common/ccprovider"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 // VersionedDBProvider provides an instance of an versioned DB
@@ -26,8 +28,9 @@ type VersionedDBProvider interface {
 
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
+	statekeyindex.IndexReady
 	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
-	GetKVCacheProvider() (*kvcache.KVCacheProvider)
+	GetKVCacheProvider() *kvcache.KVCacheProvider
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
 	GetState(namespace string, key string) (*VersionedValue, error)
 	// GetVersion gets the version for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
@@ -75,8 +78,8 @@ type VersionedDB interface {
 type BulkOptimizable interface {
 	// Load all heights for 'keys' from the data store in bulk and store in cache for later retrieval.
 	// Merge the pre-loaded key-heights into the cache.
-	LoadCommittedVersions(keys []*CompositeKey, preLoaded map[*CompositeKey]*version.Height) error
-	LoadWSetCommittedVersions(keys []*CompositeKey, keysExist []*CompositeKey, blockNum uint64) error
+	LoadCommittedVersions(keys []*CompositeKey, preLoaded map[*CompositeKey]*statekeyindex.Metadata) error
+	LoadWSetCommittedVersions(keys []*CompositeKey, preLoaded map[*CompositeKey]*statekeyindex.Metadata, blockNum uint64) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()
 	//TODO find better way to acquire lock
