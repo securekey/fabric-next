@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c23241fa_6d409fa4",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 280,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-06T14:35:15Z",
+      "side": 1,
+      "message": "If the pvtdata store is not empty, but is out of sync with the blockstore, then I think we won\u0027t be calling InitLastCOmmittedBlock() in order to sync.",
+      "range": {
+        "startLine": 280,
+        "startChar": 1,
+        "endLine": 280,
+        "endChar": 44
+      },
+      "revId": "87523585dc788af8ca5310fb149de6816a7ac962",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8289a587_99e634a9",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl_test.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-06T14:35:15Z",
+      "side": 1,
+      "message": "we\u0027ve already committed block 1 pvt data on lines 73-76. How come we can commit the same again? And why are we expecting lastCommittedBlockHeight\u003d2 instead of \u00271\u0027 after committing (again) block 1?",
+      "range": {
+        "startLine": 88,
+        "startChar": 1,
+        "endLine": 93,
+        "endChar": 54
+      },
+      "revId": "87523585dc788af8ca5310fb149de6816a7ac962",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
