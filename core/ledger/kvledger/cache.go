@@ -13,7 +13,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
@@ -26,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 	"github.com/hyperledger/fabric/protos/utils"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
@@ -104,9 +104,9 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	return nil
 }
 
-func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.BTLPolicy) ([]statedb.ValidatedTxOp, []statedb.ValidatedPvtData, util.TxValidationFlags, error) {
-	validatedTxOps := make([]statedb.ValidatedTxOp, 0)
-	pvtHashedKeys := make([]statedb.ValidatedPvtData, 0)
+func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.BTLPolicy) ([]kvcache.ValidatedTxOp, []kvcache.ValidatedPvtData, util.TxValidationFlags, error) {
+	validatedTxOps := make([]kvcache.ValidatedTxOp, 0)
+	pvtHashedKeys := make([]kvcache.ValidatedPvtData, 0)
 	txsFilter := ledgerUtil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	for txIndex, envBytes := range block.Data.Data {
 		var env *common.Envelope
@@ -174,7 +174,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 
 				for _, kvwrite := range pubWriteset.Writes {
 					validatedTxOps = append(validatedTxOps,
-						statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex},
+						kvcache.ValidatedTxOp{ValidatedTx: kvcache.ValidatedTx{Key: kvwrite.Key, Value: kvwrite.Value, BlockNum: block.Header.Number, IndexInBlock: txIndex},
 							IsDeleted: kvwrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId})
 				}
 				for _, collHashedRwSets := range nsRwSet.CollHashedRwSets {
@@ -184,7 +184,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 							return nil, nil, nil, err
 						}
 						pvtHashedKeys = append(pvtHashedKeys,
-							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: base64.StdEncoding.EncodeToString(hashedWrite.KeyHash),
+							kvcache.ValidatedPvtData{ValidatedTxOp: kvcache.ValidatedTxOp{ValidatedTx: kvcache.ValidatedTx{Key: base64.StdEncoding.EncodeToString(hashedWrite.KeyHash),
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
 								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(block.Header.Number, btl),
@@ -221,9 +221,9 @@ func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.Hea
 	return simRes.PubSimulationResults, nil
 }
 
-func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags, btlPolicy pvtdatapolicy.BTLPolicy) ([]statedb.ValidatedPvtData, []*ledger.TxPvtData, error) {
+func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledger.TxPvtData, txValidationFlags util.TxValidationFlags, btlPolicy pvtdatapolicy.BTLPolicy) ([]kvcache.ValidatedPvtData, []*ledger.TxPvtData, error) {
 
-	pvtKeys := make([]statedb.ValidatedPvtData, 0)
+	pvtKeys := make([]kvcache.ValidatedPvtData, 0)
 	validPvtData := make([]*ledger.TxPvtData, 0)
 	for _, txPvtdata := range pvtData {
 		if txValidationFlags.IsValid(int(txPvtdata.SeqInBlock)) {
@@ -243,7 +243,7 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 					}
 					for _, write := range collPvtRwSets.KvRwSet.Writes {
 						pvtKeys = append(pvtKeys,
-							statedb.ValidatedPvtData{ValidatedTxOp: statedb.ValidatedTxOp{ValidatedTx: statedb.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
+							kvcache.ValidatedPvtData{ValidatedTxOp: kvcache.ValidatedTxOp{ValidatedTx: kvcache.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
 								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(blockNumber, btl),
 								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(blockNumber, btl)})

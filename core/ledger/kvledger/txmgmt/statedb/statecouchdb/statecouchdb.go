@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 var logger = flogging.MustGetLogger("statecouchdb")
@@ -69,7 +70,7 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type VersionedDB struct {
-	kvCacheProvider        *statedb.KVCacheProvider
+	kvCacheProvider        *kvcache.KVCacheProvider
 	couchInstance          *couchdb.CouchInstance
 	couchCheckpointRev     string
 	metadataDB             *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
@@ -93,7 +94,7 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 		return nil, err
 	}
 
-	kvCacheProvider := statedb.NewKVCacheProvider()
+	kvCacheProvider := kvcache.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
 	return &VersionedDB{kvCacheProvider: kvCacheProvider, couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
 		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
@@ -145,7 +146,7 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 	return db, nil
 }
 
-func (vdb *VersionedDB) GetKVCacheProvider() *statedb.KVCacheProvider {
+func (vdb *VersionedDB) GetKVCacheProvider() (* kvcache.KVCacheProvider) {
 	return vdb.kvCacheProvider
 }
 

@@ -4,7 +4,7 @@ Copyright SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package statedb
+package kvcache
 
 import (
 	"container/list"
@@ -14,7 +14,14 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 )
+
+// VersionedValue encloses value and corresponding version
+type VersionedValue struct {
+	Value   []byte
+	Version *version.Height
+}
 
 var logger = flogging.MustGetLogger("statedb")
 var defVal struct{}
