@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ee858bfa_e499fa6c",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-06T18:10:46Z",
+      "side": 1,
+      "message": "This will not work once we have non-consecutive blocks, so other option would be to query last block and iterate up to that block",
+      "revId": "0f9706e7dbe160d29d0e89dc45b947d533d9f38c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
