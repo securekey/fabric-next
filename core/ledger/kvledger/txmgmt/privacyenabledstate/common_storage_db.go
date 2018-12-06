@@ -203,7 +203,11 @@ func (s *CommonStorageDB) GetKeyHashVersion(namespace, collection string, keyHas
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
+	vv, err := s.GetState(DeriveHashedDataNs(namespace, collection), keyHashStr)
+	if err != nil || vv == nil {
+		return nil, err
+	}
+	return vv.Version, nil
 }
 
 // GetCachedKeyHashVersion retrieves the keyhash version from cache
