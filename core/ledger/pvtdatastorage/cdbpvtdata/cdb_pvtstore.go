@@ -20,9 +20,9 @@ import (
 )
 
 type store struct {
-	db               *couchdb.CouchDatabase
-	purgeInterval    uint64
-	pendingDocs      []*couchdb.CouchDoc
+	db            *couchdb.CouchDatabase
+	purgeInterval uint64
+	pendingDocs   []*couchdb.CouchDoc
 
 	commonStore
 }
@@ -141,15 +141,27 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 		return nil, err
 	}
 
+	logger.Debugf("purge: processing [%d] expiry entries for block [%d]", len(expiryEntries), blockNumber)
 	for _, expiryKey := range expiryEntries {
+		expiryBytesStr := hex.EncodeToString(encodeExpiryKey(expiryKey.key))
+
 		dataKeys := deriveDataKeys(expiryKey)
+		allPurged := true
 		for _, dataKey := range dataKeys {
-			keyBytes := encodeDataKey(dataKey)
-			delete(blockPvtData.Data, hex.EncodeToString(keyBytes))
+			keyBytesStr := hex.EncodeToString(encodeDataKey(dataKey))
+			if dataKey.purge {
+				logger.Debugf("purge: deleting data key[%s] for expiry entry[%s]", keyBytesStr, expiryBytesStr)
+				delete(blockPvtData.Data, keyBytesStr)
+			} else {
+				logger.Debugf("purge: skipping data key[%s] for expiry entry[%s]", keyBytesStr, expiryBytesStr)
+				allPurged = false
+			}
 		}
 
-		expiryBytes := encodeExpiryKey(expiryKey.key)
-		delete(blockPvtData.Expiry, hex.EncodeToString(expiryBytes))
+		if allPurged {
+			delete(blockPvtData.Expiry, expiryBytesStr)
+			logger.Debugf("purge: deleted expiry key [%s]", expiryBytesStr)
+		}
 	}
 
 	var purgeBlockNumbers []string

@@ -104,8 +104,8 @@ type expiryInfo struct {
 
 func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64) (*expiryInfo, error) {
 	ei := expiryInfo{
-		json: make(jsonValue),
-		purgeKeys: make([]string, 0),
+		json:       make(jsonValue),
+		purgeKeys:  make([]string, 0),
 		expiryKeys: make([]string, 0),
 	}
 
@@ -122,9 +122,14 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 		ei.json[keyBytesHex] = valBytes
 
 		if !expiryBlockCounted[expiryEntry.key.expiringBlk] {
-			ei.expiryKeys = append(ei.expiryKeys, blockNumberToKey(expiryEntry.key.expiringBlk))
-			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + expiryEntry.key.expiringBlk%purgeInterval)
-			ei.purgeKeys = append(ei.purgeKeys, purgedAt)
+			expiringBlk := blockNumberToKey(expiryEntry.key.expiringBlk)
+			if !stringInSlice(expiringBlk, ei.expiryKeys) {
+				ei.expiryKeys = append(ei.expiryKeys, expiringBlk)
+			}
+			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + (purgeInterval - expiryEntry.key.expiringBlk%purgeInterval))
+			if !stringInSlice(purgedAt, ei.purgeKeys) {
+				ei.purgeKeys = append(ei.purgeKeys, purgedAt)
+			}
 			expiryBlockCounted[expiryEntry.key.expiringBlk] = true
 		}
 	}

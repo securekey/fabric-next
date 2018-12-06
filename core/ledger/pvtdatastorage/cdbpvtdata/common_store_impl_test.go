@@ -301,6 +301,197 @@ func TestStorePurge(t *testing.T) {
 	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
 }
 
+func TestStoreExpireWithoutPurge(t *testing.T) {
+	ledgerid := "TestStoreExpiredWithoutPurge"
+	viper.Set("ledger.pvtdataStore.purgeInterval", 2)
+	viper.Set("ledger.pvtdataStore.skipPurgeForCollections", "coll-1,coll-2")
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 1)
+	cs.SetBTL("ns-1", "coll-2", 0)
+	cs.SetBTL("ns-2", "coll-1", 0)
+	cs.SetBTL("ns-2", "coll-2", 4)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+
+	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	s := env.TestStore
+
+	// no pvt data with block 0
+	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Commit())
+
+	// write pvt data for block 1
+	testDataForBlk1 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+	}
+	assert.NoError(s.Prepare(1, testDataForBlk1))
+	assert.NoError(s.Commit())
+
+	// write pvt data for block 2
+	assert.NoError(s.Prepare(2, nil))
+	assert.NoError(s.Commit())
+	// data for ns-1:coll-1 and ns-2:coll-2 should exist in store
+	testWaitForPurgerRoutineToFinish(s)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	// write pvt data for block 3
+	assert.NoError(s.Prepare(3, nil))
+	assert.NoError(s.Commit())
+
+	// data for ns-1:coll-1 and ns-2:coll-2 should exist in store (because purger should not be launched at block 3)
+	testWaitForPurgerRoutineToFinish(s)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	// write pvt data for block 4
+	assert.NoError(s.Prepare(4, nil))
+	assert.NoError(s.Commit())
+	// data for ns-1:coll-1 should exist in store since it is in skip-purge-for-collections list, however it is expired  ns-2:coll-2 should exist because it
+	// expires at block 5
+	testWaitForPurgerRoutineToFinish(s)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	pvtData, _ := s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		// data for ns-1:coll-1 expired in store so we should not be able to get it
+		assert.False(v.Has("ns-1", "coll-1"))
+		// btl for ns-2, coll-2 is 4 so this one did not expire yet
+		assert.True(v.Has("ns-2", "coll-2"))
+	}
+
+	// write pvt data for block 5
+	assert.NoError(s.Prepare(5, nil))
+	assert.NoError(s.Commit())
+	// ns-2:coll-2 should exist because though the data expires at block 5 but purger is launched every second block
+	testWaitForPurgerRoutineToFinish(s)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	// write pvt data for block 6
+	assert.NoError(s.Prepare(6, nil))
+	assert.NoError(s.Commit())
+	// purger should be launched at block 6
+	testWaitForPurgerRoutineToFinish(s)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	pvtData, _ = s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		// btl for ns-2, coll-2 is 4 so this one expired at block 6 too
+		assert.False(v.Has("ns-2", "coll-2"))
+	}
+
+	// "ns-2:coll-1" should never have been purged (because, it was no btl was declared for this)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-1"}))
+
+}
+
+func TestStoreExpireMixed(t *testing.T) {
+	ledgerid := "TestStoreExpireMixed"
+	viper.Set("ledger.pvtdataStore.purgeInterval", 2)
+	viper.Set("ledger.pvtdataStore.skipPurgeForCollections", "coll-1")
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 1)
+	cs.SetBTL("ns-1", "coll-2", 3)
+	cs.SetBTL("ns-2", "coll-1", 3)
+	cs.SetBTL("ns-2", "coll-2", 0)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+
+	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	s := env.TestStore
+
+	// no pvt data with block 0
+	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Commit())
+
+	// write pvt data for block 1
+	testDataForBlk1 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
+	}
+	assert.NoError(s.Prepare(1, testDataForBlk1))
+	assert.NoError(s.Commit())
+
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 4, ns: "ns-2", coll: "coll-1"}))
+
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 2
+	assert.NoError(s.Prepare(2, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 3
+	assert.NoError(s.Prepare(3, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ := s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		// btl for ns-1, coll-1 is 1 so this one  should be expired
+		assert.False(v.Has("ns-1", "coll-1"))
+		// btl for ns-1, coll-1 is 3 so this one is not expired (purge = false)
+		assert.True(v.Has("ns-2", "coll-1"))
+		// btl for ns-1, coll-1 is 3 so this one is not purged yet (purge = true)
+		assert.True(v.Has("ns-1", "coll-2"))
+		// btl for ns-2, coll-2 is 0 so this one will never be expired or purged
+		assert.True(v.Has("ns-2", "coll-2"))
+	}
+
+	// write pvt data for block 4
+	assert.NoError(s.Prepare(4, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 5
+	assert.NoError(s.Prepare(5, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ = s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		// btl for ns-1, coll-1 is 1 so this one should be expired
+		assert.False(v.Has("ns-1", "coll-1"))
+		// btl for ns-1, coll-1 is 3 so this one is expired too at block 4
+		assert.False(v.Has("ns-2", "coll-1"))
+		// btl for ns-1, coll-1 is 3 so this one exires at block 4, purges at block 6
+		assert.False(v.Has("ns-1", "coll-2"))
+		// btl for ns-2, coll-2 is 0 so this one will never be expired or purged
+		assert.True(v.Has("ns-2", "coll-2"))
+	}
+
+	// coll-1 is never purged (skip purge for this collection is true)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+
+	// ns-1,coll-2 gets will get purged at block 6
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 4, ns: "ns-2", coll: "coll-1"}))
+	// ns-2, coll-2 never gets purged since blt=0
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+
+	// purger kicks in at block 6
+	assert.NoError(s.Prepare(6, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	// coll-1 is never purged (skip purge for this collection is true)
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 4, ns: "ns-2", coll: "coll-1"}))
+
+	// coll-2 will be purged for blt=3
+	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+	// ns-2, coll-2 never gets purged since blt=0
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
+}
+
 func TestStoreState(t *testing.T) {
 	cs := btltestutil.NewMockCollectionStore()
 	cs.SetBTL("ns-1", "coll-1", 0)

@@ -193,6 +193,13 @@ func GetPvtdataStorePurgeInterval() uint64 {
 	return uint64(purgeInterval)
 }
 
+// GetPvtdataSkipPurgeForCollections returns the list of collections that will be expired but not purged
+func GetPvtdataSkipPurgeForCollections() []string {
+	skipPurgeForCollections := viper.GetString("ledger.pvtdataStore.skipPurgeForCollections")
+	return strings.Split(skipPurgeForCollections, ",")
+}
+
+
 // GetCouchDBMaxIdleConns returns the number of idle connections to hold in the connection pool for couchDB.
 func GetCouchDBMaxIdleConns() int {
 	// TODO: this probably be the default golang version (100)
