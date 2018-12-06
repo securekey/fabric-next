@@ -186,6 +186,10 @@ func (vdb *versionedDB) GetLatestSavePoint() (*version.Height, error) {
 	return version, nil
 }
 
+func (vdb *versionedDB) IndexReadyChan() chan struct{} {
+	panic("not supposed to call IndexReadyChan() on levelDB state datastore!")
+}
+
 func constructCompositeKey(ns string, key string) []byte {
 	return append(append([]byte(ns), compositeKeySep...), []byte(key)...)
 }

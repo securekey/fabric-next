@@ -114,7 +114,7 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, nil)
 	pubKeys = append(pubKeys, deriveKeys...)
 
-	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*version.Height))
+	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*statekeyindex.Metadata))
 	if err != nil {
 		return err
 	}
@@ -328,6 +328,10 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 // ChaincodeDeployDone is a noop for couchdb state impl
 func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 	// NOOP
+}
+
+func (s *CommonStorageDB) IndexReadyChan() chan struct{} {
+	return s.VersionedDB.IndexReadyChan()
 }
 
 func DerivePvtDataNs(namespace, collection string) string {

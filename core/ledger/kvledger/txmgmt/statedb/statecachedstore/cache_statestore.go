@@ -189,8 +189,8 @@ func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 	return c.vdb.GetLatestSavePoint()
 }
 
-func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
-	preloaded := make(map[*statedb.CompositeKey]*version.Height)
+func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, _ map[*statedb.CompositeKey]*statekeyindex.Metadata) error {
+	preloaded := make(map[*statedb.CompositeKey]*statekeyindex.Metadata)
 	notPreloaded := make([]*statedb.CompositeKey, 0)
 	for _, key := range keys {
 		metadata, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
@@ -198,7 +198,7 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
 		}
 		if found {
-			preloaded[key] = version.NewHeight(metadata.BlockNumber, metadata.TxNumber)
+			preloaded[key] = &metadata
 		} else {
 			notPreloaded = append(notPreloaded, key)
 		}
@@ -210,19 +210,18 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 	return nil
 }
 
-func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
-	keysExist = make([]*statedb.CompositeKey, 0)
+func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, _ map[*statedb.CompositeKey]*statekeyindex.Metadata, blockNum uint64) error {
+	keysExist := make(map[*statedb.CompositeKey]*statekeyindex.Metadata)
 	keysNotExist := make([]*statedb.CompositeKey, 0)
 	for _, key := range keys {
-		_, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		md, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
 		if err != nil {
 			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
 		}
 		if found {
-			keysExist = append(keysExist, key)
+			keysExist[key] = &md
 		} else {
 			keysNotExist = append(keysNotExist, key)
-
 		}
 	}
 	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
@@ -248,6 +247,10 @@ func (c *cachedStateStore) GetDBType() string {
 }
 func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error {
 	return c.indexCapable.ProcessIndexesForChaincodeDeploy(namespace, fileEntries)
+}
+
+func (c *cachedStateStore) IndexReadyChan() chan struct{} {
+	return c.vdb.IndexReadyChan()
 }
 
 type kvScanner struct {

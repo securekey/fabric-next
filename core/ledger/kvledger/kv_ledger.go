@@ -117,7 +117,7 @@ func newKVLedger(
 	}
 
 	go l.commitWatcher(btlPolicy)
-	go l.indexWriter()
+	go l.indexWriter(versionedDB.IndexReadyChan())
 
 	return l, nil
 }
