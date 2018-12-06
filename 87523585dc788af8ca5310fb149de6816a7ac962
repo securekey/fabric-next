@@ -73,6 +73,30 @@
     },
     {
       "key": {
+        "uuid": "4d5f3ffc_ebe182f0",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 280,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-06T16:05:52Z",
+      "side": 1,
+      "message": "Does this work with the old fspvtdatastore?",
+      "parentUuid": "06eef186_52542417",
+      "range": {
+        "startLine": 280,
+        "startChar": 1,
+        "endLine": 280,
+        "endChar": 44
+      },
+      "revId": "87523585dc788af8ca5310fb149de6816a7ac962",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "8289a587_99e634a9",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl_test.go",
         "patchSetId": 4
