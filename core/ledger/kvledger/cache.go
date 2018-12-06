@@ -207,7 +207,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 }
 
 //indexWriter worker thread which looks for index updates to be applied to db
-func (l *kvLedger) indexWriter() {
+func (l *kvLedger) indexWriter(notifyIndexReady chan struct{}) {
 	for {
 		select {
 		case <-l.doneCh:
@@ -225,6 +225,10 @@ func (l *kvLedger) indexWriter() {
 				panic(fmt.Sprintf("%s", err))
 			}
 			stopWatch()
+			if ledgerconfig.IsCommitter() {
+				logger.Debug("notifying completion of statekeyindex updates")
+				notifyIndexReady <- struct{}{}
+			}
 		}
 	}
 }
