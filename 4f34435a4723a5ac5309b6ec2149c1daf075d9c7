@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d65764c8_644d3f95",
+        "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 206,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-06T21:12:10Z",
+      "side": 1,
+      "message": "We don’t need all the state. This isn’t optimal in case the value isn’t in the cache.",
+      "range": {
+        "startLine": 206,
+        "startChar": 14,
+        "endLine": 206,
+        "endChar": 22
+      },
+      "revId": "4f34435a4723a5ac5309b6ec2149c1daf075d9c7",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
