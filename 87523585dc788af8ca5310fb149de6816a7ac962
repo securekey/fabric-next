@@ -49,6 +49,30 @@
     },
     {
       "key": {
+        "uuid": "b8be8fd2_c88cd6af",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 280,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-06T15:55:44Z",
+      "side": 1,
+      "message": "pvtdataStoreEmpty is removed from the if condition altogether... the code will not reach this line if pvtdataStoreEmpty \u003d\u003d true",
+      "parentUuid": "06eef186_52542417",
+      "range": {
+        "startLine": 280,
+        "startChar": 1,
+        "endLine": 280,
+        "endChar": 44
+      },
+      "revId": "87523585dc788af8ca5310fb149de6816a7ac962",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "8289a587_99e634a9",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl_test.go",
         "patchSetId": 4
