@@ -7,6 +7,8 @@ package cdbpvtdata
 import (
 	"math"
 
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
@@ -30,13 +32,14 @@ func prepareDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) []*dataEnt
 				txnum := txPvtdata.SeqInBlock
 				ns := nsPvtdata.Namespace
 				coll := collPvtdata.CollectionName
-				dataKey := &dataKey{blockNum, txnum, ns, coll}
+				dataKey := &dataKey{blockNum, txnum, ns, coll, getPurgeFlag(coll)}
 				dataEntries = append(dataEntries, &dataEntry{key: dataKey, value: collPvtdata})
 			}
 		}
 	}
 	return dataEntries
 }
+
 func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, btlPolicy pvtdatapolicy.BTLPolicy) ([]*expiryEntry, error) {
 	mapByExpiringBlk := make(map[uint64]*pvtmetadata.ExpiryData)
 	for _, dataEntry := range dataEntries {
@@ -61,12 +64,26 @@ func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, btlPol
 	}
 	return expiryEntries, nil
 }
+
+func getPurgeFlag(coll string) bool {
+	return !stringInSlice(coll, ledgerconfig.GetPvtdataSkipPurgeForCollections())
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
 func deriveDataKeys(expiryEntry *expiryEntry) []*dataKey {
 	var dataKeys []*dataKey
 	for ns, colls := range expiryEntry.value.Map {
 		for coll, txNums := range colls.Map {
 			for _, txNum := range txNums.List {
-				dataKeys = append(dataKeys, &dataKey{expiryEntry.key.committingBlk, txNum, ns, coll})
+				dataKeys = append(dataKeys, &dataKey{expiryEntry.key.committingBlk, txNum, ns, coll, getPurgeFlag(coll)})
 			}
 		}
 	}
