@@ -75,19 +75,14 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	//Cache update with pinning
 	l.txtmgmt.Lock()
 	l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
+	//TODO 'Index update in background' move to background worker thread
+	indexUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
+	err = l.kvCacheProvider.ApplyIndexUpdates(indexUpdates, indexDeletes, l.ledgerID)
+	if err != nil {
+		logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
+		return err
+	}
 	l.txtmgmt.Unlock()
-
-	//Index update in background
-	go func() {
-		l.txtmgmt.RLock()
-		defer l.txtmgmt.RUnlock()
-		indexUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
-		err := l.kvCacheProvider.ApplyIndexUpdates(indexUpdates, indexDeletes, l.ledgerID)
-		if err != nil {
-			logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
-			panic(err)
-		}
-	}()
 
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
