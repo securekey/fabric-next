@@ -52,8 +52,10 @@ type kvLedger struct {
 
 	commitDoneCh        chan *ledger.BlockAndPvtData
 	commitCh            chan *ledger.BlockAndPvtData
+	indexCh             chan *indexUpdate
 	stoppedCommitCh     chan struct{}
 	stoppedCommitDoneCh chan struct{}
+	stoppedIndexCh      chan struct{}
 	doneCh              chan struct{}
 }
 
@@ -80,8 +82,10 @@ func newKVLedger(
 		blockAPIsRWLock:     &sync.RWMutex{},
 		commitDoneCh:        make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
 		commitCh:            make(chan *ledger.BlockAndPvtData),
+		indexCh:             make(chan *indexUpdate),
 		stoppedCommitCh:     make(chan struct{}),
 		stoppedCommitDoneCh: make(chan struct{}),
+		stoppedIndexCh:      make(chan struct{}),
 		doneCh:              make(chan struct{}),
 	}
 
@@ -119,6 +123,7 @@ func newKVLedger(
 
 	go l.commitWatcher(btlPolicy)
 	go l.blockWriter()
+	go l.indexWriter()
 
 	return l, nil
 }
@@ -432,7 +437,7 @@ func (l *kvLedger) blockWriter() {
 		case <-l.doneCh:
 			close(l.stoppedCommitCh)
 			return
-		case pvtdataAndBlock := <- l.commitCh:
+		case pvtdataAndBlock := <-l.commitCh:
 			err := l.commitWithPvtData(pvtdataAndBlock)
 			if err != nil {
 				panic(fmt.Sprintf("%s", err))
@@ -497,6 +502,7 @@ func (l *kvLedger) Close() {
 	close(l.doneCh)
 	<-l.stoppedCommitCh
 	<-l.stoppedCommitDoneCh
+	<-l.stoppedIndexCh
 
 	l.blockStore.Shutdown()
 	l.txtmgmt.Shutdown()
