@@ -1,27 +1,22 @@
 /*
 Copyright IBM Corp. All Rights Reserved.
-
 SPDX-License-Identifier: Apache-2.0
 */
-
 package privacyenabledstate
 
 import (
 	"encoding/base64"
 	"fmt"
 	"strings"
-
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
+	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-
-	"sync"
-
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
@@ -51,7 +46,6 @@ func NewCommonStorageDBProvider() (DBProvider, error) {
 	} else {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
-
 	return &CommonStorageDBProvider{
 		statecachedstore.NewProvider(
 			vdbProvider,
@@ -95,22 +89,18 @@ func (s *CommonStorageDB) IsBulkOptimizable() bool {
 // LoadCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
 func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
 	hashedKeys []*HashedCompositeKey) error {
-
 	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
 	if !ok {
 		return nil
 	}
 	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, nil)
 	pubKeys = append(pubKeys, deriveKeys...)
-
 	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*version.Height))
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
-
 func (s *CommonStorageDB) GetWSetCacheLock() *sync.RWMutex {
 	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
 	if !ok {
@@ -123,7 +113,6 @@ func (s *CommonStorageDB) GetWSetCacheLock() *sync.RWMutex {
 // LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
 func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
 	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey, blockNum uint64) error {
-
 	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
 	if !ok {
 		return nil
@@ -134,10 +123,8 @@ func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
-
 func (s *CommonStorageDB) deriveHashedKeysAndPvtKeys(hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey) []*statedb.CompositeKey {
 	deriveKeys := make([]*statedb.CompositeKey, 0)
 	// Here, hashedKeys are merged into pubKeys to get a combined set of keys for combined loading
@@ -163,7 +150,6 @@ func (s *CommonStorageDB) deriveHashedKeysAndPvtKeys(hashedKeys []*HashedComposi
 		})
 	}
 	return deriveKeys
-
 }
 
 // ClearCachedVersions implements corresponding function in interface DB
@@ -203,7 +189,11 @@ func (s *CommonStorageDB) GetKeyHashVersion(namespace, collection string, keyHas
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
+	vv, err := s.GetState(DeriveHashedDataNs(namespace, collection), keyHashStr)
+	if err != nil || vv == nil {
+		return nil, err
+	}
+	return vv.Version, nil
 }
 
 // GetCachedKeyHashVersion retrieves the keyhash version from cache
@@ -212,7 +202,6 @@ func (s *CommonStorageDB) GetCachedKeyHashVersion(namespace, collection string, 
 	if !ok {
 		return nil, false
 	}
-
 	keyHashStr := string(keyHash)
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
@@ -260,17 +249,14 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 // is acceptable since peer can continue in the committing role without the indexes. However, executing chaincode queries
 // may be affected, until a new chaincode with fixed indexes is installed and instantiated
 func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt.ChaincodeDefinition, dbArtifactsTar []byte) error {
-
 	//Check to see if the interface for IndexCapable is implemented
 	indexCapable, ok := s.VersionedDB.(statedb.IndexCapable)
 	if !ok {
 		return nil
 	}
-
 	if chaincodeDefinition == nil {
 		return fmt.Errorf("chaincode definition not found while creating couchdb index on chain")
 	}
-
 	dbArtifacts, err := ccprovider.ExtractFileEntries(dbArtifactsTar, indexCapable.GetDBType())
 	if err != nil {
 		logger.Errorf("error during extracting db artifacts from tar for chaincode=[%s] on chain=[%s]. error=%s",
@@ -305,15 +291,12 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 	// NOOP
 }
-
 func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
-
 func DeriveHashedDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + hashDataPrefix + collection
 }
-
 func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatch) {
 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
@@ -323,7 +306,6 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
 		}
 	}
 }
-
 func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedUpdateBatch, base64Key bool) {
 	for ns, nsBatch := range hashedUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
