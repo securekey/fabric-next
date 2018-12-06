@@ -52,6 +52,24 @@
       "revId": "0f9706e7dbe160d29d0e89dc45b947d533d9f38c",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "44e783ce_c6337fa4",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-06T19:08:03Z",
+      "side": 1,
+      "message": "Baha, I would separate that out into a new task. For now, it should work. The focus right now is on fixing the committer restart.",
+      "parentUuid": "311b451e_94b4e976",
+      "revId": "0f9706e7dbe160d29d0e89dc45b947d533d9f38c",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
