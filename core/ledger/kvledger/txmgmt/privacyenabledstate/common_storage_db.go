@@ -78,12 +78,13 @@ func (p *CommonStorageDBProvider) Close() {
 // both the public and private data
 type CommonStorageDB struct {
 	statedb.VersionedDB
+	ledgerID string
 }
 
 // NewCommonStorageDB wraps a VersionedDB instance. The public data is managed directly by the wrapped versionedDB.
 // For managing the hashed data and private data, this implementation creates separate namespaces in the wrapped db
-func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerid string) (DB, error) {
-	return &CommonStorageDB{VersionedDB: vdb}, nil
+func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerID string) (DB, error) {
+	return &CommonStorageDB{VersionedDB: vdb, ledgerID: ledgerID}, nil
 }
 
 // IsBulkOptimizable implements corresponding function in interface DB
@@ -203,7 +204,12 @@ func (s *CommonStorageDB) GetKeyHashVersion(namespace, collection string, keyHas
 	if !s.BytesKeySuppoted() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
+
+	versionedValue, ok := s.GetKVCacheProvider().GetFromKVCache(s.ledgerID, DeriveHashedDataNs(namespace, collection), keyHashStr)
+	if !ok {
+		return nil, nil
+	}
+	return versionedValue.Version, nil
 }
 
 // GetCachedKeyHashVersion retrieves the keyhash version from cache
