@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "06eef186_52542417",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 280,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-06T15:19:57Z",
+      "side": 1,
+      "message": "I think this is a typo, it should be !pvtdataStoreEmpty since we should be sync\u0027ing pvtdata only if it\u0027s not empty and block store height is \u003e 0, I\u0027ll update that..",
+      "parentUuid": "c23241fa_6d409fa4",
+      "range": {
+        "startLine": 280,
+        "startChar": 1,
+        "endLine": 280,
+        "endChar": 44
+      },
+      "revId": "87523585dc788af8ca5310fb149de6816a7ac962",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "8289a587_99e634a9",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl_test.go",
         "patchSetId": 4
@@ -36,6 +60,30 @@
       "writtenOn": "2018-12-06T14:35:15Z",
       "side": 1,
       "message": "we\u0027ve already committed block 1 pvt data on lines 73-76. How come we can commit the same again? And why are we expecting lastCommittedBlockHeight\u003d2 instead of \u00271\u0027 after committing (again) block 1?",
+      "range": {
+        "startLine": 88,
+        "startChar": 1,
+        "endLine": 93,
+        "endChar": 54
+      },
+      "revId": "87523585dc788af8ca5310fb149de6816a7ac962",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "eaafd996_67cd4e42",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl_test.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-06T15:19:57Z",
+      "side": 1,
+      "message": "line 76 commit of block 1, with makes block height of 2 (line 78 assert)\nline 83 rollback of block 1, block height is down to 1 (rollback now deletes the last document, so block height is decremented by 1)\nline 91 commit of block 1 again, so block height is 2 (line 93 assert)",
+      "parentUuid": "8289a587_99e634a9",
       "range": {
         "startLine": 88,
         "startChar": 1,
