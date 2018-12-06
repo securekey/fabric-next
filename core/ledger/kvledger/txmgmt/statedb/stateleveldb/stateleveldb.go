@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 var logger = flogging.MustGetLogger("stateleveldb")
@@ -48,18 +49,18 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type versionedDB struct {
-	kvCacheProvider *statedb.KVCacheProvider
-	db              *leveldbhelper.DBHandle
-	dbName          string
+	kvCacheProvider *kvcache.KVCacheProvider
+	db     *leveldbhelper.DBHandle
+	dbName string
 }
 
 // newVersionedDB constructs an instance of VersionedDB
 func newVersionedDB(db *leveldbhelper.DBHandle, dbName string) *versionedDB {
-	kvCacheProvider := statedb.NewKVCacheProvider()
+	kvCacheProvider := kvcache.NewKVCacheProvider()
 	return &versionedDB{kvCacheProvider, db, dbName}
 }
 
-func (vdb *versionedDB) GetKVCacheProvider() *statedb.KVCacheProvider {
+func (vdb *versionedDB) GetKVCacheProvider() (*kvcache.KVCacheProvider) {
 	return vdb.kvCacheProvider
 }
 

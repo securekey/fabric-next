@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package statecachedstore
 
 import (
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"sync"
 
 	"sort"
@@ -64,7 +65,7 @@ func (c *cachedStateStore) BytesKeySuppoted() bool {
 	return c.vdb.BytesKeySuppoted()
 }
 
-func (c *cachedStateStore) GetKVCacheProvider() *statedb.KVCacheProvider {
+func (c *cachedStateStore) GetKVCacheProvider() *kvcache.KVCacheProvider {
 	return c.vdb.GetKVCacheProvider()
 }
 
@@ -73,19 +74,19 @@ func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.Vers
 	if versionedValue, ok := c.vdb.GetKVCacheProvider().GetFromKVCache(c.ledgerID, namespace, key); ok {
 		logger.Debugf("[%s] state retrieved from cache [ns=%s, key=%s]", c.ledgerID, namespace, key)
 		metrics.IncrementCounter("cachestatestore_getstate_cache_request_hit")
-		return versionedValue, nil
+		return &statedb.VersionedValue{versionedValue.Value, versionedValue.Version}, nil
 	}
 	versionedValue, err := c.vdb.GetState(namespace, key)
 
 	if versionedValue != nil && err == nil {
-		validatedTx := statedb.ValidatedTx{
+		validatedTx := kvcache.ValidatedTx{
 			Key:          key,
 			Value:        versionedValue.Value,
 			BlockNum:     versionedValue.Version.BlockNum,
 			IndexInBlock: int(versionedValue.Version.TxNum),
 		}
 
-		validatedTxOp := []statedb.ValidatedTxOp{
+		validatedTxOp := []kvcache.ValidatedTxOp{
 			{
 				Namespace:   namespace,
 				ChId:        c.ledgerID,
