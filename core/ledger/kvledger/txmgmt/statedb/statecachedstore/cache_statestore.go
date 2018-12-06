@@ -247,6 +247,10 @@ func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fi
 	return c.indexCapable.ProcessIndexesForChaincodeDeploy(namespace, fileEntries)
 }
 
+func (c *cachedStateStore) IndexReadyChan() chan struct{} {
+	return c.vdb.IndexReadyChan()
+}
+
 type kvScanner struct {
 	namespace        string
 	keyRange         []string
