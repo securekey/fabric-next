@@ -6,14 +6,15 @@ SPDX-License-Identifier: Apache-2.0
 package statedb
 
 import (
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"sort"
 
 	"sync"
 
 	"github.com/hyperledger/fabric/core/common/ccprovider"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 // VersionedDBProvider provides an instance of an versioned DB
@@ -26,6 +27,7 @@ type VersionedDBProvider interface {
 
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
+	statekeyindex.IndexReady
 	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
 	GetKVCacheProvider() (*kvcache.KVCacheProvider)
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
