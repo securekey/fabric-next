@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c78382da_2cee211c",
+        "filename": "core/ledger/kvledger/kv_ledger.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 361,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-06T21:29:22Z",
+      "side": 1,
+      "message": "Downstream, the statecouchdb requires the statekeyindex completely populated in the background by this.",
+      "range": {
+        "startLine": 361,
+        "startChar": 1,
+        "endLine": 361,
+        "endChar": 37
+      },
+      "revId": "b8e134ae658ec8458da5b4d35612db1e07f8668e",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
