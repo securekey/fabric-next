@@ -45,8 +45,9 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 		return err
 	}
 
-	l.txtmgmt.Lock()
-	defer l.txtmgmt.Unlock()
+	//TODO Need to bring these locks back
+	//l.txtmgmt.Lock()
+	//defer l.txtmgmt.Unlock()
 
 	// Update the 'non-durable' cache only
 	l.kvCacheProvider.UpdateNonDurableKVCache(block.Header.Number, pvtDataKeys, pvtDataHashedKeys)
@@ -73,7 +74,8 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	}
 
 	//Cache update with pinning
-	l.txtmgmt.Lock()
+	//TODO Need to bring these write locks back
+	//l.txtmgmt.Lock()
 	l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
 	//TODO 'Index update in background' move to background worker thread
 	indexUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
@@ -82,7 +84,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 		logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
 		return err
 	}
-	l.txtmgmt.Unlock()
+	//l.txtmgmt.Unlock()
 
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
