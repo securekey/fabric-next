@@ -58,8 +58,7 @@ type DBInfo struct {
 		External int `json:"external"`
 		Active   int `json:"active"`
 	} `json:"sizes"`
-	PurgeSeq string `json:"purge_seq"`
-	Other    struct {
+	Other struct {
 		DataSize int `json:"data_size"`
 	} `json:"other"`
 	DocDelCount       int    `json:"doc_del_count"`
