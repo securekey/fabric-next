@@ -81,6 +81,7 @@ type VersionedDB struct {
 	mux                    sync.RWMutex
 	committedWSetDataCache map[uint64]*versionsCache // Used as a local cache during bulk processing of a block.
 	verWSetCacheLock       *sync.RWMutex
+	stateKeyIndexReadyCh   chan struct{}
 }
 
 // newVersionedDB constructs an instance of VersionedDB
@@ -96,8 +97,18 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 
 	kvCacheProvider := kvcache.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
-	return &VersionedDB{kvCacheProvider: kvCacheProvider, couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
+	return &VersionedDB{
+		kvCacheProvider: kvCacheProvider,
+		couchInstance: couchInstance,
+		metadataDB: metadataDB,
+		chainName: chainName,
+		namespaceDBs: namespaceDBMap,
+		committedDataCache: newVersionCache(),
+		mux: sync.RWMutex{},
+		committedWSetDataCache: make(map[uint64]*versionsCache),
+		verWSetCacheLock: &sync.RWMutex{},
+		stateKeyIndexReadyCh: make(chan struct{}),
+	}, nil
 }
 
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
@@ -460,6 +471,7 @@ func (vdb *VersionedDB) Open() error {
 // Close implements method in VersionedDB interface
 func (vdb *VersionedDB) Close() {
 	// no need to close db since a shared couch instance is used
+	close(vdb.stateKeyIndexReadyCh)
 }
 
 // Savepoint docid (key) for couchdb
@@ -520,6 +532,10 @@ func (vdb *VersionedDB) GetLatestSavePoint() (*version.Height, error) {
 		return nil, nil
 	}
 	return decodeSavepoint(couchDoc)
+}
+
+func (vdb *VersionedDB) IndexReadyChan() chan struct{} {
+	return vdb.stateKeyIndexReadyCh
 }
 
 // applyAdditionalQueryOptions will add additional fields to the query required for query processing

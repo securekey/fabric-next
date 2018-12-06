@@ -329,6 +329,10 @@ func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 	// NOOP
 }
 
+func (s *CommonStorageDB) IndexReadyChan() chan struct{} {
+	return s.VersionedDB.IndexReadyChan()
+}
+
 func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
