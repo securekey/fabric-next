@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "aee11272_5a21ebc4",
+        "filename": "core/ledger/kvledger/cache.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 81,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-06T14:24:44Z",
+      "side": 1,
+      "message": "in the next refactoring, this should be done by a worker goroutine rather than spinning up a new goroutine every time.",
+      "revId": "8cc84223355d3226db50e58a30d6d124de2a55b8",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
