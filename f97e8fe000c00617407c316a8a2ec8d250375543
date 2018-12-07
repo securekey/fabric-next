@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "90db1341_fdf777d6",
+        "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 15,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-07T15:35:13Z",
+      "side": 1,
+      "message": "imports are not formatted consistently",
+      "range": {
+        "startLine": 15,
+        "startChar": 1,
+        "endLine": 15,
+        "endChar": 24
+      },
+      "revId": "f97e8fe000c00617407c316a8a2ec8d250375543",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7b30bdff_6388fa9f",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 109,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-07T15:35:13Z",
+      "side": 1,
+      "message": "it would be more explicit to check for notFound and then nil, nil with a comment that nil/nil means notFound to callers.",
+      "range": {
+        "startLine": 109,
+        "startChar": 1,
+        "endLine": 109,
+        "endChar": 55
+      },
+      "revId": "f97e8fe000c00617407c316a8a2ec8d250375543",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
