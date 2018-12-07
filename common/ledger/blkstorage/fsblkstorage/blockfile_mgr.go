@@ -618,6 +618,16 @@ func (mgr *blockfileMgr) lastBlockNumber() uint64 {
 	return mgr.cpInfo.lastBlockNumber
 }
 
+func (mgr *blockfileMgr) blockCommitted() (uint64, chan struct {}) {
+	// TODO: Should probably make a copy.
+	mgr.cpInfoMtx.RLock()
+	sigCh := mgr.cpInfoSig
+	blockNumber := mgr.cpInfo.lastBlockNumber
+	mgr.cpInfoMtx.RUnlock()
+
+	return blockNumber, sigCh
+}
+
 func (mgr *blockfileMgr) waitForBlock(ctx context.Context, blockNum uint64) uint64 {
 	var lastBlockNumber uint64
 

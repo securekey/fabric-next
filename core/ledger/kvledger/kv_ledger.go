@@ -36,8 +36,6 @@ import (
 
 var logger = flogging.MustGetLogger("kvledger")
 
-const commitWatcherQueueLen = 1
-
 // KVLedger provides an implementation of `ledger.PeerLedger`.
 // This implementation provides a key-value based data model
 type kvLedger struct {
@@ -50,13 +48,12 @@ type kvLedger struct {
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
 
-	commitDoneCh        chan *ledger.BlockAndPvtData
-	commitCh            chan *ledger.BlockAndPvtData
-	indexCh             chan *indexUpdate
-	stoppedCommitCh     chan struct{}
-	stoppedCommitDoneCh chan struct{}
-	stoppedIndexCh      chan struct{}
-	doneCh              chan struct{}
+	stateCommitDoneCh chan *ledger.BlockAndPvtData
+	commitCh          chan *ledger.BlockAndPvtData
+	indexCh           chan *indexUpdate
+	stoppedCommitCh   chan struct{}
+	stoppedIndexCh    chan struct{}
+	doneCh            chan struct{}
 }
 
 // NewKVLedger constructs new `KVLedger`
@@ -74,19 +71,18 @@ func newKVLedger(
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
 	l := &kvLedger{
-		ledgerID:            ledgerID,
-		blockStore:          blockStore,
-		historyDB:           historyDB,
-		versionedDB:         versionedDB,
-		kvCacheProvider:     versionedDB.GetKVCacheProvider(),
-		blockAPIsRWLock:     &sync.RWMutex{},
-		commitDoneCh:        make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
-		commitCh:            make(chan *ledger.BlockAndPvtData),
-		indexCh:             make(chan *indexUpdate),
-		stoppedCommitCh:     make(chan struct{}),
-		stoppedCommitDoneCh: make(chan struct{}),
-		stoppedIndexCh:      make(chan struct{}),
-		doneCh:              make(chan struct{}),
+		ledgerID:                 ledgerID,
+		blockStore:               blockStore,
+		historyDB:                historyDB,
+		versionedDB:              versionedDB,
+		kvCacheProvider:          versionedDB.GetKVCacheProvider(),
+		blockAPIsRWLock:          &sync.RWMutex{},
+		stateCommitDoneCh:        make(chan *ledger.BlockAndPvtData),
+		commitCh:                 make(chan *ledger.BlockAndPvtData),
+		indexCh:                  make(chan *indexUpdate),
+		stoppedCommitCh:          make(chan struct{}),
+		stoppedIndexCh:           make(chan struct{}),
+		doneCh:                   make(chan struct{}),
 	}
 
 	// TODO Move the function `GetChaincodeEventListener` to ledger interface and
@@ -122,7 +118,6 @@ func newKVLedger(
 	}
 
 	go l.commitWatcher(btlPolicy)
-	go l.blockWriter()
 	go l.indexWriter()
 
 	return l, nil
@@ -131,7 +126,7 @@ func newKVLedger(
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDoneCh)
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.stateCommitDoneCh)
 	return err
 }
 
@@ -362,6 +357,11 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	stopWatch := metrics.StopWatch("kvledger_CommitWithPvtData_duration")
 	defer stopWatch()
 
+	blockNo := pvtdataAndBlock.Block.GetHeader().GetNumber()
+	if blockNo > 0 {
+		l.waitForBlock(context.Background(), blockNo-1)
+	}
+
 	l.blockAPIsRWLock.Lock()
 	err := l.cacheBlock(pvtdataAndBlock)
 	if err != nil {
@@ -382,26 +382,16 @@ func (l *kvLedger) commitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	block := pvtdataAndBlock.Block
 	blockNo := pvtdataAndBlock.Block.Header.Number
 
-	startCommitBlockStorage := time.Now()
 	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
-
-	startStateValidation := time.Now()
-	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
 
 	if err := l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
 		return errors.WithMessage(err, `Error during commit to block store`)
 	}
 
-	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
-
-	logger.Infof("Channel [%s]: Committed block [%d] with %d transaction(s)", metrics.FilterMetricName(l.ledgerID), block.Header.Number, len(block.Data.Data))
-
-	startCommitState := time.Now()
 	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
 	if err := l.txtmgmt.Commit(); err != nil {
 		return errors.WithMessage(err, `Error during commit to txmgr`)
 	}
-	elapsedCommitState := time.Since(startCommitState) / time.Millisecond // duration in ms
 
 	// History database could be written in parallel with state and/or async as a future optimization,
 	// although it has not been a bottleneck...no need to clutter the log with elapsed duration.
@@ -417,31 +407,25 @@ func (l *kvLedger) commitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		return errors.WithMessage(err, `Error during checkpoint`)
 	}
 
-	// TODO: Monitor that block is written (panic if not). Basically need to have blocking version of CheckpointBlock.
-
-	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
-
-	// KEEP EVEN WHEN metrics.debug IS OFF
-	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
-
-	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
-		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
-		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
-
 	return nil
 }
 
-func (l *kvLedger) blockWriter() {
+func (l *kvLedger) waitForBlock(ctx context.Context, blockNumber uint64) error {
+	store, ok := l.blockStore.BlockStore.(blockCommitNotifier)
+	if !ok {
+		return nil
+	}
+
 	for {
+		committedBlockNumber, nextBlockCh := store.BlockCommitted()
+		if committedBlockNumber >= blockNumber {
+			return nil
+		}
+
 		select {
-		case <-l.doneCh:
-			close(l.stoppedCommitCh)
-			return
-		case pvtdataAndBlock := <-l.commitCh:
-			err := l.commitWithPvtData(pvtdataAndBlock)
-			if err != nil {
-				panic(fmt.Sprintf("%s", err))
-			}
+		case <-ctx.Done():
+			return errors.New("timed out waiting for commit to complete")
+		case <-nextBlockCh:
 		}
 	}
 }
@@ -501,38 +485,110 @@ func (l *kvLedger) Close() {
 
 	close(l.doneCh)
 	<-l.stoppedCommitCh
-	<-l.stoppedCommitDoneCh
+	<-l.stateCommitDoneCh
 	<-l.stoppedIndexCh
 
 	l.blockStore.Shutdown()
 	l.txtmgmt.Shutdown()
 }
 
+// TODO: merge into BlockStore interface
+type blockCommitNotifier interface {
+	BlockCommitted() (uint64, chan struct{})
+}
+
 // commitWatcher gets notified when each commit is done and it performs required cache cleanup
 func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
+	// TODO: merge interfaces
+	store, ok := l.blockStore.BlockStore.(blockCommitNotifier)
+	if !ok {
+		panic("commitWatcher using an incompatible blockStore")
+	}
+
+	blockNo, nextBlockCh := store.BlockCommitted()
+
+	type blockCommitProgress struct {
+		nextBlock *common.Block
+		commitStartTime time.Time
+		stateCommittedDuration, elapsedBlockStorage time.Duration
+		blockCommitted, stateCommitted bool
+	}
+	commitProgress := make(map[uint64]*blockCommitProgress)
+
+	checkForDone := func(cp *blockCommitProgress) {
+		if cp.blockCommitted && cp.stateCommitted {
+			elapsedCommitWithPvtData := time.Since(cp.commitStartTime)
+
+			metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(blockNo))
+			metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_commited_duration", metrics.FilterMetricName(l.ledgerID))).Record(elapsedCommitWithPvtData)
+			if metrics.IsDebug() {
+				metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_commited_state_duration", metrics.FilterMetricName(l.ledgerID))).Record(cp.stateCommittedDuration)
+				metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_commited_block_duration", metrics.FilterMetricName(l.ledgerID))).Record(cp.elapsedBlockStorage)
+			}
+
+			// TODO: more precise start times for elapsedBlockStorage and stateCommittedDuration
+			logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (block_commit=%dms state_commit=%dms)",
+				l.ledgerID, blockNo, len(cp.nextBlock.Data.Data), elapsedCommitWithPvtData/time.Millisecond, cp.elapsedBlockStorage/time.Millisecond, cp.stateCommittedDuration/time.Millisecond)
+
+			delete(commitProgress, cp.nextBlock.GetHeader().GetNumber())
+		}
+	}
 
 	for {
 		select {
-		case <-l.doneCh:
-			close(l.stoppedCommitDoneCh)
+		case <-l.doneCh: // kvledger is shutting down.
+			close(l.stoppedCommitCh)
 			return
-		case pvtdataAndBlock := <-l.commitDoneCh:
-
+		case pvtdataAndBlock := <-l.stateCommitDoneCh: // State has been committed - unpin keys from cache
 			block := pvtdataAndBlock.Block
 			pvtData := pvtdataAndBlock.BlockPvtData
-			logger.Debugf("*** cleaning up pinned tx in cache for cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
 
+			cp, ok := commitProgress[block.Header.Number]
+			if !ok {
+				panic(fmt.Sprintf("unexpected block committed [%d]", block.Header.Number))
+			}
+
+			logger.Debugf("*** cleaning up pinned tx in cache for cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
 			validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
 			if err != nil {
-				logger.Errorf(" failed to clear cache for committed block %d : %s", pvtdataAndBlock.Block.Header.GetNumber(), err)
+				logger.Errorf(" failed to clear pinned tx for committed block %d : %s", pvtdataAndBlock.Block.Header.GetNumber(), err)
 			}
 			pvtDataKeys, _, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
 			if err != nil {
-				logger.Errorf(" failed to clear cache for committed block %d : %s", pvtdataAndBlock.Block.Header.GetNumber(), err)
+				logger.Errorf(" failed to clear pinned tx for committed block %d : %s", pvtdataAndBlock.Block.Header.GetNumber(), err)
 			}
 
-			// Update the cache
 			l.kvCacheProvider.OnTxCommit(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
+
+			cp.stateCommittedDuration = time.Since(cp.commitStartTime)
+			cp.stateCommitted = true
+			checkForDone(cp)
+		case <-nextBlockCh:  // A block has been committed to storage.
+			blockNo, nextBlockCh = store.BlockCommitted()
+
+			if !ledgerconfig.IsCommitter() { // TODO: refactor AddBlock to do similar
+				continue
+			}
+
+			cp, ok := commitProgress[blockNo]
+			if !ok {
+				panic(fmt.Sprintf("unexpected block committed [%d, %d]", blockNo, cp.nextBlock.Header.Number))
+			}
+
+			cp.elapsedBlockStorage = time.Since(cp.commitStartTime)
+			cp.blockCommitted = true
+			checkForDone(cp)
+		case pvtdataAndBlock := <-l.commitCh: // Process next block through commit workflow (should be last case statement).
+			cp := blockCommitProgress{
+				nextBlock:       pvtdataAndBlock.Block,
+				commitStartTime: time.Now(),
+			}
+			commitProgress[pvtdataAndBlock.Block.GetHeader().GetNumber()] = &cp
+
+			err := l.commitWithPvtData(pvtdataAndBlock)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 }
