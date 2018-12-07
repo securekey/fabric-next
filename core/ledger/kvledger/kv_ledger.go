@@ -50,13 +50,12 @@ type kvLedger struct {
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
 
-	commitDoneCh        chan *ledger.BlockAndPvtData
-	commitCh            chan *ledger.BlockAndPvtData
-	indexCh             chan *indexUpdate
-	stoppedCommitCh     chan struct{}
-	stoppedCommitDoneCh chan struct{}
-	stoppedIndexCh      chan struct{}
-	doneCh              chan struct{}
+	stateCommitDoneCh        chan *ledger.BlockAndPvtData
+	commitCh                 chan *ledger.BlockAndPvtData
+	indexCh                  chan *indexUpdate
+	stoppedCommitCh          chan struct{}
+	stoppedIndexCh           chan struct{}
+	doneCh                   chan struct{}
 }
 
 // NewKVLedger constructs new `KVLedger`
@@ -74,19 +73,18 @@ func newKVLedger(
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
 	l := &kvLedger{
-		ledgerID:            ledgerID,
-		blockStore:          blockStore,
-		historyDB:           historyDB,
-		versionedDB:         versionedDB,
-		kvCacheProvider:     versionedDB.GetKVCacheProvider(),
-		blockAPIsRWLock:     &sync.RWMutex{},
-		commitDoneCh:        make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
-		commitCh:            make(chan *ledger.BlockAndPvtData),
-		indexCh:             make(chan *indexUpdate),
-		stoppedCommitCh:     make(chan struct{}),
-		stoppedCommitDoneCh: make(chan struct{}),
-		stoppedIndexCh:      make(chan struct{}),
-		doneCh:              make(chan struct{}),
+		ledgerID:                 ledgerID,
+		blockStore:               blockStore,
+		historyDB:                historyDB,
+		versionedDB:              versionedDB,
+		kvCacheProvider:          versionedDB.GetKVCacheProvider(),
+		blockAPIsRWLock:          &sync.RWMutex{},
+		stateCommitDoneCh:        make(chan *ledger.BlockAndPvtData, commitWatcherQueueLen),
+		commitCh:                 make(chan *ledger.BlockAndPvtData),
+		indexCh:                  make(chan *indexUpdate),
+		stoppedCommitCh:          make(chan struct{}),
+		stoppedIndexCh:           make(chan struct{}),
+		doneCh:                   make(chan struct{}),
 	}
 
 	// TODO Move the function `GetChaincodeEventListener` to ledger interface and
@@ -122,7 +120,6 @@ func newKVLedger(
 	}
 
 	go l.commitWatcher(btlPolicy)
-	go l.blockWriter()
 	go l.indexWriter()
 
 	return l, nil
@@ -131,7 +128,7 @@ func newKVLedger(
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.commitDoneCh)
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, l.stateCommitDoneCh)
 	return err
 }
 
@@ -386,7 +383,6 @@ func (l *kvLedger) commitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	logger.Debugf("[%s] Committing block [%d] to storage", l.ledgerID, blockNo)
 
 	startStateValidation := time.Now()
-	elapsedStateValidation := time.Since(startStateValidation) / time.Millisecond // duration in ms
 
 	if err := l.blockStore.CommitWithPvtData(pvtdataAndBlock); err != nil {
 		return errors.WithMessage(err, `Error during commit to block store`)
@@ -417,31 +413,46 @@ func (l *kvLedger) commitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		return errors.WithMessage(err, `Error during checkpoint`)
 	}
 
-	// TODO: Monitor that block is written (panic if not). Basically need to have blocking version of CheckpointBlock.
+	ctx, cancel := context.WithTimeout(context.Background(), 60 * time.Second) // TODO: make configurable
+	err := l.waitForCommit(ctx, blockNo)
+	if err != nil {
+		panic(err)
+	}
+	cancel()
 
 	elapsedCommitWithPvtData := time.Since(startStateValidation) / time.Millisecond // total duration in ms
 
 	// KEEP EVEN WHEN metrics.debug IS OFF
 	metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(block.Header.Number))
 
-	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (state_validation=%dms block_commit=%dms state_commit=%dms)",
+	logger.Infof("[%s] Committed block [%d] with %d transaction(s) in %dms (block_commit=%dms state_commit=%dms)",
 		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedCommitWithPvtData,
-		elapsedStateValidation, elapsedCommitBlockStorage, elapsedCommitState)
+		elapsedCommitBlockStorage, elapsedCommitState)
 
 	return nil
 }
 
-func (l *kvLedger) blockWriter() {
+// TODO: merge into BlockStore interface
+type blockCommitNotifier interface {
+	BlockCommitted() (uint64, chan struct{})
+}
+
+func (l *kvLedger) waitForCommit(ctx context.Context, blockNumber uint64) error {
+	store, ok := l.blockStore.BlockStore.(blockCommitNotifier)
+	if !ok {
+		return nil
+	}
+
 	for {
+		committedBlockNumber, nextBlockCh := store.BlockCommitted()
+		if committedBlockNumber >= blockNumber {
+			return nil
+		}
+
 		select {
-		case <-l.doneCh:
-			close(l.stoppedCommitCh)
-			return
-		case pvtdataAndBlock := <-l.commitCh:
-			err := l.commitWithPvtData(pvtdataAndBlock)
-			if err != nil {
-				panic(fmt.Sprintf("%s", err))
-			}
+		case <-ctx.Done():
+			return errors.New("timed out waiting for commit to complete")
+		case <-nextBlockCh:
 		}
 	}
 }
@@ -501,7 +512,7 @@ func (l *kvLedger) Close() {
 
 	close(l.doneCh)
 	<-l.stoppedCommitCh
-	<-l.stoppedCommitDoneCh
+	<-l.stateCommitDoneCh
 	<-l.stoppedIndexCh
 
 	l.blockStore.Shutdown()
@@ -514,9 +525,14 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 	for {
 		select {
 		case <-l.doneCh:
-			close(l.stoppedCommitDoneCh)
+			close(l.stoppedCommitCh)
 			return
-		case pvtdataAndBlock := <-l.commitDoneCh:
+		case pvtdataAndBlock := <-l.commitCh:
+			err := l.commitWithPvtData(pvtdataAndBlock)
+			if err != nil {
+				panic(fmt.Sprintf("%s", err))
+			}
+		case pvtdataAndBlock := <-l.stateCommitDoneCh:
 
 			block := pvtdataAndBlock.Block
 			pvtData := pvtdataAndBlock.BlockPvtData
