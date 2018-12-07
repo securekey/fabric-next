@@ -7,8 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package statecachedstore
 
 import (
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"sync"
+
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 
 	"sort"
 
@@ -106,16 +107,12 @@ func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.Vers
 
 // GetVersion implements method in VersionedDB interface
 func (c *cachedStateStore) GetVersion(namespace string, key string) (*version.Height, error) {
-	returnVersion, _ := c.GetCachedVersion(namespace, key)
-	//if !keyFound {
-	//	// This if block get executed only during simulation because during commit
-	//	// we always call `LoadCommittedVersions` before calling `GetVersion`
-	//	vv, err := c.GetState(namespace, key)
-	//	if err != nil || vv == nil {
-	//		return nil, err
-	//	}
-	//	returnVersion = vv.Version
-	//}
+	returnVersion, keyFound := c.GetCachedVersion(namespace, key)
+	if !keyFound {
+		// nil/nil means notFound to callers
+		return nil, nil
+
+	}
 	return returnVersion, nil
 }
 
