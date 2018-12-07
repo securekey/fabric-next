@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "57e58bff_7b066cd5",
+        "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 208,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-07T02:32:03Z",
+      "side": 1,
+      "message": "does this go to index if not found?",
+      "range": {
+        "startLine": 208,
+        "startChar": 46,
+        "endLine": 208,
+        "endChar": 60
+      },
+      "revId": "da24e2c1b1445bf2283c01c5f4f5ebe48b159fd4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e743e4a2_d3e9a803",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statecachedstore/cache_statestore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 108,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-07T02:32:03Z",
+      "side": 1,
+      "message": "is this only called during validation?",
+      "range": {
+        "startLine": 108,
+        "startChar": 27,
+        "endLine": 108,
+        "endChar": 37
+      },
+      "revId": "da24e2c1b1445bf2283c01c5f4f5ebe48b159fd4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
