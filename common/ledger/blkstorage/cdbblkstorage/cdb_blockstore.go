@@ -341,6 +341,21 @@ func (s *cdbBlockStore) LastBlockNumber() uint64 {
 	return s.cpInfo.lastBlockNumber
 }
 
+func (s *cdbBlockStore) LastBlockNumberCommitted() uint64 {
+	// this package does not have its own cache, so last block number available and committed is the same.
+	return s.LastBlockNumber()
+}
+
+func (s *cdbBlockStore) BlockCommitted() (uint64, chan struct{}) {
+	// TODO: Should probably make a copy.
+	s.cpInfoMtx.RLock()
+	sigCh := s.cpInfoSig
+	blockNumber := s.cpInfo.lastBlockNumber
+	s.cpInfoMtx.RUnlock()
+
+	return blockNumber, sigCh
+}
+
 func (s *cdbBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
 	var lastBlockNumber uint64
 

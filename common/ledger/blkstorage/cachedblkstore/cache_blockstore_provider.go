@@ -25,7 +25,9 @@ type CachedBlockstoreProvider struct {
 type blockStoreWithCheckpoint interface {
 	blkstorage.BlockStore
 	WaitForBlock(ctx context.Context, blockNum uint64) uint64
+	BlockCommitted() (uint64, chan struct{})
 	LastBlockNumber() uint64
+	LastBlockNumberCommitted() uint64
 }
 
 // NewProvider creates a new BlockStoreProvider that combines a cache (+ index) provider and a backing storage provider
