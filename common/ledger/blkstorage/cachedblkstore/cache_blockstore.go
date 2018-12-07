@@ -285,6 +285,10 @@ func (s *cachedBlockStore) LastBlockNumber() uint64 {
 	return s.bcInfo.GetHeight() - 1
 }
 
+func (s *cachedBlockStore) BlockCommitted() (uint64, chan struct{}) {
+	return s.blockStore.BlockCommitted()
+}
+
 func (s *cachedBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
 	var lastBlockNumber uint64
 
@@ -310,7 +314,6 @@ BlockLoop:
 	logger.Debugf("finished waiting for blocks [%d, %d]", lastBlockNumber, blockNum)
 	return lastBlockNumber
 }
-
 
 func extractTxValidationCode(block *common.Block, txNumber uint64) peer.TxValidationCode {
 	blockMetadata := block.GetMetadata()
