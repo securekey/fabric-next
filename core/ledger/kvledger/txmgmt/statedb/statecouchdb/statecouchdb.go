@@ -15,10 +15,10 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 var logger = flogging.MustGetLogger("statecouchdb")
@@ -146,7 +146,7 @@ func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName st
 	return db, nil
 }
 
-func (vdb *VersionedDB) GetKVCacheProvider() (* kvcache.KVCacheProvider) {
+func (vdb *VersionedDB) GetKVCacheProvider() *kvcache.KVCacheProvider {
 	return vdb.kvCacheProvider
 }
 
@@ -584,7 +584,6 @@ func (scanner *queryScanner) Next() (statedb.QueryResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger.Infof("*** Couchdb GetStateRangeScanIterator next namespace %s key %s value %s", scanner.namespace, key, kv.VersionedValue.Value)
 	return &statedb.VersionedKV{
 		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
 		VersionedValue: *kv.VersionedValue}, nil
