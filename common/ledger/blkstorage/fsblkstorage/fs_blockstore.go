@@ -104,6 +104,11 @@ func (store *fsBlockStore) LastBlockNumber() uint64 {
 	return store.fileMgr.lastBlockNumber()
 }
 
+
+func (store *fsBlockStore) BlockCommitted() (uint64, chan struct{}) {
+	return store.fileMgr.blockCommitted()
+}
+
 func (store *fsBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
 	return store.fileMgr.waitForBlock(ctx, blockNum)
 }
