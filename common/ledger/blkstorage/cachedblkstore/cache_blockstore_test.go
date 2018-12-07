@@ -50,7 +50,10 @@ func TestCheckpointBlock(t *testing.T) {
 	const blockNumber = 0
 	b := mocks.CreateSimpleMockBlock(blockNumber)
 
-	err := cbs.CheckpointBlock(b)
+	err := cbs.AddBlock(b)
+	assert.NoError(t, err, "block should have been added successfully")
+
+	err = cbs.CheckpointBlock(b)
 	assert.NoError(t, err, "block should have been checkpointed successfully")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500 * time.Millisecond)
@@ -58,6 +61,40 @@ func TestCheckpointBlock(t *testing.T) {
 	cbs.blockStore.WaitForBlock(ctx, blockNumber)
 
 	assert.Equal(t, b, cbs.blockStore.(*mockBlockStoreWithCheckpoint).LastBlockCheckpoint, "block should have been checkpointed to store")
+}
+
+func TestBlockCommittedSignal(t *testing.T) {
+	cbs := newMockCachedBlockStore(t)
+
+	const blockNumber = 0
+	b := mocks.CreateSimpleMockBlock(blockNumber)
+
+	signalCh := cbs.BlockCommitted()
+
+	err := cbs.AddBlock(b)
+	assert.NoError(t, err, "block should have been added successfully")
+
+	select {
+	case <- signalCh:
+		t.Fatal("Committed Signal should not have been called")
+	case <- time.After(100 * time.Millisecond):
+	}
+
+	err = cbs.CheckpointBlock(b)
+	assert.NoError(t, err, "block should have been checkpointed successfully")
+
+	cbs.blockStore.(*mockBlockStoreWithCheckpoint).blockCommittedCh = make(chan struct{})
+	close(cbs.blockStore.(*mockBlockStoreWithCheckpoint).blockCommittedCh)
+
+	signalCh = cbs.BlockCommitted()
+
+	select {
+		case <- signalCh:
+		case <- time.After(100 * time.Millisecond):
+			t.Fatal("Committed Signal should have been called")
+	}
+
+	assert.Equal(t, uint64(0), cbs.LastBlockNumber(), "last block committed should be 0")
 }
 
 func TestShutdown(t *testing.T) {
@@ -595,6 +632,7 @@ func newMockCachedBlockStoreWithBlockchainInfo(t *testing.T, mbi *common.Blockch
 
 type mockBlockStoreWithCheckpoint struct {
 	*mocks.MockBlockStore
+	blockCommittedCh chan struct{}
 }
 
 func newMockBlockStoreWithCheckpoint() *mockBlockStoreWithCheckpoint {
@@ -607,11 +645,28 @@ func newMockBlockStoreWithCheckpoint() *mockBlockStoreWithCheckpoint {
 	return &bs
 }
 
+func (m *mockBlockStoreWithCheckpoint) BlockCommitted() (uint64, chan struct{}) {
+	return m.LastBlockNumber(), m.blockCommittedCh
+}
+
 func (m *mockBlockStoreWithCheckpoint) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
-	return blockNum
+	for {
+		select {
+		case <-ctx.Done():
+			return m.LastBlockNumber()
+		case <-time.After(10 * time.Millisecond):
+		}
+
+		if blockNum >= m.LastBlockNumber() {
+			return m.LastBlockNumber()
+		}
+	}
 }
 
 func (m *mockBlockStoreWithCheckpoint) LastBlockNumber() uint64 {
-	return 0
+	return m.LastBlockCheckpoint.GetHeader().GetNumber()
 }
 
+func (m *mockBlockStoreWithCheckpoint) LastBlockNumberCommitted() uint64 {
+	return m.LastBlockCheckpoint.GetHeader().GetNumber()
+}

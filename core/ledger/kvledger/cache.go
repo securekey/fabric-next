@@ -31,9 +31,9 @@ import (
 
 //indexUpdate contains index updates to be applied
 type indexUpdate struct {
-	TxOps       []statedb.ValidatedTxOp
-	PvtData     []statedb.ValidatedPvtData
-	PvtHashData []statedb.ValidatedPvtData
+	TxOps       []kvcache.ValidatedTxOp
+	PvtData     []kvcache.ValidatedPvtData
+	PvtHashData []kvcache.ValidatedPvtData
 }
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
