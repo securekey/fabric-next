@@ -1132,12 +1132,14 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 		}
 		return nil
 	}
-
+	timer := metrics.RootScope.Timer("validateblock_duration").Start()
 	blockAndPvtData, pvtTxns, err := s.ledger.ValidateBlock(block, pvtData, s.validationResponseChan)
 	if err != nil {
 		logger.Errorf("Got error while validating block: %s", err)
+		timer.Stop()
 		return err
 	}
+	timer.Stop()
 
 	// KEEP EVEN WHEN metrics.debug IS OFF
 	metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_validated_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
