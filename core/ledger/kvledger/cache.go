@@ -8,6 +8,7 @@ package kvledger
 
 import (
 	"encoding/base64"
+	"fmt"
 	"math"
 
 	"github.com/hyperledger/fabric/core/ledger"
@@ -27,6 +28,13 @@ import (
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
+
+//indexUpdate contains index updates to be applied
+type indexUpdate struct {
+	TxOps       []statedb.ValidatedTxOp
+	PvtData     []statedb.ValidatedPvtData
+	PvtHashData []statedb.ValidatedPvtData
+}
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
@@ -77,14 +85,9 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	//TODO Need to bring these write locks back
 	//l.txtmgmt.Lock()
 	l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
-	//TODO 'Index update in background' move to background worker thread
-	indexUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(validatedTxOps, pvtDataKeys, pvtDataHashedKeys)
-	err = l.kvCacheProvider.ApplyIndexUpdates(indexUpdates, indexDeletes, l.ledgerID)
-	if err != nil {
-		logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
-		return err
-	}
 	//l.txtmgmt.Unlock()
+
+	l.indexCh <- &indexUpdate{validatedTxOps, pvtDataKeys, pvtDataHashedKeys}
 
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
@@ -195,6 +198,27 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 		}
 	}
 	return validatedTxOps, pvtHashedKeys, txsFilter, nil
+}
+
+//indexWriter worker thread which looks for index updates to be applied to db
+func (l *kvLedger) indexWriter() {
+	for {
+		select {
+		case <-l.doneCh:
+			close(l.stoppedIndexCh)
+			return
+		case indexUpdate := <-l.indexCh:
+			allUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(indexUpdate.TxOps, indexUpdate.PvtData, indexUpdate.PvtHashData)
+			//TODO Need to bring these read locks back
+			//l.txtmgmt.RLock()
+			err := l.kvCacheProvider.ApplyIndexUpdates(allUpdates, indexDeletes, l.ledgerID)
+			//l.txtmgmt.RUnlock()
+			if err != nil {
+				logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
+				panic(fmt.Sprintf("%s", err))
+			}
+		}
+	}
 }
 
 func processNonEndorserTx(txEnv *common.Envelope, txid string, txType common.HeaderType, txmgr txmgr.TxMgr) (*rwset.TxReadWriteSet, error) {
