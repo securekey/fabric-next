@@ -21,19 +21,19 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/mempvtdatacache"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 	"github.com/hyperledger/fabric/protos/utils"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 //indexUpdate contains index updates to be applied
 type indexUpdate struct {
-	TxOps       []statedb.ValidatedTxOp
-	PvtData     []statedb.ValidatedPvtData
-	PvtHashData []statedb.ValidatedPvtData
+	TxOps       []kvcache.ValidatedTxOp
+	PvtData     []kvcache.ValidatedPvtData
+	PvtHashData []kvcache.ValidatedPvtData
 }
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
