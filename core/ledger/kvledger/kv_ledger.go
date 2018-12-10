@@ -123,6 +123,10 @@ func newKVLedger(
 		}
 	}
 
+	fmt.Println("\n\n #################################################################################")
+	fmt.Println(" CREATED NEW KV LEDGER")
+	fmt.Println("#################################################################################\n\n.")
+
 	go l.commitWatcher(btlPolicy)
 	go l.blockWriter()
 	go l.indexWriter()
