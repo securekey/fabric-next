@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "6bffda08_f974f737",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 148,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-12-10T19:12:35Z",
+      "side": 1,
+      "message": "txmgr.pendingLock.Lock()/Unlock()?",
+      "range": {
+        "startLine": 148,
+        "startChar": 14,
+        "endLine": 148,
+        "endChar": 15
+      },
+      "revId": "0566f618a8ac20dc88182945a396a4ace1546df4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
