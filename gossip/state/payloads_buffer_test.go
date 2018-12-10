@@ -51,14 +51,14 @@ func TestPayloadsBufferImpl_Push(t *testing.T) {
 	t.Log("Pushing new payload into buffer")
 	buffer.Push(payload)
 
-	// Payloads with sequence number less than buffer top
+	// Payloads with sequence number less than buffer height
 	// index should not be accepted
 	t.Log("Getting next block sequence number")
 	assert.Equal(t, buffer.Next(), uint64(5))
 	t.Log("Check block buffer size")
 	assert.Equal(t, buffer.Size(), 0)
 
-	// Adding new payload with seq. number equal to top
+	// Adding new payload with seq. number equal to height
 	// payload should not be added
 	payload, err = randomPayloadWithSeqNum(5)
 	if err != nil {
@@ -78,9 +78,10 @@ func TestPayloadsBufferImpl_Ready(t *testing.T) {
 	buffer := NewPayloadsBuffer(1)
 	assert.Equal(t, buffer.Next(), uint64(1))
 
+	_, baSig := buffer.BlockHeightAvailable()
 	go func() {
-		<-buffer.Ready()
-		fin <- struct{}{}
+		<-baSig
+		close(fin)
 	}()
 
 	time.AfterFunc(100*time.Millisecond, func() {
@@ -125,9 +126,10 @@ func TestPayloadsBufferImpl_ConcurrentPush(t *testing.T) {
 	ready := int32(0)
 	readyWG := sync.WaitGroup{}
 	readyWG.Add(1)
+	_, baSig := buffer.BlockHeightAvailable()
 	go func() {
 		// Wait for next expected block to arrive
-		<-buffer.Ready()
+		<-baSig
 		atomic.AddInt32(&ready, 1)
 		readyWG.Done()
 	}()
@@ -148,7 +150,7 @@ func TestPayloadsBufferImpl_ConcurrentPush(t *testing.T) {
 	assert.Equal(t, 1, buffer.Size())
 }
 
-// Tests the scenario where payload pushes and pops are interleaved after a Ready() signal.
+// Tests the scenario where payload pushes and pops are interleaved after a BlockHeightAvailable() signal.
 func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	buffer := NewPayloadsBuffer(1)
 	assert.Equal(t, buffer.Next(), uint64(1))
@@ -161,7 +163,7 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	//
 	// Payloads are pushed into the buffer. These payloads can be out of order.
 	// When the buffer has a sequence of payloads ready (in order), it fires a signal
-	// on it's Ready() channel.
+	// on it's BlockHeightAvailable() channel.
 	//
 	// The consumer waits for the signal and then drains all ready payloads.
 
@@ -171,10 +173,11 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 
 	payload, err = randomPayloadWithSeqNum(2)
 	assert.NoError(t, err, "generating random payload failed")
+	_, baSig := buffer.BlockHeightAvailable()
 	buffer.Push(payload)
 
 	select {
-	case <-buffer.Ready():
+	case <-baSig:
 	case <-time.After(500 * time.Millisecond):
 		t.Error("buffer wasn't ready after 500 ms for first sequence")
 	}
@@ -184,8 +187,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	}
 
 	// The buffer isn't ready since no new sequences have come since emptying the buffer.
+	_, baSig = buffer.BlockHeightAvailable()
 	select {
-	case <-buffer.Ready():
+	case <-baSig:
 		t.Error("buffer should not be ready as no new sequences have come")
 	case <-time.After(500 * time.Millisecond):
 	}
@@ -195,10 +199,11 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	//
 	payload, err = randomPayloadWithSeqNum(3)
 	assert.NoError(t, err, "generating random payload failed")
+	_, baSig = buffer.BlockHeightAvailable()
 	buffer.Push(payload)
 
 	select {
-	case <-buffer.Ready():
+	case <-baSig:
 	case <-time.After(500 * time.Millisecond):
 		t.Error("buffer wasn't ready after 500 ms for second sequence")
 	}
@@ -228,8 +233,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	//
 	// Now we see that goroutines are building up due to the interleaved push and pops above.
 	//
+	_, baSig = buffer.BlockHeightAvailable()
 	select {
-	case <-buffer.Ready():
+	case <-baSig:
 		//
 		// Should be error - no payloads are ready
 		//
@@ -242,8 +248,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	t.Logf("payload: %v", payload)
 	assert.Nil(t, payload, "payload should be nil")
 
+	_, baSig = buffer.BlockHeightAvailable()
 	select {
-	case <-buffer.Ready():
+	case <-baSig:
 		//
 		// Should be error - no payloads are ready
 		//
@@ -256,8 +263,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	assert.Nil(t, payload, "payload should be nil")
 	t.Logf("payload: %v", payload)
 
+	_, baSig = buffer.BlockHeightAvailable()
 	select {
-	case <-buffer.Ready():
+	case <-baSig:
 		t.Error("buffer ready (3)")
 	case <-time.After(500 * time.Millisecond):
 		t.Log("buffer not ready (3) -- good")

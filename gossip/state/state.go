@@ -651,14 +651,18 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 func (s *GossipStateProviderImpl) deliverPayloads() {
 	defer s.done.Done()
 
+	height, heightSig := s.payloads.BlockHeightAvailable()
+
 	for {
 		select {
 		// Wait for notification that next seq has arrived
-		case <-s.payloads.Ready():
+		case <-heightSig:
+			height, heightSig = s.payloads.BlockHeightAvailable()
+
 			if metrics.IsDebug() {
-				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_ready", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
+				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_ready", metrics.FilterMetricName(s.chainID))).Update(float64(height - 1))
 			}
-			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
+			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, height)
 			// Collect all subsequent payloads
 			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
 				// KEEP EVEN WHEN metrics.debug IS OFF

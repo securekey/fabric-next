@@ -8,7 +8,6 @@ package state
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -34,7 +33,7 @@ type PayloadsBuffer interface {
 
 	// Channel to indicate event when new payload pushed with sequence
 	// number equal to the next expected value.
-	Ready() chan struct{}
+	BlockHeightAvailable() (uint64, chan struct{})
 
 	Close()
 }
@@ -42,32 +41,31 @@ type PayloadsBuffer interface {
 // PayloadsBufferImpl structure to implement PayloadsBuffer interface
 // store inner state of available payloads and sequence numbers
 type PayloadsBufferImpl struct {
-	next uint64
-
-	buf map[uint64]*proto.Payload
-
-	readyChan chan struct{}
-
-	mutex sync.RWMutex
-
-	logger *logging.Logger
+	next       uint64
+	height     uint64
+	baSignalCh chan struct{}
+	buf        map[uint64]*proto.Payload
+	mutex      sync.RWMutex
+	logger     *logging.Logger
 }
 
 // NewPayloadsBuffer is factory function to create new payloads buffer
 func NewPayloadsBuffer(next uint64) PayloadsBuffer {
 	return &PayloadsBufferImpl{
-		buf:       make(map[uint64]*proto.Payload),
-		readyChan: make(chan struct{}, 1),
-		next:      next,
-		logger:    util.GetLogger(util.LoggingStateModule, ""),
+		buf:        make(map[uint64]*proto.Payload),
+		baSignalCh: make(chan struct{}),
+		next:       next,
+		logger:     util.GetLogger(util.LoggingStateModule, ""),
 	}
 }
 
-// Ready function returns the channel which indicates whenever expected
+// BlockHeightAvailable function returns the channel which indicates whenever expected
 // next block has arrived and one could safely pop out
 // next sequence of blocks
-func (b *PayloadsBufferImpl) Ready() chan struct{} {
-	return b.readyChan
+func (b *PayloadsBufferImpl) BlockHeightAvailable() (uint64, chan struct{}) {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+	return b.height, b.baSignalCh
 }
 
 // Push new payload into the buffer structure in case new arrived payload
@@ -88,18 +86,19 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) bool {
 	b.buf[seqNum] = payload
 
 	// Send notification that next sequence has arrived
-
-	if seqNum == b.next && len(b.readyChan) == 0 {
-		b.readyChan <- struct{}{}
-	}
+	b.height = seqNum + 1
+	close(b.baSignalCh)
+	b.baSignalCh = make(chan struct{})
 
 	return true
 }
 
 // Next function provides the number of the next expected block
 func (b *PayloadsBufferImpl) Next() uint64 {
-	// Atomically read the value of the top sequence number
-	return atomic.LoadUint64(&b.next)
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.next
 }
 
 // Pop function extracts the payload according to the next expected block
@@ -108,44 +107,26 @@ func (b *PayloadsBufferImpl) Pop() *proto.Payload {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	result := b.buf[b.Next()]
+	result := b.buf[b.next]
 
 	if result != nil {
 		// If there is such sequence in the buffer need to delete it
-		delete(b.buf, b.Next())
+		delete(b.buf, b.next)
 		// Increment next expect block index
-		atomic.AddUint64(&b.next, 1)
-
-		b.drainReadChannel()
-
+		b.next = b.next + 1
 	}
 
 	return result
-}
-
-// drainReadChannel empties ready channel in case last
-// payload has been poped up and there are still awaiting
-// notifications in the channel
-func (b *PayloadsBufferImpl) drainReadChannel() {
-	if len(b.buf) == 0 {
-		for {
-			if len(b.readyChan) > 0 {
-				<-b.readyChan
-			} else {
-				break
-			}
-		}
-	}
 }
 
 // Size returns current number of payloads stored within buffer
 func (b *PayloadsBufferImpl) Size() int {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
+
 	return len(b.buf)
 }
 
 // Close cleanups resources and channels in maintained
 func (b *PayloadsBufferImpl) Close() {
-	close(b.readyChan)
 }
