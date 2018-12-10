@@ -19,11 +19,11 @@ import (
 
 type KVCacheProvider struct {
 	kvCacheMap map[string]*KVCache
-	kvCacheMtx sync.RWMutex
+	kvCacheMtx sync.Mutex
 }
 
 func NewKVCacheProvider() *KVCacheProvider {
-	return &KVCacheProvider{kvCacheMap: make(map[string]*KVCache), kvCacheMtx: sync.RWMutex{}}
+	return &KVCacheProvider{kvCacheMap: make(map[string]*KVCache), kvCacheMtx: sync.Mutex{}}
 }
 
 func (p *KVCacheProvider) getKVCache(chId string, namespace string) (*KVCache, error) {
@@ -42,8 +42,8 @@ func (p *KVCacheProvider) getKVCache(chId string, namespace string) (*KVCache, e
 }
 
 func (p *KVCacheProvider) GetKVCache(chId string, namespace string) (*KVCache, error) {
-	p.kvCacheMtx.RLock()
-	defer p.kvCacheMtx.RUnlock()
+	p.kvCacheMtx.Lock()
+	defer p.kvCacheMtx.Unlock()
 
 	return p.getKVCache(chId, namespace)
 }
@@ -176,8 +176,8 @@ func (p *KVCacheProvider) OnTxCommit(validatedTxOps []ValidatedTxOp, validatedPv
 }
 
 func (p *KVCacheProvider) GetLeveLDBIterator(namespace, startKey, endKey, ledgerID string) (*leveldbhelper.Iterator, error) {
-	p.kvCacheMtx.RLock()
-	defer p.kvCacheMtx.RUnlock()
+	p.kvCacheMtx.Lock()
+	defer p.kvCacheMtx.Unlock()
 	stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
 	if err != nil {
 		return nil, err
@@ -265,10 +265,10 @@ func (p *KVCacheProvider) ApplyIndexUpdates(indexUpdates []*statekeyindex.IndexU
 //TODO possible memory issues if empty start/end key used in case of huge cache
 func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey string) []string {
 
-	p.kvCacheMtx.RLock()
-	defer p.kvCacheMtx.RUnlock()
+	p.kvCacheMtx.Lock()
+	defer p.kvCacheMtx.Unlock()
 
-	kvCache, _ := p.GetKVCache(chId, namespace)
+	kvCache, _ := p.getKVCache(chId, namespace)
 	sortedKeys := util.GetSortedKeys(kvCache.keys)
 	var keyRange []string
 	foundStartKey := startKey == ""
@@ -292,10 +292,10 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 
 //GetNonDurableSortedKeys returns non durable cache sorted keys
 func (p *KVCacheProvider) GetNonDurableSortedKeys(chId, namespace string) []string {
-	p.kvCacheMtx.RLock()
-	defer p.kvCacheMtx.RUnlock()
+	p.kvCacheMtx.Lock()
+	defer p.kvCacheMtx.Unlock()
 
-	kvCache, _ := p.GetKVCache(chId, namespace)
+	kvCache, _ := p.getKVCache(chId, namespace)
 	stopWatch := metrics.StopWatch("getnondurablesortedkeys_duration")
 	keys := kvCache.getNonDurableSortedKeys()
 	stopWatch()
