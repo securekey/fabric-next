@@ -392,7 +392,7 @@ func (l *kvLedger) commitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	}
 
 	logger.Debugf("[%s] Committing block [%d] transactions to state database", l.ledgerID, blockNo)
-	if err := l.txtmgmt.Commit(); err != nil {
+	if err := l.txtmgmt.Commit(pvtdataAndBlock); err != nil {
 		return errors.WithMessage(err, `Error during commit to txmgr`)
 	}
 
