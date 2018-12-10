@@ -1132,29 +1132,39 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 		}
 		return nil
 	}
-	timer := metrics.RootScope.Timer("validateblock_duration").Start()
+
+	stopWatch := metrics.StopWatch("committer_validateblock_duration")
 	blockAndPvtData, pvtTxns, err := s.ledger.ValidateBlock(block, pvtData, s.validationResponseChan)
 	if err != nil {
 		logger.Errorf("Got error while validating block: %s", err)
-		timer.Stop()
+		stopWatch()
 		return err
 	}
-	timer.Stop()
+	stopWatch()
 
 	// KEEP EVEN WHEN metrics.debug IS OFF
 	metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_validated_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
 
+	stopWatch = metrics.StopWatch("committer_gossipblock_duration")
 	// Gossip messages with other nodes in my org
 	s.gossipBlock(block, blockAndPvtData.BlockPvtData)
+	stopWatch()
 
+	stopWatch = metrics.StopWatch("committer_storeblock_duration")
 	// Commit block with available private transactions
 	err = s.ledger.StoreBlock(blockAndPvtData, pvtTxns)
 	if err != nil {
 		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
+		stopWatch()
 		return err
 	}
+	stopWatch()
+
+	stopWatch = metrics.StopWatch("committer_updateledgerheight_duration")
 	// Update ledger height
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
+	stopWatch()
+
 	logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
 		s.chainID, block.Header.Number, len(block.Data.Data))
 
