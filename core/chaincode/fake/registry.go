@@ -98,7 +98,7 @@ func (fake *Registry) Ready(cname string) {
 	fake.readyArgsForCall = append(fake.readyArgsForCall, struct {
 		cname string
 	}{cname})
-	fake.recordInvocation("Ready", []interface{}{cname})
+	fake.recordInvocation("BlockHeightAvailable", []interface{}{cname})
 	fake.readyMutex.Unlock()
 	if fake.ReadyStub != nil {
 		fake.ReadyStub(cname)

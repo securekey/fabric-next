@@ -82,7 +82,7 @@ func (r *HandlerRegistry) Launching(cname string) (*LaunchState, error) {
 	return launchState, nil
 }
 
-// Ready indicates that the chaincode registration has completed and the
+// BlockHeightAvailable indicates that the chaincode registration has completed and the
 // READY response has been sent to the chaincode.
 func (r *HandlerRegistry) Ready(cname string) {
 	r.mutex.Lock()

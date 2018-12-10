@@ -83,7 +83,7 @@ var _ = Describe("HandlerRegistry", func() {
 		})
 	})
 
-	Describe("Ready", func() {
+	Describe("BlockHeightAvailable", func() {
 		var launchState *chaincode.LaunchState
 
 		BeforeEach(func() {
