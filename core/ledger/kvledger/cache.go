@@ -63,7 +63,7 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 	return nil
 }
 
-func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUpdate, error) {
+func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
@@ -72,13 +72,13 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUp
 	btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
 	validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	pvtDataKeys, validPvtData, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	//Cache update with pinning
@@ -87,22 +87,24 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUp
 	l.kvCacheProvider.UpdateKVCache(block.Header.Number, validatedTxOps, pvtDataKeys, pvtDataHashedKeys, true)
 	//l.txtmgmt.Unlock()
 
+	l.indexCh <- &indexUpdate{validatedTxOps, pvtDataKeys, pvtDataHashedKeys}
+
 	if !ledgerconfig.IsCommitter() {
 		// Update pvt data cache
 		pvtCache, err := getPrivateDataCache(l.ledgerID)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		err = pvtCache.Prepare(block.Header.Number, validPvtData)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		err = pvtCache.Commit()
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &indexUpdate{validatedTxOps, pvtDataKeys, pvtDataHashedKeys}, nil
+	return nil
 }
 
 func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.BTLPolicy) ([]kvcache.ValidatedTxOp, []kvcache.ValidatedPvtData, util.TxValidationFlags, error) {
