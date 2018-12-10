@@ -56,6 +56,7 @@ type dataKey struct {
 	blkNum   uint64
 	txNum    uint64
 	ns, coll string
+	purge    bool
 }
 
 func (s *store) nextBlockNum() uint64 {

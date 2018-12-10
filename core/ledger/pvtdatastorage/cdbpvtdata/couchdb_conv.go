@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"strconv"
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -122,9 +123,18 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 		ei.json[keyBytesHex] = valBytes
 
 		if !expiryBlockCounted[expiryEntry.key.expiringBlk] {
-			ei.expiryKeys = append(ei.expiryKeys, blockNumberToKey(expiryEntry.key.expiringBlk))
-			purgedAt := blockNumberToKey(expiryEntry.key.expiringBlk + expiryEntry.key.expiringBlk%purgeInterval)
-			ei.purgeKeys = append(ei.purgeKeys, purgedAt)
+			expiringBlk := blockNumberToKey(expiryEntry.key.expiringBlk)
+			if !stringInSlice(expiringBlk, ei.expiryKeys) {
+				ei.expiryKeys = append(ei.expiryKeys, expiringBlk)
+			}
+			purgeAt := expiryEntry.key.expiringBlk
+			if purgeAt%purgeInterval != 0 {
+				purgeAt = expiryEntry.key.expiringBlk + (purgeInterval - expiryEntry.key.expiringBlk%purgeInterval)
+			}
+			purgeAtStr := blockNumberToKey(purgeAt)
+			if !stringInSlice(purgeAtStr, ei.purgeKeys) {
+				ei.purgeKeys = append(ei.purgeKeys, purgeAtStr)
+			}
 			expiryBlockCounted[expiryEntry.key.expiringBlk] = true
 		}
 	}
@@ -201,6 +211,14 @@ func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataRe
 }
 
 func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtDataResponse, error) {
+
+	purgeInterval := ledgerconfig.GetPvtdataStorePurgeInterval()
+	limit := ledgerconfig.GetQueryLimit()
+	if purgeInterval > uint64(limit) {
+		return nil, errors.Errorf("Purge cannot be performed successfully since purge interval[%d] is greater than query limit[%d]", purgeInterval, limit)
+	}
+
+	skip := 0
 	const queryFmt = `
 	{
 		"selector": {
@@ -210,10 +228,12 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
 				}
 			}
 		},
-		"use_index": ["_design/` + purgeBlockNumbersIndexDoc + `", "` + purgeBlockNumbersIndexName + `"]
+		"use_index": ["_design/` + purgeBlockNumbersIndexDoc + `", "` + purgeBlockNumbersIndexName + `"],
+    	"limit": %d,
+    	"skip": %d
 	}`
 
-	results, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id))
+	results, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
 	if err != nil {
 		return nil, err
 	}
