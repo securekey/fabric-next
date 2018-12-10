@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa6a3086_b7108ec4",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 1135,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-10T15:13:53Z",
+      "side": 1,
+      "message": "shouldn\u0027t all of these timers in this change use metrics.StopWatch?\n\nSo that it only shows up in debug.",
+      "range": {
+        "startLine": 1135,
+        "startChar": 10,
+        "endLine": 1135,
+        "endChar": 77
+      },
+      "revId": "f079288f937c3cf1654560fe466593257068331a",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
