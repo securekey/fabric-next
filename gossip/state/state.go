@@ -1035,6 +1035,7 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 
 	if s.payloads.Push(payload) {
 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
+		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_length", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Size()))
 		logger.Debugf("[%s] Adding Payload to local buffer done, blockNum = [%d]", s.chainID, payload.SeqNum)
 	}
 
