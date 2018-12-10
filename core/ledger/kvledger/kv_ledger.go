@@ -47,6 +47,7 @@ type kvLedger struct {
 	kvCacheProvider        *kvcache.KVCacheProvider
 	configHistoryRetriever ledger.ConfigHistoryRetriever
 	blockAPIsRWLock        *sync.RWMutex
+	bcInfo                 *common.BlockchainInfo
 
 	stateCommitDoneCh chan *ledger.BlockAndPvtData
 	commitCh          chan *ledger.BlockAndPvtData
@@ -107,11 +108,12 @@ func newKVLedger(
 	l.configHistoryRetriever = configHistoryMgr.GetRetriever(ledgerID, l)
 
 	// pre populate non durable private data cache
-	blkInfo, err := blockStore.GetBlockchainInfo()
+	var err error
+	l.bcInfo, err = blockStore.GetBlockchainInfo()
 	if err != nil {
 		logger.Warningf("Skipping pre populate of non-durable private data cache due to failed fetching BlockChainInfo [ledgerID:%s] - error : %s", ledgerID, err)
 	} else {
-		err = l.populateNonDurablePvtCache(blkInfo.Height)
+		err = l.populateNonDurablePvtCache(l.bcInfo.Height)
 		if err != nil {
 			logger.Warningf("Skipping pre populate of non-durable private data cache on new KV ledger because it failed [ledgerID:%s] - error : %s", ledgerID, err)
 		}
@@ -242,10 +244,9 @@ func (l *kvLedger) GetTransactionByID(txID string, hints ...ledger.SearchHint) (
 
 // GetBlockchainInfo returns basic info about blockchain
 func (l *kvLedger) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	bcInfo, err := l.blockStore.GetBlockchainInfo()
 	l.blockAPIsRWLock.RLock()
 	defer l.blockAPIsRWLock.RUnlock()
-	return bcInfo, err
+	return l.bcInfo, nil
 }
 
 // GetBlockByNumber returns block at a given height
@@ -261,9 +262,6 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	blockNo := pvtdataAndBlock.Block.Header.Number
 	block := pvtdataAndBlock.Block
 
-	l.blockAPIsRWLock.Lock()
-	defer l.blockAPIsRWLock.Unlock()
-
 	logger.Debugf("[%s] Adding block [%d] to storage", l.ledgerID, blockNo)
 	startCommitBlockStorage := time.Now()
 	err := l.blockStore.AddBlock(pvtdataAndBlock.Block)
@@ -273,17 +271,24 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 
 	logger.Debugf("[%s] Adding block [%d] transactions to state cache", l.ledgerID, blockNo)
+
+	l.blockAPIsRWLock.Lock()
 	startStateCacheStorage := time.Now()
-	err = l.cacheBlock(pvtdataAndBlock)
+	indexUpdate, err := l.cacheBlock(pvtdataAndBlock)
 	if err != nil {
+		l.blockAPIsRWLock.Unlock()
 		return err
 	}
 	elapsedCacheBlock := time.Since(startStateCacheStorage) / time.Millisecond // total duration in ms
-
+	//update local block chain info
 	err = l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
 	if err != nil {
 		return err
 	}
+	l.updateBlockchainInfo(pvtdataAndBlock.Block)
+	l.blockAPIsRWLock.Unlock()
+
+	l.indexCh <- indexUpdate
 
 	elapsedAddBlock := time.Since(startCommitBlockStorage) / time.Millisecond // total duration in ms
 
@@ -358,13 +363,16 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 	defer stopWatch()
 
 	l.blockAPIsRWLock.Lock()
-	err := l.cacheBlock(pvtdataAndBlock)
+	indexUpdate, err := l.cacheBlock(pvtdataAndBlock)
 	if err != nil {
 		l.blockAPIsRWLock.Unlock()
 		panic(fmt.Errorf("block was not cached [%s]", err))
 	}
+	//update local block chain info
+	l.updateBlockchainInfo(pvtdataAndBlock.Block)
 	l.blockAPIsRWLock.Unlock()
 
+	l.indexCh <- indexUpdate
 	l.commitCh <- pvtdataAndBlock
 
 	return nil
@@ -565,6 +573,16 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 				panic(err)
 			}
 		}
+	}
+}
+
+func (l *kvLedger) updateBlockchainInfo(block *common.Block) {
+	hash := block.GetHeader().Hash()
+	number := block.GetHeader().GetNumber()
+	l.bcInfo = &common.BlockchainInfo{
+		Height:            number + 1,
+		CurrentBlockHash:  hash,
+		PreviousBlockHash: block.Header.PreviousHash,
 	}
 }
 
