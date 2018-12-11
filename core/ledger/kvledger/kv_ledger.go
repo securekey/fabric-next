@@ -349,6 +349,18 @@ func (l *kvLedger) NewQueryExecutor() (ledger.QueryExecutor, error) {
 	return l.txtmgmt.NewQueryExecutor(util.GenerateUUID())
 }
 
+// GetState return state from db
+func (l *kvLedger) GetState(namespace string, key string) ([]byte, error) {
+	vv, err := l.txtmgmt.GetDB().GetState(namespace, key)
+	if err != nil {
+		return nil, err
+	}
+	if vv != nil {
+		return vv.Value, nil
+	}
+	return nil, nil
+}
+
 // NewHistoryQueryExecutor gives handle to a history query executor.
 // A client can obtain more than one 'HistoryQueryExecutor's for parallel execution.
 // Any synchronization should be performed at the implementation level if required

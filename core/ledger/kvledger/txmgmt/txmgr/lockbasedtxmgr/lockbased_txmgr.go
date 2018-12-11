@@ -97,6 +97,11 @@ func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 	return txmgr.db.GetLatestSavePoint()
 }
 
+// GetDB returns the db instance
+func (txmgr *LockBasedTxMgr) GetDB() privacyenabledstate.DB {
+	return txmgr.db
+}
+
 // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) NewQueryExecutor(txid string) (ledger.QueryExecutor, error) {
 	qe := newQueryExecutor(txmgr, txid, txmgr.btlPolicy)
@@ -146,7 +151,7 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
 	if err != nil {
 		return err
 	}
-	current := update{blockAndPvtData: blockAndPvtdata, batch: batch, commitDoneCh:make(chan struct{})}
+	current := update{blockAndPvtData: blockAndPvtdata, batch: batch, commitDoneCh: make(chan struct{})}
 	if err := txmgr.invokeNamespaceListeners(&current); err != nil {
 		return err
 	}

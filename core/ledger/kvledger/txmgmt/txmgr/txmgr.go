@@ -18,6 +18,7 @@ package txmgr
 
 import (
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -27,6 +28,7 @@ import (
 // TxMgr - an interface that a transaction manager should implement
 type TxMgr interface {
 	NewQueryExecutor(txid string) (ledger.QueryExecutor, error)
+	GetDB() privacyenabledstate.DB
 	NewTxSimulator(txid string) (ledger.TxSimulator, error)
 	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error
