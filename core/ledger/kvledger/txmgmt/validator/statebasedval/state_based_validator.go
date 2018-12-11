@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package statebasedval
 
 import (
+	"github.com/hyperledger/fabric/common/metrics"
 	"runtime"
 
 	"github.com/hyperledger/fabric/common/flogging"
@@ -62,6 +63,8 @@ func NewValidator(channelID string, db privacyenabledstate.DB) *Validator {
 // preLoadCommittedVersionOfRSet loads committed version of all keys in each
 // transaction's read set into a cache.
 func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block, shouldLoad util.TxFilter) error {
+	stopWatch := metrics.StopWatch("validator_preload_committed_version_rset_duration")
+	defer stopWatch()
 
 	// Collect both public and hashed keys in read sets of all transactions in a given block
 	var pubKeys []*statedb.CompositeKey
@@ -124,6 +127,8 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block, shou
 // preLoadCommittedVersionOfWSet loads committed version of all keys in each
 // transaction's write set into a cache.
 func (v *Validator) preLoadCommittedVersionOfWSet() {
+	stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
+	defer stopWatch()
 
 	for {
 		select {
