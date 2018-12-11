@@ -31,6 +31,7 @@ type commonStore struct {
 
 	isEmpty            bool
 	lastCommittedBlock uint64
+	pendingBlock       uint64
 	batchPending       bool
 	purgerLock         sync.Mutex
 }
@@ -59,13 +60,6 @@ type dataKey struct {
 	purge    bool
 }
 
-func (s *store) nextBlockNum() uint64 {
-	if s.isEmpty {
-		return 0
-	}
-	return s.lastCommittedBlock + 1
-}
-
 func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	s.btlPolicy = btlPolicy
 }
@@ -82,9 +76,9 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
 	}
-	expectedBlockNum := s.nextBlockNum()
-	if expectedBlockNum != blockNum {
-		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d, recived block number=%d", expectedBlockNum, blockNum))
+
+	if s.lastCommittedBlock > blockNum {
+		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Last committed block number in pvt store=%d is greater than recived block number=%d", s.lastCommittedBlock, blockNum))
 	}
 
 	err := s.prepareDB(blockNum, pvtData)
@@ -92,9 +86,11 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		return err
 	}
 
-	s.batchPending = true
-	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
-
+	if len(s.pendingDocs) > 0 {
+		s.batchPending = true
+		logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
+	}
+	s.pendingBlock = blockNum
 	return nil
 }
 
@@ -106,11 +102,19 @@ func (s *store) Commit() error {
 	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_duration")
 	defer stopWatch()
 
+	committingBlockNum := s.pendingBlock
+	if s.pendingDocs == nil {
+		logger.Debugf("There are no committed private data for block [%d] - setting lastCommittedBlock, isEmpty=false and calling performPurgeIfScheduled", committingBlockNum)
+		s.batchPending = false
+		s.lastCommittedBlock = committingBlockNum
+		s.isEmpty = false // if pendingDocs is empty it means pvt data for the committing block is nil, but the block is being committed, so the db is not empty anymore
+		s.performPurgeIfScheduled(committingBlockNum)
+		return nil
+	}
+
 	if !s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
 	}
-	committingBlockNum := s.nextBlockNum()
-	logger.Debugf("Committing private data for block [%d]", committingBlockNum)
 
 	err := s.commitDB(committingBlockNum)
 	if err != nil {
