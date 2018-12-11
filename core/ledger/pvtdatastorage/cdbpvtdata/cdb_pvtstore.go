@@ -70,7 +70,10 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	if err != nil {
 		return err
 	}
-	s.pendingDocs = append(s.pendingDocs, blockDoc)
+
+	if blockDoc != nil {
+		s.pendingDocs = append(s.pendingDocs, blockDoc)
+	}
 
 	return nil
 }

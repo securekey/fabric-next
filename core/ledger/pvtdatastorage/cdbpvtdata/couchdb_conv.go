@@ -49,22 +49,34 @@ func (v jsonValue) toBytes() ([]byte, error) {
 
 func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry, blockNumber uint64, purgeInterval uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
-	jsonMap[idField] = blockNumberToKey(blockNumber)
-	jsonMap[purgeIntervalField] = strconv.FormatUint(purgeInterval, 10)
+	// add blockNumber, purgeInterval, dataJSON if pvt data is not empty
+	if len(dataEntries) > 0 {
+		jsonMap[idField] = blockNumberToKey(blockNumber)
+		jsonMap[purgeIntervalField] = strconv.FormatUint(purgeInterval, 10)
+		dataJSON, err := dataEntriesToJSONValue(dataEntries)
+		if err != nil {
+			return nil, err
+		}
 
-	dataJSON, err := dataEntriesToJSONValue(dataEntries)
-	if err != nil {
-		return nil, err
+		jsonMap[dataField] = dataJSON
 	}
-	jsonMap[dataField] = dataJSON
 
-	ei, err := expiryEntriesToJSONValue(expiryEntries, purgeInterval)
-	if err != nil {
-		return nil, err
+	// add dataJSON if pvt data is not empty
+	if len(expiryEntries) > 0 {
+		ei, err := expiryEntriesToJSONValue(expiryEntries, purgeInterval)
+		if err != nil {
+			return nil, err
+		}
+
+		jsonMap[expiryField] = ei.json
+		jsonMap[purgeBlockNumbersField] = ei.purgeKeys
+		jsonMap[expiryBlockNumbersField] = ei.expiryKeys
 	}
-	jsonMap[expiryField] = ei.json
-	jsonMap[purgeBlockNumbersField] = ei.purgeKeys
-	jsonMap[expiryBlockNumbersField] = ei.expiryKeys
+
+	// return nil coucdb doc if jsonMap is empty
+	if !(len(jsonMap) > 0) {
+		return nil, nil
+	}
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {

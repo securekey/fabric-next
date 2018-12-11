@@ -83,8 +83,8 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
 	}
 	expectedBlockNum := s.nextBlockNum()
-	if expectedBlockNum != blockNum {
-		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d, recived block number=%d", expectedBlockNum, blockNum))
+	if expectedBlockNum > blockNum {
+		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d to be less or equal to recived block number=%d", expectedBlockNum, blockNum))
 	}
 
 	err := s.prepareDB(blockNum, pvtData)
@@ -92,8 +92,10 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		return err
 	}
 
-	s.batchPending = true
-	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
+	if len(s.pendingDocs) > 0 {
+		s.batchPending = true
+		logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
+	}
 
 	return nil
 }
