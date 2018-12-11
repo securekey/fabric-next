@@ -502,11 +502,11 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 		if cp.blockCommitted && cp.stateCommitted {
 			elapsedCommitWithPvtData := time.Since(cp.commitStartTime)
 
-			metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_commited_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(blockNo))
-			metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_commited_duration", metrics.FilterMetricName(l.ledgerID))).Record(elapsedCommitWithPvtData)
+			metrics.RootScope.Gauge(fmt.Sprintf("kvledger_%s_committed_block_number", metrics.FilterMetricName(l.ledgerID))).Update(float64(blockNo))
+			metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_committed_duration", metrics.FilterMetricName(l.ledgerID))).Record(elapsedCommitWithPvtData)
 			if metrics.IsDebug() {
-				metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_commited_state_duration", metrics.FilterMetricName(l.ledgerID))).Record(cp.stateCommittedDuration)
-				metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_commited_block_duration", metrics.FilterMetricName(l.ledgerID))).Record(cp.elapsedBlockStorage)
+				metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_committed_state_duration", metrics.FilterMetricName(l.ledgerID))).Record(cp.stateCommittedDuration)
+				metrics.RootScope.Timer(fmt.Sprintf("kvledger_%s_committed_block_duration", metrics.FilterMetricName(l.ledgerID))).Record(cp.elapsedBlockStorage)
 			}
 
 			// TODO: more precise start times for elapsedBlockStorage and stateCommittedDuration

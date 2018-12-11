@@ -239,7 +239,7 @@ func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProv
 		cnflogger.Debugf("Initializing channel [%s]", chainID)
 		peer.InitChain(chainID)
 	} else {
-		cnflogger.Debugf("I am not a commiter - initializing channel [%s]...", chainID)
+		cnflogger.Debugf("I am not a committer - initializing channel [%s]...", chainID)
 		if err := initializeChannel(chainID); err != nil {
 			cnflogger.Errorf("Error initializing channel [%s]: %s", chainID, err)
 			return shim.Error(fmt.Sprintf("Error initializing channel [%s]: %s", chainID, err))
