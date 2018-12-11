@@ -57,10 +57,11 @@ func TestMetadata(t *testing.T) {
 	assert.NoError(err)
 	assert.True(isEmpty)
 	testLastCommittedBlockHeight(0, assert, store)
-
-	// no pvt data with block 0
+	// no pvt data with block 0 should not store any pvt data
 	assert.NoError(store.Prepare(0, nil))
-	testPendingBatch(true, assert, store)
+	// nil pvtData does not expect to set pending anymore
+	testPendingBatch(false, assert, store)
+	// Commit should throw an error, but lastCommittedBlockHeight should still be increased for the next block
 	assert.NoError(store.Commit())
 	testPendingBatch(false, assert, store)
 	testLastCommittedBlockHeight(1, assert, store)
@@ -69,7 +70,7 @@ func TestMetadata(t *testing.T) {
 	assert.NoError(err)
 	assert.False(isEmpty)
 
-	// pvt data with block 1 - commit
+	// non empty pvt data for block 1
 	assert.NoError(store.Prepare(1, testData))
 	testPendingBatch(true, assert, store)
 	testLastCommittedBlockHeight(1, assert, store)
@@ -84,7 +85,7 @@ func TestMetadata(t *testing.T) {
 	testPendingBatch(false, assert, store)
 	testLastCommittedBlockHeight(2, assert, store)
 
-	// write pvt data for block 2
+	// write non empty pvt data for block 2
 	assert.NoError(store.Prepare(2, testData))
 	testPendingBatch(true, assert, store)
 	testLastCommittedBlockHeight(2, assert, store)
@@ -92,12 +93,11 @@ func TestMetadata(t *testing.T) {
 	testPendingBatch(false, assert, store)
 	testLastCommittedBlockHeight(3, assert, store)
 
-	// write pvt data for block 3 (no data)
+	// write pvt data for block 3 (empty pvt data)
 	assert.NoError(store.Prepare(3, nil))
-	testPendingBatch(true, assert, store)
+	testPendingBatch(false, assert, store)
 	testLastCommittedBlockHeight(3, assert, store)
 	assert.NoError(store.Commit())
-	testPendingBatch(false, assert, store)
 	testLastCommittedBlockHeight(4, assert, store)
 }
 
@@ -121,7 +121,7 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 	assert.NoError(store.Prepare(0, nil))
 	assert.NoError(store.Commit())
 
-	// pvt data with block 1 - commit
+	// pvt data (not empty) with block 1 - commit
 	assert.NoError(store.Prepare(1, testData))
 	assert.NoError(store.Commit())
 
@@ -176,7 +176,7 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	assert.NoError(store.Prepare(0, nil))
 	assert.NoError(store.Commit())
 
-	// write pvt data for block 1
+	// write pvt data (not empty) for block 1
 	testDataForBlk1 := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 2, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
 		produceSamplePvtdata(t, 4, []string{"ns-1:coll-1", "ns-1:coll-2", "ns-2:coll-1", "ns-2:coll-2"}),
@@ -192,9 +192,10 @@ func TestExpiryDataNotIncluded(t *testing.T) {
 	assert.NoError(store.Prepare(2, testDataForBlk2))
 	assert.NoError(store.Commit())
 
-	retrievedData, _ := store.GetPvtDataByBlockNum(1, nil)
-	// block 1 data should still be not expired
-	testutil.AssertEquals(t, retrievedData, testDataForBlk1)
+	retrievedData, err := store.GetPvtDataByBlockNum(0, nil)
+	assert.NoError(err)
+	// block 0 has no pvt data so it should not be stored
+	assert.Nil(retrievedData)
 
 	// Commit block 3 with no pvtdata
 	assert.NoError(store.Prepare(3, nil))
@@ -299,6 +300,61 @@ func TestStorePurge(t *testing.T) {
 
 	// "ns-2:coll-1" should never have been purged (because, it was no btl was declared for this)
 	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+}
+
+func TestStorePurgeWithEmptPvtData(t *testing.T) {
+	ledgerid := "TestStorePurgeWithEmptPvtData"
+	viper.Set("ledger.pvtdataStore.purgeInterval", 3)
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 1)
+	cs.SetBTL("ns-1", "coll-2", 2)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+
+	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	s := env.TestStore
+
+	// no pvt data with block 0
+	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Commit())
+
+	// write pvt data for block 1
+	testDataForBlk1 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 1, []string{"ns-1:coll-1", "ns-1:coll-2"}),
+	}
+	assert.NoError(s.Prepare(1, testDataForBlk1))
+	assert.NoError(s.Commit())
+
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-2"}))
+
+	assert.NoError(s.Prepare(2, nil))
+	assert.NoError(s.Commit())
+
+	assert.NoError(s.Prepare(3, nil))
+	assert.NoError(s.Commit())
+
+	testWaitForPurgerRoutineToFinish(s)
+	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-2"}))
+
+	assert.NoError(s.Prepare(4, nil))
+	assert.NoError(s.Commit())
+
+	assert.NoError(s.Prepare(5, nil))
+	assert.NoError(s.Commit())
+
+	assert.NoError(s.Prepare(6, nil))
+	assert.NoError(s.Commit())
+
+	testWaitForPurgerRoutineToFinish(s)
+	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-2"}))
+
+	pvtData, err := s.GetPvtDataByBlockNum(1, nil)
+	assert.NoError(err)
+	assert.Nil(pvtData)
 }
 
 func TestStoreExpireWithoutPurge(t *testing.T) {
@@ -505,10 +561,12 @@ func TestStoreState(t *testing.T) {
 	testData := []*ledger.TxPvtData{
 		produceSamplePvtdata(t, 0, []string{"ns-1:coll-1", "ns-1:coll-2"}),
 	}
-	_, ok := store.Prepare(1, testData).(*pvtdatastorage.ErrIllegalArgs)
-	assert.True(ok)
+	assert.NoError(store.Prepare(0, nil))
+	assert.NoError(store.Commit())
+	assert.NoError(store.Prepare(1, testData))
 
-	assert.Nil(store.Prepare(0, testData))
+	_, ok := store.Prepare(0, testData).(*pvtdatastorage.ErrIllegalCall)
+	assert.True(ok)
 	assert.NoError(store.Commit())
 
 	assert.Nil(store.Prepare(1, testData))
@@ -550,7 +608,7 @@ func testRestart(t *testing.T, ledgerID string) {
 	cs.SetBTL("ns-2", "coll-1", 0)
 	cs.SetBTL("ns-2", "coll-2", 0)
 	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
-	env := NewTestStoreEnv(t, ledgerID, btlPolicy)
+	env := NewTestStoreEnv(t, fmt.Sprintf("%s-testRestart", ledgerID), btlPolicy)
 	defer env.Cleanup()
 	assert := assert.New(t)
 	s := env.TestStore
