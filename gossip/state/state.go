@@ -24,14 +24,12 @@ import (
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	common2 "github.com/hyperledger/fabric/gossip/common"
-	"github.com/hyperledger/fabric/gossip/state/validationctx"
 
 	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
 	privdata2 "github.com/hyperledger/fabric/gossip/privdata"
 	"github.com/hyperledger/fabric/gossip/util"
 
 	"github.com/hyperledger/fabric/gossip/discovery"
-	"github.com/hyperledger/fabric/gossip/roleutil"
 	"github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
@@ -39,7 +37,6 @@ import (
 	"github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 // GossipStateProvider is the interface to acquire sequences of the ledger blocks
@@ -89,12 +86,6 @@ type GossipAdapter interface {
 
 	// Gossip sends a message to other peers to the network
 	Gossip(msg *proto.GossipMessage)
-
-	// IdentityInfo returns information known peer identities
-	IdentityInfo() api.PeerIdentitySet
-
-	// SelfMembershipInfo returns the peer's membership information
-	SelfMembershipInfo() discovery.NetworkMember
 }
 
 // MCSAdapter adapter of message crypto service interface to bound
@@ -126,7 +117,7 @@ type ledgerResources interface {
 	// ValidateBlock validate block
 	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
 
-	ValidatePartialBlock(ctx context.Context, block *common.Block)
+	ValidatePartialBlock(block *common.Block)
 
 	// StorePvtData used to persist private date into transient store
 	StorePvtData(txid string, privData *transientstore.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -166,8 +157,8 @@ type GossipStateProviderImpl struct {
 	commChan <-chan proto.ReceivedMessage
 
 	// Queue of payloads which wasn't acquired yet
-	payloads          PayloadsBuffer
-	validationReqChan chan *common.Block
+	payloads           PayloadsBuffer
+	validationPayloads chan *proto.Payload
 
 	ledger ledgerResources
 
@@ -190,10 +181,6 @@ type GossipStateProviderImpl struct {
 	peerLedger ledger.PeerLedger
 
 	blockPublisher *publisher
-
-	ctxProvider *validationctx.Provider
-
-	roleUtil *roleutil.RoleUtil
 }
 
 var logger = util.GetLogger(util.LoggingStateModule, "")
@@ -211,10 +198,9 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 	remoteStateMsgFilter := func(message interface{}) bool {
 		receivedMsg := message.(proto.ReceivedMessage)
 		msg := receivedMsg.GetGossipMessage()
-		if !(msg.IsRemoteStateMessage() || msg.GetPrivateData() != nil || msg.IsValidationResultsMsg() || msg.IsValidationReqMsg()) {
+		if !(msg.IsRemoteStateMessage() || msg.GetPrivateData() != nil) {
 			return false
 		}
-
 		// Ensure we deal only with messages that belong to this channel
 		if !bytes.Equal(msg.Channel, []byte(chainID)) {
 			return false
@@ -263,8 +249,8 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		pendingValidations: newBlockCache(),
 
 		// Create a queue for payload received
-		payloads:          NewPayloadsBuffer(height),
-		validationReqChan: make(chan *common.Block, 10),
+		payloads:           NewPayloadsBuffer(height),
+		validationPayloads: make(chan *proto.Payload),
 
 		ledger: ledger,
 
@@ -281,10 +267,6 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		peerLedger: peerLedger,
 
 		blockPublisher: newBlockPublisher(chainID, ledger, height),
-
-		ctxProvider: validationctx.NewProvider(),
-
-		roleUtil: roleutil.NewRoleUtil(chainID, services),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -292,7 +274,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 	logger.Debug("Updating gossip ledger height to", height)
 	services.UpdateLedgerHeight(height, common2.ChainID(s.chainID))
 
-	s.done.Add(5)
+	s.done.Add(4)
 
 	// Listen for incoming communication
 	go s.listen()
@@ -302,8 +284,6 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 	go s.antiEntropy()
 	// Taking care of state request messages
 	go s.processStateRequests()
-	// Process validation request messages
-	go s.processValidationRequests()
 
 	return s
 }
@@ -336,15 +316,9 @@ func (s *GossipStateProviderImpl) dispatch(msg proto.ReceivedMessage) {
 		logger.Debug("Handling private data collection message")
 		// Handling private data replication message
 		s.privateDataMessage(msg)
-	} else if msg.GetGossipMessage().IsValidationResultsMsg() {
-		logger.Debug("Handling validation results message")
-		s.validationResultsMessage(msg)
-	} else if msg.GetGossipMessage().IsValidationReqMsg() {
-		logger.Debug("Handling validation request message")
-		s.validationRequestMessage(msg)
 	}
-}
 
+}
 func (s *GossipStateProviderImpl) privateDataMessage(msg proto.ReceivedMessage) {
 	if !bytes.Equal(msg.GetGossipMessage().Channel, []byte(s.chainID)) {
 		logger.Warning("Received state transfer request for channel",
@@ -427,50 +401,6 @@ func (s *GossipStateProviderImpl) directMessage(msg proto.ReceivedMessage) {
 			s.stateResponseCh <- msg
 		}
 	}
-}
-
-func (s *GossipStateProviderImpl) validationResultsMessage(msg proto.ReceivedMessage) {
-	logger.Debug("[ENTER] -> validationResultsMessage")
-	defer logger.Debug("[EXIT] ->  validationResultsMessage")
-
-	validationResultsMsg := msg.GetGossipMessage().GetValidationResultsMsg()
-	if !ledgerconfig.IsCommitter() {
-		logger.Warningf("[%s] Validation Results message received on non-committer for block [%d]. Ignoring.", s.chainID, validationResultsMsg.SeqNum)
-		return
-	}
-
-	logger.Debugf("[%s] Validation Results message for block [%d] received - sending to response channel", s.chainID, validationResultsMsg.SeqNum)
-	s.validationResponseChan <- &txvalidator.ValidationResults{
-		BlockNumber: validationResultsMsg.SeqNum,
-		TxFlags:     validationResultsMsg.TxFlags,
-		Endpoint:    msg.GetConnectionInfo().Endpoint,
-	}
-}
-
-func (s *GossipStateProviderImpl) validationRequestMessage(msg proto.ReceivedMessage) {
-	logger.Debugf("[ENTER] -> validationRequestMessage")
-	defer logger.Debug("[EXIT] ->  validationRequestMessage")
-
-	if !ledgerconfig.IsValidator() {
-		logger.Warningf("Non-validator should not be receiving validation request messages")
-		return
-	}
-
-	validationRequest := msg.GetGossipMessage().GetValidationReqMsg()
-	if validationRequest.GetPayload() == nil {
-		logger.Warning("Got nil payload in ValidationRequestMsg")
-		return
-	}
-
-	block, err := createBlockFromPayload(validationRequest.GetPayload())
-	if err != nil {
-		logger.Warning("Got invalid block for seq number: %s", validationRequest.GetPayload().SeqNum, err)
-		return
-	}
-
-	// FIXME: Change to Debug
-	logger.Infof("[%s] Submitting unvalidated block %d for validation.", s.chainID, block.Header.Number)
-	s.validationReqChan <- block
 }
 
 func (s *GossipStateProviderImpl) processStateRequests() {
@@ -622,8 +552,6 @@ func (s *GossipStateProviderImpl) Stop() {
 		s.ledger.Close()
 		close(s.stateRequestCh)
 		close(s.stateResponseCh)
-		close(s.validationReqChan)
-		close(s.validationResponseChan)
 		close(s.stopCh)
 	})
 }
@@ -642,9 +570,40 @@ func (s *GossipStateProviderImpl) queueNewMessage(msg *proto.GossipMessage) {
 		return
 	}
 
-	logger.Debugf("[%s] Adding block [%d] to payload buffer", s.chainID, dataMsg.Payload.SeqNum)
-	if err := s.addPayload(dataMsg.Payload, nonBlocking); err != nil {
-		logger.Warningf("[%s] Block [%d] received from gossip wasn't added to payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+	block, err := createBlockFromPayload(dataMsg.GetPayload())
+	if err != nil {
+		panic(fmt.Sprintf("[%s] extracting block from payload failed: %s", s.chainID, err))
+	}
+
+	fullyValidated, partiallyValidated, unvalidated := getValidationStatus(block)
+
+	if ledgerconfig.IsCommitter() {
+		if partiallyValidated {
+			// FIXME: Need to ensure that the block came from a peer in our org - otherwise can't trust it
+			logger.Debugf("[%s] Partially validated block [%d] received - sending to response channel", s.chainID, dataMsg.Payload.SeqNum)
+			s.validationResponseChan <- &txvalidator.ValidationResults{
+				BlockNumber: block.Header.Number,
+				TxFlags:     block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER],
+			}
+		} else {
+			logger.Debugf("[%s] Adding block [%d] to payload buffer", s.chainID, dataMsg.Payload.SeqNum)
+			if err := s.addPayload(dataMsg.Payload, nonBlocking); err != nil {
+				logger.Warningf("[%s] Block [%d] received from gossip wasn't added to payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+			}
+		}
+	} else if fullyValidated {
+		// FIXME: Need to ensure that the block came from a peer in our org - otherwise can't trust it
+		logger.Debugf("[%s] Fully validated block [%d] received with %d transactions. Adding to payload buffer.", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+		if err := s.addPayload(dataMsg.Payload, nonBlocking); err != nil {
+			logger.Warningf("[%s] Block [%d] received from gossip wasn't added to payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+		}
+	} else if unvalidated {
+		logger.Debugf("[%s] Unvalidated block [%d] received with %d transaction(s).", s.chainID, dataMsg.Payload.SeqNum, len(block.Data.Data))
+		if err := s.addValidationPayload(dataMsg.Payload); err != nil {
+			logger.Warningf("[%s] Block [%d] received from gossip wasn't added to validation payload buffer: %v", s.chainID, dataMsg.Payload.SeqNum, err)
+		}
+	} else {
+		logger.Debugf("[%s] Will not add partially validated block [%d] to validation payload buffer", s.chainID, dataMsg.Payload.SeqNum)
 	}
 }
 
@@ -655,15 +614,12 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 		select {
 		// Wait for notification that next seq has arrived
 		case <-s.payloads.Ready():
-			if metrics.IsDebug() {
-				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_ready", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
-			}
+			// KEEP EVEN WHEN metrics.debug IS OFF
+			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
+
 			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
 			// Collect all subsequent payloads
 			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
-				// KEEP EVEN WHEN metrics.debug IS OFF
-				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(payload.GetSeqNum()))
-
 				rawBlock := &common.Block{}
 				if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
 					logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
@@ -674,12 +630,6 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 						payload.SeqNum, rawBlock.Header, rawBlock.Data)
 					continue
 				}
-
-				if ledgerconfig.IsValidator() {
-					// Cancel any outstanding validation for the current block being committed
-					s.ctxProvider.Cancel(rawBlock.Header.Number)
-				}
-
 				logger.Debugf("[%s] Transferring block [%d] with %d transaction(s) to the ledger", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
 
 				// Read all private data into slice
@@ -702,10 +652,36 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 				if ledgerconfig.IsValidator() {
 					unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
 					if unvalidatedBlock != nil {
-						logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
-						s.ledger.ValidatePartialBlock(s.ctxProvider.Create(unvalidatedBlock.Header.Number), unvalidatedBlock)
+						// FIXME: Change to Debug
+						logger.Infof("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
+						s.ledger.ValidatePartialBlock(unvalidatedBlock)
 					}
 				}
+			}
+		case payload := <-s.validationPayloads:
+			logger.Debugf("[%s] Received unvalidated blocks %d", s.chainID, payload.SeqNum)
+			rawBlock := &common.Block{}
+			if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
+				logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+				continue
+			}
+			if rawBlock.Data == nil || rawBlock.Header == nil {
+				logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)",
+					payload.SeqNum, rawBlock.Header, rawBlock.Data)
+				continue
+			}
+			ledgerHeight, err := s.ledger.LedgerHeight()
+			if err!= nil {
+				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+			}
+			if rawBlock.Header.Number == ledgerHeight {
+				// FIXME: Change to Debug
+				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
+				s.ledger.ValidatePartialBlock(rawBlock)
+			} else {
+				// FIXME: Change to Debug
+				logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, payload.SeqNum, len(rawBlock.Data.Data), ledgerHeight)
+				s.pendingValidations.Add(rawBlock)
 			}
 		case <-s.stopCh:
 			s.stopCh <- struct{}{}
@@ -714,36 +690,12 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 		}
 	}
 }
-
-func (s *GossipStateProviderImpl) processValidationRequests() {
-	defer s.done.Done()
-
-	for {
-		select {
-		case block := <-s.validationReqChan:
-			// FIXME: Change to Debug
-			logger.Infof("[%s] Received validation request for block %d", s.chainID, block.Header.Number)
-
-			currentHeight := s.blockPublisher.LedgerHeight()
-			if block.Header.Number == currentHeight {
-				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
-				s.ledger.ValidatePartialBlock(s.ctxProvider.Create(block.Header.Number), block)
-			} else if block.Header.Number > currentHeight {
-				logger.Infof("[%s] Block [%d] with %d transaction(s) cannot be validated yet since our ledger height is %d. Adding to cache.", s.chainID, block.Header.Number, len(block.Data.Data), currentHeight)
-				s.pendingValidations.Add(block)
-			} else {
-				logger.Infof("[%s] Block [%d] will not be validated since the block has already been committed. Our ledger height is %d.", s.chainID, block.Header.Number, currentHeight)
-			}
-		case <-s.stopCh:
-			s.stopCh <- struct{}{}
-			return
-		}
-	}
-}
-
 func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
 	if !ledgerconfig.IsCommitter() {
-		ourHeight := s.blockPublisher.LedgerHeight()
+		ourHeight, err := s.ledger.LedgerHeight()
+		if err!= nil {
+			logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+		}
 		logger.Debugf("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
 		return ourHeight, nil
 	}
@@ -985,23 +937,6 @@ func (s *GossipStateProviderImpl) hasRequiredHeight(height uint64) func(peer dis
 
 // AddPayload add new payload into state.
 func (s *GossipStateProviderImpl) AddPayload(payload *proto.Payload) error {
-	if !ledgerconfig.IsCommitter() {
-		// Only the committer processes the payload from the orderer.
-		// Other roles receive the block via gossip.
-		return nil
-	}
-
-	// Gossip the unvalidated block to other validators (if any)
-	// so that they can perform validation on the block.
-	validators := s.roleUtil.Validators(false)
-	if len(validators) > 0 {
-		gossipMsg := createValidationRequestGossipMsg(s.chainID, payload)
-		logger.Debugf("[%s] Gossiping block [%d] to [%d] validator(s)", s.chainID, payload.SeqNum, len(validators))
-		s.mediator.Send(gossipMsg, asRemotePeers(validators)...)
-	} else {
-		logger.Debugf("[%s] Not gossiping block [%d] since no other validators were found", s.chainID, payload.SeqNum)
-	}
-
 	blockingMode := blocking
 	if viper.GetBool("peer.gossip.nonBlockingCommitMode") {
 		blockingMode = false
@@ -1033,12 +968,23 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		time.Sleep(enqueueRetryInterval)
 	}
 
-	if s.payloads.Push(payload) {
-		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
-		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_length", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Size()))
-		logger.Debugf("[%s] Adding Payload to local buffer done, blockNum = [%d]", s.chainID, payload.SeqNum)
+	s.payloads.Push(payload)
+
+	return nil
+}
+
+func (s *GossipStateProviderImpl) addValidationPayload(payload *proto.Payload) error {
+	if payload == nil {
+		return errors.New("Given payload is nil")
 	}
 
+	if !ledgerconfig.IsValidator() {
+		logger.Debugf("[%s] Ignoring unvalidated block [%d] since I am not a validator.", s.chainID, payload.SeqNum)
+		return nil
+	}
+
+	logger.Debugf("[%s] Sending block %d to validation payload channel.", s.chainID, payload.SeqNum)
+	s.validationPayloads <- payload
 	return nil
 }
 
@@ -1074,10 +1020,6 @@ func getValidationStatus(block *common.Block) (validated, partiallyValidated, un
 	envelopesLen := len(envelopes)
 
 	blockMetadata := block.GetMetadata()
-	if blockMetadata == nil || blockMetadata.GetMetadata() == nil {
-		return false, false, true
-	}
-
 	txValidationFlags := ledgerUtil.TxValidationFlags(blockMetadata.GetMetadata()[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 	flagsLen := len(txValidationFlags)
 
@@ -1134,41 +1076,22 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 		return nil
 	}
 
-	stopWatch := metrics.StopWatch(fmt.Sprintf("committer_%s_commitblock_duration", metrics.FilterMetricName(s.chainID)))
-	defer stopWatch()
-
-	stopWatch = metrics.StopWatch(fmt.Sprintf("committer_%s_validateblock_duration", metrics.FilterMetricName(s.chainID)))
 	blockAndPvtData, pvtTxns, err := s.ledger.ValidateBlock(block, pvtData, s.validationResponseChan)
 	if err != nil {
 		logger.Errorf("Got error while validating block: %s", err)
-		stopWatch()
 		return err
 	}
-	stopWatch()
 
-	// KEEP EVEN WHEN metrics.debug IS OFF
-	metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_validated_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
-
-	stopWatch = metrics.StopWatch(fmt.Sprintf("committer_%s_gossipblock_duration", metrics.FilterMetricName(s.chainID)))
 	// Gossip messages with other nodes in my org
 	s.gossipBlock(block, blockAndPvtData.BlockPvtData)
-	stopWatch()
-
-	stopWatch = metrics.StopWatch(fmt.Sprintf("committer_%s_storeblock_duration", metrics.FilterMetricName(s.chainID)))
 	// Commit block with available private transactions
 	err = s.ledger.StoreBlock(blockAndPvtData, pvtTxns)
 	if err != nil {
 		logger.Errorf("Got error while committing(%+v)", errors.WithStack(err))
-		stopWatch()
 		return err
 	}
-	stopWatch()
-
-	stopWatch = metrics.StopWatch(fmt.Sprintf("committer_%s_updateledgerheight_duration", metrics.FilterMetricName(s.chainID)))
 	// Update ledger height
 	s.mediator.UpdateLedgerHeight(block.Header.Number+1, common2.ChainID(s.chainID))
-	stopWatch()
-
 	logger.Debugf("[%s] Committed block [%d] with %d transaction(s)",
 		s.chainID, block.Header.Number, len(block.Data.Data))
 
@@ -1240,7 +1163,10 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return err
 	}
 
-	currentHeight := s.blockPublisher.LedgerHeight()
+	currentHeight, err := s.ledger.LedgerHeight()
+	if err!= nil {
+		logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+	}
 	if block.Header.Number < currentHeight-1 {
 		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
 	}
@@ -1335,29 +1261,4 @@ func (s *GossipStateProviderImpl) getBlockFromLedger(number uint64) (*common.Blo
 
 func min(a uint64, b uint64) uint64 {
 	return b ^ ((a ^ b) & (-(uint64(a-b) >> 63)))
-}
-
-func createValidationRequestGossipMsg(chainID string, payload *proto.Payload) *proto.GossipMessage {
-	gossipMsg := &proto.GossipMessage{
-		Nonce:   0,
-		Tag:     proto.GossipMessage_CHAN_AND_ORG,
-		Channel: []byte(chainID),
-		Content: &proto.GossipMessage_ValidationReqMsg{
-			ValidationReqMsg: &proto.DataMessage{
-				Payload: payload,
-			},
-		},
-	}
-	return gossipMsg
-}
-
-func asRemotePeers(members []*roleutil.Member) []*comm.RemotePeer {
-	var peers []*comm.RemotePeer
-	for _, m := range members {
-		peers = append(peers, &comm.RemotePeer{
-			Endpoint: m.Endpoint,
-			PKIID:    m.PKIid,
-		})
-	}
-	return peers
 }

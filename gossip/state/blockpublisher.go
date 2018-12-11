@@ -35,7 +35,6 @@ type blockPublisher interface {
 type publisher struct {
 	channelID               string
 	bp                      blockPublisher
-	blockNumber             uint64
 	mutex                   sync.RWMutex
 }
 
@@ -49,7 +48,6 @@ func newBlockPublisher(channelID string, bp blockPublisher, ledgerHeight uint64)
 	return &publisher{
 		channelID:               channelID,
 		bp:                      bp,
-		blockNumber:             ledgerHeight - 1,
 	}
 }
 
@@ -60,10 +58,6 @@ func (p *publisher) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	defer p.mutex.Unlock()
 
 	block := pvtdataAndBlock.Block
-
-	if block.Header.Number != p.blockNumber+1 {
-		return errors.Errorf("expecting block %d for channel [%s] but got block %d", p.blockNumber+1, p.channelID, block.Header.Number)
-	}
 
 	var pvtDataTxIDs []string
 	for i := range block.Data.Data {
@@ -84,16 +78,7 @@ func (p *publisher) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 		return err
 	}
 
-	p.blockNumber = block.Header.Number
-	logger.Debugf("Updated ledger height to %d for channel [%s]", p.blockNumber+1, p.channelID)
-
 	return nil
-}
-
-func (p *publisher) LedgerHeight() uint64 {
-	p.mutex.RLock()
-	defer p.mutex.RUnlock()
-	return p.blockNumber + 1
 }
 
 func (p *publisher) checkEnvelope(envelope *fabriccmn.Envelope) (string, bool, error) {
