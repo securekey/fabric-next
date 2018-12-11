@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/hyperledger/fabric/common/metrics"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -38,6 +40,9 @@ type indexUpdate struct {
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
+	stopWatch := metrics.StopWatch("kvledger_cacheNonDurableBlock")
+	defer stopWatch()
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
 	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -63,6 +68,9 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 }
 
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUpdate, error) {
+
+	stopWatch := metrics.StopWatch("kvledger_cacheBlock")
+	defer stopWatch()
 
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.BlockPvtData
@@ -206,14 +214,17 @@ func (l *kvLedger) indexWriter() {
 			close(l.stoppedIndexCh)
 			return
 		case indexUpdate := <-l.indexCh:
+			stopWatch := metrics.StopWatch("kvledger_indexUpdate")
 			allUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(indexUpdate.TxOps, indexUpdate.PvtData, indexUpdate.PvtHashData)
 			l.txtmgmt.RLock()
 			err := l.kvCacheProvider.ApplyIndexUpdates(allUpdates, indexDeletes, l.ledgerID)
 			l.txtmgmt.RUnlock()
 			if err != nil {
 				logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
+				stopWatch()
 				panic(fmt.Sprintf("%s", err))
 			}
+			stopWatch()
 		}
 	}
 }
