@@ -742,7 +742,10 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Received validation request for block %d", s.chainID, block.Header.Number)
 
-			currentHeight := s.blockPublisher.LedgerHeight()
+			currentHeight, err := s.ledger.LedgerHeight()
+			if err!= nil {
+				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+			}
 			if block.Header.Number == currentHeight {
 				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
 				s.ledger.ValidatePartialBlock(s.ctxProvider.Create(block.Header.Number), block)
@@ -761,7 +764,10 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
 
 func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
 	if !ledgerconfig.IsCommitter() {
-		ourHeight := s.blockPublisher.LedgerHeight()
+		ourHeight, err := s.ledger.LedgerHeight()
+		if err!= nil {
+			logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+		}
 		logger.Debugf("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
 		return ourHeight, nil
 	}
@@ -1260,7 +1266,10 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return err
 	}
 
-	currentHeight := s.blockPublisher.LedgerHeight()
+	currentHeight ,err := s.ledger.LedgerHeight()
+	if err != nil {
+		logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+	}
 	if block.Header.Number < currentHeight-1 {
 		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
 	}
