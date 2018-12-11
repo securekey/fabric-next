@@ -1019,7 +1019,7 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		return errors.New("Given payload is nil")
 	}
 
-	logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", s.chainID, payload.SeqNum)
+	logger.Debugf("[%s] adding payload to local buffer [%d]", s.chainID, payload.SeqNum)
 	height, err := s.ledgerHeight()
 	if err != nil {
 		return errors.Wrap(err, "Failed obtaining ledger height")
@@ -1030,13 +1030,15 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	}
 
 	for blockingMode && s.payloads.Size() > defMaxBlockDistance*2 {
+		logger.Infof("[%s] waiting for buffer to drain [seqNum=%d, size=%d]", s.chainID, payload.SeqNum, s.payloads.Size())
 		time.Sleep(enqueueRetryInterval)
 	}
 
 	if s.payloads.Push(payload) {
 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_length", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Size()))
-		logger.Debugf("[%s] Adding Payload to local buffer done, blockNum = [%d]", s.chainID, payload.SeqNum)
+		// TODO - make the following Debug if it turns out to be not useful.
+		logger.Infof("[%s] payload added to buffer [%d]", s.chainID, payload.SeqNum)
 	}
 
 	return nil
