@@ -965,10 +965,10 @@ func (p validators) Len() int {
 
 func (p validators) Less(i, j int) bool {
 	// Committers should always come first
-	if p.isCommiter(i) {
+	if p.isCommitter(i) {
 		return true
 	}
-	if p.isCommiter(j) {
+	if p.isCommitter(j) {
 		return false
 	}
 	return p[i].Endpoint < p[j].Endpoint
@@ -978,7 +978,7 @@ func (p validators) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
 }
 
-func (p validators) isCommiter(i int) bool {
+func (p validators) isCommitter(i int) bool {
 	if p[i].Properties == nil {
 		return false
 	}

@@ -75,7 +75,7 @@ func SplitCompositeHistoryKey(bytesToSplit []byte, separator []byte) ([]byte, []
 }
 
 // ConstructHistoryBatch takes a block and constructs a map of (key, value) pairs
-// to be commited to a history store as a batch
+// to be committed to a history store as a batch
 // Returns:
 // [][]byte composite history keys in the form ns~key~blockNo~tranNo (each key is []byte)
 // []byte save point
