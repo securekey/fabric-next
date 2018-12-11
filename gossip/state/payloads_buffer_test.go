@@ -78,8 +78,9 @@ func TestPayloadsBufferImpl_Ready(t *testing.T) {
 	buffer := NewPayloadsBuffer(1)
 	assert.Equal(t, buffer.Next(), uint64(1))
 
+	_, readySig := buffer.Ready()
 	go func() {
-		<-buffer.Ready()
+		<-readySig
 		fin <- struct{}{}
 	}()
 
@@ -125,9 +126,11 @@ func TestPayloadsBufferImpl_ConcurrentPush(t *testing.T) {
 	ready := int32(0)
 	readyWG := sync.WaitGroup{}
 	readyWG.Add(1)
+
+	_, readySig := buffer.Ready()
 	go func() {
 		// Wait for next expected block to arrive
-		<-buffer.Ready()
+		<-readySig
 		atomic.AddInt32(&ready, 1)
 		readyWG.Done()
 	}()
@@ -165,6 +168,7 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	//
 	// The consumer waits for the signal and then drains all ready payloads.
 
+	_, readySig := buffer.Ready()
 	payload, err := randomPayloadWithSeqNum(1)
 	assert.NoError(t, err, "generating random payload failed")
 	buffer.Push(payload)
@@ -174,7 +178,7 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	buffer.Push(payload)
 
 	select {
-	case <-buffer.Ready():
+	case <-readySig:
 	case <-time.After(500 * time.Millisecond):
 		t.Error("buffer wasn't ready after 500 ms for first sequence")
 	}
@@ -184,8 +188,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	}
 
 	// The buffer isn't ready since no new sequences have come since emptying the buffer.
+	_, readySig = buffer.Ready()
 	select {
-	case <-buffer.Ready():
+	case <-readySig:
 		t.Error("buffer should not be ready as no new sequences have come")
 	case <-time.After(500 * time.Millisecond):
 	}
@@ -193,12 +198,13 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	//
 	// Next sequences are incoming at the same time the buffer is being emptied by the consumer.
 	//
+	_, readySig = buffer.Ready()
 	payload, err = randomPayloadWithSeqNum(3)
 	assert.NoError(t, err, "generating random payload failed")
 	buffer.Push(payload)
 
 	select {
-	case <-buffer.Ready():
+	case <-readySig:
 	case <-time.After(500 * time.Millisecond):
 		t.Error("buffer wasn't ready after 500 ms for second sequence")
 	}
@@ -228,8 +234,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	//
 	// Now we see that goroutines are building up due to the interleaved push and pops above.
 	//
+	_, readySig = buffer.Ready()
 	select {
-	case <-buffer.Ready():
+	case <-readySig:
 		//
 		// Should be error - no payloads are ready
 		//
@@ -242,8 +249,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	t.Logf("payload: %v", payload)
 	assert.Nil(t, payload, "payload should be nil")
 
+	_, readySig = buffer.Ready()
 	select {
-	case <-buffer.Ready():
+	case <-readySig:
 		//
 		// Should be error - no payloads are ready
 		//
@@ -256,8 +264,9 @@ func TestPayloadsBufferImpl_Interleave(t *testing.T) {
 	assert.Nil(t, payload, "payload should be nil")
 	t.Logf("payload: %v", payload)
 
+	_, readySig = buffer.Ready()
 	select {
-	case <-buffer.Ready():
+	case <-readySig:
 		t.Error("buffer ready (3)")
 	case <-time.After(500 * time.Millisecond):
 		t.Log("buffer not ready (3) -- good")

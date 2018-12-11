@@ -652,67 +652,85 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 	defer s.done.Done()
 
 	for {
-		select {
-		// Wait for notification that next seq has arrived
-		case <-s.payloads.Ready():
-			if metrics.IsDebug() {
-				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_ready", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
-			}
-			logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
-			// Collect all subsequent payloads
-			for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
-				// KEEP EVEN WHEN metrics.debug IS OFF
-				metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(payload.GetSeqNum()))
+		if !s.waitForBufferReady() {
+			break
+		}
 
-				rawBlock := &common.Block{}
-				if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
-					logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+		for payload := s.payloads.Pop(); payload != nil; payload = s.payloads.Pop() {
+			// KEEP EVEN WHEN metrics.debug IS OFF
+			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_arrived", metrics.FilterMetricName(s.chainID))).Update(float64(payload.GetSeqNum()))
+
+			rawBlock := &common.Block{}
+			if err := pb.Unmarshal(payload.Data, rawBlock); err != nil {
+				logger.Errorf("Error getting block with seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
+				continue
+			}
+			if rawBlock.Data == nil || rawBlock.Header == nil {
+				logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)",
+					payload.SeqNum, rawBlock.Header, rawBlock.Data)
+				continue
+			}
+
+			if ledgerconfig.IsValidator() {
+				// Cancel any outstanding validation for the current block being committed
+				s.ctxProvider.Cancel(rawBlock.Header.Number)
+			}
+
+			logger.Debugf("[%s] Transferring block [%d] with %d transaction(s) to the ledger", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
+
+			// Read all private data into slice
+			var p util.PvtDataCollections
+			if payload.PrivateData != nil {
+				err := p.Unmarshal(payload.PrivateData)
+				if err != nil {
+					logger.Errorf("Wasn't able to unmarshal private data for block seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
 					continue
 				}
-				if rawBlock.Data == nil || rawBlock.Header == nil {
-					logger.Errorf("Block with claimed sequence %d has no header (%v) or data (%v)",
-						payload.SeqNum, rawBlock.Header, rawBlock.Data)
-					continue
+			}
+			if err := s.commitBlock(rawBlock, p); err != nil {
+				if executionErr, isExecutionErr := err.(*vsccErrors.VSCCExecutionFailureError); isExecutionErr {
+					logger.Errorf("Failed executing VSCC due to %v. Aborting chain processing", executionErr)
+					return
 				}
+				logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
+			}
 
-				if ledgerconfig.IsValidator() {
-					// Cancel any outstanding validation for the current block being committed
-					s.ctxProvider.Cancel(rawBlock.Header.Number)
-				}
-
-				logger.Debugf("[%s] Transferring block [%d] with %d transaction(s) to the ledger", s.chainID, payload.SeqNum, len(rawBlock.Data.Data))
-
-				// Read all private data into slice
-				var p util.PvtDataCollections
-				if payload.PrivateData != nil {
-					err := p.Unmarshal(payload.PrivateData)
-					if err != nil {
-						logger.Errorf("Wasn't able to unmarshal private data for block seqNum = %d due to (%+v)...dropping block", payload.SeqNum, errors.WithStack(err))
-						continue
-					}
-				}
-				if err := s.commitBlock(rawBlock, p); err != nil {
-					if executionErr, isExecutionErr := err.(*vsccErrors.VSCCExecutionFailureError); isExecutionErr {
-						logger.Errorf("Failed executing VSCC due to %v. Aborting chain processing", executionErr)
-						return
-					}
-					logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
-				}
-
-				if ledgerconfig.IsValidator() {
-					unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
-					if unvalidatedBlock != nil {
-						logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
-						s.ledger.ValidatePartialBlock(s.ctxProvider.Create(unvalidatedBlock.Header.Number), unvalidatedBlock)
-					}
+			if ledgerconfig.IsValidator() {
+				unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
+				if unvalidatedBlock != nil {
+					logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
+					s.ledger.ValidatePartialBlock(s.ctxProvider.Create(unvalidatedBlock.Header.Number), unvalidatedBlock)
 				}
 			}
-		case <-s.stopCh:
-			s.stopCh <- struct{}{}
-			logger.Debug("State provider has been stopped, finishing to push new blocks.")
-			return
+
 		}
 	}
+}
+
+func (s *GossipStateProviderImpl) waitForBufferReady() bool {
+	stopWatch := metrics.StopWatch(fmt.Sprintf("gossip_state_%s_wait_for_buffer_ready", metrics.FilterMetricName(s.chainID)))
+	defer stopWatch()
+
+	ready, readySig := s.payloads.Ready()
+	if ready {
+		return true
+	}
+
+	select {
+	// Wait for notification that next seq has arrived
+	case <-readySig:
+		if metrics.IsDebug() {
+			metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_next_sequence_ready", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Next()))
+		}
+		logger.Debugf("[%s] Ready to transfer payloads (blocks) to the ledger, next block number is = [%d]", s.chainID, s.payloads.Next())
+		// Collect all subsequent payloads
+	case <-s.stopCh:
+		s.stopCh <- struct{}{}
+		logger.Debug("State provider has been stopped, finishing to push new blocks.")
+		return false
+	}
+
+	return true
 }
 
 func (s *GossipStateProviderImpl) processValidationRequests() {

@@ -34,7 +34,7 @@ type PayloadsBuffer interface {
 
 	// Channel to indicate event when new payload pushed with sequence
 	// number equal to the next expected value.
-	Ready() chan struct{}
+	Ready() (bool, chan struct{})
 
 	Close()
 }
@@ -51,13 +51,15 @@ type PayloadsBufferImpl struct {
 	mutex sync.RWMutex
 
 	logger *logging.Logger
+
+	ready bool
 }
 
 // NewPayloadsBuffer is factory function to create new payloads buffer
 func NewPayloadsBuffer(next uint64) PayloadsBuffer {
 	return &PayloadsBufferImpl{
 		buf:       make(map[uint64]*proto.Payload),
-		readyChan: make(chan struct{}, 1),
+		readyChan: make(chan struct{}),
 		next:      next,
 		logger:    util.GetLogger(util.LoggingStateModule, ""),
 	}
@@ -66,8 +68,11 @@ func NewPayloadsBuffer(next uint64) PayloadsBuffer {
 // Ready function returns the channel which indicates whenever expected
 // next block has arrived and one could safely pop out
 // next sequence of blocks
-func (b *PayloadsBufferImpl) Ready() chan struct{} {
-	return b.readyChan
+func (b *PayloadsBufferImpl) Ready() (bool, chan struct{}) {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.ready, b.readyChan
 }
 
 // Push new payload into the buffer structure in case new arrived payload
@@ -89,8 +94,10 @@ func (b *PayloadsBufferImpl) Push(payload *proto.Payload) bool {
 
 	// Send notification that next sequence has arrived
 
-	if seqNum == b.next && len(b.readyChan) == 0 {
-		b.readyChan <- struct{}{}
+	if seqNum == b.next {
+		b.ready = true
+		close(b.readyChan)
+		b.readyChan = make(chan struct{})
 	}
 
 	return true
@@ -108,34 +115,17 @@ func (b *PayloadsBufferImpl) Pop() *proto.Payload {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	result := b.buf[b.Next()]
-
-	if result != nil {
-		// If there is such sequence in the buffer need to delete it
-		delete(b.buf, b.Next())
-		// Increment next expect block index
-		atomic.AddUint64(&b.next, 1)
-
-		b.drainReadChannel()
-
+	result, ok := b.buf[b.Next()]
+	if !ok {
+		b.ready = false
+		return nil
 	}
 
+	// If there is such sequence in the buffer need to delete it
+	delete(b.buf, b.Next())
+	// Increment next expect block index
+	atomic.AddUint64(&b.next, 1)
 	return result
-}
-
-// drainReadChannel empties ready channel in case last
-// payload has been poped up and there are still awaiting
-// notifications in the channel
-func (b *PayloadsBufferImpl) drainReadChannel() {
-	if len(b.buf) == 0 {
-		for {
-			if len(b.readyChan) > 0 {
-				<-b.readyChan
-			} else {
-				break
-			}
-		}
-	}
 }
 
 // Size returns current number of payloads stored within buffer
