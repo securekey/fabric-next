@@ -72,18 +72,18 @@ func newKVLedger(
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
 	l := &kvLedger{
-		ledgerID:                 ledgerID,
-		blockStore:               blockStore,
-		historyDB:                historyDB,
-		versionedDB:              versionedDB,
-		kvCacheProvider:          versionedDB.GetKVCacheProvider(),
-		blockAPIsRWLock:          &sync.RWMutex{},
-		stateCommitDoneCh:        make(chan *ledger.BlockAndPvtData),
-		commitCh:                 make(chan *ledger.BlockAndPvtData),
-		indexCh:                  make(chan *indexUpdate),
-		stoppedCommitCh:          make(chan struct{}),
-		stoppedIndexCh:           make(chan struct{}),
-		doneCh:                   make(chan struct{}),
+		ledgerID:          ledgerID,
+		blockStore:        blockStore,
+		historyDB:         historyDB,
+		versionedDB:       versionedDB,
+		kvCacheProvider:   versionedDB.GetKVCacheProvider(),
+		blockAPIsRWLock:   &sync.RWMutex{},
+		stateCommitDoneCh: make(chan *ledger.BlockAndPvtData),
+		commitCh:          make(chan *ledger.BlockAndPvtData),
+		indexCh:           make(chan *indexUpdate),
+		stoppedCommitCh:   make(chan struct{}),
+		stoppedIndexCh:    make(chan struct{}),
+		doneCh:            make(chan struct{}),
 	}
 
 	// TODO Move the function `GetChaincodeEventListener` to ledger interface and
@@ -285,7 +285,7 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	if err != nil {
 		return err
 	}
-	l.updateBlockchainInfo(pvtdataAndBlock.Block)
+
 	l.blockAPIsRWLock.Unlock()
 
 	l.indexCh <- indexUpdate
@@ -368,8 +368,6 @@ func (l *kvLedger) CommitWithPvtData(pvtdataAndBlock *ledger.BlockAndPvtData) er
 		l.blockAPIsRWLock.Unlock()
 		panic(fmt.Errorf("block was not cached [%s]", err))
 	}
-	//update local block chain info
-	l.updateBlockchainInfo(pvtdataAndBlock.Block)
 	l.blockAPIsRWLock.Unlock()
 
 	l.indexCh <- indexUpdate
@@ -491,10 +489,10 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 	blockNo, nextBlockCh := store.BlockCommitted()
 
 	type blockCommitProgress struct {
-		nextBlock *common.Block
-		commitStartTime time.Time
+		nextBlock                                   *common.Block
+		commitStartTime                             time.Time
 		stateCommittedDuration, elapsedBlockStorage time.Duration
-		blockCommitted, stateCommitted bool
+		blockCommitted, stateCommitted              bool
 	}
 	commitProgress := make(map[uint64]*blockCommitProgress)
 
@@ -546,7 +544,7 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 			cp.stateCommittedDuration = time.Since(cp.commitStartTime)
 			cp.stateCommitted = true
 			checkForDone(cp)
-		case <-nextBlockCh:  // A block has been committed to storage.
+		case <-nextBlockCh: // A block has been committed to storage.
 			blockNo, nextBlockCh = store.BlockCommitted()
 
 			if !ledgerconfig.IsCommitter() { // TODO: refactor AddBlock to do similar
@@ -573,16 +571,6 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 				panic(err)
 			}
 		}
-	}
-}
-
-func (l *kvLedger) updateBlockchainInfo(block *common.Block) {
-	hash := block.GetHeader().Hash()
-	number := block.GetHeader().GetNumber()
-	l.bcInfo = &common.BlockchainInfo{
-		Height:            number + 1,
-		CurrentBlockHash:  hash,
-		PreviousBlockHash: block.Header.PreviousHash,
 	}
 }
 
