@@ -66,22 +66,27 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		return err
 	}
 
-	blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
-	if err != nil {
-		return err
+	if len(dataEntries) > 0 || len(expiryEntries) > 0 {
+		blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
+		if err != nil {
+			return err
+		}
+
+		if blockDoc != nil {
+			s.pendingDocs = append(s.pendingDocs, blockDoc)
+		}
 	}
-	s.pendingDocs = append(s.pendingDocs, blockDoc)
 
 	return nil
 }
 
-func (s *store) commitDB(committingBlockNum uint64) error {
+func (s *store) commitDB() error {
 	if s.pendingDocs == nil {
 		return errors.New("no commit is pending")
 	}
 	_, err := s.db.CommitDocuments(s.pendingDocs)
 	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", committingBlockNum))
+		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", s.committingBlockNum))
 	}
 	s.pendingDocs = nil
 
