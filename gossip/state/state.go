@@ -1149,7 +1149,7 @@ func (s *GossipStateProviderImpl) commitBlock(block *common.Block, pvtData util.
 	// KEEP EVEN WHEN metrics.debug IS OFF
 	metrics.RootScope.Gauge(fmt.Sprintf("gossip_state_%s_validated_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(block.Header.Number))
 
-	stopWatch = metrics.StopWatch("committer_%s_gossipblock_duration")
+	stopWatch = metrics.StopWatch(fmt.Sprintf("committer_%s_gossipblock_duration", metrics.FilterMetricName(s.chainID)))
 	// Gossip messages with other nodes in my org
 	s.gossipBlock(block, blockAndPvtData.BlockPvtData)
 	stopWatch()
