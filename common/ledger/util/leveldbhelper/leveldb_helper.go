@@ -29,6 +29,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/spf13/viper"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
@@ -44,8 +45,9 @@ const (
 )
 
 // Conf configuration for `DB`
+// TODO: Add configuration for DB (e.g., bloom filter bits)
 type Conf struct {
-	DBPath string
+	DBPath                string
 }
 
 // DB - a wrapper on an actual store
@@ -82,7 +84,10 @@ func (dbInst *DB) Open() {
 	if dbInst.dbState == opened {
 		return
 	}
-	dbOpts := &opt.Options{}
+	// TODO: make bloom filter configurable
+	dbOpts := &opt.Options{
+		Filter: filter.NewBloomFilter(10),
+	}
 	dbPath := dbInst.conf.DBPath
 	var err error
 	var dirEmpty bool
