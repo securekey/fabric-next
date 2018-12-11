@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/common"
@@ -637,7 +638,7 @@ func (g *gossipServiceImpl) SendByCriteria(msg *proto.SignedGossipMessage, crite
 		membership = gc.GetPeers()
 	}
 
-	peers2send := filter.SelectPeers(criteria.MaxPeers, membership, criteria.IsEligible)
+	peers2send := g.getPeersToSendTo(membership, criteria)
 	if len(peers2send) < criteria.MinAck {
 		return fmt.Errorf("Requested to send to at least %d peers, but know only of %d suitable peers", criteria.MinAck, len(peers2send))
 	}
@@ -655,6 +656,70 @@ func (g *gossipServiceImpl) SendByCriteria(msg *proto.SignedGossipMessage, crite
 		return errors.New(results.String())
 	}
 	return nil
+}
+
+func (g *gossipServiceImpl) getPeersToSendTo(membership []discovery.NetworkMember, criteria SendCriteria) []*comm.RemotePeer {
+	if !criteria.PreferCommitter {
+		return filter.SelectPeers(criteria.MaxPeers, membership, criteria.IsEligible)
+	}
+
+	committers, endorsers := g.categorizeMembershipByRole(membership)
+
+	if len(committers) > criteria.MaxPeers {
+		g.logger.Debugf("The number of committers %d, exceeds criteria.MaxPeers %d. Adjusting MaxPeers to %d so that (if possible) each committer gets the private data", len(committers), criteria.MaxPeers, len(committers))
+	}
+
+	// First select as many committers as possible. Note that it may not be possible to send to all
+	// committers due to collection policy Org restrictions.
+	peers2send := filter.SelectPeers(len(committers), committers, criteria.IsEligible)
+	if len(peers2send) < criteria.MaxPeers && len(endorsers) > 0 {
+		g.logger.Debugf("Only %d peer(s) returned and need %d. Selecting from %d endorsers...", len(peers2send), criteria.MaxPeers, len(endorsers))
+		peersFromEndorser := filter.SelectPeers(criteria.MaxPeers-len(peers2send), endorsers, criteria.IsEligible)
+		g.logger.Debugf("Got %d additional selection(s) from endorsers", len(peersFromEndorser))
+		peers2send = append(peers2send, peersFromEndorser...)
+	}
+
+	if g.logger.IsEnabledFor(logging.DEBUG) {
+		g.logger.Debugf("Sending private data to the following peers:")
+		for _, p := range peers2send {
+			g.logger.Debugf("- [%s]", p.Endpoint)
+		}
+	}
+
+	return peers2send
+}
+
+// Roles is a set of peer roles
+type Roles []string
+
+// HasRole return true if the given role is included in the set
+func (r Roles) HasRole(role ledgerconfig.Role) bool {
+	if len(r) == 0 {
+		// Return true by default in order to be backward compatible
+		return true
+	}
+	for _, r := range r {
+		if r == string(role) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *gossipServiceImpl) categorizeMembershipByRole(membership []discovery.NetworkMember) (committers, endorsers []discovery.NetworkMember) {
+	for _, p := range membership {
+		if p.Properties == nil {
+			committers = append(committers, p)
+			continue
+		}
+		roles := Roles(p.Properties.Roles)
+		if roles.HasRole(ledgerconfig.CommitterRole) {
+			committers = append(committers, p)
+			continue
+		}
+		endorsers = append(endorsers, p)
+	}
+	return
 }
 
 // Gossip sends a message to other peers to the network

@@ -53,7 +53,7 @@ type Support interface {
 	GetHistoryQueryExecutor(ledgername string) (ledger.HistoryQueryExecutor, error)
 
 	// GetTransactionByID retrieves a transaction by id
-	GetTransactionByID(chid, txID string) (*pb.ProcessedTransaction, error)
+	GetTransactionByID(chid, txID string, hints ...ledger.SearchHint) (*pb.ProcessedTransaction, error)
 
 	// IsSysCC returns true if the name matches a system chaincode's
 	// system chaincode names are system, chain wide
@@ -372,7 +372,7 @@ func (e *Endorser) preProcess(signedProp *pb.SignedProposal) (*validateResult, e
 	if chainID != "" {
 		// Here we handle uniqueness check and ACLs for proposals targeting a chain
 		// Notice that ValidateProposalMessage has already verified that TxID is computed properly
-		if _, err = e.s.GetTransactionByID(chainID, txid); err == nil {
+		if _, err = e.s.GetTransactionByID(chainID, txid, ledger.RecentOnly); err == nil {
 			err = errors.Errorf("duplicate transaction found [%s]. Creator [%x]", txid, shdr.Creator)
 			vr.resp = &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}
 			return vr, err

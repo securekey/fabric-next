@@ -32,13 +32,14 @@ type Provider struct {
 	db        *DB
 	dbHandles map[string]*DBHandle
 	mux       sync.Mutex
+	dbPath    string
 }
 
 // NewProvider constructs a Provider
 func NewProvider(conf *Conf) *Provider {
 	db := CreateDB(conf)
 	db.Open()
-	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}}
+	return &Provider{db, make(map[string]*DBHandle), sync.Mutex{}, conf.DBPath}
 }
 
 // GetDBHandle returns a handle to a named db
@@ -47,7 +48,7 @@ func (p *Provider) GetDBHandle(dbName string) *DBHandle {
 	defer p.mux.Unlock()
 	dbHandle := p.dbHandles[dbName]
 	if dbHandle == nil {
-		dbHandle = &DBHandle{dbName, p.db}
+		dbHandle = &DBHandle{dbName, p.db, p.dbPath}
 		p.dbHandles[dbName] = dbHandle
 	}
 	return dbHandle
@@ -62,6 +63,7 @@ func (p *Provider) Close() {
 type DBHandle struct {
 	dbName string
 	db     *DB
+	dbPath string
 }
 
 // Get returns the value for the given key

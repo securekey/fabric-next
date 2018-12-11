@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package gossip
 
 import (
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
@@ -42,7 +43,7 @@ func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Member
 		PKIid:      stateInf.PkiId,
 		Envelope:   msg.Envelope,
 	}
-	return append(s.Gossip.PeersOfChannel(chain), selfMember)
+	return endorsersOnly(append(s.Gossip.PeersOfChannel(chain), selfMember))
 }
 
 // Peers returns the NetworkMembers considered alive

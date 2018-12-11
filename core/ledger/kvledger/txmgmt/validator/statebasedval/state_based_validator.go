@@ -46,6 +46,12 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *internal.Block) error {
 	hashedKeysMap := make(map[privacyenabledstate.HashedCompositeKey]interface{})
 
 	for _, tx := range block.Txs {
+		if !shouldLoad(tx.IndexInBlock) {
+			continue
+		}
+
+		logger.Debugf("Pre-loading committed versions for TxIdx %d in block %d", tx.IndexInBlock, block.Num)
+
 		for _, nsRWSet := range tx.RWSet.NsRwSets {
 			for _, kvRead := range nsRWSet.KvRwSet.Reads {
 				compositeKey := statedb.CompositeKey{
@@ -175,13 +181,16 @@ func (v *Validator) validateReadSet(ns string, kvReads []*kvrwset.KVRead, update
 	return true, nil
 }
 
-// validateKVRead performs mvcc check for a key read during transaction simulation.
-// i.e., it checks whether a key/version combination is already updated in the statedb (by an already committed block)
-// or in the updates (by a preceding valid transaction in the current block)
-func (v *Validator) validateKVRead(ns string, kvRead *kvrwset.KVRead, updates *privacyenabledstate.PubUpdateBatch) (bool, error) {
-	if updates.Exists(ns, kvRead.Key) {
-		return false, nil
+func (v *Validator) validateReadSetMVCC(ns string, kvReads []*kvrwset.KVRead) (bool, error) {
+	for _, kvRead := range kvReads {
+		if valid, err := v.validateKVReadMVCC(ns, kvRead); !valid || err != nil {
+			return valid, err
+		}
 	}
+	return true, nil
+}
+
+func (v *Validator) validateKVReadMVCC(ns string, kvRead *kvrwset.KVRead) (bool, error) {
 	committedVersion, err := v.db.GetVersion(ns, kvRead.Key)
 	if err != nil {
 		return false, err
@@ -197,9 +206,29 @@ func (v *Validator) validateKVRead(ns string, kvRead *kvrwset.KVRead, updates *p
 	return true, nil
 }
 
+// validateKVRead performs mvcc check for a key read during transaction simulation.
+// i.e., it checks whether a key/version combination is already updated in the statedb (by an already committed block)
+// or in the updates (by a preceding valid transaction in the current block)
+func (v *Validator) validateKVRead(ns string, kvRead *kvrwset.KVRead, updates *privacyenabledstate.PubUpdateBatch) (bool, error) {
+	if updates.Exists(ns, kvRead.Key) {
+		logger.Debugf("Returning invalid since there were updates to [%s]", kvRead.Key)
+		return false, nil
+	}
+	return true, nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /////                 Validation of range queries
 ////////////////////////////////////////////////////////////////////////////////
+func (v *Validator) validateRangeQueriesMVCC(ns string, rangeQueriesInfo []*kvrwset.RangeQueryInfo) (bool, error) {
+	for _, rqi := range rangeQueriesInfo {
+		if valid, err := v.validateRangeQueryMVCC(ns, rqi); !valid || err != nil {
+			return valid, err
+		}
+	}
+	return true, nil
+}
+
 func (v *Validator) validateRangeQueries(ns string, rangeQueriesInfo []*kvrwset.RangeQueryInfo, updates *privacyenabledstate.PubUpdateBatch) (bool, error) {
 	for _, rqi := range rangeQueriesInfo {
 		if valid, err := v.validateRangeQuery(ns, rqi, updates); !valid || err != nil {
@@ -211,7 +240,29 @@ func (v *Validator) validateRangeQueries(ns string, rangeQueriesInfo []*kvrwset.
 
 // validateRangeQuery performs a phantom read check i.e., it
 // checks whether the results of the range query are still the same when executed on the
-// statedb (latest state as of last committed block) + updates (prepared by the writes of preceding valid transactions
+// statedb (latest state as of last committed block)
+func (v *Validator) validateRangeQueryMVCC(ns string, rangeQueryInfo *kvrwset.RangeQueryInfo) (bool, error) {
+	logger.Debugf("validateRangeQueryMVCC: ns=%s, rangeQueryInfo=%s", ns, rangeQueryInfo)
+
+	var validator rangeQueryValidator
+	if rangeQueryInfo.GetReadsMerkleHashes() != nil {
+		validator = &rangeQueryHashValidator{}
+	} else {
+		validator = &rangeQueryResultsValidator{}
+	}
+
+	itr, err := v.db.GetStateRangeScanIterator(ns, rangeQueryInfo.StartKey, rangeQueryInfo.EndKey)
+	if err != nil {
+		return false, err
+	}
+	defer itr.Close()
+
+	validator.init(rangeQueryInfo, itr)
+	return validator.validate()
+}
+
+// validateRangeQuery performs a phantom read check i.e., it
+// checks whether the results of the range query exist in the updates (prepared by the writes of preceding valid transactions
 // in the current block and yet to be committed as part of group commit at the end of the validation of the block)
 func (v *Validator) validateRangeQuery(ns string, rangeQueryInfo *kvrwset.RangeQueryInfo, updates *privacyenabledstate.PubUpdateBatch) (bool, error) {
 	logger.Debugf("validateRangeQuery: ns=%s, rangeQueryInfo=%s", ns, rangeQueryInfo)
@@ -219,33 +270,41 @@ func (v *Validator) validateRangeQuery(ns string, rangeQueryInfo *kvrwset.RangeQ
 	// If during simulation, the caller had not exhausted the iterator so
 	// rangeQueryInfo.EndKey is not actual endKey given by the caller in the range query
 	// but rather it is the last key seen by the caller and hence the combinedItr should include the endKey in the results.
-	includeEndKey := !rangeQueryInfo.ItrExhausted
-
-	combinedItr, err := newCombinedIterator(v.db, updates.UpdateBatch,
-		ns, rangeQueryInfo.StartKey, rangeQueryInfo.EndKey, includeEndKey)
-	if err != nil {
-		return false, err
-	}
-	defer combinedItr.Close()
-	var validator rangeQueryValidator
-	if rangeQueryInfo.GetReadsMerkleHashes() != nil {
-		logger.Debug(`Hashing results are present in the range query info hence, initiating hashing based validation`)
-		validator = &rangeQueryHashValidator{}
+	var itr statedb.ResultsIterator
+	if rangeQueryInfo.ItrExhausted {
+		itr = updates.GetRangeScanIterator(ns, rangeQueryInfo.StartKey, rangeQueryInfo.EndKey)
 	} else {
-		logger.Debug(`Hashing results are not present in the range query info hence, initiating raw KVReads based validation`)
-		validator = &rangeQueryResultsValidator{}
+		itr = updates.GetRangeScanIteratorIncludingEndKey(ns, rangeQueryInfo.StartKey, rangeQueryInfo.EndKey)
 	}
-	validator.init(rangeQueryInfo, combinedItr)
-	return validator.validate()
+	defer itr.Close()
+	return newRangeQueryUpdatesValidator(rangeQueryInfo, itr).validate()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /////                 Validation of hashed read-set
 ////////////////////////////////////////////////////////////////////////////////
+func (v *Validator) validateNsHashedReadSetsMVCC(ns string, collHashedRWSets []*rwsetutil.CollHashedRwSet) (bool, error) {
+	for _, collHashedRWSet := range collHashedRWSets {
+		if valid, err := v.validateCollHashedReadSetMVCC(ns, collHashedRWSet.CollectionName, collHashedRWSet.HashedRwSet.HashedReads); !valid || err != nil {
+			return valid, err
+		}
+	}
+	return true, nil
+}
+
 func (v *Validator) validateNsHashedReadSets(ns string, collHashedRWSets []*rwsetutil.CollHashedRwSet,
 	updates *privacyenabledstate.HashedUpdateBatch) (bool, error) {
 	for _, collHashedRWSet := range collHashedRWSets {
 		if valid, err := v.validateCollHashedReadSet(ns, collHashedRWSet.CollectionName, collHashedRWSet.HashedRwSet.HashedReads, updates); !valid || err != nil {
+			return valid, err
+		}
+	}
+	return true, nil
+}
+
+func (v *Validator) validateCollHashedReadSetMVCC(ns, coll string, kvReadHashes []*kvrwset.KVReadHash) (bool, error) {
+	for _, kvReadHash := range kvReadHashes {
+		if valid, err := v.validateKVReadHashMVCC(ns, coll, kvReadHash); !valid || err != nil {
 			return valid, err
 		}
 	}
@@ -262,14 +321,9 @@ func (v *Validator) validateCollHashedReadSet(ns, coll string, kvReadHashes []*k
 	return true, nil
 }
 
-// validateKVReadHash performs mvcc check for a hash of a key that is present in the private data space
+// validateKVReadHashMVCC performs mvcc check for a hash of a key that is present in the private data space
 // i.e., it checks whether a key/version combination is already updated in the statedb (by an already committed block)
-// or in the updates (by a preceding valid transaction in the current block)
-func (v *Validator) validateKVReadHash(ns, coll string, kvReadHash *kvrwset.KVReadHash,
-	updates *privacyenabledstate.HashedUpdateBatch) (bool, error) {
-	if updates.Contains(ns, coll, kvReadHash.KeyHash) {
-		return false, nil
-	}
+func (v *Validator) validateKVReadHashMVCC(ns, coll string, kvReadHash *kvrwset.KVReadHash) (bool, error) {
 	committedVersion, err := v.db.GetKeyHashVersion(ns, coll, kvReadHash.KeyHash)
 	if err != nil {
 		return false, err
@@ -278,6 +332,15 @@ func (v *Validator) validateKVReadHash(ns, coll string, kvReadHash *kvrwset.KVRe
 	if !version.AreSame(committedVersion, rwsetutil.NewVersion(kvReadHash.Version)) {
 		logger.Debugf("Version mismatch for key hash [%s:%s:%#v]. Committed version = [%s], Version in hashedReadSet [%s]",
 			ns, coll, kvReadHash.KeyHash, committedVersion, kvReadHash.Version)
+		return false, nil
+	}
+	return true, nil
+}
+
+// validateKVReadHash performs mvcc check for a hash of a key that is present in the private data space
+// i.e., it checks whether a key/version combination has already been updated by a preceding valid transaction in the current block
+func (v *Validator) validateKVReadHash(ns, coll string, kvReadHash *kvrwset.KVReadHash, updates *privacyenabledstate.HashedUpdateBatch) (bool, error) {
+	if updates.Contains(ns, coll, kvReadHash.KeyHash) {
 		return false, nil
 	}
 	return true, nil

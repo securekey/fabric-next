@@ -127,7 +127,7 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 		lgr.Close()
 		return nil, err
 	}
-	panicOnErr(provider.idStore.createLedgerID(ledgerID, genesisBlock), "Error while marking ledger as created")
+	panicOnErr(provider.idStore.CreateLedgerID(ledgerID, genesisBlock), "Error while marking ledger as created")
 	return lgr, nil
 }
 
@@ -135,7 +135,7 @@ func (provider *Provider) Create(genesisBlock *common.Block) (ledger.PeerLedger,
 func (provider *Provider) Open(ledgerID string) (ledger.PeerLedger, error) {
 	logger.Debugf("Open() opening kvledger: %s", ledgerID)
 	// Check the ID store to ensure that the chainId/ledgerId exists
-	exists, err := provider.idStore.ledgerIDExists(ledgerID)
+	exists, err := provider.idStore.LedgerIDExists(ledgerID)
 	if err != nil {
 		return nil, err
 	}
@@ -181,17 +181,17 @@ func (provider *Provider) openInternal(ledgerID string) (ledger.PeerLedger, erro
 
 // Exists implements the corresponding method from interface ledger.PeerLedgerProvider
 func (provider *Provider) Exists(ledgerID string) (bool, error) {
-	return provider.idStore.ledgerIDExists(ledgerID)
+	return provider.idStore.LedgerIDExists(ledgerID)
 }
 
 // List implements the corresponding method from interface ledger.PeerLedgerProvider
 func (provider *Provider) List() ([]string, error) {
-	return provider.idStore.getAllLedgerIds()
+	return provider.idStore.GetAllLedgerIds()
 }
 
 // Close implements the corresponding method from interface ledger.PeerLedgerProvider
 func (provider *Provider) Close() {
-	provider.idStore.close()
+	provider.idStore.Close()
 	provider.ledgerStoreProvider.Close()
 	provider.vdbProvider.Close()
 	provider.historydbProvider.Close()
@@ -205,7 +205,7 @@ func (provider *Provider) Close() {
 // the last step of adding the ledger id to the list of created ledgers. Else, it clears the under construction flag
 func (provider *Provider) recoverUnderConstructionLedger() {
 	logger.Debugf("Recovering under construction ledger")
-	ledgerID, err := provider.idStore.getUnderConstructionFlag()
+	ledgerID, err := provider.idStore.GetUnderConstructionFlag()
 	panicOnErr(err, "Error while checking whether the under construction flag is set")
 	if ledgerID == "" {
 		logger.Debugf("No under construction ledger found. Quitting recovery")

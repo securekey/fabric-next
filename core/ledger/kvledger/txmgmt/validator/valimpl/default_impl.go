@@ -32,8 +32,35 @@ type DefaultImpl struct {
 
 // NewStatebasedValidator constructs a validator that internally manages statebased validator and in addition
 // handles the tasks that are agnostic to a particular validation scheme such as parsing the block and handling the pvt data
-func NewStatebasedValidator(txmgr txmgr.TxMgr, db privacyenabledstate.DB) validator.Validator {
-	return &DefaultImpl{txmgr, db, statebasedval.NewValidator(db)}
+func NewStatebasedValidator(channelID string, txmgr txmgr.TxMgr, db privacyenabledstate.DB) validator.Validator {
+	return &DefaultImpl{txmgr, db, statebasedval.NewValidator(channelID, db)}
+}
+
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (impl *DefaultImpl) ValidateMVCC(ctx context.Context, block *common.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
+	logger.Debugf("ValidateMVCC - Block number = [%d]", block.Header.Number)
+
+	internalBlock, err := preprocessProtoBlock(impl.txmgr, impl.db.ValidateKeyValue, block, true, txsFilter, acceptTx)
+	if err != nil {
+		return err
+	}
+
+	for txIndex := range block.Data.Data {
+		if txsFilter.IsValid(txIndex) {
+			// Mark the transaction as not validated so that we know that the first phase (distributed) validation
+			// has completed validating all transactions and that none are missed
+			txsFilter.SetFlag(txIndex, peer.TxValidationCode_NOT_VALIDATED)
+		}
+	}
+
+	if err = impl.InternalValidator.ValidateMVCC(ctx, internalBlock, txsFilter, acceptTx); err != nil {
+		return err
+	}
+
+	postprocessProtoBlock(block, txsFilter, internalBlock, acceptTx)
+	logger.Debugf("ValidateMVCC completed for block %d", block.Header.Number)
+
+	return nil
 }
 
 // ValidateAndPrepareBatch implements the function in interface validator.Validator

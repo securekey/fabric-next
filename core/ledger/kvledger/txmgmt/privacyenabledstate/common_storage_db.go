@@ -104,18 +104,20 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 		} else {
 			keyHashStr = key.KeyHash
 		}
-		pubKeys = append(pubKeys, &statedb.CompositeKey{
+		deriveKeys = append(deriveKeys, &statedb.CompositeKey{
 			Namespace: ns,
 			Key:       keyHashStr,
 		})
 	}
-
-	err := bulkOptimizable.LoadCommittedVersions(pubKeys)
-	if err != nil {
-		return err
+	for _, key := range pvtKeys {
+		ns := DerivePvtDataNs(key.Namespace, key.CollectionName)
+		deriveKeys = append(deriveKeys, &statedb.CompositeKey{
+			Namespace: ns,
+			Key:       key.Key,
+		})
 	}
+	return deriveKeys
 
-	return nil
 }
 
 // ClearCachedVersions implements corresponding function in interface DB
@@ -137,7 +139,7 @@ func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifec
 
 // GetPrivateData implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateData(namespace, collection, key string) (*statedb.VersionedValue, error) {
-	return s.GetState(derivePvtDataNs(namespace, collection), key)
+	return s.GetState(DerivePvtDataNs(namespace, collection), key)
 }
 
 // GetValueHash implements corresponding function in interface DB
@@ -294,11 +296,11 @@ func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 	// NOOP
 }
 
-func derivePvtDataNs(namespace, collection string) string {
+func DerivePvtDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
-func deriveHashedDataNs(namespace, collection string) string {
+func DeriveHashedDataNs(namespace, collection string) string {
 	return namespace + nsJoiner + hashDataPrefix + collection
 }
 
@@ -306,7 +308,7 @@ func addPvtUpdates(pubUpdateBatch *PubUpdateBatch, pvtUpdateBatch *PvtUpdateBatc
 	for ns, nsBatch := range pvtUpdateBatch.UpdateMap {
 		for _, coll := range nsBatch.GetCollectionNames() {
 			for key, vv := range nsBatch.GetUpdates(coll) {
-				pubUpdateBatch.Update(derivePvtDataNs(ns, coll), key, vv)
+				pubUpdateBatch.Update(DerivePvtDataNs(ns, coll), key, vv)
 			}
 		}
 	}
@@ -319,7 +321,7 @@ func addHashedUpdates(pubUpdateBatch *PubUpdateBatch, hashedUpdateBatch *HashedU
 				if base64Key {
 					key = base64.StdEncoding.EncodeToString([]byte(key))
 				}
-				pubUpdateBatch.Update(deriveHashedDataNs(ns, coll), key, vv)
+				pubUpdateBatch.Update(DeriveHashedDataNs(ns, coll), key, vv)
 			}
 		}
 	}

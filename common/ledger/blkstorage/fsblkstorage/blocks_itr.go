@@ -13,13 +13,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+/*
+Copyright SecureKey Technologies Inc. All Rights Reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
 
 package fsblkstorage
 
 import (
-	"sync"
-
+	"context"
 	"github.com/hyperledger/fabric/common/ledger"
+	"sync"
 )
 
 // blocksItr - an iterator for iterating over a sequence of blocks
@@ -92,15 +97,25 @@ func (itr *blocksItr) Next() (ledger.QueryResult, error) {
 	return deserializeBlock(nextBlockBytes)
 }
 
+func (itr *blocksItr) initStream() error {
+	var lp *fileLocPointer
+	var err error
+	if lp, err = itr.mgr.index.getBlockLocByBlockNum(itr.blockNumToRetrieve); err != nil {
+		return err
+	}
+	if itr.stream, err = newBlockStream(itr.mgr.rootDir, lp.fileSuffixNum, int64(lp.offset), -1); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Close releases any resources held by the iterator
 func (itr *blocksItr) Close() {
-	itr.mgr.cpInfoCond.L.Lock()
-	defer itr.mgr.cpInfoCond.L.Unlock()
-	itr.closeMarkerLock.Lock()
-	defer itr.closeMarkerLock.Unlock()
-	itr.closeMarker = true
-	itr.mgr.cpInfoCond.Broadcast()
+	itr.cancel()
+
+	itr.streamMtx.Lock()
 	if itr.stream != nil {
 		itr.stream.close()
 	}
+	itr.streamMtx.Unlock()
 }

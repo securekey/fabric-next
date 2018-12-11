@@ -153,7 +153,9 @@ func Close() {
 }
 
 func wrapLedger(id string, l ledger.PeerLedger) ledger.PeerLedger {
-	return &closableLedger{id, l}
+	return &closableLedger{
+		id, l,
+	}
 }
 
 // closableLedger extends from actual validated ledger and overwrites the Close method

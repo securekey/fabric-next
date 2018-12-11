@@ -196,6 +196,10 @@ func (d *distributorImpl) disseminationPlanForMsg(colAP privdata.CollectionAcces
 		IsEligible: func(member discovery.NetworkMember) bool {
 			return routingFilter(member)
 		},
+		// Ensure that the private data is pushed to committers (if possible)
+		// so that the committer doesn't need to pull data from other peers
+		// at commit time
+		PreferCommitter: true,
 	}
 	disseminationPlan = append(disseminationPlan, &dissemination{
 		criteria: sc,

@@ -34,7 +34,7 @@ func (_m *Store) GetMinTransientBlkHt() (uint64, error) {
 }
 
 // GetTxPvtRWSetByTxid provides a mock function with given fields: txid, filter
-func (_m *Store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error) {
+func (_m *Store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
 	ret := _m.Called(txid, filter)
 
 	var r0 transientstore.RWSetScanner

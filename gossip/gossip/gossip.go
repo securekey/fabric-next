@@ -100,6 +100,7 @@ type SendCriteria struct {
 	IsEligible filter.RoutingFilter // IsEligible defines whether a specific peer is eligible of receiving the message
 	Channel    common.ChainID       // Channel specifies a channel to send this message on. \
 	// Only peers that joined the channel would receive this message
+	PreferCommitter bool // If true then peers with the committer role are preferred over other peers
 }
 
 // String returns a string representation of this SendCriteria
@@ -125,11 +126,11 @@ type Config struct {
 
 	SkipBlockVerification bool // Should we skip verifying block messages or not
 
-	PublishCertPeriod        time.Duration // Time from startup certificates are included in Alive messages
-	PublishStateInfoInterval time.Duration // Determines frequency of pushing state info messages to peers
-	RequestStateInfoInterval time.Duration // Determines frequency of pulling state info messages from peers
-
-	TLSCerts *common.TLSCertificates // TLS certificates of the peer
+	PublishCertPeriod        time.Duration           // Time from startup certificates are included in Alive messages
+	PublishStateInfoInterval time.Duration           // Determines frequency of pushing state info messages to peers
+	RequestStateInfoInterval time.Duration           // Determines frequency of pulling state info messages from peers
+	BlockExpirationInterval  time.Duration           // Specifies how long a gossiped block will live in the message store
+	TLSCerts                 *common.TLSCertificates // TLS certificates of the peer
 
 	InternalEndpoint         string        // Endpoint we publish to peers in our organization
 	ExternalEndpoint         string        // Peer publishes this endpoint instead of SelfEndpoint to foreign organizations

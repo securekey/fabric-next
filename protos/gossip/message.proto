@@ -130,6 +130,12 @@ message GossipMessage {
         // Encapsulates private data used to distribute
         // private rwset after the endorsement
         PrivateDataMessage private_data = 25;
+
+        // Contains validation results
+        ValidationResultsMessage validation_results_msg = 50;
+
+        // Request for block validaton
+        DataMessage validation_req_msg = 51;
     }
 }
 
@@ -151,6 +157,7 @@ message Properties {
     uint64 ledger_height = 1;
     bool left_channel = 2;
     repeated Chaincode chaincodes = 3;
+    repeated string roles = 4;
 }
 
 // StateInfoSnapshot is an aggregation of StateInfo messages
@@ -369,4 +376,10 @@ message Chaincode {
     string name = 1;
     string version = 2;
     bytes metadata = 3;
+}
+
+// ValidationResultsMessage is the message containing block validation results
+message ValidationResultsMessage {
+    uint64 seq_num = 1;
+    bytes txFlags  = 2;
 }

@@ -21,9 +21,15 @@ import (
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/common/validation"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/gossip/comm"
+	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
+	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
+	"github.com/hyperledger/fabric/gossip/roleutil"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protos/common"
+	gossipproto "github.com/hyperledger/fabric/protos/gossip"
 	mspprotos "github.com/hyperledger/fabric/protos/msp"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
@@ -59,7 +65,8 @@ type Support interface {
 // and return the bit array mask indicating invalid transactions which
 // didn't pass validation.
 type Validator interface {
-	Validate(block *common.Block) error
+	Validate(block *common.Block, resultsChan chan *ValidationResults) error
+	ValidatePartial(ctx context.Context, block *common.Block)
 }
 
 // private interface to decouple tx validator
@@ -96,18 +103,33 @@ type blockValidationResult struct {
 }
 
 // NewTxValidator creates new transactions validator
-func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemChaincodeProvider, pm PluginMapper) *TxValidator {
+func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemChaincodeProvider, pm PluginMapper, gossip gossip2.Gossip, mvccValidator mvccValidator) *TxValidator {
 	// Encapsulates interface implementation
 	pluginValidator := NewPluginValidator(pm, support.Ledger(), &dynamicDeserializer{support: support}, &dynamicCapabilities{support: support})
+
 	return &TxValidator{
-		ChainID: chainID,
-		Support: support,
-		Vscc:    newVSCCValidator(chainID, support, sccp, pluginValidator)}
+		ChainID:       chainID,
+		Support:       support,
+		Vscc:          newVSCCValidator(chainID, support, sccp, pluginValidator),
+		gossip:        gossip,
+		mvccValidator: mvccValidator,
+		roleUtil:      roleutil.NewRoleUtil(chainID, gossip),
+	}
 }
 
 func (v *TxValidator) chainExists(chain string) bool {
 	// TODO: implement this function!
 	return true
+}
+
+// ValidationResults contains the validation flags for the given block number.
+type ValidationResults struct {
+	BlockNumber uint64
+	TxFlags     ledgerUtil.TxValidationFlags
+	Err         error
+	// Endpoint is the endpoint of the peer that provided the results.
+	// Empty means local peer.
+	Endpoint string
 }
 
 // Validate performs the validation of a block. The validation
@@ -130,10 +152,9 @@ func (v *TxValidator) chainExists(chain string) bool {
 //    state is when a config transaction is received, but they are
 //    guaranteed to be alone in the block. If/when this assumption
 //    is violated, this code must be changed.
-func (v *TxValidator) Validate(block *common.Block) error {
-	var err error
-	var errPos int
-
+//
+// NOTE: This function should only be called by committers and not validators.
+func (v *TxValidator) Validate(block *common.Block, resultsChan chan *ValidationResults) error {
 	startValidation := time.Now() // timer to log Validate block duration
 	logger.Debugf("[%s] START Block Validation for block [%d]", v.ChainID, block.Header.Number)
 
@@ -146,12 +167,300 @@ func (v *TxValidator) Validate(block *common.Block) error {
 	// array of txids
 	txidArray := make([]string, len(block.Data.Data))
 
-	results := make(chan *blockValidationResult)
-	go func() {
-		for tIdx, d := range block.Data.Data {
-			// ensure that we don't have too many concurrent validation workers
-			v.Support.Acquire(context.Background(), 1)
+	txFlags, numValidated, err := v.validate(context.Background(), block, v.getTxFilter())
+	if err == nil {
+		flags := newTxFlags(block.Header.Number, txsfltr)
+		done := flags.merge(txFlags)
+		if done {
+			logger.Debugf("[%s] Committer has validated all %d transactions in block %d", v.ChainID, len(block.Data.Data), block.Header.Number)
+		} else {
+			err = v.waitForValidationResults(ignoreCancel, block.Header.Number, flags, resultsChan, getValidationWaitTime(numValidated))
+			if err != nil {
+				logger.Warningf("[%s] Got error in validation response for block %d: %s", v.ChainID, block.Header.Number, err)
+			}
+		}
 
+		if err == nil {
+			notValidated := make(map[int]struct{})
+			for i, flag := range txsfltr {
+				if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
+					notValidated[i] = struct{}{}
+				}
+			}
+
+			if len(notValidated) > 0 {
+				ctx, cancel := context.WithCancel(context.Background())
+
+				// Haven't received results for some of the transactions. Validate the remaining ones.
+				go v.validateRemaining(ctx, block, notValidated, resultsChan)
+
+				// Wait forever for a response
+				err = v.waitForValidationResults(cancel, block.Header.Number, flags, resultsChan, time.Hour)
+				if err != nil {
+					logger.Warningf("[%s] Got error validating remaining transactions in block %d: %s", v.ChainID, block.Header.Number, err)
+				}
+			}
+		}
+	}
+
+	// if we're here, all workers have completed the validation.
+	// If there was an error we return the error from the first
+	// tx in this block that returned an error
+	if err != nil {
+		logger.Infof("[%s] Got error validating transactions in block %d: %s", v.ChainID, block.Header.Number, err)
+		return err
+	}
+
+	if !allValidated(txsfltr) {
+		logger.Errorf("[%s] Not all transactions in block %d were validated", v.ChainID, block.Header.Number)
+		return errors.Errorf("Not all transactions in block %d were validated", block.Header.Number)
+	}
+
+	// if we operate with this capability, we mark invalid any transaction that has a txid
+	// which is equal to that of a previous tx in this block
+	if v.Support.Capabilities().ForbidDuplicateTXIdInBlock() {
+		markTXIdDuplicates(txidArray, txsfltr)
+	}
+
+	// if we're here, all workers have completed validation and
+	// no error was reported; we set the tx filter and return
+	// success
+	v.invalidTXsForUpgradeCC(txsChaincodeNames, txsUpgradedChaincodes, txsfltr)
+
+	// make sure no transaction has skipped validation
+	if !allValidated(txsfltr) {
+		return errors.Errorf("not all transactions in block %d were validated", block.Header.Number)
+	}
+
+	// Initialize metadata structure
+	utils.InitBlockMetadata(block)
+	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsfltr
+
+	elapsedValidation := time.Since(startValidation) / time.Millisecond // duration in ms
+	logger.Infof("[%s] Validated block [%d] in %dms", v.ChainID, block.Header.Number, elapsedValidation)
+
+	return nil
+}
+
+// ValidatePartial partially validates the block and sends the validation results over Gossip
+// NOTE: This function should only be called by validators and not committers.
+func (v *TxValidator) ValidatePartial(ctx context.Context, block *common.Block) {
+	committer, err := v.roleUtil.Committer(false)
+	if err != nil {
+		logger.Errorf("[%s] Unable to get the committing peer to send the validation response to: %s", v.ChainID, err)
+		return
+	}
+
+	txFlags, numValidated, err := v.validate(ctx, block, v.getTxFilter())
+	if err != nil {
+		// Error while validating. Don't send the result over Gossip - in this case the committer will
+		// revalidate the unvalidated transactions.
+		logger.Infof("[%s] Got error in validation of block %d: %s", v.ChainID, block.Header.Number, err)
+		return
+	}
+
+	if numValidated == 0 {
+		logger.Debugf("[%s] No transactions were validated for block %d", v.ChainID, block.Header.Number)
+		return
+	}
+
+	logger.Debugf("[%s] ... finished validating %d transactions in block %d. Error: %v", v.ChainID, numValidated, block.Header.Number, err)
+
+	// Gossip the results to the committer
+	msg, err := v.createValidationResponseGossipMsg(block, txFlags)
+	if err != nil {
+		logger.Errorf("[%s] Got error creating validation response for block %d: %s", v.ChainID, block.Header.Number, err)
+		return
+	}
+
+	logger.Debugf("[%s] ... gossiping validation response for %d transactions in block %d to the committer: [%s]", v.ChainID, numValidated, block.Header.Number, committer.Endpoint)
+
+	v.gossip.Send(msg, &comm.RemotePeer{
+		Endpoint: committer.Endpoint,
+		PKIID:    committer.PKIid,
+	})
+}
+
+func (v *TxValidator) validateRemaining(ctx context.Context, block *common.Block, notValidated map[int]struct{}, resultsChan chan *ValidationResults) {
+	txFlags, numValidated, err := v.validate(ctx, block,
+		func(txIdx int) bool {
+			_, ok := notValidated[txIdx]
+			return ok
+		},
+	)
+
+	// FIXME: Change to Debug
+	logger.Infof("[%s] ... finished validating %d transactions in block %d that were not validated. Err: %v", v.ChainID, numValidated, block.Header.Number, err)
+
+	resultsChan <- &ValidationResults{
+		BlockNumber: block.Header.Number,
+		TxFlags:     txFlags,
+		Err:         err,
+	}
+}
+
+func (v *TxValidator) waitForValidationResults(cancel context.CancelFunc, blockNumber uint64, flags *txFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
+	logger.Debugf("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
+
+	start := time.Now()
+	timeoutChan := time.After(timeout)
+
+	for {
+		select {
+		case result := <-resultsChan:
+			// FIXME: Change to Debug
+			logger.Infof("[%s] Got results from [%s] for block %d after %s", v.ChainID, result.Endpoint, result.BlockNumber, time.Since(start))
+
+			done, err := v.handleResults(blockNumber, flags, result)
+			if err != nil {
+				logger.Infof("[%s] Received error in validation results from [%s] peer for block %d: %s", v.ChainID, result.Endpoint, result.BlockNumber, err)
+				return err
+			}
+
+			if done {
+				// Cancel any background validations
+				cancel()
+
+				// FIXME: Change to Debug
+				logger.Infof("[%s] Block %d is all validated. Done waiting %s for responses.", v.ChainID, blockNumber, time.Since(start))
+				return nil
+			}
+		case <-timeoutChan:
+			// FIXME: Change to Debug
+			logger.Infof("[%s] Timed out after %s waiting for validation response for block %d", v.ChainID, timeout, blockNumber)
+			return nil
+		}
+	}
+}
+
+func (v *TxValidator) handleResults(blockNumber uint64, flags *txFlags, result *ValidationResults) (done bool, err error) {
+	if result.BlockNumber < blockNumber {
+		logger.Debugf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
+		return false, nil
+	}
+
+	if result.BlockNumber > blockNumber {
+		// This shouldn't be possible
+		logger.Warningf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
+		return false, nil
+	}
+
+	if result.Err != nil {
+		if result.Err == context.Canceled {
+			// Ignore this error
+			logger.Debugf("[%s] Validation was canceled in [%s] peer for block %d", v.ChainID, result.Endpoint, result.BlockNumber)
+			return false, nil
+		}
+		return true, result.Err
+	}
+
+	return flags.merge(result.TxFlags), nil
+}
+
+type txFlags struct {
+	mutex       sync.Mutex
+	flags       ledgerUtil.TxValidationFlags
+	blockNumber uint64
+}
+
+func newTxFlags(blockNumber uint64, flags ledgerUtil.TxValidationFlags) *txFlags {
+	return &txFlags{blockNumber: blockNumber, flags: flags}
+}
+
+// merge merges the given flags and returns true if all of the flags have been validated
+func (f *txFlags) merge(source ledgerUtil.TxValidationFlags) bool {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	for i, flag := range source {
+		if peer.TxValidationCode(flag) == peer.TxValidationCode_NOT_VALIDATED {
+			continue
+		}
+		currentFlag := f.flags.Flag(i)
+		if currentFlag == peer.TxValidationCode_NOT_VALIDATED {
+			f.flags.SetFlag(i, peer.TxValidationCode(flag))
+		} else {
+			logger.Debugf("TxValidation flag at index [%d] for block number %d is already set to %s and attempting to set it to %s. The flag will not be changed.", i, f.blockNumber, currentFlag, peer.TxValidationCode(flag))
+		}
+	}
+	return allValidated(f.flags)
+}
+
+func (v *TxValidator) validate(ctx context.Context, block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
+	// First phase validation includes validating the block for proper structure, no duplicate transactions, signatures.
+	logger.Debugf("[%s] Starting phase 1 validation of block %d ...", v.ChainID, block.Header.Number)
+	txFlags, numValidated, err := v.validateBlock(ctx, block, shouldValidate)
+	if logger.IsEnabledFor(logging.DEBUG) {
+		logger.Debugf("[%s] ... finished phase 1 validation of block %d. Flags: %s", v.ChainID, block.Header.Number, flagsToString(txFlags))
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Second phase validation validates the transactions for MVCC conflicts against committed data.
+	logger.Debugf("[%s] Starting phase 2 validation of block %d ...", v.ChainID, block.Header.Number)
+	err = v.mvccValidator.ValidateMVCC(ctx, block, txFlags, shouldValidate)
+	logger.Debugf("[%s] ... finished validation of block %d.", v.ChainID, block.Header.Number)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		logger.Debugf("[%s] Returning flags from phase1 validation of block %d: %s", v.ChainID, block.Header.Number, flagsToString(txFlags))
+	}
+
+	return txFlags, numValidated, nil
+}
+
+func (v *TxValidator) validateBlock(ctx context.Context, block *common.Block, shouldValidate util.TxFilter) (ledgerUtil.TxValidationFlags, int, error) {
+	logger.Debugf("[%s] Validating block %d ...", v.ChainID, block.Header.Number)
+
+	var err error
+	var errPos int
+
+	// Initialize trans as valid here, then set invalidation reason code upon invalidation below
+	txsfltr := ledgerUtil.NewTxValidationFlags(len(block.Data.Data))
+	// txsChaincodeNames records all the invoked chaincodes by tx in a block
+	txsChaincodeNames := make(map[int]*sysccprovider.ChaincodeInstance)
+	// upgradedChaincodes records all the chaincodes that are upgraded in a block
+	txsUpgradedChaincodes := make(map[int]*sysccprovider.ChaincodeInstance)
+	// array of txids
+	txidArray := make([]string, len(block.Data.Data))
+
+	transactions := make(map[int]struct{})
+	for tIdx := range block.Data.Data {
+		if shouldValidate(tIdx) {
+			transactions[tIdx] = struct{}{}
+		}
+	}
+
+	results := make(chan *blockValidationResult, 10)
+
+	go func() {
+		n := 0
+		for tIdx, d := range block.Data.Data {
+			_, ok := transactions[tIdx]
+			if !ok {
+				continue
+			}
+
+			// ensure that we don't have too many concurrent validation workers
+			err := v.Support.Acquire(ctx, 1)
+			if err != nil {
+				// Probably canceled
+				// FIXME: Change to Debug
+				logger.Infof("Unable to acquire semaphore after submitting %d of %d validation requests for block %d: %s", n, len(transactions), block.Header.Number, err)
+
+				// Send error responses for the remaining transactions
+				for ; n < len(transactions); n++ {
+					results <- &blockValidationResult{err: err}
+				}
+				return
+			}
+
+			n++
+
+			logger.Debugf("[%s] Validating tx index [%d] in block %d ...", v.ChainID, tIdx, block.Header.Number)
 			go func(index int, data []byte) {
 				defer v.Support.Release(1)
 
@@ -160,25 +469,31 @@ func (v *TxValidator) Validate(block *common.Block) error {
 					block: block,
 					tIdx:  index,
 				}, results)
+				logger.Debugf("[%s] ... finished validating tx index [%d] in block %d", v.ChainID, index, block.Header.Number)
 			}(tIdx, d)
 		}
 	}()
 
-	logger.Debugf("expecting %d block validation responses", len(block.Data.Data))
+	logger.Debugf("[%s] expecting %d block validation responses", v.ChainID, len(transactions))
 
 	// now we read responses in the order in which they come back
-	for i := 0; i < len(block.Data.Data); i++ {
+	for i := 0; i < len(transactions); i++ {
 		res := <-results
 
 		if res.err != nil {
 			// if there is an error, we buffer its value, wait for
 			// all workers to complete validation and then return
 			// the error from the first tx in this block that returned an error
-			logger.Debugf("got terminal error %s for idx %d", res.err, res.tIdx)
-
 			if err == nil || res.tIdx < errPos {
 				err = res.err
 				errPos = res.tIdx
+
+				if err == context.Canceled {
+					// FIXME: Change to Debug
+					logger.Infof("Validation of block %d was canceled", block.Header.Number)
+				} else {
+					logger.Warningf("Got error %s for idx %d", err, res.tIdx)
+				}
 			}
 		} else {
 			// if there was no error, we set the txsfltr and we set the
@@ -199,51 +514,50 @@ func (v *TxValidator) Validate(block *common.Block) error {
 		}
 	}
 
-	// if we're here, all workers have completed the validation.
-	// If there was an error we return the error from the first
-	// tx in this block that returned an error
-	if err != nil {
-		return err
-	}
-
-	// if we operate with this capability, we mark invalid any transaction that has a txid
-	// which is equal to that of a previous tx in this block
-	if v.Support.Capabilities().ForbidDuplicateTXIdInBlock() {
-		markTXIdDuplicates(txidArray, txsfltr)
-	}
-
-	// if we're here, all workers have completed validation and
-	// no error was reported; we set the tx filter and return
-	// success
-	v.invalidTXsForUpgradeCC(txsChaincodeNames, txsUpgradedChaincodes, txsfltr)
-
-	// make sure no transaction has skipped validation
-	err = v.allValidated(txsfltr, block)
-	if err != nil {
-		return err
-	}
-
-	// Initialize metadata structure
-	utils.InitBlockMetadata(block)
-
-	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txsfltr
-
-	elapsedValidation := time.Since(startValidation) / time.Millisecond // duration in ms
-	logger.Infof("[%s] Validated block [%d] in %dms", v.ChainID, block.Header.Number, elapsedValidation)
-
-	return nil
+	return txsfltr, len(transactions), err
 }
 
-// allValidated returns error if some of the validation flags have not been set
+// allValidated returns false if some of the validation flags have not been set
 // during validation
-func (v *TxValidator) allValidated(txsfltr ledgerUtil.TxValidationFlags, block *common.Block) error {
-	for id, f := range txsfltr {
+func allValidated(txsfltr ledgerUtil.TxValidationFlags) bool {
+	for _, f := range txsfltr {
 		if peer.TxValidationCode(f) == peer.TxValidationCode_NOT_VALIDATED {
-			return errors.Errorf("transaction %d in block %d has skipped validation", id, block.Header.Number)
+			return false
+		}
+	}
+	return true
+}
+
+func (v *TxValidator) createValidationResponseGossipMsg(block *common.Block, txFlags ledgerUtil.TxValidationFlags) (*gossipproto.GossipMessage, error) {
+	return &gossipproto.GossipMessage{
+		Nonce:   0,
+		Tag:     gossipproto.GossipMessage_CHAN_AND_ORG,
+		Channel: []byte(v.ChainID),
+		Content: &gossipproto.GossipMessage_ValidationResultsMsg{
+			ValidationResultsMsg: &gossipproto.ValidationResultsMessage{
+				SeqNum:  block.Header.Number,
+				TxFlags: txFlags,
+			},
+		},
+	}, nil
+}
+
+func (v *TxValidator) getTxFilter() util.TxFilter {
+	sortedValidators := validators(v.roleUtil.Validators(true))
+	sort.Sort(sortedValidators)
+
+	if logger.IsEnabledFor(logging.DEBUG) {
+		logger.Debugf("[%s] All validators:", v.ChainID)
+		for _, m := range sortedValidators {
+			logger.Debugf("- [%s], MSPID [%s], - Roles: %s", m.Endpoint, m.MSPID, m.Properties.Roles)
 		}
 	}
 
-	return nil
+	return func(txIdx int) bool {
+		validatorForTx := sortedValidators[txIdx%len(sortedValidators)]
+		logger.Debugf("[%s] Validator for TxIdx [%d] is [%s]", v.ChainID, txIdx, validatorForTx.Endpoint)
+		return validatorForTx.Local
+	}
 }
 
 func markTXIdDuplicates(txids []string, txsfltr ledgerUtil.TxValidationFlags) {

@@ -32,7 +32,7 @@ type StorageDataRetriever interface {
 type DataStore interface {
 	// GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 	// RWSets persisted from different endorsers (via Gossip)
-	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error)
+	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error)
 
 	// GetPvtDataByNum returns a slice of the private data from the ledger
 	// for given block and based on the filter which indicates a map of

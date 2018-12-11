@@ -543,7 +543,7 @@ func TestGetVersion(t *testing.T, dbProvider statedb.VersionedDBProvider) {
 		compositeKey := statedb.CompositeKey{Namespace: "ns", Key: "key3"}
 		loadKeys = append(loadKeys, &compositeKey)
 		//load the committed versions
-		bulkdb.LoadCommittedVersions(loadKeys)
+		bulkdb.LoadCommittedVersions(loadKeys, make(map[*statedb.CompositeKey]*version.Height))
 
 		//retrieve a version by namespace and key
 		resp, err := db.GetVersion("ns", "key3")

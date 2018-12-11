@@ -674,6 +674,20 @@ func (m *GossipMessage) GetPrivateData() *PrivateDataMessage {
 	return nil
 }
 
+func (m *GossipMessage) GetValidationResultsMsg() *ValidationResultsMessage {
+	if x, ok := m.GetContent().(*GossipMessage_ValidationResultsMsg); ok {
+		return x.ValidationResultsMsg
+	}
+	return nil
+}
+
+func (m *GossipMessage) GetValidationReqMsg() *DataMessage {
+	if x, ok := m.GetContent().(*GossipMessage_ValidationReqMsg); ok {
+		return x.ValidationReqMsg
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*GossipMessage) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _GossipMessage_OneofMarshaler, _GossipMessage_OneofUnmarshaler, _GossipMessage_OneofSizer, []interface{}{
@@ -698,6 +712,8 @@ func (*GossipMessage) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer)
 		(*GossipMessage_PrivateReq)(nil),
 		(*GossipMessage_PrivateRes)(nil),
 		(*GossipMessage_PrivateData)(nil),
+		(*GossipMessage_ValidationResultsMsg)(nil),
+		(*GossipMessage_ValidationReqMsg)(nil),
 	}
 }
 
@@ -808,6 +824,16 @@ func _GossipMessage_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *GossipMessage_PrivateData:
 		b.EncodeVarint(25<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.PrivateData); err != nil {
+			return err
+		}
+	case *GossipMessage_ValidationResultsMsg:
+		b.EncodeVarint(50<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ValidationResultsMsg); err != nil {
+			return err
+		}
+	case *GossipMessage_ValidationReqMsg:
+		b.EncodeVarint(51<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ValidationReqMsg); err != nil {
 			return err
 		}
 	case nil:
@@ -987,6 +1013,22 @@ func _GossipMessage_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.
 		msg := new(PrivateDataMessage)
 		err := b.DecodeMessage(msg)
 		m.Content = &GossipMessage_PrivateData{msg}
+		return true, err
+	case 50: // content.validation_results_msg
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ValidationResultsMessage)
+		err := b.DecodeMessage(msg)
+		m.Content = &GossipMessage_ValidationResultsMsg{msg}
+		return true, err
+	case 51: // content.validation_req_msg
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(DataMessage)
+		err := b.DecodeMessage(msg)
+		m.Content = &GossipMessage_ValidationReqMsg{msg}
 		return true, err
 	default:
 		return false, nil
@@ -2637,6 +2679,31 @@ func (m *Chaincode) GetMetadata() []byte {
 	return nil
 }
 
+// ValidationResultsMessage is the message containing block validation results
+type ValidationResultsMessage struct {
+	SeqNum  uint64 `protobuf:"varint,1,opt,name=seq_num,json=seqNum" json:"seq_num,omitempty"`
+	TxFlags []byte `protobuf:"bytes,2,opt,name=txFlags,proto3" json:"txFlags,omitempty"`
+}
+
+func (m *ValidationResultsMessage) Reset()                    { *m = ValidationResultsMessage{} }
+func (m *ValidationResultsMessage) String() string            { return proto.CompactTextString(m) }
+func (*ValidationResultsMessage) ProtoMessage()               {}
+func (*ValidationResultsMessage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{34} }
+
+func (m *ValidationResultsMessage) GetSeqNum() uint64 {
+	if m != nil {
+		return m.SeqNum
+	}
+	return 0
+}
+
+func (m *ValidationResultsMessage) GetTxFlags() []byte {
+	if m != nil {
+		return m.TxFlags
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*Envelope)(nil), "gossip.Envelope")
 	proto.RegisterType((*SecretEnvelope)(nil), "gossip.SecretEnvelope")
@@ -2672,6 +2739,7 @@ func init() {
 	proto.RegisterType((*PvtDataPayload)(nil), "gossip.PvtDataPayload")
 	proto.RegisterType((*Acknowledgement)(nil), "gossip.Acknowledgement")
 	proto.RegisterType((*Chaincode)(nil), "gossip.Chaincode")
+	proto.RegisterType((*ValidationResultsMessage)(nil), "gossip.ValidationResultsMessage")
 	proto.RegisterEnum("gossip.PullMsgType", PullMsgType_name, PullMsgType_value)
 	proto.RegisterEnum("gossip.GossipMessage_Tag", GossipMessage_Tag_name, GossipMessage_Tag_value)
 }

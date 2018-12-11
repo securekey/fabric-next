@@ -28,6 +28,8 @@ type VersionedDBProvider interface {
 
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
+	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
+	GetKVCacheProvider() (*kvcache.KVCacheProvider)
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
 	GetState(namespace string, key string) (*VersionedValue, error)
 	// GetVersion gets the version for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
@@ -76,9 +78,14 @@ type VersionedDB interface {
 //BulkOptimizable interface provides additional functions for
 //databases capable of batch operations
 type BulkOptimizable interface {
-	LoadCommittedVersions(keys []*CompositeKey) error
+	// Load all heights for 'keys' from the data store in bulk and store in cache for later retrieval.
+	// Merge the pre-loaded key-heights into the cache.
+	LoadCommittedVersions(keys []*CompositeKey, preLoaded map[*CompositeKey]*version.Height) error
+	LoadWSetCommittedVersions(keys []*CompositeKey, keysExist []*CompositeKey, blockNum uint64) error
 	GetCachedVersion(namespace, key string) (*version.Height, bool)
 	ClearCachedVersions()
+	//TODO find better way to acquire lock
+	GetWSetCacheLock() *sync.RWMutex
 }
 
 //IndexCapable interface provides additional functions for
@@ -212,6 +219,11 @@ func (batch *UpdateBatch) GetUpdates(ns string) map[string]*VersionedValue {
 	return nsUpdates.m
 }
 
+// RemoveUpdates removes all the updates for a namespace
+func (batch *UpdateBatch) RemoveUpdates(ns string) {
+	delete(batch.updates, ns)
+}
+
 // GetRangeScanIterator returns an iterator that iterates over keys of a specific namespace in sorted order
 // In other word this gives the same functionality over the contents in the `UpdateBatch` as
 // `VersionedDB.GetStateRangeScanIterator()` method gives over the contents in the statedb
@@ -240,7 +252,7 @@ type nsIterator struct {
 	lastIndex  int
 }
 
-func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch) *nsIterator {
+func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch, includeEndKey bool) *nsIterator {
 	nsUpdates, ok := batch.updates[ns]
 	if !ok {
 		return &nsIterator{}
@@ -257,6 +269,9 @@ func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch
 		lastIndex = len(sortedKeys)
 	} else {
 		lastIndex = sort.SearchStrings(sortedKeys, endKey)
+		if includeEndKey {
+			lastIndex++
+		}
 	}
 	return &nsIterator{ns, nsUpdates, sortedKeys, nextIndex, lastIndex}
 }

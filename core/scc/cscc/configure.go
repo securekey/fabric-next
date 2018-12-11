@@ -13,16 +13,19 @@ package cscc
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/config"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/util/retry"
 	"github.com/hyperledger/fabric/core/aclmgmt"
 	"github.com/hyperledger/fabric/core/aclmgmt/resources"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/policy"
@@ -333,4 +336,22 @@ func getChannels() pb.Response {
 	}
 
 	return shim.Success(cqrbytes)
+}
+
+func initializeChannel(channelID string) error {
+	// TODO: Make configurable
+	maxAttempts := 10
+
+	_, err := retry.Invoke(
+		func() (interface{}, error) {
+			err := peer.InitializeChannel(channelID)
+			return nil, err
+		},
+		retry.WithMaxAttempts(maxAttempts),
+		retry.WithBeforeRetry(func(err error, attempt int, backoff time.Duration) bool {
+			cnflogger.Infof("Error initializing channel [%s] on attempt %d: %s. Will retry in %s", channelID, attempt, err, backoff)
+			return true
+		}),
+	)
+	return err
 }

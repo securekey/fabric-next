@@ -18,6 +18,7 @@ type batch interface {
 // any of the batches return error during its execution
 func executeBatches(batches []batch) error {
 	logger.Debugf("Executing batches = %s", batches)
+
 	numBatches := len(batches)
 	if numBatches == 0 {
 		return nil

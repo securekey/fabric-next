@@ -1,5 +1,5 @@
 /*
-Copyright IBM Corp. All Rights Reserved.
+Copyright IBM Corp, SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
@@ -8,6 +8,7 @@ package couchdb
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptrace"
 	"net/http/httputil"
 	"net/textproto"
 	"net/url"
@@ -53,8 +55,7 @@ type DBInfo struct {
 		External int `json:"external"`
 		Active   int `json:"active"`
 	} `json:"sizes"`
-	PurgeSeq int `json:"purge_seq"`
-	Other    struct {
+	Other struct {
 		DataSize int `json:"data_size"`
 	} `json:"other"`
 	DocDelCount       int    `json:"doc_del_count"`
@@ -177,15 +178,33 @@ type CouchDoc struct {
 	Attachments []*AttachmentInfo
 }
 
-//BatchRetrieveDocMetadataResponse is used for processing REST batch responses from CouchDB
-type BatchRetrieveDocMetadataResponse struct {
+//NamedCouchDoc defines the structure for a JSON document value with its ID
+type NamedCouchDoc struct {
+	ID  string
+	Doc *CouchDoc
+}
+
+//BatchRetrieveDocResponse is used for processing REST batch responses from CouchDB
+type BatchRetrieveDocResponse struct {
 	Rows []struct {
-		ID          string `json:"id"`
-		DocMetadata struct {
-			ID      string `json:"_id"`
-			Rev     string `json:"_rev"`
-			Version string `json:"~version"`
+		ID    string `json:"id"`
+		Key   string `json:"key"`
+		Value struct {
+			Rev string `json:"rev"`
+		} `json:"value"`
+		Doc struct {
+			ID              string          `json:"_id"`
+			Rev             string          `json:"_rev"`
+			Version         string          `json:"~version"`
+			AttachmentsInfo json.RawMessage `json:"_attachments"`
 		} `json:"doc"`
+	} `json:"rows"`
+}
+
+type BatchRetreiveDocValueResponse struct {
+	Rows []struct {
+		ID  string                     `json:"id"`
+		Doc map[string]json.RawMessage `json:"doc"`
 	} `json:"rows"`
 }
 
@@ -227,6 +246,9 @@ type DatabaseSecurity struct {
 // connection pool
 func closeResponseBody(resp *http.Response) {
 	if resp != nil {
+		if ledgerconfig.CouchDBHTTPTraceEnabled() {
+			httpTraceClose(resp)
+		}
 		io.Copy(ioutil.Discard, resp.Body) // discard whatever is remaining of body
 		resp.Body.Close()
 	}
@@ -581,7 +603,8 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 
 		//If there is a zero length attachment, do not keep the connection open
 		for _, attach := range couchDoc.Attachments {
-			if attach.Length < 1 {
+			if len(attach.AttachmentBytes) == 0 {
+				logger.Debugf("Attachment zero length and therefore connection will not be kept open. Attach: %+v", attach)
 				keepConnectionOpen = false
 			}
 		}
@@ -604,6 +627,10 @@ func (dbclient *CouchDatabase) SaveDoc(id string, rev string, couchDoc *CouchDoc
 		return "", err
 	}
 	defer closeResponseBody(resp)
+
+	if resp.StatusCode != http.StatusCreated {
+		logger.Infof("couchdb saved document but did not return created status code [%d]", resp.StatusCode)
+	}
 
 	//get the revision and return
 	revision, err := getRevisionHeader(resp)
@@ -1226,13 +1253,13 @@ func (dbclient *CouchDatabase) CreateIndex(indexdefinition string) (*CreateIndex
 
 	if couchDBReturn.Result == "created" {
 
-		logger.Infof("Created CouchDB index [%s] in state database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
+		logger.Infof("Created CouchDB index [%s] in database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
 
 		return couchDBReturn, nil
 
 	}
 
-	logger.Infof("Updated CouchDB index [%s] in state database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
+	logger.Infof("Updated CouchDB index [%s] in database [%s] using design document [%s]", couchDBReturn.Name, dbclient.DBName, couchDBReturn.ID)
 
 	return couchDBReturn, nil
 }
@@ -1900,4 +1927,19 @@ func printDocumentIds(documentPointers []*CouchDoc) (string, error) {
 		documentIds = append(documentIds, docMetadata.ID)
 	}
 	return strings.Join(documentIds, ","), nil
+}
+
+func newHTTPRequest(method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ledgerconfig.CouchDBHTTPTraceEnabled() {
+		return req, nil
+	}
+
+	trace := newHTTPTrace()
+	req = req.WithContext(context.WithValue(req.Context(), httpTraceContextKey{}, trace))
+	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace.Trace())), nil
 }

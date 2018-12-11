@@ -34,6 +34,8 @@ func newConfig(selfEndpoint string, externalEndpoint string, certs *common.TLSCe
 		return nil, errors.Wrapf(err, "misconfigured endpoint %s, failed to parse port number", selfEndpoint)
 	}
 
+	pullInterval := util.GetDurationOrDefault("peer.gossip.pullInterval", 4*time.Second)
+
 	conf := &gossip.Config{
 		BindPort:                   int(port),
 		BootstrapPeers:             bootPeers,

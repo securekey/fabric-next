@@ -21,6 +21,8 @@ type nsCommittersBuilder struct {
 	db              *couchdb.CouchDatabase
 	revisions       map[string]string
 	subNsCommitters []batch
+	ns              string
+	keyIndex        statekeyindex.StateKeyIndex
 }
 
 // subNsCommitter implements `batch` interface. Each batch commits the portion of updates within a namespace assigned to it
@@ -30,7 +32,11 @@ type subNsCommitter struct {
 }
 
 // buildCommitters build the batches of type subNsCommitter. This functions processes different namespaces in parallel
-func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, error) {
+func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch, blockNum uint64) ([]batch, error) {
+	keyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(vdb.chainName)
+	if err != nil {
+		return nil, err
+	}
 	namespaces := updates.GetUpdatedNamespaces()
 	var nsCommitterBuilder []batch
 	for _, ns := range namespaces {
@@ -43,10 +49,21 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 		if nsRevs == nil {
 			nsRevs = make(nsRevisions)
 		}
+		vdb.GetWSetCacheLock().RLock()
+		if committedWSetDataCache := vdb.committedWSetDataCache[blockNum]; committedWSetDataCache != nil {
+			nsWSetRevs := committedWSetDataCache.revs[ns]
+			for k, v := range nsWSetRevs {
+				nsRevs[k] = v
+			}
+		}
+		vdb.GetWSetCacheLock().RUnlock()
 		// for each namespace, construct one builder with the corresponding couchdb handle and couch revisions
 		// that are already loaded into cache (during validation phase)
-		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{updates: nsUpdates, db: db, revisions: nsRevs})
+		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{ns: ns, updates: nsUpdates, db: db, revisions: nsRevs, keyIndex: keyIndex})
 	}
+	vdb.GetWSetCacheLock().Lock()
+	vdb.committedWSetDataCache[blockNum] = nil
+	vdb.GetWSetCacheLock().Unlock()
 	if err := executeBatches(nsCommitterBuilder); err != nil {
 		return nil, err
 	}
@@ -61,7 +78,8 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch) ([]batch, 
 // execute implements the function in `batch` interface. This function builds one or more `subNsCommitter`s that
 // cover the updates for a namespace
 func (builder *nsCommittersBuilder) execute() error {
-	if err := addRevisionsForMissingKeys(builder.revisions, builder.db, builder.updates); err != nil {
+	// TODO: Perform couchdb revision load in the background earlier.
+	if err := addRevisionsForMissingKeys(builder.ns, builder.keyIndex, builder.revisions, builder.db, builder.updates); err != nil {
 		return err
 	}
 	maxBacthSize := ledgerconfig.GetMaxBatchUpdateSize()
@@ -71,7 +89,8 @@ func (builder *nsCommittersBuilder) execute() error {
 		if err != nil {
 			return err
 		}
-		batchUpdateMap[key] = &batchableDocument{CouchDoc: *couchDoc, Deleted: vv.Value == nil}
+		// TODO: I removed the copy of the couch document here. (It isn't clear why a copy is needed).
+		batchUpdateMap[key] = &batchableDocument{CouchDoc: couchDoc, Deleted: vv.Value == nil}
 		if len(batchUpdateMap) == maxBacthSize {
 			builder.subNsCommitters = append(builder.subNsCommitters, &subNsCommitter{builder.db, batchUpdateMap})
 			batchUpdateMap = make(map[string]*batchableDocument)
@@ -89,14 +108,14 @@ func (committer *subNsCommitter) execute() error {
 }
 
 // commitUpdates commits the given updates to couchdb
+// TODO: this should be refactored to use a common commit function in the CouchDB package.
 func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchableDocument) error {
 	//Add the documents to the batch update array
 	batchUpdateDocs := []*couchdb.CouchDoc{}
 	for _, updateDocument := range batchUpdateMap {
 		batchUpdateDocument := updateDocument
-		batchUpdateDocs = append(batchUpdateDocs, &batchUpdateDocument.CouchDoc)
+		batchUpdateDocs = append(batchUpdateDocs, batchUpdateDocument.CouchDoc)
 	}
-
 	// Do the bulk update into couchdb. Note that this will do retries if the entire bulk update fails or times out
 	batchUpdateResp, err := db.BatchUpdateDocuments(batchUpdateDocs)
 	if err != nil {
@@ -188,6 +207,6 @@ func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDa
 
 //batchableDocument defines a document for a batch
 type batchableDocument struct {
-	CouchDoc couchdb.CouchDoc
+	CouchDoc *couchdb.CouchDoc
 	Deleted  bool
 }

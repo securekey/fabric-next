@@ -18,7 +18,9 @@ package committer
 
 import (
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
+	"golang.org/x/net/context"
 )
 
 // Committer is the interface supported by committers
@@ -29,9 +31,17 @@ import (
 // more support (such as Gossip) this interface will
 // change
 type Committer interface {
+	// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
+	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
 
 	// CommitWithPvtData block and private data into the ledger
 	CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error
+
+	// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+
+	// ValidateBlock validate block
+	ValidateBlock(blockAndPvtData *ledger.BlockAndPvtData) error
 
 	// GetPvtDataAndBlockByNum retrieves block with private data with given
 	// sequence number

@@ -48,13 +48,19 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type versionedDB struct {
+	kvCacheProvider *kvcache.KVCacheProvider
 	db     *leveldbhelper.DBHandle
 	dbName string
 }
 
 // newVersionedDB constructs an instance of VersionedDB
 func newVersionedDB(db *leveldbhelper.DBHandle, dbName string) *versionedDB {
-	return &versionedDB{db, dbName}
+	kvCacheProvider := kvcache.NewKVCacheProvider()
+	return &versionedDB{kvCacheProvider, db, dbName}
+}
+
+func (vdb *versionedDB) GetKVCacheProvider() (*kvcache.KVCacheProvider) {
+	return vdb.kvCacheProvider
 }
 
 // Open implements method in VersionedDB interface
@@ -166,6 +172,7 @@ func (vdb *versionedDB) ExecuteQueryWithMetadata(namespace, query string, metada
 
 // ApplyUpdates implements method in VersionedDB interface
 func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
+
 	dbBatch := leveldbhelper.NewUpdateBatch()
 	namespaces := batch.GetUpdatedNamespaces()
 	for _, ns := range namespaces {

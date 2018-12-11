@@ -29,8 +29,9 @@ const (
 )
 
 // Conf configuration for `DB`
+// TODO: Add configuration for DB (e.g., bloom filter bits)
 type Conf struct {
-	DBPath string
+	DBPath                string
 }
 
 // DB - a wrapper on an actual store
@@ -67,7 +68,10 @@ func (dbInst *DB) Open() {
 	if dbInst.dbState == opened {
 		return
 	}
-	dbOpts := &opt.Options{}
+	// TODO: make bloom filter configurable
+	dbOpts := &opt.Options{
+		Filter: filter.NewBloomFilter(10),
+	}
 	dbPath := dbInst.conf.DBPath
 	var err error
 	var dirEmpty bool
@@ -153,4 +157,25 @@ func (dbInst *DB) WriteBatch(batch *leveldb.Batch, sync bool) error {
 		return errors.Wrap(err, "error writing batch to leveldb")
 	}
 	return nil
+}
+
+func (dbInst *DB) getState() {
+	for {
+		time.Sleep(5 * time.Second)
+		if dbInst.dbState == closed {
+			logger.Info("leveldb is closed exit the getState")
+			break
+		}
+		levelDBStats := []string{"stats", "iostats", "writedelay", "sstables", "blockpool", "cachedblock", "openedtables", "alivesnaps", "aliveiters"}
+		var b bytes.Buffer
+		for _, stats := range levelDBStats {
+			res, err := dbInst.db.GetProperty(fmt.Sprintf("leveldb.%s", stats))
+			if err != nil {
+				logger.Errorf("leveldb getState %s return error %s", stats, err)
+				continue
+			}
+			b.WriteString(res)
+		}
+		logger.Infof("******* leveldb getState %s", strings.Replace(b.String(), "\n", " ", -1))
+	}
 }

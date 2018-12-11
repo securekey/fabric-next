@@ -99,7 +99,7 @@ func (scanner *historyScanner) Next() (commonledger.QueryResult, error) {
 		}
 
 		// Get the txid, key write value, timestamp, and delete indicator associated with this transaction
-		queryResult, err := getKeyModificationFromTran(tranEnvelope, scanner.namespace, scanner.key)
+		queryResult, err := historydb.GetKeyModificationFromTran(tranEnvelope, scanner.namespace, scanner.key)
 		if err != nil {
 			return nil, err
 		}

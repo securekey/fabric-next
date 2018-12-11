@@ -70,13 +70,17 @@ func (provider *VersionedDBProvider) Close() {
 
 // VersionedDB implements VersionedDB interface
 type VersionedDB struct {
-	couchInstance      *couchdb.CouchInstance
-	metadataDB         *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
-	chainName          string                            // The name of the chain/channel.
-	namespaceDBs       map[string]*couchdb.CouchDatabase // One database per deployed chaincode.
-	committedDataCache *versionsCache                    // Used as a local cache during bulk processing of a block.
-	verCacheLock       sync.RWMutex
-	mux                sync.RWMutex
+	kvCacheProvider        *kvcache.KVCacheProvider
+	couchInstance          *couchdb.CouchInstance
+	couchCheckpointRev     string
+	metadataDB             *couchdb.CouchDatabase            // A database per channel to store metadata such as savepoint.
+	chainName              string                            // The name of the chain/channel.
+	namespaceDBs           map[string]*couchdb.CouchDatabase // One database per deployed chaincode.
+	committedDataCache     *versionsCache                    // Used as a local cache during bulk processing of a block.
+	verCacheLock           sync.RWMutex
+	mux                    sync.RWMutex
+	committedWSetDataCache map[uint64]*versionsCache // Used as a local cache during bulk processing of a block.
+	verWSetCacheLock       *sync.RWMutex
 }
 
 // newVersionedDB constructs an instance of VersionedDB
@@ -85,13 +89,65 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 	chainName := dbName
 	dbName = couchdb.ConstructMetadataDBName(dbName)
 
-	metadataDB, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+	metadataDB, err := createCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
+
+	kvCacheProvider := kvcache.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
-	return &VersionedDB{couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}}, nil
+	return &VersionedDB{kvCacheProvider: kvCacheProvider, couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
+		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
+}
+
+func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	if ledgerconfig.IsCommitter() {
+		return couchdb.CreateCouchDatabase(couchInstance, dbName)
+	}
+
+	return createCouchDatabaseEndorser(couchInstance, dbName)
+}
+
+type dbNotFoundError struct {
+	name string
+}
+
+func newDBNotFoundError(name string) dbNotFoundError {
+	return dbNotFoundError{name: name}
+}
+
+func (e dbNotFoundError) Error() string {
+	return fmt.Sprintf("DB not found: [%s]", e.name)
+}
+
+func isDBNotFoundForEndorser(err error) bool {
+	if ledgerconfig.IsCommitter() {
+		return false
+	}
+	_, ok := err.(dbNotFoundError)
+	return ok
+}
+
+func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	dbExists, err := db.ExistsWithRetry()
+	if err != nil {
+		return nil, err
+	}
+
+	if !dbExists {
+		return nil, newDBNotFoundError(db.DBName)
+	}
+
+	return db, nil
+}
+
+func (vdb *VersionedDB) GetKVCacheProvider() *kvcache.KVCacheProvider {
+	return vdb.kvCacheProvider
 }
 
 // getNamespaceDBHandle gets the handle to a named chaincode database
@@ -108,7 +164,7 @@ func (vdb *VersionedDB) getNamespaceDBHandle(namespace string) (*couchdb.CouchDa
 	db = vdb.namespaceDBs[namespace]
 	if db == nil {
 		var err error
-		db, err = couchdb.CreateCouchDatabase(vdb.couchInstance, namespaceDBName)
+		db, err = createCouchDatabase(vdb.couchInstance, namespaceDBName)
 		if err != nil {
 			return nil, err
 		}
@@ -218,6 +274,10 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
+		if isDBNotFoundForEndorser(err) {
+			logger.Debugf("DB [%s] Not Found. Returning nil since I'm an endorser.", namespace)
+			return nil, nil
+		}
 		return nil, err
 	}
 	couchDoc, _, err := db.ReadDoc(key)
@@ -231,11 +291,16 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
+	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
 	return kv.VersionedValue, nil
 }
 
 // GetStateMultipleKeys implements method in VersionedDB interface
 func (vdb *VersionedDB) GetStateMultipleKeys(namespace string, keys []string) ([]*statedb.VersionedValue, error) {
+	panic("unreachable, (the logic moved to cached state store)")
+
 	vals := make([]*statedb.VersionedValue, len(keys))
 	for i, key := range keys {
 		val, err := vdb.GetState(namespace, key)
@@ -446,7 +511,7 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 	// and keep it in memory
 	var updateBatches []batch
 	var err error
-	if updateBatches, err = vdb.buildCommitters(updates); err != nil {
+	if updateBatches, err = vdb.buildCommitters(updates, height.BlockNum); err != nil {
 		return err
 	}
 	// stage 2 - ApplyUpdates push the changes to the DB
@@ -468,8 +533,8 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 func (vdb *VersionedDB) ClearCachedVersions() {
 	logger.Debugf("Clear Cache")
 	vdb.verCacheLock.Lock()
-	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = newVersionCache()
+	vdb.verCacheLock.Unlock()
 }
 
 // Open implements method in VersionedDB interface

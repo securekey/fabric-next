@@ -68,8 +68,25 @@ func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEve
 	return &LedgerCommitter{PeerLedgerSupport: ledger, eventer: eventer}
 }
 
+// AddBlock stores a validated block into local caches and indexes (for a peer that does endorsement).
+func (lc *LedgerCommitter) AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error {
+	// Do validation and whatever needed before
+	// committing new block
+	if err := lc.preCommit(blockAndPvtData.Block); err != nil {
+		return err
+	}
+
+	// Committing new block
+	if err := lc.PeerLedgerSupport.AddBlock(blockAndPvtData); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // preCommit takes care to validate the block and update based on its
 // content
+// TODO: This is really preValidate. Need to ensure that only validation-related funcs are being called here.
 func (lc *LedgerCommitter) preCommit(block *common.Block) error {
 	// Updating CSCC with new configuration block
 	if utils.IsConfigBlock(block) {
@@ -83,6 +100,21 @@ func (lc *LedgerCommitter) preCommit(block *common.Block) error {
 
 // CommitWithPvtData commits blocks atomically with private data
 func (lc *LedgerCommitter) CommitWithPvtData(blockAndPvtData *ledger.BlockAndPvtData) error {
+	// Committing new block
+	if err := lc.PeerLedgerSupport.CommitWithPvtData(blockAndPvtData); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (lc *LedgerCommitter) ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
+	return lc.PeerLedgerSupport.ValidateMVCC(ctx, block, txFlags, filter)
+}
+
+// ValidateBlock validate block
+func (lc *LedgerCommitter) ValidateBlock(blockAndPvtData *ledger.BlockAndPvtData) error {
 	// Do validation and whatever needed before
 	// committing new block
 	if err := lc.preCommit(blockAndPvtData.Block); err != nil {

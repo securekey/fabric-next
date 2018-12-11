@@ -196,13 +196,30 @@ func (h *queryHelper) getPrivateDataMultipleKeys(ns, coll string, keys []string)
 	return values, nil
 }
 
-func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (commonledger.ResultsIterator, error) {
+func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string, btlPolicy pvtdatapolicy.BTLPolicy) (commonledger.ResultsIterator, error) {
 	if err := h.validateCollName(namespace, collection); err != nil {
 		return nil, err
 	}
 	if err := h.checkDone(); err != nil {
 		return nil, err
 	}
+
+	blocksToLiveInCache := ledgerconfig.GetKVCacheBlocksToLive()
+	btl, err := btlPolicy.GetBTL(namespace, collection)
+	if err != nil {
+		return nil, err
+	}
+
+	if btl != 0 && btl < blocksToLiveInCache {
+		metrics.IncrementCounter("getnondurableprivatedatarangescaniterator_cache_request_hit")
+		logger.Debugf("GetNonDurablePrivateDataRangeScanIterator namespace %s collection %s startKey %s endKey %s", namespace, collection, startKey)
+		dbItr, err := h.txmgr.db.GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
+		if err != nil {
+			return nil, err
+		}
+		return &pvtdataResultsItr{namespace, collection, dbItr}, nil
+	}
+
 	dbItr, err := h.txmgr.db.GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
 	if err != nil {
 		return nil, err
@@ -286,6 +303,14 @@ func (h *queryHelper) done() {
 
 	defer func() {
 		h.txmgr.commitRWLock.RUnlock()
+		if h.txmgr.StopWatchAccess != "" {
+			h.txmgr.StopWatch.Stop()
+			h.txmgr.StopWatchAccess = ""
+		}
+		if h.txmgr.StopWatch1Access != "" {
+			h.txmgr.StopWatch1.Stop()
+			h.txmgr.StopWatch1Access = ""
+		}
 		h.doneInvoked = true
 		for _, itr := range h.itrs {
 			itr.Close()

@@ -117,10 +117,12 @@ func preprocessProtoBlock(txMgr txmgr.TxMgr,
 		}
 		if txsFilter.IsInvalid(txIndex) {
 			// Skipping invalid transaction
-			logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
-				" marked as invalid by committer. Reason code [%s]",
-				chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
-				txsFilter.Flag(txIndex).String())
+			if txsFilter.Flag(txIndex) != peer.TxValidationCode_NOT_VALIDATED {
+				logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
+					" marked as invalid by committer. Reason code [%s]",
+					chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
+					txsFilter.Flag(txIndex).String())
+			}
 			continue
 		}
 		if err != nil {

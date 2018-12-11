@@ -555,6 +555,7 @@ chaincode:
 ledger:
 
   blockchain:
+      blockStorage: filesystem
 
   state:
     # stateDatabase - options are "goleveldb", "CouchDB"

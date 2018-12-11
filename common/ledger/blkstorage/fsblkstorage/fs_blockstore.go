@@ -42,6 +42,11 @@ func (store *fsBlockStore) AddBlock(block *common.Block) error {
 	return store.fileMgr.addBlock(block)
 }
 
+// CheckpointBlock sets the given block as checkpoint
+func (store *fsBlockStore) CheckpointBlock(block *common.Block) error {
+	return store.fileMgr.CheckpointBlock(block)
+}
+
 // GetBlockchainInfo returns the current info about blockchain
 func (store *fsBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
 	return store.fileMgr.getBlockchainInfo(), nil
@@ -68,7 +73,7 @@ func (store *fsBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
-func (store *fsBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+func (store *fsBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*common.Envelope, error) {
 	return store.fileMgr.retrieveTransactionByID(txID)
 }
 
@@ -89,4 +94,18 @@ func (store *fsBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxV
 func (store *fsBlockStore) Shutdown() {
 	logger.Debugf("closing fs blockStore:%s", store.id)
 	store.fileMgr.close()
+}
+
+
+func (store *fsBlockStore) LastBlockNumber() uint64 {
+	return store.fileMgr.lastBlockNumber()
+}
+
+
+func (store *fsBlockStore) BlockCommitted() (uint64, chan struct{}) {
+	return store.fileMgr.blockCommitted()
+}
+
+func (store *fsBlockStore) WaitForBlock(ctx context.Context, blockNum uint64) uint64 {
+	return store.fileMgr.waitForBlock(ctx, blockNum)
 }

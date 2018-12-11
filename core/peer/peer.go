@@ -31,8 +31,11 @@ import (
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/transientstore"
+	"github.com/hyperledger/fabric/core/transientstore/cdbtransientdata"
+	"github.com/hyperledger/fabric/core/transientstore/memtransientdata"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -94,7 +97,22 @@ func (sp *storeProvider) OpenStore(ledgerID string) (transientstore.Store, error
 	sp.Lock()
 	defer sp.Unlock()
 	if sp.StoreProvider == nil {
-		sp.StoreProvider = transientstore.NewStoreProvider()
+		transientStorageConfig := ledgerconfig.GetTransientStoreProvider()
+		switch transientStorageConfig {
+		case ledgerconfig.LevelDBTransientStorage:
+			sp.StoreProvider = transientstore.NewStoreProvider()
+		case ledgerconfig.MemoryTransientStorage:
+			sp.StoreProvider = memtransientdata.NewProvider()
+		case ledgerconfig.CouchDBTransientStorage:
+			var err error
+			sp.StoreProvider, err = cdbtransientdata.NewProvider()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if sp.StoreProvider == nil {
+			return nil, errors.New("transient storage provider creation failed due to unknown configuration")
+		}
 	}
 	store, err := sp.StoreProvider.OpenStore(ledgerID)
 	if err == nil {
@@ -188,6 +206,8 @@ var chains = struct {
 var chainInitializer func(string)
 
 var pluginMapper txvalidator.PluginMapper
+var ccProvider ccprovider.ChaincodeProvider
+var sccProvider sysccprovider.SystemChaincodeProvider
 
 var mockMSPIDGetter func(string) []string
 
@@ -382,7 +402,6 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		*chainSupport
 		*semaphore.Weighted
 	}{cs, validationWorkersSemaphore}
-	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm)
 	c := committer.NewLedgerCommitterReactive(ledger, func(block *common.Block) error {
 		chainID, err := utils.GetChainIDFromBlock(block)
 		if err != nil {
@@ -390,6 +409,7 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		}
 		return SetCurrConfigBlock(block, chainID)
 	})
+	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm, service.GetGossipService(), c)
 
 	ordererAddresses := bundle.ChannelConfig().OrdererAddresses()
 	if len(ordererAddresses) == 0 {
@@ -412,6 +432,7 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		Store:                store,
 		Cs:                   simpleCollectionStore,
 		IdDeserializeFactory: csStoreSupport,
+		Ledger:               ledger,
 	})
 
 	chains.Lock()
@@ -747,6 +768,10 @@ type fileLedgerBlockStore struct {
 }
 
 func (flbs fileLedgerBlockStore) AddBlock(*common.Block) error {
+	return nil
+}
+
+func (flbs fileLedgerBlockStore) CheckpointBlock(*common.Block) error {
 	return nil
 }
 

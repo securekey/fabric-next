@@ -7,12 +7,14 @@ SPDX-License-Identifier: Apache-2.0
 package blocksprovider
 
 import (
+	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/gossip/api"
 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
@@ -160,6 +162,7 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 			errorStatusCounter = 0
 			statusCounter = 0
 			blockNum := t.Block.Header.Number
+			metrics.RootScope.Gauge(fmt.Sprintf("blocksprovider_%s_received_block_number", metrics.FilterMetricName(b.chainID))).Update(float64(blockNum))
 
 			marshaledBlock, err := proto.Marshal(t.Block)
 			if err != nil {
@@ -233,20 +236,6 @@ func (b *blocksProviderImpl) isEndpointsUpdated(endpoints []string) bool {
 // Check whenever provider is stopped
 func (b *blocksProviderImpl) isDone() bool {
 	return atomic.LoadInt32(&b.done) == 1
-}
-
-func createGossipMsg(chainID string, payload *gossip_proto.Payload) *gossip_proto.GossipMessage {
-	gossipMsg := &gossip_proto.GossipMessage{
-		Nonce:   0,
-		Tag:     gossip_proto.GossipMessage_CHAN_AND_ORG,
-		Channel: []byte(chainID),
-		Content: &gossip_proto.GossipMessage_DataMsg{
-			DataMsg: &gossip_proto.DataMessage{
-				Payload: payload,
-			},
-		},
-	}
-	return gossipMsg
 }
 
 func createPayload(seqNum uint64, marshaledBlock []byte) *gossip_proto.Payload {

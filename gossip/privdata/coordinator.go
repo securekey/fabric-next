@@ -53,7 +53,7 @@ type TransientStore interface {
 	Persist(txid string, blockHeight uint64, privateSimulationResults *rwset.TxPvtReadWriteSet) error
 	// GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 	// write sets persisted from different endorsers (via Gossip)
-	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (transientstore.RWSetScanner, error)
+	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error)
 
 	// PurgeByTxids removes private read-write sets for a given set of transactions from the
 	// transient store
@@ -73,8 +73,19 @@ type TransientStore interface {
 // to complete missing parts of transient data for given block.
 type Coordinator interface {
 	// StoreBlock deliver new block with underlined private data
-	// returns missing transaction ids
-	StoreBlock(block *common.Block, data util.PvtDataCollections) error
+	// returns missing transaction ids (this version commits the transaction).
+	StoreBlock(*ledger.BlockAndPvtData, []string) error
+
+	// PublishBlock deliver new block with underlined private data
+	// returns missing transaction ids (this version adds the validated block
+	// into local caches and indexes (for a peer that does endorsement).
+	PublishBlock(*ledger.BlockAndPvtData, []string) error
+
+	// ValidateBlock validate block
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
+
+	// ValidatePartialBlock is called by the validator to validate only a subset of the transactions within the block
+	ValidatePartialBlock(ctx context.Context, block *common.Block)
 
 	// StorePvtData used to persist private data into transient store
 	StorePvtData(txid string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blckHeight uint64) error
@@ -167,13 +178,13 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	ownedRWsets, err := computeOwnedRWsets(block, privateDataSets)
 	if err != nil {
 		logger.Warning("Failed computing owned RWSets", err)
-		return err
+		return nil, nil, err
 	}
 
 	privateInfo, err := c.listMissingPrivateData(block, ownedRWsets)
 	if err != nil {
 		logger.Warning(err)
-		return err
+		return nil, nil, err
 	}
 
 	retryThresh := viper.GetDuration("peer.gossip.pvtData.pullRetryThreshold")
@@ -187,7 +198,14 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 	startPull := time.Now()
 	limit := startPull.Add(retryThresh)
+
+	var waitingForMissingKeysStopWatch tally.Stopwatch
+	if metrics.IsDebug() {
+		metrics.RootScope.Gauge("privdata_gossipMissingKeys").Update(float64(len(privateInfo.missingKeys)))
+		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_duration").Start()
+	}
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
+		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
 		// If succeeded to fetch everything, no need to sleep before
 		// retry
@@ -198,6 +216,9 @@ func (c *coordinator) StoreBlock(block *common.Block, privateDataSets util.PvtDa
 	}
 	elapsedPull := int64(time.Since(startPull) / time.Millisecond) // duration in ms
 
+	if metrics.IsDebug() {
+		waitingForMissingKeysStopWatch.Stop()
+	}
 	// Only log results if we actually attempted to fetch
 	if bFetchFromPeers {
 		if len(privateInfo.missingKeys) == 0 {
@@ -310,15 +331,22 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 	}
 }
 
-func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte) {
+func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte, sources map[rwSetKey][]*peer.Endorsement) {
 	// Check transient store
 	for txAndSeq, filter := range missing.FiltersByTxIDs() {
-		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets)
+		var endorsers []*peer.Endorsement
+		for key, value := range sources {
+			if key.txID == txAndSeq.txID && key.seqInBlock == txAndSeq.seqInBlock {
+				endorsers = value
+				break
+			}
+		}
+		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets, endorsers)
 	}
 }
 
-func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte) {
-	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter)
+func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte, endorsers []*peer.Endorsement) {
+	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter, endorsers)
 	if err != nil {
 		logger.Warning("Failed obtaining iterator from transient store:", err)
 		return
@@ -334,6 +362,7 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			// End of iteration
 			break
 		}
+
 		if res.PvtSimulationResultsWithConfig == nil {
 			logger.Warning("Resultset's PvtSimulationResultsWithConfig for", txAndSeq.txID, "is nil, skipping")
 			continue
@@ -666,8 +695,7 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 	logger.Debug("Retrieving private write sets for", len(privateInfo.missingKeysByTxIDs), "transactions from transient store")
 
 	// Put into ownedRWsets RW sets that are missing and found in the transient store
-	c.fetchMissingFromTransientStore(privateInfo.missingKeysByTxIDs, ownedRWsets)
-
+	c.fetchMissingFromTransientStore(privateInfo.missingKeysByTxIDs, ownedRWsets, privateInfo.sources)
 	// In the end, iterate over the ownedRWsets, and if the key doesn't exist in
 	// the privateRWsetsInBlock - delete it from the ownedRWsets
 	for k := range ownedRWsets {

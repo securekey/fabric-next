@@ -16,6 +16,7 @@ import (
 	"time"
 
 	common_utils "github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/common"
@@ -356,6 +357,8 @@ func (gc *gossipChannel) GetPeers() []discovery.NetworkMember {
 		member.Properties = stateInf.GetStateInfo().Properties
 		member.Envelope = stateInf.Envelope
 		members = append(members, member)
+
+		gc.logger.Debugf("[%s] Adding member [%s] - Height: %d, Roles: %s", gc.chainID, member.Endpoint, member.Properties.LedgerHeight, member.Properties.Roles)
 	}
 	return members
 }
@@ -563,6 +566,21 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
 
 	if m.IsStateInfoSnapshot() {
 		gc.handleStateInfSnapshot(m.GossipMessage, msg.GetConnectionInfo().ID)
+		return
+	}
+
+	if m.IsValidationResultsMsg() {
+		gc.logger.Debugf("Got ValidationResults message from [%s] for block %d", msg.GetConnectionInfo().Endpoint, m.GetValidationResultsMsg().SeqNum)
+		if m.GetValidationResultsMsg().SeqNum == 0 {
+			gc.logger.Warning("ValidationResults sequence number is 0 - ", msg.GetConnectionInfo().ID)
+			return
+		}
+		gc.DeMultiplex(m)
+		return
+	}
+
+	if m.IsValidationReqMsg() {
+		gc.DeMultiplex(m)
 		return
 	}
 
@@ -869,6 +887,7 @@ func (gc *gossipChannel) updateProperties(ledgerHeight uint64, chaincodes []*pro
 			LeftChannel:  leftChannel,
 			LedgerHeight: ledgerHeight,
 			Chaincodes:   chaincodes,
+			Roles:        ledgerconfig.RolesAsString(),
 		},
 	}
 	m := &proto.GossipMessage{

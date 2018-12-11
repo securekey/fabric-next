@@ -31,13 +31,9 @@ type Provider interface {
 type Store interface {
 	// Init initializes the store. This function is expected to be invoked before using the store
 	Init(btlPolicy pvtdatapolicy.BTLPolicy)
-	// InitLastCommittedBlockHeight sets the last commited block height into the pvt data store
-	// This function is used in a special case where the peer is started up with the blockchain
-	// from an earlier version of a peer when the pvt data feature (and hence this store) was not
-	// available. This function is expected to be called only this situation and hence is
-	// expected to throw an error if the store is not empty. On a successful return from this
-	// fucntion the state of the store is expected to be same as of calling the prepare/commit
-	// function for block `0` through `blockNum` with no pvt data
+	// InitLastCommittedBlockHeight resets the store's state with blockNum.
+	// the store will only keep data up to the given blockNum.
+	// Any documents found in the store above this blockNum will be deleted.
 	InitLastCommittedBlock(blockNum uint64) error
 	// GetPvtDataByBlockNum returns only the pvt data  corresponding to the given block number
 	// The pvt data is filtered by the list of 'ns/collections' supplied in the filter
@@ -91,6 +87,11 @@ type ErrIllegalCall struct {
 	msg string
 }
 
+// NewErrIllegalCall creates an illegal call error
+func NewErrIllegalCall(msg string) *ErrIllegalCall {
+	return &ErrIllegalCall{msg}
+}
+
 func (err *ErrIllegalCall) Error() string {
 	return err.msg
 }
@@ -100,6 +101,11 @@ type ErrIllegalArgs struct {
 	msg string
 }
 
+// NewErrIllegalArgs creates an illegal arguments error
+func NewErrIllegalArgs(msg string) *ErrIllegalArgs {
+	return &ErrIllegalArgs{msg}
+}
+
 func (err *ErrIllegalArgs) Error() string {
 	return err.msg
 }
@@ -107,6 +113,11 @@ func (err *ErrIllegalArgs) Error() string {
 // ErrOutOfRange is to be thrown for the request for the data that is not yet committed
 type ErrOutOfRange struct {
 	msg string
+}
+
+// NewErrOutOfRange creates an out of range error
+func NewErrOutOfRange(msg string) *ErrOutOfRange {
+	return &ErrOutOfRange{msg}
 }
 
 func (err *ErrOutOfRange) Error() string {

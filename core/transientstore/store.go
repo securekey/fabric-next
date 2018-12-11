@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
@@ -67,7 +68,7 @@ type Store interface {
 	PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error
 	// GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 	// write sets persisted from different endorsers (via Gossip)
-	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (RWSetScanner, error)
+	GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error)
 	// PurgeByTxids removes private write sets of a given set of transactions from the
 	// transient store
 	PurgeByTxids(txids []string) error
@@ -190,8 +191,6 @@ func (s *store) Persist(txid string, blockHeight uint64,
 func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
 
-	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
-
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	// Create compositeKey with appropriate prefix, txid, uuid and blockHeight
@@ -203,6 +202,7 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 	if err != nil {
 		return err
 	}
+	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d] key %s", txid, blockHeight, compositeKeyPvtRWSet)
 
 	// Note that some rwset.TxPvtReadWriteSet may exist in the transient store immediately after
 	// upgrading the peer to v1.2. In order to differentiate between new proto and old proto while
@@ -240,7 +240,7 @@ func (s *store) PersistWithConfig(txid string, blockHeight uint64,
 
 // GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 // write sets persisted from different endorsers.
-func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (RWSetScanner, error) {
+func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (RWSetScanner, error) {
 
 	logger.Debugf("Getting private data from transient store for transaction %s", txid)
 
@@ -257,7 +257,7 @@ func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) 
 // committing a block to ledger.
 func (s *store) PurgeByTxids(txids []string) error {
 
-	logger.Debug("Purging private data from transient store for committed txids")
+	logger.Debugf("Purging private data from transient store for committed txids %s", txids)
 
 	dbBatch := leveldbhelper.NewUpdateBatch()
 
@@ -339,6 +339,7 @@ func (s *store) PurgeByHeight(maxBlockNumToRetain uint64) error {
 
 // GetMinTransientBlkHt returns the lowest block height remaining in transient store
 func (s *store) GetMinTransientBlkHt() (uint64, error) {
+
 	// Current approach performs a range query on purgeIndex with startKey
 	// as 0 (i.e., blockHeight) and returns the first key which denotes
 	// the lowest block height remaining in transient store. An alternative approach
@@ -369,6 +370,7 @@ func (scanner *RwsetScanner) Next() (*EndorserPvtSimulationResults, error) {
 	if !scanner.dbItr.Next() {
 		return nil, nil
 	}
+
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
@@ -392,9 +394,12 @@ func (scanner *RwsetScanner) NextWithConfig() (*EndorserPvtSimulationResultsWith
 	if !scanner.dbItr.Next() {
 		return nil, nil
 	}
+
 	dbKey := scanner.dbItr.Key()
 	dbVal := scanner.dbItr.Value()
 	_, blockHeight := splitCompositeKeyOfPvtRWSet(dbKey)
+
+	logger.Debugf("NextWithConfig() txID %s key %s", scanner.txid, dbKey)
 
 	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
 	filteredTxPvtRWSet := &rwset.TxPvtReadWriteSet{}

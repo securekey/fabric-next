@@ -44,7 +44,7 @@ func TestStateListener(t *testing.T) {
 	sampleBatch.PubUpdates.Put("ns2", "key2_1", []byte("value2_1"), version.NewHeight(1, 3))
 	sampleBatch.PubUpdates.Put("ns3", "key3_1", []byte("value3_1"), version.NewHeight(1, 4))
 	dummyBlock := common.NewBlock(1, []byte("dummyHash"))
-	txmgr.current = &current{block: dummyBlock, batch: sampleBatch}
+	txmgr.current = &update{block: dummyBlock, batch: sampleBatch}
 	txmgr.invokeNamespaceListeners()
 	assert.Equal(t, 1, ml1.HandleStateUpdatesCallCount())
 	assert.Equal(t, 1, ml2.HandleStateUpdatesCallCount())
@@ -75,7 +75,7 @@ func TestStateListener(t *testing.T) {
 	// This should cause callback only to ml3
 	sampleBatch = privacyenabledstate.NewUpdateBatch()
 	sampleBatch.PubUpdates.Put("ns4", "key4_1", []byte("value4_1"), version.NewHeight(2, 1))
-	txmgr.current = &current{block: common.NewBlock(2, []byte("anotherDummyHash")), batch: sampleBatch}
+	txmgr.current = &update{block: common.NewBlock(2, []byte("anotherDummyHash")), batch: sampleBatch}
 	txmgr.invokeNamespaceListeners()
 	assert.Equal(t, 1, ml1.HandleStateUpdatesCallCount())
 	assert.Equal(t, 1, ml2.HandleStateUpdatesCallCount())

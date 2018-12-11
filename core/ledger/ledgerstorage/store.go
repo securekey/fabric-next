@@ -37,7 +37,7 @@ type Store struct {
 }
 
 // NewProvider returns the handle to the provider
-func NewProvider() *Provider {
+func NewProvider() (*Provider, error) {
 	// Initialize the block storage
 	attrsToIndex := []blkstorage.IndexableAttr{
 		blkstorage.IndexableAttrBlockHash,
@@ -48,12 +48,62 @@ func NewProvider() *Provider {
 		blkstorage.IndexableAttrTxValidationCode,
 	}
 	indexConfig := &blkstorage.IndexConfig{AttrsToIndex: attrsToIndex}
-	blockStoreProvider := fsblkstorage.NewProvider(
-		fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
-		indexConfig)
 
-	pvtStoreProvider := pvtdatastorage.NewProvider()
-	return &Provider{blockStoreProvider, pvtStoreProvider}
+	blockStoreProvider, err := createBlockStoreProvider(indexConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	pvtStoreProvider, err := createPvtDataStoreProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Provider{blockStoreProvider, pvtStoreProvider}, nil
+}
+
+func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProvider, error) {
+	blockStorageConfig := ledgerconfig.GetBlockStoreProvider()
+
+	switch blockStorageConfig {
+	case ledgerconfig.FilesystemLedgerStorage:
+		return fsblkstorage.NewProvider(
+			fsblkstorage.NewConf(ledgerconfig.GetBlockStorePath(), ledgerconfig.GetMaxBlockfileSize()),
+			indexConfig), nil
+	case ledgerconfig.CouchDBLedgerStorage:
+		blockCacheSize := ledgerconfig.GetBlockCacheSize()
+		//cdb uses cache, no need to query with indexes (blockIndexEnabled=false)
+		blockStorage, err := cdbblkstorage.NewProvider(false)
+		if err != nil {
+			return nil, err
+		}
+		blockIndex := ldbblkindex.NewProvider(
+			ldbblkindex.NewConf(ledgerconfig.GetBlockStorePath()),
+			indexConfig)
+		blockCache := memblkcache.NewProvider(blockCacheSize)
+
+		return cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache), nil
+	}
+
+	return nil, errors.New("block storage provider creation failed due to unknown configuration")
+}
+
+func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
+	pvtDataStorageConfig := ledgerconfig.GetPvtDataStoreProvider()
+
+	switch pvtDataStorageConfig {
+	case ledgerconfig.LevelDBPvtDataStorage:
+		return pvtdatastorage.NewProvider(), nil
+	case ledgerconfig.CouchDBPvtDataStorage:
+		pvtDataCacheSize := ledgerconfig.GetPvtDataCacheSize()
+		dbPvtData, err := cdbpvtdata.NewProvider()
+		if err != nil {
+			return nil, err
+		}
+		return cachedpvtdatastore.NewProvider(dbPvtData, mempvtdatacache.NewProvider(pvtDataCacheSize)), nil
+	}
+	return nil, errors.New("private data storage provider creation failed due to unknown configuration")
+
 }
 
 // Open opens the store
@@ -88,6 +138,9 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
+	stopWatch := metrics.StopWatch("ledgerstorage_CommitWithPvtData_duration")
+	defer stopWatch()
+
 	blockNum := blockAndPvtdata.Block.Header.Number
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
@@ -95,6 +148,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 	pvtBlkStoreHt, err := s.pvtdataStore.LastCommittedBlockHeight()
 	if err != nil {
 		return err
+	}
+	if metrics.IsDebug() {
+		metrics.RootScope.Gauge("ledgerstorage_CommitWithPvtData_BlockDiff").Update(float64(blockNum - pvtBlkStoreHt))
 	}
 
 	writtenToPvtStore := false
@@ -126,6 +182,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		}
 		writtenToPvtStore = true
 	} else {
+		metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
 	}
 
@@ -181,6 +238,9 @@ func (s *Store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPv
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
+	stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataAndBlockByNum_duration")
+	defer stopWatch()
+
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
 
@@ -200,6 +260,9 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
 // A nil filter does not filter any results
 func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+	stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataByNum_duration")
+	defer stopWatch()
+
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
 	return s.getPvtDataByNumWithoutLock(blockNum, filter)
@@ -247,6 +310,20 @@ func (s *Store) ResetLastUpdatedOldBlocksList() error {
 // not the case then this init will invoke function `syncPvtdataStoreWithBlockStore`
 // to follow the normal course
 func (s *Store) init() error {
+	if ledgerconfig.IsCouchDBEnabled() {
+		return s.initCouchDB()
+	}
+	return s.initLevelDB()
+}
+
+func (s *Store) initLevelDB() error {
+	if !ledgerconfig.IsCommitter() {
+		if initialized, err := s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {
+			return err
+		}
+		return nil
+	}
+
 	var initialized bool
 	var err error
 	if initialized, err = s.initPvtdataStoreFromExistingBlockchain(); err != nil || initialized {

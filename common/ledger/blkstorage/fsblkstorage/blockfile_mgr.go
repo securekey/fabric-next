@@ -41,7 +41,8 @@ type blockfileMgr struct {
 	db                *leveldbhelper.DBHandle
 	index             index
 	cpInfo            *checkpointInfo
-	cpInfoCond        *sync.Cond
+	cpInfoSig         chan struct{}
+	cpInfoMtx         sync.RWMutex
 	currentFileWriter *blockfileWriter
 	bcInfo            atomic.Value
 }
@@ -140,9 +141,6 @@ func newBlockfileMgr(id string, conf *Conf, indexConfig *blkstorage.IndexConfig,
 	// Update the manager with the checkpoint info and the file writer
 	mgr.cpInfo = cpInfo
 	mgr.currentFileWriter = currentFileWriter
-	// Create a checkpoint condition (event) variable, for the  goroutine waiting for
-	// or announcing the occurrence of an event.
-	mgr.cpInfoCond = sync.NewCond(&sync.Mutex{})
 
 	// init BlockchainInfo for external API's
 	bcInfo := &common.BlockchainInfo{
@@ -432,11 +430,17 @@ func (mgr *blockfileMgr) getBlockchainInfo() *common.BlockchainInfo {
 }
 
 func (mgr *blockfileMgr) updateCheckpoint(cpInfo *checkpointInfo) {
-	mgr.cpInfoCond.L.Lock()
-	defer mgr.cpInfoCond.L.Unlock()
+	mgr.cpInfoMtx.Lock()
+	defer mgr.cpInfoMtx.Unlock()
 	mgr.cpInfo = cpInfo
-	logger.Debugf("Broadcasting about update checkpointInfo: %s", cpInfo)
-	mgr.cpInfoCond.Broadcast()
+	logger.Debugf("Broadcasting about update checkpointInfo: %s", mgr.cpInfo)
+	close(mgr.cpInfoSig)
+	mgr.cpInfoSig = make(chan struct{})
+}
+
+// CheckpointBlock is not implemented for file-based block storage
+func (mgr *blockfileMgr) CheckpointBlock(block *common.Block) error {
+	return nil
 }
 
 func (mgr *blockfileMgr) updateBlockchainInfo(latestBlockHash []byte, latestBlock *common.Block) {
@@ -602,6 +606,49 @@ func (mgr *blockfileMgr) saveCurrentInfo(i *checkpointInfo, sync bool) error {
 		return err
 	}
 	return nil
+}
+
+func (mgr *blockfileMgr) lastBlockNumber() uint64 {
+	mgr.cpInfoMtx.RLock()
+	defer mgr.cpInfoMtx.RUnlock()
+
+	return mgr.cpInfo.lastBlockNumber
+}
+
+func (mgr *blockfileMgr) blockCommitted() (uint64, chan struct {}) {
+	// TODO: Should probably make a copy.
+	mgr.cpInfoMtx.RLock()
+	sigCh := mgr.cpInfoSig
+	blockNumber := mgr.cpInfo.lastBlockNumber
+	mgr.cpInfoMtx.RUnlock()
+
+	return blockNumber, sigCh
+}
+
+func (mgr *blockfileMgr) waitForBlock(ctx context.Context, blockNum uint64) uint64 {
+	var lastBlockNumber uint64
+
+BlockLoop:
+	for {
+		mgr.cpInfoMtx.RLock()
+		lastBlockNumber = mgr.cpInfo.lastBlockNumber
+		sigCh := mgr.cpInfoSig
+		mgr.cpInfoMtx.RUnlock()
+
+		if lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break BlockLoop
+		case <-sigCh:
+		}
+	}
+
+	logger.Debugf("finished waiting for blocks [%d, %d]", lastBlockNumber, blockNum)
+	return lastBlockNumber
 }
 
 // scanForLastCompleteBlock scan a given block file and detects the last offset in the file
