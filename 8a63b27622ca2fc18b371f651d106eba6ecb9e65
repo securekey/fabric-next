@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9b01bd1c_03034c9b",
+        "filename": "gossip/state/state.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 783,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-12-11T20:54:11Z",
+      "side": 1,
+      "message": "This function should be deleted and all calls to it be replaced with s.ledger.LedgerHeight()",
+      "range": {
+        "startLine": 765,
+        "startChar": 0,
+        "endLine": 783,
+        "endChar": 1
+      },
+      "revId": "8a63b27622ca2fc18b371f651d106eba6ecb9e65",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
