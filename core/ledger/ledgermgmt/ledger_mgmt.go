@@ -34,9 +34,6 @@ import (
 
 var logger = flogging.MustGetLogger("ledgermgmt")
 
-// ErrLedgerAlreadyOpened is thrown by a CreateLedger call if a ledger with the given id is already opened
-var ErrLedgerAlreadyOpened = errors.New("Ledger already opened")
-
 // ErrLedgerMgmtNotInitialized is thrown when ledger mgmt is used before initializing this
 var ErrLedgerMgmtNotInitialized = errors.New("ledger mgmt should be initialized before using")
 
@@ -106,7 +103,7 @@ func OpenLedger(id string) (ledger.PeerLedger, error) {
 	}
 	l, ok := openedLedgers[id]
 	if ok {
-		return nil, ErrLedgerAlreadyOpened
+		return l, nil
 	}
 	l, err := ledgerProvider.Open(id)
 	if err != nil {
