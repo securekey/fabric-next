@@ -353,10 +353,6 @@ func TestStorePurgeWithEmptPvtData(t *testing.T) {
 	assert.NoError(s.Prepare(6, nil))
 	assert.NoError(s.Commit())
 
-	testWaitForPurgerRoutineToFinish(s)
-	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
-	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-2"}))
-
 	pvtData, err := s.GetPvtDataByBlockNum(1, nil)
 	assert.NoError(err)
 	assert.Nil(pvtData)
@@ -552,6 +548,228 @@ func TestStoreExpireMixed(t *testing.T) {
 	// ns-2, coll-2 never gets purged since blt=0
 	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-2", coll: "coll-2"}))
 }
+
+
+
+func TestIncreasePurgeInterval(t *testing.T) {
+	ledgerid := "TestIncreasePurgeInterval"
+	viper.Set("ledger.pvtdataStore.purgeInterval", 3)
+	viper.Set("ledger.pvtdataStore.skipPurgeForCollections", "coll-1")
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 1)
+	cs.SetBTL("ns-1", "coll-2", 3)
+	cs.SetBTL("ns-2", "coll-1", 5)
+	cs.SetBTL("ns-2", "coll-2", 0)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+
+	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	s := env.TestStore
+
+	// no pvt data with block 0
+	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Commit())
+
+	// write pvt data for block 1
+	testDataForBlk1 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 1, []string{"ns-1:coll-1"}),
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-2"}),
+		produceSamplePvtdata(t, 3, []string{"ns-2:coll-1"}),
+		produceSamplePvtdata(t, 4, []string{"ns-2:coll-2"}),
+	}
+	assert.NoError(s.Prepare(1, testDataForBlk1))
+	assert.NoError(s.Commit())
+
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 3, ns: "ns-2", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 4, ns: "ns-2", coll: "coll-2"}))
+
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 2
+	assert.NoError(s.Prepare(2, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ := s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		if v.SeqInBlock == 1 {
+			assert.True(v.Has("ns-1", "coll-1"))
+		}
+		if v.SeqInBlock == 2 {
+			assert.True(v.Has("ns-1", "coll-2"))
+		}
+		if v.SeqInBlock == 3 {
+			assert.True(v.Has("ns-2", "coll-1"))
+		}
+		if v.SeqInBlock == 4 {
+			assert.True(v.Has("ns-2", "coll-2"))
+		}
+	}
+
+	// write pvt data for block 3 (purger kicks in)
+	assert.NoError(s.Prepare(3, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ = s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		if v.SeqInBlock == 1 {
+			assert.False(v.Has("ns-1", "coll-1"))
+		}
+		if v.SeqInBlock == 2 {
+			assert.True(v.Has("ns-1", "coll-2"))
+		}
+		if v.SeqInBlock == 3 {
+			assert.True(v.Has("ns-2", "coll-1"))
+		}
+		if v.SeqInBlock == 4 {
+			assert.True(v.Has("ns-2", "coll-2"))
+		}
+	}
+
+	viper.Set("ledger.pvtdataStore.purgeInterval", 7)
+
+	// write pvt data for block 4
+	assert.NoError(s.Prepare(4, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 5
+	assert.NoError(s.Prepare(5, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 6
+	assert.NoError(s.Prepare(6, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ = s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		if v.SeqInBlock == 1 {
+			assert.False(v.Has("ns-1", "coll-1"))
+		}
+		if v.SeqInBlock == 2 {
+			// purge block was at 6 so it will get cleaned at 7 when purger with new interval kicks in
+			assert.True(v.Has("ns-1", "coll-2"))
+		}
+		if v.SeqInBlock == 3 {
+			assert.True(v.Has("ns-2", "coll-1"))
+		}
+		if v.SeqInBlock == 4 {
+			assert.True(v.Has("ns-2", "coll-2"))
+		}
+	}
+
+	// write pvt data for block 7 (purger kicks in)
+	assert.NoError(s.Prepare(7, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ = s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		if v.SeqInBlock == 1 {
+			assert.False(v.Has("ns-1", "coll-1"))
+		}
+		if v.SeqInBlock == 2 {
+			// purge block was at 6 so it got cleaned at 7 when purger with new interval kicked in
+			assert.False(v.Has("ns-1", "coll-2"))
+		}
+		if v.SeqInBlock == 3 {
+			// expiry block equals 7 so it expired
+			assert.False(v.Has("ns-2", "coll-1"))
+		}
+		if v.SeqInBlock == 4 {
+			assert.True(v.Has("ns-2", "coll-2"))
+		}
+	}
+
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 3, ns: "ns-2", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 4, ns: "ns-2", coll: "coll-2"}))
+}
+
+
+
+func TestDecreasePurgeInterval(t *testing.T) {
+	ledgerid := "TestDecreasePurgeInterval"
+	viper.Set("ledger.pvtdataStore.purgeInterval", 5)
+	viper.Set("ledger.pvtdataStore.skipPurgeForCollections", "coll-2")
+	cs := btltestutil.NewMockCollectionStore()
+	cs.SetBTL("ns-1", "coll-1", 1)
+	cs.SetBTL("ns-1", "coll-2", 3)
+	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(cs)
+
+	env := NewTestStoreEnv(t, ledgerid, btlPolicy)
+	defer env.Cleanup()
+	assert := assert.New(t)
+	s := env.TestStore
+
+	// no pvt data with block 0
+	assert.NoError(s.Prepare(0, nil))
+	assert.NoError(s.Commit())
+
+	// write pvt data for block 1
+	testDataForBlk1 := []*ledger.TxPvtData{
+		produceSamplePvtdata(t, 1, []string{"ns-1:coll-1"}),
+		produceSamplePvtdata(t, 2, []string{"ns-1:coll-2"}),
+	}
+
+	assert.NoError(s.Prepare(1, testDataForBlk1))
+	assert.NoError(s.Commit())
+
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+
+	testWaitForPurgerRoutineToFinish(s)
+
+	assert.NoError(s.Prepare(2, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	viper.Set("ledger.pvtdataStore.purgeInterval", 3)
+
+	// write pvt data for block 3 (purger kicks in)
+	assert.NoError(s.Prepare(3, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	pvtData, _ := s.GetPvtDataByBlockNum(1, nil)
+	for _, v := range pvtData {
+		if v.SeqInBlock == 1 {
+			assert.False(v.Has("ns-1", "coll-1"))
+		}
+		if v.SeqInBlock == 2 {
+			assert.True(v.Has("ns-1", "coll-2"))
+		}
+	}
+
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+
+	assert.NoError(s.Prepare(4, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	assert.NoError(s.Prepare(5, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	// write pvt data for block 6 (purger kicks in)
+	assert.NoError(s.Prepare(6, nil))
+	assert.NoError(s.Commit())
+	testWaitForPurgerRoutineToFinish(s)
+
+	assert.False(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 1, ns: "ns-1", coll: "coll-1"}))
+	assert.True(testDataKeyExists(t, s, &dataKey{blkNum: 1, txNum: 2, ns: "ns-1", coll: "coll-2"}))
+
+}
+
+
 
 func TestStoreState(t *testing.T) {
 	cs := btltestutil.NewMockCollectionStore()
