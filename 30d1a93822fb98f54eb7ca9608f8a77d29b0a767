@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "c87f1dac_c29472fa",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-12T22:16:07Z",
+      "side": 1,
+      "message": "this is checked inside the createBlockCouchDoc and will return nil if the entries are empty.. this is why line 74 below is checking of blockDoc !\u003d nil",
+      "parentUuid": "1758cf18_c1803c2c",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "d7bc015a_f84d0eed",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
         "patchSetId": 2
@@ -30,6 +48,24 @@
       "writtenOn": "2018-12-12T22:03:28Z",
       "side": 1,
       "message": "no need to use new variable, you can also rename pendingBlock to committingBlock (your choice)",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "d641a562_f68464b0",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 105,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-12T22:16:07Z",
+      "side": 1,
+      "message": "sure, I can rename s.pendingBlock to s.committingBlockNum",
+      "parentUuid": "d7bc015a_f84d0eed",
       "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
@@ -53,6 +89,24 @@
     },
     {
       "key": {
+        "uuid": "78a69348_59c63390",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-12T22:16:07Z",
+      "side": 1,
+      "message": "sure I can remove",
+      "parentUuid": "96de3f56_48dc74e8",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "9bf7c4c5_019855c6",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
         "patchSetId": 2
@@ -64,6 +118,24 @@
       "writtenOn": "2018-12-12T22:03:28Z",
       "side": 1,
       "message": "Condition for creating couch doc should be dataEntries\u003e0 and it should be checked before this function is called. Checking the length of the map seems bit complicated.",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "462647be_a82b2049",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 50,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-12T22:16:07Z",
+      "side": 1,
+      "message": "ok, I see what you mean, disregard the comment added where this function is called... I will pull the validations below up in when this function is called...",
+      "parentUuid": "9bf7c4c5_019855c6",
       "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
