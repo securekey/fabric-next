@@ -1,0 +1,72 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "1758cf18_c1803c2c",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/cdb_pvtstore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-12T22:03:28Z",
+      "side": 1,
+      "message": "check for creating couch doc (dataEntries\u003e0) should be here",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "d7bc015a_f84d0eed",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 105,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-12T22:03:28Z",
+      "side": 1,
+      "message": "no need to use new variable, you can also rename pendingBlock to committingBlock (your choice)",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "96de3f56_48dc74e8",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-12T22:03:28Z",
+      "side": 1,
+      "message": "we don\u0027t need batchPending any more since we have pending docs",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9bf7c4c5_019855c6",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/couchdb_conv.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 50,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-12T22:03:28Z",
+      "side": 1,
+      "message": "Condition for creating couch doc should be dataEntries\u003e0 and it should be checked before this function is called. Checking the length of the map seems bit complicated.",
+      "revId": "30d1a93822fb98f54eb7ca9608f8a77d29b0a767",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
