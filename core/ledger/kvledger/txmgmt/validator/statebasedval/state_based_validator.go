@@ -127,12 +127,10 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block, shou
 // preLoadCommittedVersionOfWSet loads committed version of all keys in each
 // transaction's write set into a cache.
 func (v *Validator) preLoadCommittedVersionOfWSet() {
-	stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
-	defer stopWatch()
-
 	for {
 		select {
 		case data := <-v.preLoadCommittedVersionOfWSetCh:
+			stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
 			v.db.GetWSetCacheLock().Lock()
 			// Collect both public and hashed keys in read sets of all transactions in a given block
 			var pubKeys []*statedb.CompositeKey
@@ -217,6 +215,8 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 				}
 			}
 			v.db.GetWSetCacheLock().Unlock()
+			stopWatch()
+
 		}
 	}
 
