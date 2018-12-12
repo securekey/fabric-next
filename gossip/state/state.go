@@ -1055,8 +1055,16 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	if s.payloads.Push(payload) {
 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_length", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Size()))
+
+		block, _ := createBlockFromPayload(payload)
+		txnCount := 0
+		if block != nil {
+			txnCount = len(block.Data.Data)
+		}
+		metrics.RootScope.Gauge(fmt.Sprintf("block_%s_size_txns", metrics.FilterMetricName(s.chainID))).Update(float64(txnCount))
+
 		// TODO - make the following Debug if it turns out to be not useful.
-		logger.Infof("[%s] payload added to buffer [%d]", s.chainID, payload.SeqNum)
+		logger.Infof("[%s] payload added to buffer [%d] txn [%d]", s.chainID, payload.SeqNum, txnCount)
 	}
 
 	return nil
