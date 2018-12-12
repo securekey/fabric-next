@@ -742,7 +742,10 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Received validation request for block %d", s.chainID, block.Header.Number)
 
-			currentHeight := s.blockPublisher.LedgerHeight()
+			currentHeight, err := s.ledger.LedgerHeight()
+			if err!= nil {
+				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+			}
 			if block.Header.Number == currentHeight {
 				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
 				s.ledger.ValidatePartialBlock(s.ctxProvider.Create(block.Header.Number), block)
@@ -759,23 +762,6 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
 	}
 }
 
-func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
-	if !ledgerconfig.IsCommitter() {
-		ourHeight := s.blockPublisher.LedgerHeight()
-		logger.Debugf("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
-		return ourHeight, nil
-	}
-
-	ourHeight, err := s.ledger.LedgerHeight()
-	if err != nil {
-		logger.Errorf("Error getting height from ledger for channel [%s]: %s", s.chainID, err)
-		return 0, err
-	}
-
-	logger.Debugf("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
-	return ourHeight, nil
-}
-
 func (s *GossipStateProviderImpl) antiEntropy() {
 	defer s.done.Done()
 	defer logger.Debug("State Provider stopped, stopping anti entropy procedure.")
@@ -786,7 +772,7 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 			s.stopCh <- struct{}{}
 			return
 		case <-time.After(defAntiEntropyInterval):
-			ourHeight, err := s.ledgerHeight()
+			ourHeight, err := s.ledger.LedgerHeight()
 			if err != nil {
 				// Unable to read from ledger continue to the next round
 				logger.Errorf("Cannot obtain ledger height, due to %+v", errors.WithStack(err))
@@ -1038,7 +1024,7 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 	}
 
 	logger.Debugf("[%s] adding payload to local buffer [%d]", s.chainID, payload.SeqNum)
-	height, err := s.ledgerHeight()
+	height, err := s.ledger.LedgerHeight()
 	if err != nil {
 		return errors.Wrap(err, "Failed obtaining ledger height")
 	}
@@ -1268,7 +1254,10 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return err
 	}
 
-	currentHeight := s.blockPublisher.LedgerHeight()
+	currentHeight ,err := s.ledger.LedgerHeight()
+	if err != nil {
+		logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
+	}
 	if block.Header.Number < currentHeight-1 {
 		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
 	}
