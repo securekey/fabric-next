@@ -89,7 +89,7 @@ func (s *store) commitDB(committingBlockNum uint64) error {
 }
 
 func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, error) {
-	pd, err := retrieveBlockPvtData(s.db, strconv.FormatUint(blockNum, blockNumberBase))
+	pd, err := retrieveBlockPvtData(s.db, blockNumberToKey(blockNum))
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
-	pds, err := retrieveBlockExpiryData(s.db, strconv.FormatUint(blockNum, blockNumberBase))
+	pds, err := retrieveBlockExpiryData(s.db, blockNumberToPurgeBlockKey(blockNum))
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +164,6 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 		}
 	}
 
-	var purgeBlockNumbers []string
-	for _, pvtBlockNum := range blockPvtData.PurgeBlocks {
-		if pvtBlockNum != blockNumberToKey(maxBlkNum) {
-			purgeBlockNumbers = append(purgeBlockNumbers, pvtBlockNum)
-		}
-	}
-	blockPvtData.PurgeBlocks = purgeBlockNumbers
-
 	var expiryBlockNumbers []string
 	for _, pvtBlockNum := range blockPvtData.ExpiryBlocks {
 		n, err := strconv.ParseUint(pvtBlockNum, blockNumberBase, 64)
@@ -183,6 +175,14 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 		}
 	}
 	blockPvtData.ExpiryBlocks = expiryBlockNumbers
+
+	purgeBlockNumber, err := getPurgeBlockNumber(expiryBlockNumbers, s.purgeInterval)
+	if err != nil {
+		return nil, err
+	}
+	blockPvtData.PurgeBlock = purgeBlockNumber
+
+	logger.Debugf("Setting next purge block[%s] for block[%d], max block[%d]", purgeBlockNumber, blockNumber, maxBlkNum)
 
 	jsonBytes, err := json.Marshal(blockPvtData)
 	if err != nil {
