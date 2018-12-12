@@ -10,34 +10,36 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"sort"
 	"strconv"
+
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
 )
 
 const (
-	idField                    = "_id"
-	expiryBlockNumbersField    = "expiry_block_numbers"
-	purgeBlockNumbersField     = "purge_block_numbers"
-	purgeIntervalField         = "purge_interval"
-	purgeBlockNumbersIndexName = "by_purge_block_number"
-	purgeBlockNumbersIndexDoc  = "indexPurgeBlockNumber"
-	dataField                  = "data"
-	expiryField                = "expiry"
-	blockKeyPrefix             = ""
-	blockNumberBase            = 10
-	numMetaDocs                = 1
+	idField                   = "_id"
+	expiryBlockNumbersField   = "expiry_block_numbers"
+	purgeBlockNumberField     = "purge_block_number"
+	purgeIntervalField        = "purge_interval"
+	purgeBlockNumberIndexName = "by_purge_block_number"
+	purgeBlockNumberIndexDoc  = "indexPurgeBlockNumber"
+	dataField                 = "data"
+	expiryField               = "expiry"
+	blockKeyPrefix            = ""
+	blockNumberBase           = 10
+	numMetaDocs               = 1
 )
 
-const purgeBlockNumbersIndexDef = `
+const purgeBlockNumberIndexDef = `
 	{
 		"index": {
-			"fields": ["` + purgeBlockNumbersField + `"]
+			"fields": ["` + purgeBlockNumberField + `"]
 		},
-		"name": "` + purgeBlockNumbersIndexName + `",
-		"ddoc": "` + purgeBlockNumbersIndexDoc + `",
+		"name": "` + purgeBlockNumberIndexName + `",
+		"ddoc": "` + purgeBlockNumberIndexDoc + `",
 		"type": "json"
 	}`
 
@@ -58,12 +60,19 @@ func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry,
 	}
 	jsonMap[dataField] = dataJSON
 
-	ei, err := expiryEntriesToJSONValue(expiryEntries, purgeInterval)
+	ei, err := expiryEntriesToJSONValue(expiryEntries)
 	if err != nil {
 		return nil, err
 	}
+
+	purgeBlockNumber, err := getPurgeBlockNumber(ei.expiryKeys, purgeInterval)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debugf("Setting next purge block[%s] for block[%d]", purgeBlockNumber, blockNumber)
+
 	jsonMap[expiryField] = ei.json
-	jsonMap[purgeBlockNumbersField] = ei.purgeKeys
+	jsonMap[purgeBlockNumberField] = purgeBlockNumber
 	jsonMap[expiryBlockNumbersField] = ei.expiryKeys
 
 	jsonBytes, err := jsonMap.toBytes()
@@ -76,8 +85,38 @@ func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry,
 	return &couchDoc, nil
 }
 
+func getPurgeBlockNumber(expiryBlocks []string, purgeInterval uint64) (string, error) {
+
+	var expiryBlockNumbers []uint64
+	if len(expiryBlocks) >= 1 {
+
+		for _, pvtBlockNum := range expiryBlocks {
+			n, err := strconv.ParseUint(pvtBlockNum, blockNumberBase, 64)
+			if err != nil {
+				return "", err
+			}
+			expiryBlockNumbers = append(expiryBlockNumbers, uint64(n))
+		}
+
+		sort.Slice(expiryBlockNumbers, func(i, j int) bool { return expiryBlockNumbers[i] < expiryBlockNumbers[j] })
+		purgeAt := expiryBlockNumbers[0]
+		if purgeAt%purgeInterval != 0 {
+			purgeAt = purgeAt + (purgeInterval - purgeAt%purgeInterval)
+		}
+
+		return blockNumberToPurgeBlockKey(purgeAt), nil
+	}
+
+	return "", nil
+
+}
+
 func blockNumberToKey(blockNum uint64) string {
 	return blockKeyPrefix + strconv.FormatUint(blockNum, 10)
+}
+
+func blockNumberToPurgeBlockKey(blockNum uint64) string {
+	return blockKeyPrefix + fmt.Sprintf("%064s", strconv.FormatUint(blockNum, 10))
 }
 
 func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
@@ -99,14 +138,12 @@ func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
 
 type expiryInfo struct {
 	json       jsonValue
-	purgeKeys  []string
 	expiryKeys []string
 }
 
-func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64) (*expiryInfo, error) {
+func expiryEntriesToJSONValue(expiryEntries []*expiryEntry) (*expiryInfo, error) {
 	ei := expiryInfo{
 		json:       make(jsonValue),
-		purgeKeys:  make([]string, 0),
 		expiryKeys: make([]string, 0),
 	}
 
@@ -127,19 +164,9 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 			if !stringInSlice(expiringBlk, ei.expiryKeys) {
 				ei.expiryKeys = append(ei.expiryKeys, expiringBlk)
 			}
-			purgeAt := expiryEntry.key.expiringBlk
-			if purgeAt%purgeInterval != 0 {
-				purgeAt = expiryEntry.key.expiringBlk + (purgeInterval - expiryEntry.key.expiringBlk%purgeInterval)
-			}
-			purgeAtStr := blockNumberToKey(purgeAt)
-			if !stringInSlice(purgeAtStr, ei.purgeKeys) {
-				ei.purgeKeys = append(ei.purgeKeys, purgeAtStr)
-			}
 			expiryBlockCounted[expiryEntry.key.expiringBlk] = true
 		}
 	}
-
-	// TODO: sort string slices numerically.
 
 	return &ei, nil
 }
@@ -185,7 +212,7 @@ type blockPvtDataResponse struct {
 	ID            string            `json:"_id"`
 	Rev           string            `json:"_rev"`
 	PurgeInterval string            `json:"purge_interval"`
-	PurgeBlocks   []string          `json:"purge_block_numbers"`
+	PurgeBlock    string            `json:"purge_block_number"`
 	ExpiryBlocks  []string          `json:"expiry_block_numbers"`
 	Data          map[string][]byte `json:"data"`
 	Expiry        map[string][]byte `json:"expiry"`
@@ -222,13 +249,10 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
 	const queryFmt = `
 	{
 		"selector": {
-			"` + purgeBlockNumbersField + `": {
-				"$elemMatch": {
-					"$eq": "%s"
-				}
-			}
+			"` + purgeBlockNumberField + `":  { "$lte": "%s" },
+			"$nor": [{ "` + purgeBlockNumberField + `": "" }]
 		},
-		"use_index": ["_design/` + purgeBlockNumbersIndexDoc + `", "` + purgeBlockNumbersIndexName + `"],
+		"use_index": ["_design/` + purgeBlockNumberIndexDoc + `", "` + purgeBlockNumberIndexName + `"],
     	"limit": %d,
     	"skip": %d
 	}`
@@ -237,6 +261,8 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Debugf("Number of blocks that meet purge criteria: %d", len(results))
 
 	if len(results) == 0 {
 		return nil, NewErrNotFoundInIndex()
