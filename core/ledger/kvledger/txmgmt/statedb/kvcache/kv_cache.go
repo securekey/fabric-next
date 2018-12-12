@@ -12,9 +12,10 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/emirpasic/gods/maps/treemap"
 )
 
 // VersionedValue encloses value and corresponding version
@@ -60,7 +61,7 @@ type KVCache struct {
 	nonDurablePvtCache   map[string]*ValidatedPvtData
 	expiringPvtKeys      map[uint64]*list.List
 	pinnedTx             map[string]*ValidatedTx
-	keys                 map[string]struct{}
+	keys                 *treemap.Map
 	nonDurableSortedKeys []string
 	mutex                sync.Mutex
 	hit                  uint64
@@ -84,7 +85,7 @@ func newKVCache(
 	nonDurablePvtCache := make(map[string]*ValidatedPvtData)
 	expiringPvtKeys := make(map[uint64]*list.List)
 	pinnedTx := make(map[string]*ValidatedTx)
-	keys := make(map[string]struct{})
+	keys := treemap.NewWithStringComparator()
 	nonDurableSortedKeys := make([]string, 0)
 
 	cache := KVCache{
@@ -107,7 +108,7 @@ func newKVCache(
 func cleanUpKeys(cache *KVCache) func(key lru.Key, value interface{}) {
 	return func(key lru.Key, value interface{}) {
 		keyStr, _ := key.(string)
-		delete(cache.keys, keyStr)
+		cache.keys.Remove(keyStr)
 	}
 }
 
@@ -153,13 +154,13 @@ func (c *KVCache) Put(validatedTx *ValidatedTx, pin bool) {
 		if pin {
 			c.pinnedTx[validatedTx.Key] = validatedTx
 		}
-		c.keys[validatedTx.Key] = defVal
+		c.keys.Put(validatedTx.Key, defVal)
 	}
 }
 
 // PutPrivate will add the validateTx to the 'permanent' lru cache (if level2 Block height > level1 Block)
 // or to the 'non-durable' cache otherwise
-func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData, pin bool) {
+func (c *KVCache) putPrivate(validatedTx *ValidatedPvtData, pin bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -175,7 +176,7 @@ func (c *KVCache) PutPrivate(validatedTx *ValidatedPvtData, pin bool) {
 			if pin {
 				c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
 			}
-			c.keys[validatedTx.Key] = defVal
+			c.keys.Put(validatedTx.Key, defVal)
 		}
 		return
 	}
@@ -202,7 +203,7 @@ func (c *KVCache) addNonDurable(validatedTx *ValidatedPvtData) {
 			logger.Debugf("Adding key[%s] to expiring private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
 			c.nonDurablePvtCache[validatedTx.Key] = validatedTx
 			c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
-			c.keys[validatedTx.Key] = defVal
+			c.keys.Put(validatedTx.Key, defVal)
 			c.addKeyToExpiryMap(validatedTx.Level1ExpiringBlock, validatedTx.Key)
 			if len(c.nonDurablePvtCache) > ledgerconfig.GetKVCacheNonDurableSize() {
 				logger.Debugf("Expiring cache size[%d] is over limit[%d] for cache[%s]", len(c.nonDurablePvtCache), ledgerconfig.GetKVCacheNonDurableSize(), c.cacheName)
@@ -230,7 +231,7 @@ func (c *KVCache) purgePrivate(blockNumber uint64) {
 		pvtData, ok := c.getNonDurable(key)
 		if ok && pvtData.Level1ExpiringBlock <= blockNumber {
 			delete(c.nonDurablePvtCache, key)
-			delete(c.keys, key)
+			c.keys.Remove(key)
 			deleted++
 		}
 		e = e.Next()
@@ -282,7 +283,7 @@ func (c *KVCache) MustRemove(key string) {
 	c.validatedTxCache.Remove(key)
 	delete(c.nonDurablePvtCache, key)
 	delete(c.pinnedTx, key)
-	delete(c.keys, key)
+	c.keys.Remove(key)
 }
 
 // Remove from the cache if the blockNum and indexInBlock are bigger than the corresponding values in the cache
@@ -297,7 +298,7 @@ func (c *KVCache) Remove(key string, blockNum uint64, indexInBlock int) {
 		c.validatedTxCache.Remove(key)
 		delete(c.nonDurablePvtCache, key)
 		delete(c.pinnedTx, key)
-		delete(c.keys, key)
+		c.keys.Remove(key)
 	}
 }
 
@@ -307,7 +308,7 @@ func (c *KVCache) Clear() {
 	c.validatedTxCache.Clear()
 	c.nonDurablePvtCache = nil
 	c.expiringPvtKeys = nil
-	c.keys = make(map[string]struct{})
+	c.keys.Clear()
 	c.nonDurableSortedKeys = make([]string, 0)
 }
 

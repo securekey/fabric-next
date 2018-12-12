@@ -14,7 +14,6 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
-	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
 type KVCacheProvider struct {
@@ -82,7 +81,7 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 		} else {
 			newTx := v
-			kvCache.PutPrivate(&newTx, pin)
+			kvCache.putPrivate(&newTx, pin)
 		}
 	}
 
@@ -93,7 +92,7 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 			kvCache.Remove(v.Key, v.BlockNum, v.IndexInBlock)
 		} else {
 			newTx := v
-			kvCache.PutPrivate(&newTx, pin)
+			kvCache.putPrivate(&newTx, pin)
 		}
 	}
 	//Sort non durable keys in background
@@ -269,11 +268,13 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 	defer p.kvCacheMtx.Unlock()
 
 	kvCache, _ := p.getKVCache(chId, namespace)
-	sortedKeys := util.GetSortedKeys(kvCache.keys)
 	var keyRange []string
 	foundStartKey := startKey == ""
 
-	for _, k := range sortedKeys {
+	itr := kvCache.keys.Iterator()
+	itr.Begin()
+	for itr.Next() {
+		k := itr.Key().(string)
 		if k == startKey {
 			foundStartKey = true
 		}
@@ -284,7 +285,6 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 		if foundStartKey {
 			keyRange = append(keyRange, k)
 		}
-
 	}
 
 	return keyRange
