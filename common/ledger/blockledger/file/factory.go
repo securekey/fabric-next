@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
 
 type fileLedgerFactory struct {
@@ -70,9 +69,7 @@ func (flf *fileLedgerFactory) Close() {
 }
 
 // New creates a new ledger factory
-func New(directory string) blockledger.Factory {
-	blockCacheSize := ledgerconfig.GetBlockCacheSize()
-
+func New(directory string, blockCacheSize uint) blockledger.Factory {
 	// TODO: Move the fsblkstorage index to ldbblkindex package.
 	blockStorage := fsblkstorage.NewProvider(fsblkstorage.NewConf(directory, -1),
 		&blkstorage.IndexConfig{AttrsToIndex: []blkstorage.IndexableAttr{blkstorage.IndexableAttrBlockNum}})
@@ -80,7 +77,8 @@ func New(directory string) blockledger.Factory {
 	blockIndex := ldbblkindex.NewProvider(ldbblkindex.NewConf(directory),
 		&blkstorage.IndexConfig{AttrsToIndex: []blkstorage.IndexableAttr{}})
 
-	blockCache := memblkcache.NewProvider(blockCacheSize)
+	logger.Errorf("Cache Size: %d", blockCacheSize)
+	blockCache := memblkcache.NewProvider(int(blockCacheSize))
 
 	return &fileLedgerFactory{
 		blkstorageProvider: cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache),
