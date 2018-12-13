@@ -35,6 +35,24 @@ func GetSortedKeys(m interface{}) []string {
 	return keys
 }
 
+// Returns all the keys that are in range startKey .. endKey (including startKey, excluding endKey)
+// If the endKey is an empty string ("") then it will return all the keys >= startKey.
+// The returned slice is sorted.
+func GetSortedKeysInRange(m interface{}, startKey string, endKey string) []string {
+	mapVal := reflect.ValueOf(m)
+	keyVals := mapVal.MapKeys()
+	keys := []string{}
+	
+	for _, keyVal :=range keyVals {
+		keyValStr := keyVal.String()
+		if keyValStr >= startKey && (keyValStr < endKey || endKey == "") {
+			keys = append(keys, keyVal.String())
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // GetValuesBySortedKeys returns the values of the map (mapPtr) in the list (listPtr) in the sorted order of key of the map
 // This function assumes that the mapPtr is a pointer to a map and listPtr is is a pointer to a list. Further type of keys of the
 // map are assumed to be string and the types of the values of the maps and the list are same
