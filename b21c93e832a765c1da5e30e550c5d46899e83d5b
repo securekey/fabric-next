@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ea4d4fc5_d8ef38c9",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 356,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-13T19:20:43Z",
+      "side": 0,
+      "message": "I believe this is a valid condition to check for.\n\n\u0027s.lastCommittedBlock\u0027 is the last written committed block (in memory current value updated right after calling commit) and \u0027lastCommittedBlock\u0027 from the last block from pvt store\n\npvt store should not be higher than in memory value.. I think this should throw an error",
+      "range": {
+        "startLine": 356,
+        "startChar": 1,
+        "endLine": 356,
+        "endChar": 47
+      },
+      "revId": "b21c93e832a765c1da5e30e550c5d46899e83d5b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
