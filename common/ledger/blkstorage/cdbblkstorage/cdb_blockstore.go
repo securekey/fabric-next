@@ -197,7 +197,7 @@ func retrieveBlockByNumber(blockStore *couchdb.CouchDatabase, blockNum uint64) (
 		return nil, blkstorage.ErrNotFoundInIndex
 	}
 
-	block, err := couchDocToBlock(doc)
+	block, err := couchDocToBlock(doc.JSONValue)
 	if err != nil {
 		return nil, err
 	}

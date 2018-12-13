@@ -7,12 +7,15 @@ SPDX-License-Identifier: Apache-2.0
 package cdbblkstorage
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+
+	"encoding/base64"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -22,17 +25,17 @@ import (
 
 // block document
 const (
-	idField             = "_id"
-	blockHashField      = "hash"
-	blockTxnIDsField    = "transaction_ids"
-	blockHashIndexName  = "by_hash"
-	blockHashIndexDoc   = "indexHash"
-	blockTxnIndexName   = "by_id"
-	blockTxnIndexDoc    = "indexTxn"
-	blockAttachmentName = "block"
-	blockKeyPrefix      = ""
-	blockHeaderField    = "header"
-	numMetaDocs         = 2
+	idField            = "_id"
+	blockHashField     = "hash"
+	blockTxnIDsField   = "transaction_ids"
+	blockHashIndexName = "by_hash"
+	blockHashIndexDoc  = "indexHash"
+	blockTxnIndexName  = "by_id"
+	blockTxnIndexDoc   = "indexTxn"
+	blockKeyPrefix     = ""
+	blockHeaderField   = "header"
+	blockDataField     = "data"
+	numMetaDocs        = 2
 )
 
 const blockHashIndexDef = `
@@ -85,20 +88,17 @@ func blockToCouchDoc(block *common.Block) (*couchdb.CouchDoc, error) {
 	header[blockHashField] = blockHashHex
 	jsonMap[blockHeaderField] = header
 	jsonMap[blockTxnIDsField] = blockTxnIDs
+	blockData, err := blockToBase64(block)
+	if err != nil {
+		return nil, err
+	}
+	jsonMap[blockDataField] = blockData
 
 	jsonBytes, err := jsonMap.toBytes()
 	if err != nil {
 		return nil, err
 	}
 	couchDoc := &couchdb.CouchDoc{JSONValue: jsonBytes}
-
-	attachment, err := blockToAttachment(block)
-	if err != nil {
-		return nil, err
-	}
-
-	attachments := append([]*couchdb.AttachmentInfo{}, attachment)
-	couchDoc.Attachments = attachments
 	return couchDoc, nil
 }
 
@@ -126,44 +126,36 @@ func blockToTransactionIDsField(block *common.Block) ([]string, error) {
 	return txns, nil
 }
 
-func blockToAttachment(block *common.Block) (*couchdb.AttachmentInfo, error) {
+func blockToBase64(block *common.Block) (string, error) {
 	blockBytes, err := proto.Marshal(block)
 	if err != nil {
-		return nil, errors.Wrapf(err, "marshaling block failed")
+		return "", errors.Wrapf(err, "marshaling block failed")
 	}
 
-	attachment := &couchdb.AttachmentInfo{}
-	attachment.AttachmentBytes = blockBytes
-	attachment.ContentType = "application/octet-stream"
-	attachment.Name = blockAttachmentName
+	return base64.StdEncoding.EncodeToString(blockBytes), nil
 
-	return attachment, nil
 }
 
-func couchDocToBlock(doc *couchdb.CouchDoc) (*common.Block, error) {
-	return couchAttachmentsToBlock(doc.Attachments)
-}
-
-func couchAttachmentsToBlock(attachments []*couchdb.AttachmentInfo) (*common.Block, error) {
-	var blockBytes []byte
-	block := common.Block{}
-
-	// get binary data from attachment
-	for _, a := range attachments {
-		if a.Name == blockAttachmentName {
-			blockBytes = a.AttachmentBytes
-		}
+func couchDocToBlock(docValue []byte) (*common.Block, error) {
+	jsonResult := make(map[string]interface{})
+	decoder := json.NewDecoder(bytes.NewBuffer(docValue))
+	decoder.UseNumber()
+	err := decoder.Decode(&jsonResult)
+	if err != nil {
+		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
 	}
-
+	blockBytes, err := base64.StdEncoding.DecodeString(jsonResult[blockDataField].(string))
+	if err != nil {
+		return nil, errors.Wrapf(err, "error from DecodeString for blockDataField")
+	}
 	if len(blockBytes) == 0 {
 		return nil, errors.New("block is not within couchDB document")
 	}
-
-	err := proto.Unmarshal(blockBytes, &block)
+	block := common.Block{}
+	err = proto.Unmarshal(blockBytes, &block)
 	if err != nil {
 		return nil, errors.Wrapf(err, "block from couchDB document could not be unmarshaled")
 	}
-
 	return &block, nil
 }
 
@@ -185,5 +177,5 @@ func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block,
 		return nil, errors.New("block bytes not found")
 	}
 
-	return couchAttachmentsToBlock(results[0].Attachments)
+	return couchDocToBlock(results[0].Value)
 }
