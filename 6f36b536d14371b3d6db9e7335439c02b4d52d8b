@@ -39,6 +39,30 @@
       "revId": "6f36b536d14371b3d6db9e7335439c02b4d52d8b",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "6b5acbde_748cee19",
+        "filename": "core/ledger/util/util.go",
+        "patchSetId": 4
+      },
+      "lineNbr": 59,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-13T16:27:11Z",
+      "side": 1,
+      "message": "Empty is handled with \u003e\u003d",
+      "parentUuid": "98718f1c_834eb5af",
+      "range": {
+        "startLine": 59,
+        "startChar": 3,
+        "endLine": 59,
+        "endChar": 7
+      },
+      "revId": "6f36b536d14371b3d6db9e7335439c02b4d52d8b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
