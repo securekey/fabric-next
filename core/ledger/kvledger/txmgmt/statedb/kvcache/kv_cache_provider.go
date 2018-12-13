@@ -269,23 +269,7 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 	defer p.kvCacheMtx.Unlock()
 
 	kvCache, _ := p.getKVCache(chId, namespace)
-	sortedKeys := util.GetSortedKeys(kvCache.keys)
-	var keyRange []string
-	foundStartKey := startKey == ""
-
-	for _, k := range sortedKeys {
-		if k == startKey {
-			foundStartKey = true
-		}
-		if k == endKey {
-			//exclude end key and end the range
-			break
-		}
-		if foundStartKey {
-			keyRange = append(keyRange, k)
-		}
-
-	}
+	keyRange := util.GetSortedKeysInRange(kvCache.keys, startKey, endKey)
 
 	return keyRange
 }
