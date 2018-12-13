@@ -21,7 +21,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
-	"github.com/pkg/errors"
 	"github.com/uber-go/tally"
 	"golang.org/x/net/context"
 )
@@ -37,7 +36,8 @@ type LockBasedTxMgr struct {
 	validator        validator.Validator
 	stateListeners   []ledger.StateListener
 	commitRWLock     sync.RWMutex
-	current          *update
+	pending          []*update
+	pendingLock      sync.Mutex
 	StopWatch        tally.Stopwatch
 	StopWatchAccess  string
 	StopWatch1       tally.Stopwatch
@@ -55,7 +55,6 @@ type update struct {
 	blockAndPvtData *ledger.BlockAndPvtData
 	batch           *privacyenabledstate.UpdateBatch
 	listeners       []ledger.StateListener
-	commitDoneCh    chan struct{}
 }
 
 func (c *update) blockNum() uint64 {
@@ -140,10 +139,6 @@ func (txmgr *LockBasedTxMgr) ValidateMVCC(ctx context.Context, block *common.Blo
 
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) error {
-	if !txmgr.waitForPreviousToFinish() {
-		return errors.New("shutdown has been requested")
-	}
-
 	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
 	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
 
@@ -152,27 +147,15 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
 	if err != nil {
 		return err
 	}
-	current := update{blockAndPvtData: blockAndPvtdata, batch: batch, commitDoneCh: make(chan struct{})}
+	current := update{blockAndPvtData: blockAndPvtdata, batch: batch}
 	if err := txmgr.invokeNamespaceListeners(&current); err != nil {
 		return err
 	}
-	txmgr.current = &current
+	txmgr.pendingLock.Lock()
+	txmgr.pending = append(txmgr.pending, &current)
+	txmgr.pendingLock.Unlock()
 
 	return nil
-}
-
-func (txmgr *LockBasedTxMgr) waitForPreviousToFinish() bool {
-	if txmgr.current == nil {
-		return true
-	}
-
-	select {
-	case <-txmgr.current.commitDoneCh:
-	case <-txmgr.doneCh:
-		return false // the committer goroutine is shutting down - no new commits should be done.
-	}
-
-	return true
 }
 
 func (txmgr *LockBasedTxMgr) invokeNamespaceListeners(c *update) error {
@@ -201,20 +184,26 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
 
 // Commit implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Commit() error {
-	if txmgr.current == nil {
+	txmgr.pendingLock.Lock()
+	if len(txmgr.pending) == 0 {
 		panic("validateAndPrepare() method should have been called before calling commit()")
 	}
+	current := txmgr.pending[0]
+	txmgr.pending = txmgr.pending[1:]
+	txmgr.pendingLock.Unlock()
 
-	txmgr.commitCh <- txmgr.current
+	txmgr.commitCh <- current
 	return nil
 }
 
 // Rollback implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) Rollback() {
-	if txmgr.current == nil {
+	txmgr.pendingLock.Lock()
+	if len(txmgr.pending) == 0 {
 		panic("validateAndPrepare() method should have been called before calling rollback()")
 	}
-	txmgr.current = nil
+	txmgr.pending = txmgr.pending[:len(txmgr.pending)-1]
+	txmgr.pendingLock.Unlock()
 }
 
 // clearCache empty the cache maintained by the statedb implementation
@@ -259,6 +248,7 @@ func (txmgr *LockBasedTxMgr) committer() {
 			close(txmgr.shutdownCh)
 			return
 		case current := <-txmgr.commitCh:
+
 			var commitWatch tally.Stopwatch
 			if metrics.IsDebug() {
 				// Measure the whole
@@ -336,7 +326,6 @@ func (txmgr *LockBasedTxMgr) committer() {
 			txmgr.committedBlock = current.blockAndPvtData
 
 			txmgr.commitRWLock.Unlock()
-			close(current.commitDoneCh)
 
 			//notify kv ledger that commit is done for given block and private data
 
