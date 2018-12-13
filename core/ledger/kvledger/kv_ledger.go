@@ -9,7 +9,6 @@ package kvledger
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
