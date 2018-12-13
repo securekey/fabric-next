@@ -106,7 +106,6 @@ func (lc *LedgerCommitter) AddBlock(blockAndPvtData *ledger.BlockAndPvtData) err
 
 // preCommit takes care to validate the block and update based on its
 // content
-// TODO: This is really preValidate. Need to ensure that only validation-related funcs are being called here.
 func (lc *LedgerCommitter) preCommit(block *common.Block) error {
 	// Updating CSCC with new configuration block
 	if utils.IsConfigBlock(block) {
