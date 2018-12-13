@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "aed8f650_408c36eb",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 339,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-13T23:28:31Z",
+      "side": 1,
+      "message": "instead, the sub-package should expose a chan struct{} channel.",
+      "range": {
+        "startLine": 339,
+        "startChar": 3,
+        "endLine": 339,
+        "endChar": 31
+      },
+      "revId": "95824e26a192b7912855457b8d3075cbbb8381b1",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
