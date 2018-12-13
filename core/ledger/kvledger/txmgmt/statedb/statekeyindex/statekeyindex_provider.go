@@ -26,6 +26,7 @@ type StateKeyIndexProvider interface {
 
 // StateKeyIndex - an interface for persisting and retrieving keys
 type StateKeyIndex interface {
+	sync.Locker
 	AddIndex(indexUpdates []*IndexUpdate) error
 	DeleteIndex(keys []CompositeKey) error
 	GetIterator(namespace string, startKey string, endKey string) *leveldbhelper.Iterator

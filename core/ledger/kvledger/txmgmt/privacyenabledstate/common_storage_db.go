@@ -216,6 +216,8 @@ func (s *CommonStorageDB) GetKeyHashVersion(namespace, collection string, keyHas
 
 	versionedValue, ok := s.GetKVCacheProvider().GetFromKVCache(s.ledgerID, DeriveHashedDataNs(namespace, collection), keyHashStr)
 	if !ok {
+		s.stateKeyIndex.Lock()
+		defer s.stateKeyIndex.Unlock()
 		metadata, found, err := s.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: keyHashStr, Namespace: DeriveHashedDataNs(namespace, collection)})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", keyHashStr)

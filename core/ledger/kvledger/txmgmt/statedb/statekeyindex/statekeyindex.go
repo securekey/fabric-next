@@ -23,6 +23,7 @@ package statekeyindex
 
 import (
 	"bytes"
+	"sync"
 
 	"github.com/golang/protobuf/proto"
 
@@ -35,11 +36,13 @@ var lastKeyIndicator = byte(0x01)
 type stateKeyIndex struct {
 	db     *leveldbhelper.DBHandle
 	dbName string
+	lock   sync.Locker
 }
 
 type Metadata struct {
 	BlockNumber uint64
 	TxNumber    uint64
+	DBTag       string
 }
 
 type IndexUpdate struct {
@@ -55,6 +58,11 @@ func MarshalMetadata(m *Metadata) ([]byte, error) {
 		return nil, err
 	}
 	err = buffer.EncodeVarint(m.TxNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	err = buffer.EncodeStringBytes(m.DBTag)
 	if err != nil {
 		return nil, err
 	}
@@ -76,15 +84,21 @@ func UnmarshalMetadata(b []byte) (Metadata, error) {
 		return Metadata{}, err
 	}
 
+	cdbRev, err := buffer.DecodeStringBytes()
+	if err != nil {
+		return Metadata{}, err
+	}
+
 	return Metadata{
 		BlockNumber: blockNumber,
 		TxNumber:    txNumber,
+		DBTag:       cdbRev,
 	}, nil
 }
 
 // newStateKeyIndex constructs an instance of StateKeyIndex
 func newStateKeyIndex(db *leveldbhelper.DBHandle, dbName string) *stateKeyIndex {
-	return &stateKeyIndex{db, dbName}
+	return &stateKeyIndex{db, dbName, &sync.Mutex{}}
 }
 
 func (s *stateKeyIndex) AddIndex(indexUpdates []*IndexUpdate) error {
@@ -152,6 +166,14 @@ func (s *stateKeyIndex) GetMetadata(key *CompositeKey) (Metadata, bool, error) {
 		}
 	}
 	return Metadata{}, false, nil
+}
+
+func (s *stateKeyIndex) Lock() {
+	s.lock.Lock()
+}
+
+func (s *stateKeyIndex) Unlock() {
+	s.lock.Unlock()
 }
 
 func ConstructCompositeKey(ns string, key string) []byte {

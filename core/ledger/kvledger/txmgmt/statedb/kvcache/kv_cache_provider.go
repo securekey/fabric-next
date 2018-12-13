@@ -182,6 +182,8 @@ func (p *KVCacheProvider) GetLeveLDBIterator(namespace, startKey, endKey, ledger
 	if err != nil {
 		return nil, err
 	}
+	stateKeyIndex.Lock()
+	defer stateKeyIndex.Unlock()
 	return stateKeyIndex.GetIterator(namespace, startKey, endKey), nil
 
 }
@@ -233,28 +235,27 @@ func (p *KVCacheProvider) PrepareIndexUpdates(validatedTxOps []ValidatedTxOp, va
 }
 
 func (p *KVCacheProvider) ApplyIndexUpdates(indexUpdates []*statekeyindex.IndexUpdate, indexDeletes []statekeyindex.CompositeKey, ledgerID string) error {
-
-	//Add key index in leveldb
-	if len(indexUpdates) > 0 {
+	if len(indexUpdates) > 0 || len(indexDeletes) > 0 {
 		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
 		if err != nil {
 			return err
 		}
-		err = stateKeyIndex.AddIndex(indexUpdates)
-		if err != nil {
-			return err
+		stateKeyIndex.Lock()
+		defer stateKeyIndex.Unlock()
+		//Add key index in leveldb
+		if len(indexUpdates) > 0 {
+			err = stateKeyIndex.AddIndex(indexUpdates)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
-	// Delete key index in leveldb
-	if len(indexDeletes) > 0 {
-		stateKeyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(ledgerID)
-		if err != nil {
-			return err
-		}
-		err = stateKeyIndex.DeleteIndex(indexDeletes)
-		if err != nil {
-			return err
+		// Delete key index in leveldb
+		if len(indexDeletes) > 0 {
+			err = stateKeyIndex.DeleteIndex(indexDeletes)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

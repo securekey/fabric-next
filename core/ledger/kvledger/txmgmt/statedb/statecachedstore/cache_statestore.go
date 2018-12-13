@@ -187,6 +187,8 @@ func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 }
 
 func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
+	c.stateKeyIndex.Lock()
+	defer c.stateKeyIndex.Unlock()
 	preloaded := make(map[*statedb.CompositeKey]*version.Height)
 	notPreloaded := make([]*statedb.CompositeKey, 0)
 	for _, key := range keys {
@@ -208,6 +210,8 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 }
 
 func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
+	c.stateKeyIndex.Lock()
+	defer c.stateKeyIndex.Unlock()
 	keysExist = make([]*statedb.CompositeKey, 0)
 	keysNotExist := make([]*statedb.CompositeKey, 0)
 	for _, key := range keys {
