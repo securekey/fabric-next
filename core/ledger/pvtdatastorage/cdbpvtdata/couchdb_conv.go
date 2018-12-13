@@ -10,8 +10,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"strconv"
+
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"

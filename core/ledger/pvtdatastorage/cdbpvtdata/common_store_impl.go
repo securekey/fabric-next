@@ -31,7 +31,7 @@ type commonStore struct {
 
 	isEmpty            bool
 	lastCommittedBlock uint64
-	batchPending       bool
+	committingBlockNum uint64
 	purgerLock         sync.Mutex
 }
 
@@ -59,13 +59,6 @@ type dataKey struct {
 	purge    bool
 }
 
-func (s *store) nextBlockNum() uint64 {
-	if s.isEmpty {
-		return 0
-	}
-	return s.lastCommittedBlock + 1
-}
-
 func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	s.btlPolicy = btlPolicy
 }
@@ -78,13 +71,12 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_duration")
 	defer stopWatch()
 
-	if s.batchPending {
-		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
-			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
+	if s.pendingDocs != nil {
+		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call. Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
 	}
-	expectedBlockNum := s.nextBlockNum()
-	if expectedBlockNum != blockNum {
-		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d, recived block number=%d", expectedBlockNum, blockNum))
+
+	if s.lastCommittedBlock > blockNum {
+		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Last committed block number in pvt store=%d is greater than recived block number=%d. Cannot prepare an old block # for commit.", s.lastCommittedBlock, blockNum))
 	}
 
 	err := s.prepareDB(blockNum, pvtData)
@@ -92,9 +84,10 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		return err
 	}
 
-	s.batchPending = true
-	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
-
+	if len(s.pendingDocs) > 0 {
+		logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
+	}
+	s.committingBlockNum = blockNum
 	return nil
 }
 
@@ -106,29 +99,30 @@ func (s *store) Commit() error {
 	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_duration")
 	defer stopWatch()
 
-	if !s.batchPending {
-		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
+	if s.pendingDocs == nil {
+		logger.Debugf("There are no committed private data for block [%d] - setting lastCommittedBlock, isEmpty=false and calling performPurgeIfScheduled", s.committingBlockNum)
+		s.lastCommittedBlock = s.committingBlockNum
+		s.isEmpty = false // if pendingDocs is empty it means pvt data for the committing block is nil, but the block is being committed, so the db is not empty anymore
+		s.performPurgeIfScheduled(s.committingBlockNum)
+		return nil
 	}
-	committingBlockNum := s.nextBlockNum()
-	logger.Debugf("Committing private data for block [%d]", committingBlockNum)
 
-	err := s.commitDB(committingBlockNum)
+	err := s.commitDB()
 	if err != nil {
 		return err
 	}
 
-	s.batchPending = false
 	s.isEmpty = false
-	s.lastCommittedBlock = committingBlockNum
-	logger.Debugf("Committed private data for block [%d]", committingBlockNum)
-	s.performPurgeIfScheduled(committingBlockNum)
+	s.lastCommittedBlock = s.committingBlockNum
+	logger.Debugf("Committed private data for block [%d]", s.committingBlockNum)
+	s.performPurgeIfScheduled(s.committingBlockNum)
 	return nil
 }
 
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_initLastCommittedBlock_duration")
 	defer stopWatch()
-	if !(s.isEmpty && !s.batchPending) {
+	if !s.isEmpty || s.pendingDocs != nil {
 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
 	}
 
@@ -248,7 +242,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 }
 
 func (s *store) HasPendingBatch() (bool, error) {
-	return s.batchPending, nil
+	return s.pendingDocs != nil, nil
 }
 
 func (s *store) LastCommittedBlockHeight() (uint64, error) {
@@ -264,12 +258,11 @@ func (s *store) IsEmpty() (bool, error) {
 
 // Rollback implements the function in the interface `Store`
 func (s *store) Rollback() error {
-	if !s.batchPending {
+	if s.pendingDocs == nil {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to rollback")
 	}
 
-	// reset in memory pending metadata
-	s.batchPending = false
+	// reset in memory pending docs
 	s.pendingDocs = nil
 	return nil
 }

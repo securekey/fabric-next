@@ -175,17 +175,23 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	writtenToPvtStore := false
 	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
-		// when re-processing blocks (rejoin the channel or re-fetching last few block),
-		// skip the pvt data commit to the pvtdata blockstore
-		logger.Debugf("Writing block [%d] to pvt block store", blockNum)
-		var pvtdata []*ledger.TxPvtData
-		for _, v := range blockAndPvtdata.BlockPvtData {
-			pvtdata = append(pvtdata, v)
+		if len(blockAndPvtdata.BlockPvtData) > 0 {
+			// when re-processing blocks (rejoin the channel or re-fetching last few block),
+			// skip the pvt data commit to the pvtdata blockstore
+			logger.Debugf("Writing block [%d] to pvt block store", blockNum)
+			var pvtdata []*ledger.TxPvtData
+			for _, v := range blockAndPvtdata.BlockPvtData {
+				pvtdata = append(pvtdata, v)
+			}
+			if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
+				return err
+			}
+
+			writtenToPvtStore = true
+		} else {
+			metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
+			logger.Debugf("Skipping writing block [%d] to pvt block store as block is empty", blockNum)
 		}
-		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
-			return err
-		}
-		writtenToPvtStore = true
 	} else {
 		metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
@@ -339,8 +345,10 @@ func (s *Store) syncPvtdataStoreWithBlockStore() error {
 	return fmt.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)
 }
 
+// initCouchDB will call initPvtdataStoreFromExistingBlockchainCouchDB only for committers (to clean up pvt store docs
+// with blocks above block store's height)
 func (s *Store) initCouchDB() error {
-	if !ledgerconfig.IsCommitter() {
+	if ledgerconfig.IsCommitter() {
 		return s.initPvtdataStoreFromExistingBlockchainCouchDB()
 	}
 

@@ -87,23 +87,25 @@ func (c *cachedPvtDataStore) pvtDataWriter() {
 			close(c.writerClosedCh)
 			return
 		case pvtPrepareData := <-c.pvtDataStoreCh:
-			logger.Debugf("prepare pvt data for storage [%d]", pvtPrepareData.blockNum)
-			err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
-			if err != nil {
-				logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
-				panic(panicMsg)
-			}
-			// we will wait until
-			commitReady := <-c.commitReadyCh
-			if commitReady {
-				if err := c.pvtDataStore.Commit(); err != nil {
-					logger.Errorf("pvt data was not committed to db [%d, %s]", pvtPrepareData.blockNum, err)
+			logger.Debugf("prepare pvt data for storage [%d], length of pvtData:%d", pvtPrepareData.blockNum, len(pvtPrepareData.pvtData))
+			if len(pvtPrepareData.pvtData) > 0 {
+				err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
+				if err != nil {
+					logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
 					panic(panicMsg)
 				}
-			} else {
-				if err := c.pvtDataStore.Rollback(); err != nil {
-					logger.Errorf("pvt data rollback in db failed [%d, %s]", pvtPrepareData.blockNum, err)
-					panic(panicMsg)
+				// we will wait until
+				commitReady := <-c.commitReadyCh
+				if commitReady {
+					if err := c.pvtDataStore.Commit(); err != nil {
+						logger.Errorf("pvt data was not committed to db [%d, %s]", pvtPrepareData.blockNum, err)
+						panic(panicMsg)
+					}
+				} else {
+					if err := c.pvtDataStore.Rollback(); err != nil {
+						logger.Errorf("pvt data rollback in db failed [%d, %s]", pvtPrepareData.blockNum, err)
+						panic(panicMsg)
+					}
 				}
 			}
 			c.prepareReadyCh <- true
