@@ -285,7 +285,7 @@ func (v *Validator) ValidateMVCC(ctx context.Context, block *valinternal.Block, 
 					logger.Debugf("MVCC validation of block [%d] at TxIdx [%d] and TxId [%s] marked as valid by state validator. Reason code [%s]",
 						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 				} else {
-					logger.Warningf("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
+					logger.Infof("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
 						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 				}
 				tx.ValidationCode = validationCode
@@ -321,15 +321,12 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
 	// API calls from peer to CouchDB instance.
 	if v.db.IsBulkOptimizable() {
 		// preload the block data and private data
+		logger.Infof("Pre-loading committed versions of write-set for block %d", block.Num)
 		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: block, pvtdata: pvtdata}
 	}
 
 	updates := valinternal.NewPubAndHashUpdates()
 	for _, tx := range block.Txs {
-		if tx.ValidationCode != peer.TxValidationCode_VALID {
-			continue
-		}
-
 		var validationCode peer.TxValidationCode
 		var err error
 		if validationCode, err = v.validateEndorserTX(tx.RWSet, doMVCCValidation, updates); err != nil {

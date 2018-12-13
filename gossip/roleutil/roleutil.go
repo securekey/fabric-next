@@ -58,8 +58,8 @@ func (r *RoleUtil) Validators(includeLocalPeer bool) []*Member {
 			return false
 		}
 		roles := r.getRoles(m)
-		if !roles.HasRole(ledgerconfig.ValidatorRole) && !roles.HasRole(ledgerconfig.CommitterRole) {
-			logger.Debugf("[%s] Not adding peer [%s] as a validator since it does not have the committer nor the validator role", r.channelID, m.Endpoint)
+		if !roles.HasRole(ledgerconfig.ValidatorRole) {
+			logger.Debugf("[%s] Not adding peer [%s] as a validator since it does not have the validator role", r.channelID, m.Endpoint)
 			return false
 		}
 		if m.MSPID != r.self.MSPID {

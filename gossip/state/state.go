@@ -451,8 +451,8 @@ func (s *GossipStateProviderImpl) validationRequestMessage(msg proto.ReceivedMes
 	logger.Debugf("[ENTER] -> validationRequestMessage")
 	defer logger.Debug("[EXIT] ->  validationRequestMessage")
 
-	if !ledgerconfig.IsValidator() {
-		logger.Warningf("Non-validator should not be receiving validation request messages")
+	if ledgerconfig.IsCommitter() || !ledgerconfig.IsValidator() {
+		logger.Warningf("Committer and non-validator should not be receiving validation request messages")
 		return
 	}
 
@@ -671,7 +671,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 				continue
 			}
 
-			if ledgerconfig.IsValidator() {
+			if ledgerconfig.IsValidator() && !ledgerconfig.IsCommitter() {
 				// Cancel any outstanding validation for the current block being committed
 				s.ctxProvider.Cancel(rawBlock.Header.Number)
 			}
@@ -695,7 +695,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 				logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
 			}
 
-			if ledgerconfig.IsValidator() {
+			if ledgerconfig.IsValidator() && !ledgerconfig.IsCommitter() {
 				unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
 				if unvalidatedBlock != nil {
 					logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
