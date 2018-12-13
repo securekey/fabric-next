@@ -8,6 +8,8 @@ package lockbasedtxmgr
 import (
 	"sync"
 
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -45,7 +47,7 @@ type LockBasedTxMgr struct {
 	btlPolicy        pvtdatapolicy.BTLPolicy
 
 	commitCh   chan *update
-	commitDone chan *ledger.BlockAndPvtData
+	notifier   txmgr.BlockCommitted
 	shutdownCh chan struct{}
 	doneCh     chan struct{}
 }
@@ -67,14 +69,14 @@ func (c *update) maxTxNumber() uint64 {
 
 // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
 func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
-	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, commitDone chan *ledger.BlockAndPvtData) (*LockBasedTxMgr, error) {
+	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, notifier txmgr.BlockCommitted) (*LockBasedTxMgr, error) {
 	db.Open()
 	txmgr := &LockBasedTxMgr{
 		ledgerid:       ledgerid,
 		db:             db,
 		stateListeners: stateListeners,
 		commitCh:       make(chan *update),
-		commitDone:     commitDone,
+		notifier:       notifier,
 		shutdownCh:     make(chan struct{}),
 		doneCh:         make(chan struct{}),
 		btlPolicy:      btlPolicy,
@@ -334,7 +336,7 @@ func (txmgr *LockBasedTxMgr) committer() {
 			close(current.commitDoneCh)
 
 			//notify kv ledger that commit is done for given block and private data
-			txmgr.commitDone <- current.blockAndPvtData
+			txmgr.notifier.OnBlockCommit(current.blockAndPvtData)
 
 			if metrics.IsDebug() {
 				commitWatch.Stop()

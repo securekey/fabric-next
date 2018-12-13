@@ -109,39 +109,43 @@ func (s *cachedBlockStore) blockWriter() {
 			close(s.writerClosedCh)
 			return
 		case block := <-s.blockStoreCh:
-			//startBlockStorage := time.Now()
+			stopWatch := metrics.StopWatch("cached_block_store_blockWriter_blockStore")
 			blockNumber := block.GetHeader().GetNumber()
 			logger.Debugf("processing block for storage [%d]", blockNumber)
 
 			err := s.blockStore.AddBlock(block)
 			if err != nil {
 				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				stopWatch()
 				panic(panicMsg)
 			}
 
 			err = s.blockIndex.AddBlock(block)
 			if err != nil {
 				logger.Errorf("block was not indexed [%d, %s]", blockNumber, err)
+				stopWatch()
 				panic(panicMsg)
 			}
-
-			//elapsedBlockStorage := time.Since(startBlockStorage) / time.Millisecond // duration in ms
-			//logger.Debugf("Stored block [%d] in %dms", block.Header.Number, elapsedBlockStorage)
+			stopWatch()
 		case block := <-s.checkpointCh:
+			stopWatch := metrics.StopWatch("cached_block_store_blockCheckPoint_processing")
 			blockNumber := block.GetHeader().GetNumber()
 			logger.Debugf("processing block checkpoint [%d]", blockNumber)
 			err := s.blockStore.CheckpointBlock(block)
 			if err != nil {
 				blockNumber := block.GetHeader().GetNumber()
 				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				stopWatch()
 				panic(panicMsg)
 			}
 
 			ok := s.blockCache.OnBlockStored(blockNumber)
 			if !ok {
 				logger.Errorf("block cache does not contain block [%d]", blockNumber)
+				stopWatch()
 				panic(panicMsg)
 			}
+			stopWatch()
 		}
 	}
 }

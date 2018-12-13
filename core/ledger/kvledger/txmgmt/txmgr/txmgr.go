@@ -49,6 +49,11 @@ type LockBasedTxMgr interface {
 	Unlock()
 }
 
+//BlockCommitted - an interface which will be used by lock based tx manager to notify block commit
+type BlockCommitted interface {
+	OnBlockCommit(blockAndPvtData *ledger.BlockAndPvtData)
+}
+
 // ErrUnsupportedTransaction is expected to be thrown if a unsupported query is performed in an update transaction
 type ErrUnsupportedTransaction struct {
 	Msg string
