@@ -100,6 +100,8 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 		blockIndex := ldbblkindex.NewProvider(
 			ldbblkindex.NewConf(ledgerconfig.GetBlockStorePath()),
 			indexConfig)
+
+		logger.Errorf("Cache Size: %d", blockCacheSize)
 		blockCache := memblkcache.NewProvider(blockCacheSize)
 
 		return cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache), nil
