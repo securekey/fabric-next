@@ -609,6 +609,10 @@ func (dbclient *CouchDatabase) UpdateDoc(id string, rev string, couchDoc *CouchD
 	// id can contain a '/', so encode separately
 	saveURL = &url.URL{Opaque: saveURL.String() + "/" + encodePathElement(id)}
 
+	queryParms := saveURL.Query()
+	queryParms.Set("batch", "ok")
+	saveURL.RawQuery = queryParms.Encode()
+
 	logger.Debugf("  rev=%s", rev)
 
 	//Set up a buffer for the data to be pushed to couchdb
@@ -1091,6 +1095,10 @@ func (dbclient *CouchDatabase) DeleteDoc(id, rev string) error {
 	deleteURL.Path = dbclient.DBName
 	// id can contain a '/', so encode separately
 	deleteURL = &url.URL{Opaque: deleteURL.String() + "/" + encodePathElement(id)}
+
+	queryParms := deleteURL.Query()
+	queryParms.Set("batch", "ok")
+	deleteURL.RawQuery = queryParms.Encode()
 
 	//get the number of retries
 	maxRetries := dbclient.CouchInstance.conf.MaxRetries
