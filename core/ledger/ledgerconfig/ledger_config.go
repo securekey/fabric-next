@@ -12,9 +12,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hyperledger/fabric/common/flogging"
+
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
 )
+
+var logger = flogging.MustGetLogger("ledgerstorage")
 
 //IsCouchDBEnabled exposes the useCouchDB variable
 func IsCouchDBEnabled() bool {
