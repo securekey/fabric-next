@@ -51,7 +51,6 @@ const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confRoles = "ledger.roles"
 const confValidationMinWaitTime = "ledger.blockchain.validation.minwaittime"
-const confValidationWaitTimePerTx = "ledger.blockchain.validation.waittimepertx"
 
 // TODO: couchDB config should be in a common section rather than being under state.
 const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
@@ -62,7 +61,6 @@ const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout
 const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
 
 const defaultValidationMinWaitTime = 50 * time.Millisecond
-const defaultValidationWaitTimePerTx = 5 * time.Millisecond
 
 // BlockStorageProvider holds the configuration names of the available storage providers
 type BlockStorageProvider int
@@ -198,7 +196,6 @@ func GetPvtdataSkipPurgeForCollections() []string {
 	skipPurgeForCollections := viper.GetString("ledger.pvtdataStore.skipPurgeForCollections")
 	return strings.Split(skipPurgeForCollections, ",")
 }
-
 
 // GetCouchDBMaxIdleConns returns the number of idle connections to hold in the connection pool for couchDB.
 func GetCouchDBMaxIdleConns() int {
@@ -414,6 +411,12 @@ func HasRole(role Role) bool {
 	initOnce.Do(func() {
 		roles = getRoles()
 	})
+
+	if len(roles) == 0 {
+		// No roles were explicitly set, therefore the peer is assumed to have all roles.
+		return true
+	}
+
 	_, ok := roles[role]
 	return ok
 }
@@ -456,10 +459,7 @@ func getRoles() map[Role]struct{} {
 	strRoles := viper.GetString(confRoles)
 	if strRoles == "" {
 		// The peer has all roles by default
-		return map[Role]struct{}{
-			EndorserRole:  exists,
-			CommitterRole: exists,
-		}
+		return map[Role]struct{}{}
 	}
 
 	roles := make(map[Role]struct{})
@@ -472,17 +472,6 @@ func getRoles() map[Role]struct{} {
 // CouchDBHTTPTraceEnabled returns true if HTTP tracing is enabled for Couch DB
 func CouchDBHTTPTraceEnabled() bool {
 	return viper.GetBool(confCouchDBHTTPTraceEnabled)
-}
-
-// GetValidationWaitTimePerTx is used by the committer in distributed validation and is the time
-// per transaction to wait for validation responses from other validators.
-// For example, if there are 20 transactions to validate and ValidationWaitTimePerTx=100ms
-// then the committer will wait 20*50ms for responses from other validators.
-func GetValidationWaitTimePerTx() time.Duration {
-	if viper.IsSet(confValidationWaitTimePerTx) {
-		return viper.GetDuration(confValidationWaitTimePerTx)
-	}
-	return defaultValidationWaitTimePerTx
 }
 
 // GetValidationMinWaitTime is used by the committer in distributed validation and is the minimum

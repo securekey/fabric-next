@@ -20,6 +20,7 @@ import (
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -171,22 +172,54 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		return nil, nil, errors.New("Block header is nil")
 	}
 
+	stopWatch1 := metrics.StopWatch(fmt.Sprintf("validator_%s_phase1_duration", metrics.FilterMetricName(c.ChainID)))
+
 	// FIXME: Change to Debug
-	logger.Infof("[%s] Starting first phase validation of %d transactions in block %d against committed data...", c.ChainID, len(block.Data.Data), block.Header.Number)
+	logger.Infof("[%s] Validating block and private data for %d transactions in block %d ...", c.ChainID, len(block.Data.Data), block.Header.Number)
 
-	begin := time.Now()
+	// Initialize the flags all to TxValidationCode_NOT_VALIDATED
+	utils.InitBlockMetadata(block)
+	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = ledgerUtil.NewTxValidationFlags(len(block.Data.Data))
 
-	err := c.Validator.Validate(block, resultsChan)
+	blockAndPvtData, privateInfo, err := c.validateBlockAndPvtData(block, privateDataSets)
 	if err != nil {
-		logger.Errorf("Validation failed: %+v", err)
+		logger.Errorf("[%s] Got error validating block and private data in block %d: %s", c.ChainID, block.Header.Number, err)
 		return nil, nil, err
 	}
+	stopWatch1()
 
 	// FIXME: Change to Debug
-	logger.Infof("[%s] ... finished first phase validation of %d transactions in block %d against committed data in %s. Starting second phase...", c.ChainID, len(block.Data.Data), block.Header.Number, time.Since(begin))
+	logger.Infof("[%s] ... finished validating block and private data for %d transactions in block %d. Starting second phase validation ...", c.ChainID, len(block.Data.Data), block.Header.Number)
 
-	begin2 := time.Now()
+	stopWatch2 := metrics.StopWatch(fmt.Sprintf("validator_%s_phase2_duration", metrics.FilterMetricName(c.ChainID)))
 
+	// Prepare the block for second phase validation by setting all Valid transactions
+	// to NotValidated (since only the transactions that are not validated will be validated
+	// in the second phase)
+	blockFltr := ledgerUtil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	for tIdx := range block.Data.Data {
+		if blockFltr.Flag(tIdx) == peer.TxValidationCode_VALID {
+			blockFltr.SetFlag(tIdx, peer.TxValidationCode_NOT_VALIDATED)
+		} else {
+			// FIXME: Change to Debug
+			logger.Infof("[%s] Not setting flag to 'NotValidated' for TxIdx[%d] in block %d since it has already been set to %s", c.ChainID, tIdx, block.Header.Number, blockFltr.Flag(tIdx))
+		}
+	}
+
+	err = c.Validator.Validate(block, resultsChan)
+	if err != nil {
+		logger.Errorf("[%s] Got error in second phase validation of block %d: %s", c.ChainID, block.Header.Number, err)
+		return nil, nil, err
+	}
+	stopWatch2()
+
+	// FIXME: Change to Debug
+	logger.Infof("[%s] ... finished second phase validation of %d transactions in block %d.", c.ChainID, len(block.Data.Data), block.Header.Number)
+
+	return blockAndPvtData, privateInfo.txns, nil
+}
+
+func (c *coordinator) validateBlockAndPvtData(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, *privateDataInfo, error) {
 	blockAndPvtData := &ledger.BlockAndPvtData{
 		Block:        block,
 		BlockPvtData: make(map[uint64]*ledger.TxPvtData),
@@ -269,11 +302,8 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	if err != nil {
 		return nil, nil, err
 	}
-	// FIXME: Change to Debug
-	logger.Infof("[%s] ... finished second phase validation of %d transactions in block %d in %s", c.ChainID, len(block.Data.Data), blockAndPvtData.Block.Header.Number, time.Since(begin2))
-	logger.Infof("[%s] Finished validating %d transactions in block %d in %s", c.ChainID, len(block.Data.Data), blockAndPvtData.Block.Header.Number, time.Since(begin))
 
-	return blockAndPvtData, privateInfo.txns, nil
+	return blockAndPvtData, privateInfo, nil
 }
 
 func (c *coordinator) ValidatePartialBlock(ctx context.Context, block *common.Block) {
@@ -619,7 +649,7 @@ type txns []string
 type blockData [][]byte
 type blockConsumer func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement)
 
-func (data blockData) forEachTxn(txsFilter txValidationFlags, consumer blockConsumer) txns {
+func (data blockData) forEachTxn(consumer blockConsumer) txns {
 	var txList []string
 	for seqInBlock, envBytes := range data {
 		env, err := utils.GetEnvelopeFromBlock(envBytes)
@@ -645,11 +675,6 @@ func (data blockData) forEachTxn(txsFilter txValidationFlags, consumer blockCons
 		}
 
 		txList = append(txList, chdr.TxId)
-
-		if txsFilter[seqInBlock] != uint8(peer.TxValidationCode_VALID) {
-			logger.Debug("Skipping Tx", seqInBlock, "because it's invalid. Status is", txsFilter[seqInBlock])
-			continue
-		}
 
 		respPayload, err := utils.GetActionFromEnvelope(envBytes)
 		if err != nil {
@@ -714,10 +739,6 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 	if block.Metadata == nil || len(block.Metadata.Metadata) <= int(common.BlockMetadataIndex_TRANSACTIONS_FILTER) {
 		return nil, errors.New("Block.Metadata is nil or Block.Metadata lacks a Tx filter bitmap")
 	}
-	txsFilter := txValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	if len(txsFilter) != len(block.Data.Data) {
-		return nil, errors.Errorf("Block data size(%d) is different from Tx filter size(%d)", len(block.Data.Data), len(txsFilter))
-	}
 
 	sources := make(map[rwSetKey][]*peer.Endorsement)
 	privateRWsetsInBlock := make(map[rwSetKey]struct{})
@@ -730,7 +751,7 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 		privateRWsetsInBlock: privateRWsetsInBlock,
 		coordinator:          c,
 	}
-	txList := data.forEachTxn(txsFilter, bi.inspectTransaction)
+	txList := data.forEachTxn(bi.inspectTransaction)
 
 	privateInfo := &privateDataInfo{
 		sources:            sources,
@@ -890,7 +911,7 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 
 	seqs2Namespaces := aggregatedCollections(make(map[seqAndDataModel]map[string][]*rwset.CollectionPvtReadWriteSet))
 	data := blockData(blockAndPvtData.Block.Data.Data)
-	data.forEachTxn(make(txValidationFlags, len(data)), func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
+	data.forEachTxn(func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
 		item, exists := blockAndPvtData.BlockPvtData[seqInBlock]
 		if !exists {
 			return
