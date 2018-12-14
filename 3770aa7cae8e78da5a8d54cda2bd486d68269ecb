@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "c238be92_36bf5087",
+        "filename": "common/ledger/blockledger/file/factory.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 80,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-12-14T15:44:03Z",
+      "side": 1,
+      "message": "wrong logging",
+      "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "b81fed89_0a193b78",
         "filename": "core/ledger/ledgerconfig/ledger_config.go",
         "patchSetId": 3
