@@ -87,8 +87,9 @@ type Profile struct {
 
 // FileLedger contains configuration for the file-based ledger.
 type FileLedger struct {
-	Location string
-	Prefix   string
+	Location       string
+	Prefix         string
+	BlockCacheSize uint
 }
 
 // RAMLedger contains configuration for the RAM ledger.
@@ -180,8 +181,9 @@ var Defaults = TopLevel{
 		HistorySize: 10000,
 	},
 	FileLedger: FileLedger{
-		Location: "/var/hyperledger/production/orderer",
-		Prefix:   "hyperledger-fabric-ordererledger",
+		Location:       "/var/hyperledger/production/orderer",
+		Prefix:         "hyperledger-fabric-ordererledger",
+		BlockCacheSize: 1,
 	},
 	Kafka: Kafka{
 		Retry: Retry{
@@ -306,6 +308,9 @@ func (c *TopLevel) completeInitialization(configDir string) {
 		case c.FileLedger.Prefix == "":
 			logger.Infof("FileLedger.Prefix unset, setting to %s", Defaults.FileLedger.Prefix)
 			c.FileLedger.Prefix = Defaults.FileLedger.Prefix
+		case c.FileLedger.BlockCacheSize == 0:
+			logger.Infof("FileLedger.BlockCacheSize unset, setting to %v", Defaults.FileLedger.BlockCacheSize)
+			c.FileLedger.BlockCacheSize = Defaults.FileLedger.BlockCacheSize
 
 		case c.Kafka.Retry.ShortInterval == 0:
 			logger.Infof("Kafka.Retry.ShortInterval unset, setting to %v", Defaults.Kafka.Retry.ShortInterval)
