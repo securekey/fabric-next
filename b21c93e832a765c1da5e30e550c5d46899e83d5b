@@ -46,6 +46,30 @@
       "revId": "b21c93e832a765c1da5e30e550c5d46899e83d5b",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "056bb538_2faa0caa",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 356,
+      "author": {
+        "id": 1000118
+      },
+      "writtenOn": "2018-12-14T14:41:35Z",
+      "side": 0,
+      "message": "If you follow the trail even further upstream, you\u0027d see that store.Prepare() also panics if it\u0027s not called by a committer.",
+      "parentUuid": "e8bc7f5e_21ac8649",
+      "range": {
+        "startLine": 356,
+        "startChar": 1,
+        "endLine": 356,
+        "endChar": 47
+      },
+      "revId": "b21c93e832a765c1da5e30e550c5d46899e83d5b",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
     }
   ]
 }
