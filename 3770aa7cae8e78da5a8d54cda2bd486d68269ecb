@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ae457f86_7a91a2da",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 104,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-12-14T15:42:42Z",
+      "side": 1,
+      "message": "wrong logging",
+      "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
