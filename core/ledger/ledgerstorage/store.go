@@ -175,7 +175,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	writtenToPvtStore := false
 	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
-		if len(blockAndPvtdata.BlockPvtData) > 0 {
+		if len(blockAndPvtdata.BlockPvtData) > 0 || !ledgerconfig.IsCouchDBEnabled() {
 			// when re-processing blocks (rejoin the channel or re-fetching last few block),
 			// skip the pvt data commit to the pvtdata blockstore
 			logger.Debugf("Writing block [%d] to pvt block store", blockNum)
