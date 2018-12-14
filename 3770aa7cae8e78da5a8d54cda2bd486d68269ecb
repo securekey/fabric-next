@@ -72,6 +72,24 @@
     },
     {
       "key": {
+        "uuid": "77a9f16c_5110c06a",
+        "filename": "core/ledger/ledgerconfig/ledger_config.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 303,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-12-14T16:06:41Z",
+      "side": 1,
+      "message": "made it 5",
+      "parentUuid": "e4617cfe_4c44be64",
+      "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "ae457f86_7a91a2da",
         "filename": "core/ledger/ledgerstorage/store.go",
         "patchSetId": 3
