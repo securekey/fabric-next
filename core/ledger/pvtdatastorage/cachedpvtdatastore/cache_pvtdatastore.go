@@ -9,6 +9,7 @@ package cachedpvtdatastore
 import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/pkg/errors"
@@ -88,7 +89,7 @@ func (c *cachedPvtDataStore) pvtDataWriter() {
 			return
 		case pvtPrepareData := <-c.pvtDataStoreCh:
 			logger.Debugf("prepare pvt data for storage [%d], length of pvtData:%d", pvtPrepareData.blockNum, len(pvtPrepareData.pvtData))
-			if len(pvtPrepareData.pvtData) > 0 {
+			if len(pvtPrepareData.pvtData) > 0 || !ledgerconfig.IsCouchDBEnabled() {
 				err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
 				if err != nil {
 					logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
