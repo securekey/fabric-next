@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package ledgerconfig
 
 import (
+	"github.com/hyperledger/fabric/common/flogging"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +16,8 @@ import (
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
 )
+
+var logger = flogging.MustGetLogger("ledgerstorage")
 
 //IsCouchDBEnabled exposes the useCouchDB variable
 func IsCouchDBEnabled() bool {
@@ -298,7 +301,7 @@ func GetBlockStoreProvider() BlockStorageProvider {
 func GetBlockCacheSize() int {
 	blockCacheSize := viper.GetInt(confBlockCacheSize)
 	if !viper.IsSet(confBlockCacheSize) {
-		blockCacheSize = 300
+		blockCacheSize = 5
 	}
 	return blockCacheSize
 }
