@@ -50,7 +50,7 @@ func initialize(t *testing.T) (*testEnv, *FileLedger) {
 	name, err := ioutil.TempDir("", "hyperledger_fabric")
 	assert.NoError(t, err, "Error creating temp dir: %s", err)
 
-	flf := New(name).(*fileLedgerFactory)
+	flf := New(name, 1).(*fileLedgerFactory)
 	fl, err := flf.GetOrCreate(genesisconfig.TestChainID)
 	assert.NoError(t, err, "Error GetOrCreate chain")
 
@@ -164,7 +164,7 @@ func TestReinitialization(t *testing.T) {
 	tev.shutDown()
 
 	// re-initialize the ledger provider (not the test ledger itself!)
-	provider2 := New(tev.location)
+	provider2 := New(tev.location, 1)
 
 	// assert expected ledgers exist
 	chains := provider2.ChainIDs()
