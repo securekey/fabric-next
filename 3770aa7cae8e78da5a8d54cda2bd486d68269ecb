@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "64f5a2f8_13abf2a6",
+        "filename": "common/ledger/blockledger/file/factory.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 80,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-12-14T15:53:54Z",
+      "side": 1,
+      "message": "removed it",
+      "parentUuid": "c238be92_36bf5087",
+      "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "b81fed89_0a193b78",
         "filename": "core/ledger/ledgerconfig/ledger_config.go",
         "patchSetId": 3
@@ -36,6 +54,24 @@
     },
     {
       "key": {
+        "uuid": "e4617cfe_4c44be64",
+        "filename": "core/ledger/ledgerconfig/ledger_config.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 303,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-12-14T15:53:54Z",
+      "side": 1,
+      "message": "changed it back to 300",
+      "parentUuid": "b81fed89_0a193b78",
+      "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "ae457f86_7a91a2da",
         "filename": "core/ledger/ledgerstorage/store.go",
         "patchSetId": 3
@@ -47,6 +83,24 @@
       "writtenOn": "2018-12-14T15:42:42Z",
       "side": 1,
       "message": "wrong logging",
+      "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "07f49b23_3925e09f",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 3
+      },
+      "lineNbr": 104,
+      "author": {
+        "id": 1000060
+      },
+      "writtenOn": "2018-12-14T15:53:54Z",
+      "side": 1,
+      "message": "Removed it",
+      "parentUuid": "ae457f86_7a91a2da",
       "revId": "3770aa7cae8e78da5a8d54cda2bd486d68269ecb",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
