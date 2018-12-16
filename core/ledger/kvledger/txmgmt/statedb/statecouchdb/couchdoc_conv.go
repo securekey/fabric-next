@@ -118,8 +118,10 @@ func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error) 
 		kvTypeDelete = iota
 		kvTypeJSON
 		kvTypeAttachment
+		kvTypeEmpty
+
 	)
-	key, value, metadata, version := kv.key, kv.Value, kv.Metadata, kv.Version
+	key, value, version := kv.key, kv.VersionedValue.Value, kv.VersionedValue.Version
 	jsonMap := make(jsonValue)
 
 	var kvtype kvType

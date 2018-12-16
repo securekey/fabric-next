@@ -1,26 +1,19 @@
 /*
 Copyright IBM Corp. All Rights Reserved.
-
 SPDX-License-Identifier: Apache-2.0
 */
-
 package pvtstatepurgemgmt
-
 import (
 	"math"
 	"sync"
-
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-	"github.com/hyperledger/fabric/core/ledger/util"
 )
-
-// PurgeMgr manages purging of the expired pvtdata
+// PurgeMgr manages purging of the expired pvtdata and removes non-durable key, value pairs
 type PurgeMgr interface {
 	// PrepareForExpiringKeys gives a chance to the PurgeMgr to do background work in advance if any
 	PrepareForExpiringKeys(expiringAtBlk uint64)
@@ -30,38 +23,33 @@ type PurgeMgr interface {
 	DeleteExpiredAndUpdateBookkeeping(
 		pvtUpdates *privacyenabledstate.PvtUpdateBatch,
 		hashedUpdates *privacyenabledstate.HashedUpdateBatch) error
-	// UpdateBookkeepingForPvtDataOfOldBlocks updates the existing expiry entries in the bookkeeper with the given pvtUpdates
-	UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error
+	// RemoveNonDurable updates the bookkeeping and modifies the update batch by removing non-durable items
+	RemoveNonDurable(
+		pvtUpdateBatch *privacyenabledstate.PvtUpdateBatch,
+		hashedUpdateBatch *privacyenabledstate.HashedUpdateBatch) error
 	// BlockCommitDone is a callback to the PurgeMgr when the block is committed to the ledger
 	BlockCommitDone() error
 }
-
 type keyAndVersion struct {
 	key             string
 	committingBlock uint64
 	purgeKeyOnly    bool
 }
-
-type expiryInfoMap map[privacyenabledstate.HashedCompositeKey]*keyAndVersion
-
+type expiryInfoMap map[*privacyenabledstate.HashedCompositeKey]*keyAndVersion
 type workingset struct {
 	toPurge             expiryInfoMap
 	toClearFromSchedule []*expiryInfoKey
 	expiringBlk         uint64
 	err                 error
 }
-
 type purgeMgr struct {
 	btlPolicy pvtdatapolicy.BTLPolicy
 	db        privacyenabledstate.DB
 	expKeeper expiryKeeper
-
 	lock    *sync.Mutex
 	waitGrp *sync.WaitGroup
-
 	workingset *workingset
 }
-
 // InstantiatePurgeMgr instantiates a PurgeMgr.
 func InstantiatePurgeMgr(ledgerid string, db privacyenabledstate.DB, btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider) (PurgeMgr, error) {
 	return &purgeMgr{
@@ -72,7 +60,6 @@ func InstantiatePurgeMgr(ledgerid string, db privacyenabledstate.DB, btlPolicy p
 		waitGrp:   &sync.WaitGroup{},
 	}, nil
 }
-
 // PrepareForExpiringKeys implements function in the interface 'PurgeMgr'
 func (p *purgeMgr) PrepareForExpiringKeys(expiringAtBlk uint64) {
 	p.waitGrp.Add(1)
@@ -84,35 +71,49 @@ func (p *purgeMgr) PrepareForExpiringKeys(expiringAtBlk uint64) {
 	}()
 	p.waitGrp.Wait()
 }
-
 // WaitForPrepareToFinish implements function in the interface 'PurgeMgr'
 func (p *purgeMgr) WaitForPrepareToFinish() {
 	p.lock.Lock()
 	p.lock.Unlock()
 }
-
-func (p *purgeMgr) UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error {
-	builder := newExpiryScheduleBuilder(p.btlPolicy)
-	pvtUpdateCompositeKeyMap := pvtUpdates.ToCompositeKeyMap()
-	for k, vv := range pvtUpdateCompositeKeyMap {
-		builder.add(k.Namespace, k.CollectionName, k.Key, util.ComputeStringHash(k.Key), vv)
+// RemoveNonDurable implements function in the interface 'PurgeMgr'
+func (p *purgeMgr) RemoveNonDurable(
+	pvtUpdates *privacyenabledstate.PvtUpdateBatch,
+	hashedUpdates *privacyenabledstate.HashedUpdateBatch) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	if p.workingset.err != nil {
+		return p.workingset.err
 	}
-
-	var updatedList []*expiryInfo
-	for _, toAdd := range builder.getExpiryInfo() {
-		toUpdate, err := p.expKeeper.retrieveByExpiryKey(toAdd.expiryInfoKey)
-		if err != nil {
-			return err
+	blocksToLiveInCache := ledgerconfig.GetKVCacheBlocksToLive()
+	for ns, nsBatch := range pvtUpdates.UpdateMap {
+		for _, coll := range nsBatch.GetCollectionNames() {
+			btl, err := p.btlPolicy.GetBTL(ns, coll)
+			if err != nil {
+				return err
+			}
+			if btl != 0 && btl < blocksToLiveInCache {
+				logger.Debugf("Collection policy[%s] blocks to live[%d] is less than blocks to live in cache[%d] - no need to store collection entries for data",
+					coll, btl, blocksToLiveInCache)
+				nsBatch.RemoveUpdates(coll)
+			}
 		}
-		// Though we could update the existing entry (as there should be one due
-		// to only the keyHash of this pvtUpdateKey), for simplicity and to be less
-		// expensive, we append a new entry
-		toUpdate.pvtdataKeys.addAll(toAdd.pvtdataKeys)
-		updatedList = append(updatedList, toUpdate)
 	}
-	return p.expKeeper.updateBookkeeping(updatedList, nil)
+	for ns, nsBatch := range hashedUpdates.UpdateMap {
+		for _, coll := range nsBatch.GetCollectionNames() {
+			btl, err := p.btlPolicy.GetBTL(ns, coll)
+			if err != nil {
+				return err
+			}
+			if btl != 0 && btl < blocksToLiveInCache {
+				logger.Debugf("Collection policy[%s] blocks to live[%d] is less than blocks to live in cache[%d] - no need to store collection entries for hashes",
+					coll, btl, blocksToLiveInCache)
+				nsBatch.RemoveUpdates(coll)
+			}
+		}
+	}
+	return nil
 }
-
 // DeleteExpiredAndUpdateBookkeeping implements function in the interface 'PurgeMgr'
 func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 	pvtUpdates *privacyenabledstate.PvtUpdateBatch,
@@ -122,12 +123,10 @@ func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 	if p.workingset.err != nil {
 		return p.workingset.err
 	}
-
 	listExpiryInfo, err := buildExpirySchedule(p.btlPolicy, pvtUpdates, hashedUpdates)
 	if err != nil {
 		return err
 	}
-
 	// For each key selected for purging, check if the key is not getting updated in the current block,
 	// add its deletion in the update batches for pvt and hashed updates
 	for compositeHashedKey, keyAndVersion := range p.workingset.toPurge {
@@ -138,11 +137,9 @@ func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 		purgeKeyOnly := keyAndVersion.purgeKeyOnly
 		hashUpdated := hashedUpdates.Contains(ns, coll, keyHash)
 		pvtKeyUpdated := pvtUpdates.Contains(ns, coll, key)
-
 		logger.Debugf("Checking whether the key [ns=%s, coll=%s, keyHash=%x, purgeKeyOnly=%t] "+
 			"is updated in the update batch for the committing block - hashUpdated=%t, and pvtKeyUpdated=%t",
 			ns, coll, keyHash, purgeKeyOnly, hashUpdated, pvtKeyUpdated)
-
 		expiringTxVersion := version.NewHeight(p.workingset.expiringBlk, math.MaxUint64)
 		if !hashUpdated && !purgeKeyOnly {
 			logger.Debugf("Adding the hashed key to be purged to the delete list in the update batch")
@@ -155,7 +152,6 @@ func (p *purgeMgr) DeleteExpiredAndUpdateBookkeeping(
 	}
 	return p.expKeeper.updateBookkeeping(listExpiryInfo, nil)
 }
-
 // BlockCommitDone implements function in the interface 'PurgeMgr'
 // These orphan entries for purge-schedule can be cleared off in bulk in a separate background routine as well
 // If we maintian the following logic (i.e., clear off entries just after block commit), we need a TODO -
@@ -168,7 +164,6 @@ func (p *purgeMgr) BlockCommitDone() error {
 	defer func() { p.workingset = nil }()
 	return p.expKeeper.updateBookkeeping(nil, p.workingset.toClearFromSchedule)
 }
-
 // prepareWorkingsetFor returns a working set for a given expiring block 'expiringAtBlk'.
 // This working set contains the pvt data keys that will expire with the commit of block 'expiringAtBlk'.
 func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
@@ -185,13 +180,11 @@ func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 	// Load the latest versions of the hashed keys
 	p.preloadCommittedVersionsInCache(toPurge)
 	var expiryInfoKeysToClear []*expiryInfoKey
-
 	if len(toPurge) == 0 {
 		logger.Debugf("No expiry entry found for expiringAtBlk [%d]", expiringAtBlk)
 		return workingset
 	}
 	logger.Debugf("Total [%d] expiring entries found. Evaluaitng whether some of these keys have been overwritten in later blocks...", len(toPurge))
-
 	for purgeEntryK, purgeEntryV := range toPurge {
 		logger.Debugf("Evaluating for hashedKey [%s]", purgeEntryK)
 		expiryInfoKeysToClear = append(expiryInfoKeysToClear, &expiryInfoKey{committingBlk: purgeEntryV.committingBlock, expiryBlk: expiringAtBlk})
@@ -200,14 +193,12 @@ func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 			workingset.err = err
 			return workingset
 		}
-
 		if sameVersion(currentVersion, purgeEntryV.committingBlock) {
 			logger.Debugf(
 				"The version of the hashed key in the committed state and in the expiry entry is same " +
 					"hence, keeping the entry in the purge list")
 			continue
 		}
-
 		logger.Debugf("The version of the hashed key in the committed state and in the expiry entry is different")
 		if purgeEntryV.key != "" {
 			logger.Debugf("The expiry entry also contains the raw key along with the key hash")
@@ -216,7 +207,6 @@ func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 				workingset.err = err
 				return workingset
 			}
-
 			if sameVersionFromVal(committedPvtVerVal, purgeEntryV.committingBlock) {
 				logger.Debugf(
 					"The version of the pvt key in the committed state and in the expiry entry is same" +
@@ -225,7 +215,6 @@ func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 				continue
 			}
 		}
-
 		// If we reached here, the keyhash and private key (if present, in the expiry entry) have been updated in a later block, therefore remove from current purge list
 		logger.Debugf("Removing from purge list - the key hash and key (if present, in the expiry entry)")
 		delete(toPurge, purgeEntryK)
@@ -236,25 +225,23 @@ func (p *purgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 	workingset.toClearFromSchedule = expiryInfoKeysToClear
 	return workingset
 }
-
 func (p *purgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) {
 	if !p.db.IsBulkOptimizable() {
 		return
 	}
 	var hashedKeys []*privacyenabledstate.HashedCompositeKey
 	for k := range expInfoMap {
-		hashedKeys = append(hashedKeys, &k)
+		hashedKeys = append(hashedKeys, k)
 	}
 	p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
 }
-
 func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {
-	expinfoMap := make(expiryInfoMap)
+	var expinfoMap expiryInfoMap = make(map[*privacyenabledstate.HashedCompositeKey]*keyAndVersion)
 	for _, expinfo := range expiryInfo {
 		for ns, colls := range expinfo.pvtdataKeys.Map {
 			for coll, keysAndHashes := range colls.Map {
 				for _, keyAndHash := range keysAndHashes.List {
-					compositeKey := privacyenabledstate.HashedCompositeKey{Namespace: ns, CollectionName: coll, KeyHash: string(keyAndHash.Hash)}
+					compositeKey := &privacyenabledstate.HashedCompositeKey{Namespace: ns, CollectionName: coll, KeyHash: string(keyAndHash.Hash)}
 					expinfoMap[compositeKey] = &keyAndVersion{key: keyAndHash.Key, committingBlock: expinfo.expiryInfoKey.committingBlk}
 				}
 			}
@@ -262,11 +249,9 @@ func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {
 	}
 	return expinfoMap
 }
-
 func sameVersion(version *version.Height, blockNum uint64) bool {
 	return version != nil && version.BlockNum == blockNum
 }
-
 func sameVersionFromVal(vv *statedb.VersionedValue, blockNum uint64) bool {
 	return vv != nil && sameVersion(vv.Version, blockNum)
 }
