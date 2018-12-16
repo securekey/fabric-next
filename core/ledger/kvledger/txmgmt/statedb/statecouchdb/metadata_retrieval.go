@@ -19,7 +19,7 @@ type nsMetadataRetriever struct {
 	db              *couchdb.CouchDatabase
 	keys            []string
 	executionResult []*couchdb.DocMetadata
-	includeDocs       bool
+	includeDocs     bool
 }
 
 // subNsMetadataRetriever implements `batch` interface and wraps the function `couchdb.BatchRetrieveDocumentMetadata`

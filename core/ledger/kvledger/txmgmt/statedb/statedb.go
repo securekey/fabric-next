@@ -9,10 +9,13 @@ package statedb
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
+
 )
 
 //go:generate counterfeiter -o mock/results_iterator.go -fake-name ResultsIterator . ResultsIterator
@@ -29,7 +32,7 @@ type VersionedDBProvider interface {
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
 	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
-	GetKVCacheProvider() (*kvcache.KVCacheProvider)
+	GetKVCacheProvider() *kvcache.KVCacheProvider
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
 	GetState(namespace string, key string) (*VersionedValue, error)
 	// GetVersion gets the version for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
@@ -47,6 +50,11 @@ type VersionedDB interface {
 	// metadata is a map of additional query parameters
 	// The returned ResultsIterator contains results of type *VersionedKV
 	GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (QueryResultsIterator, error)
+	// GetNonDurableStateRangeScanIterator returns an iterator that contains all the key-values between given key ranges.
+	// startKey is inclusive
+	// endKey is exclusive
+	// The returned ResultsIterator contains results of type *VersionedKV
+	GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
 	// ExecuteQuery executes the given query and returns an iterator that contains results of type *VersionedKV.
 	ExecuteQuery(namespace, query string) (ResultsIterator, error)
 	// ExecuteQueryWithMetadata executes the given query with associated query options and
@@ -232,9 +240,12 @@ func (batch *UpdateBatch) RemoveUpdates(ns string) {
 // where the UpdateBatch represents the union of the modifications performed by the preceding valid transactions in the same block
 // (Assuming Group commit approach where we commit all the updates caused by a block together).
 func (batch *UpdateBatch) GetRangeScanIterator(ns string, startKey string, endKey string) QueryResultsIterator {
-	return newNsIterator(ns, startKey, endKey, batch)
+	return newNsIterator(ns, startKey, endKey, batch, false)
 }
-
+// GetRangeScanIteratorIncludingEndKey is the same as GetRangeScanIterator except that it includes endKey in the result set
+func (batch *UpdateBatch) GetRangeScanIteratorIncludingEndKey(ns string, startKey string, endKey string) ResultsIterator {
+	 return newNsIterator(ns, startKey, endKey, batch, true)
+}
 func (batch *UpdateBatch) getOrCreateNsUpdates(ns string) *nsUpdates {
 	nsUpdates := batch.updates[ns]
 	if nsUpdates == nil {

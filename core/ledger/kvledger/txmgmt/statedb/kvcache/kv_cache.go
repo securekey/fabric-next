@@ -12,9 +12,9 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 )
 
 // VersionedValue encloses value and corresponding version

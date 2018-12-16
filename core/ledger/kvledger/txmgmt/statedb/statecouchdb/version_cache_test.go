@@ -19,7 +19,7 @@ func TestVersionCache(t *testing.T) {
 	verCache.setVer("ns1", "key1", version.NewHeight(1, 1))
 	verCache.setRev("ns1", "key1", "rev1")
 	verCache.setVer("ns2", "key2", version.NewHeight(2, 2))
-	verCache.setRev( "ns2", "key2", "rev2")
+	verCache.setRev("ns2", "key2", "rev2")
 
 	ver, found := verCache.getVersion("ns1", "key1")
 	assert.True(t, found)
