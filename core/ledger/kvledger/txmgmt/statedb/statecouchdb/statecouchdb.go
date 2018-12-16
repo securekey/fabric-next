@@ -2,15 +2,12 @@
 Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
-
 package statecouchdb
-
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"sync"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -18,15 +15,12 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"github.com/pkg/errors"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
-
 var logger = flogging.MustGetLogger("statecouchdb")
-
 // querySkip is implemented for future use by query paging
 // currently defaulted to 0 and is not used
 const querySkip = 0
-
 // VersionedDBProvider implements interface VersionedDBProvider
 type VersionedDBProvider struct {
 	couchInstance *couchdb.CouchInstance
@@ -34,19 +28,17 @@ type VersionedDBProvider struct {
 	mux           sync.Mutex
 	openCounts    uint64
 }
-
 // NewVersionedDBProvider instantiates VersionedDBProvider
-func NewVersionedDBProvider(metricsProvider metrics.Provider) (*VersionedDBProvider, error) {
+func NewVersionedDBProvider() (*VersionedDBProvider, error) {
 	logger.Debugf("constructing CouchDB VersionedDBProvider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, metricsProvider)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
 	if err != nil {
 		return nil, err
 	}
 	return &VersionedDBProvider{couchInstance, make(map[string]*VersionedDB), sync.Mutex{}, 0}, nil
 }
-
 // GetDBHandle gets the handle to a named database
 func (provider *VersionedDBProvider) GetDBHandle(dbName string) (statedb.VersionedDB, error) {
 	provider.mux.Lock()
@@ -62,12 +54,10 @@ func (provider *VersionedDBProvider) GetDBHandle(dbName string) (statedb.Version
 	}
 	return vdb, nil
 }
-
 // Close closes the underlying db instance
 func (provider *VersionedDBProvider) Close() {
 	// No close needed on Couch
 }
-
 // VersionedDB implements VersionedDB interface
 type VersionedDB struct {
 	kvCacheProvider        *kvcache.KVCacheProvider
@@ -82,44 +72,35 @@ type VersionedDB struct {
 	committedWSetDataCache map[uint64]*versionsCache // Used as a local cache during bulk processing of a block.
 	verWSetCacheLock       *sync.RWMutex
 }
-
 // newVersionedDB constructs an instance of VersionedDB
 func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*VersionedDB, error) {
 	// CreateCouchDatabase creates a CouchDB database object, as well as the underlying database if it does not exist
 	chainName := dbName
 	dbName = couchdb.ConstructMetadataDBName(dbName)
-
 	metadataDB, err := createCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
-
 	kvCacheProvider := kvcache.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
 	return &VersionedDB{kvCacheProvider: kvCacheProvider, couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
 		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
 }
-
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
 	if ledgerconfig.IsCommitter() {
 		return couchdb.CreateCouchDatabase(couchInstance, dbName)
 	}
-
 	return createCouchDatabaseEndorser(couchInstance, dbName)
 }
-
 type dbNotFoundError struct {
 	name string
 }
-
 func newDBNotFoundError(name string) dbNotFoundError {
 	return dbNotFoundError{name: name}
 }
-
 func (e dbNotFoundError) Error() string {
 	return fmt.Sprintf("DB not found: [%s]", e.name)
 }
-
 func isDBNotFoundForEndorser(err error) bool {
 	if ledgerconfig.IsCommitter() {
 		return false
@@ -127,29 +108,23 @@ func isDBNotFoundForEndorser(err error) bool {
 	_, ok := err.(dbNotFoundError)
 	return ok
 }
-
 func createCouchDatabaseEndorser(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
 	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
 	}
-
 	dbExists, err := db.ExistsWithRetry()
 	if err != nil {
 		return nil, err
 	}
-
 	if !dbExists {
 		return nil, newDBNotFoundError(db.DBName)
 	}
-
 	return db, nil
 }
-
-func (vdb *VersionedDB) GetKVCacheProvider() *kvcache.KVCacheProvider {
+func (vdb *VersionedDB) GetKVCacheProvider() (* kvcache.KVCacheProvider) {
 	return vdb.kvCacheProvider
 }
-
 // getNamespaceDBHandle gets the handle to a named chaincode database
 func (vdb *VersionedDB) getNamespaceDBHandle(namespace string) (*couchdb.CouchDatabase, error) {
 	vdb.mux.RLock()
@@ -172,7 +147,6 @@ func (vdb *VersionedDB) getNamespaceDBHandle(namespace string) (*couchdb.CouchDa
 	}
 	return db, nil
 }
-
 // ProcessIndexesForChaincodeDeploy creates indexes for a specified namespace
 func (vdb *VersionedDB) ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error {
 	db, err := vdb.getNamespaceDBHandle(namespace)
@@ -184,56 +158,85 @@ func (vdb *VersionedDB) ProcessIndexesForChaincodeDeploy(namespace string, fileE
 		filename := fileEntry.FileHeader.Name
 		_, err = db.CreateIndex(string(indexData))
 		if err != nil {
-			return errors.WithMessage(err, fmt.Sprintf(
-				"error creating index from file [%s] for channel [%s]", filename, namespace))
+			return fmt.Errorf("error during creation of index from file=[%s] for chain=[%s]. Error=%s",
+				filename, namespace, err)
 		}
 	}
 	return nil
 }
-
 func (vdb *VersionedDB) GetDBType() string {
 	return "couchdb"
 }
-
 // LoadCommittedVersions populates committedVersions and revisionNumbers into cache.
 // A bulk retrieve from couchdb is used to populate the cache.
 // committedVersions cache will be used for state validation of readsets
 // revisionNumbers cache will be used during commit phase for couchdb bulk updates
-func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
-	nsKeysMap := map[string][]string{}
+func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
+	nsKeysMap := make(map[string][]string)
 	committedDataCache := newVersionCache()
-	for _, compositeKey := range keys {
+	for _, compositeKey := range notPreloaded {
 		ns, key := compositeKey.Namespace, compositeKey.Key
-		committedDataCache.setVerAndRev(ns, key, nil, "")
+		committedDataCache.setVer(ns, key, nil)
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
 	}
-	nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap)
-	logger.Debugf("nsKeysMap=%s", nsKeysMap)
-	logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
-	if err != nil {
-		return err
-	}
-	for ns, nsMetadata := range nsMetadataMap {
-		for _, keyMetadata := range nsMetadata {
-			// TODO - why would version be ever zero if loaded from db?
-			if len(keyMetadata.Version) != 0 {
-				version, _, err := decodeVersionAndMetadata(keyMetadata.Version)
-				if err != nil {
-					return err
-				}
-				committedDataCache.setVerAndRev(ns, keyMetadata.ID, version, keyMetadata.Rev)
-			}
-		}
-	}
+	//nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
+	//nsMetadataMap := make(map[string][]*couchdb.DocMetadata)
+	//logger.Debugf("nsKeysMap=%s", nsKeysMap)
+	//logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
+	//for ns, nsMetadata := range nsMetadataMap {
+	//	for _, keyMetadata := range nsMetadata {
+	//		// TODO - why would version be ever zero if loaded from db?
+	//		if len(keyMetadata.Version) != 0 {
+	//			committedDataCache.setVerAndRev(ns, keyMetadata.ID, createVersionHeightFromVersionString(keyMetadata.Version), keyMetadata.Rev)
+	//		}
+	//	}
+	//}
 	vdb.verCacheLock.Lock()
 	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = committedDataCache
+	for key, height := range preLoaded {
+		vdb.committedDataCache.setVer(key.Namespace, key.Key, height)
+	}
 	return nil
 }
-
+func (vdb *VersionedDB) GetWSetCacheLock() *sync.RWMutex {
+	return vdb.verWSetCacheLock
+}
+func (vdb *VersionedDB) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
+	nsKeysMap := map[string][]string{}
+	committedWSetDataCache := newVersionCache()
+	for _, compositeKey := range keys {
+		ns, key := compositeKey.Namespace, compositeKey.Key
+		committedWSetDataCache.setRev(ns, key, "")
+		logger.Debugf("Load into version cache: %s~%s", ns, key)
+	}
+	for _, compositeKey := range keysExist {
+		ns, key := compositeKey.Namespace, compositeKey.Key
+		nsKeysMap[ns] = append(nsKeysMap[ns], key)
+		// in case if we didn't find key metadata in couchdb
+		committedWSetDataCache.setRev(ns, key, "")
+	}
+	if len(nsKeysMap) > 0 {
+		nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
+		logger.Debugf("nsKeysMap=%s", nsKeysMap)
+		logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
+		if err != nil {
+			return err
+		}
+		for ns, nsMetadata := range nsMetadataMap {
+			for _, keyMetadata := range nsMetadata {
+				logger.Debugf("Load into version cache: %s~%s", ns, keyMetadata.ID)
+				committedWSetDataCache.setRev(ns, keyMetadata.ID, keyMetadata.Rev)
+			}
+		}
+	}
+	vdb.committedWSetDataCache[blockNum] = committedWSetDataCache
+	return nil
+}
 // GetVersion implements method in VersionedDB interface
 func (vdb *VersionedDB) GetVersion(namespace string, key string) (*version.Height, error) {
+	panic("unreachable (the logic moved to cached state store)")
 	returnVersion, keyFound := vdb.GetCachedVersion(namespace, key)
 	if !keyFound {
 		// This if block get executed only during simulation because during commit
@@ -246,7 +249,6 @@ func (vdb *VersionedDB) GetVersion(namespace string, key string) (*version.Heigh
 	}
 	return returnVersion, nil
 }
-
 // GetCachedVersion returns version from cache. `LoadCommittedVersions` function populates the cache
 func (vdb *VersionedDB) GetCachedVersion(namespace string, key string) (*version.Height, bool) {
 	logger.Debugf("Retrieving cached version: %s~%s", key, namespace)
@@ -254,7 +256,6 @@ func (vdb *VersionedDB) GetCachedVersion(namespace string, key string) (*version
 	defer vdb.verCacheLock.RUnlock()
 	return vdb.committedDataCache.getVersion(namespace, key)
 }
-
 // ValidateKeyValue implements method in VersionedDB interface
 func (vdb *VersionedDB) ValidateKeyValue(key string, value []byte) error {
 	err := validateKey(key)
@@ -263,12 +264,10 @@ func (vdb *VersionedDB) ValidateKeyValue(key string, value []byte) error {
 	}
 	return validateValue(value)
 }
-
-// BytesKeySupported implements method in VersionedDB interface
-func (vdb *VersionedDB) BytesKeySupported() bool {
+// BytesKeySuppoted implements method in VersionedDB interface
+func (vdb *VersionedDB) BytesKeySuppoted() bool {
 	return false
 }
-
 // GetState implements method in VersionedDB interface
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
@@ -291,16 +290,13 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	if err != nil {
 		return nil, err
 	}
-
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
 	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
 	return kv.VersionedValue, nil
 }
-
 // GetStateMultipleKeys implements method in VersionedDB interface
 func (vdb *VersionedDB) GetStateMultipleKeys(namespace string, keys []string) ([]*statedb.VersionedValue, error) {
 	panic("unreachable, (the logic moved to cached state store)")
-
 	vals := make([]*statedb.VersionedValue, len(keys))
 	for i, key := range keys {
 		val, err := vdb.GetState(namespace, key)
@@ -311,202 +307,68 @@ func (vdb *VersionedDB) GetStateMultipleKeys(namespace string, keys []string) ([
 	}
 	return vals, nil
 }
-
 // GetStateRangeScanIterator implements method in VersionedDB interface
 // startKey is inclusive
 // endKey is exclusive
 func (vdb *VersionedDB) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
-	return vdb.GetStateRangeScanIteratorWithMetadata(namespace, startKey, endKey, nil)
-}
-
-const optionBookmark = "bookmark"
-const optionLimit = "limit"
-const returnCount = "count"
-
-// GetStateRangeScanIteratorWithMetadata implements method in VersionedDB interface
-// startKey is inclusive
-// endKey is exclusive
-// metadata contains a map of additional query options
-func (vdb *VersionedDB) GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
-	logger.Debugf("Entering GetStateRangeScanIteratorWithMetadata  namespace: %s  startKey: %s  endKey: %s  metadata: %v", namespace, startKey, endKey, metadata)
-	// Get the internalQueryLimit from core.yaml
-	internalQueryLimit := int32(ledgerconfig.GetInternalQueryLimit())
-	requestedLimit := int32(0)
-	// if metadata is provided, validate and apply options
-	if metadata != nil {
-		//validate the metadata
-		err := statedb.ValidateRangeMetadata(metadata)
-		if err != nil {
-			return nil, err
-		}
-		if limitOption, ok := metadata[optionLimit]; ok {
-			requestedLimit = limitOption.(int32)
-		}
-	}
+	// Get the querylimit from core.yaml
+	queryLimit := ledgerconfig.GetQueryLimit()
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
+		if isDBNotFoundForEndorser(err) {
+			logger.Debugf("DB [%s] Not Found. Returning empty range scanner since I'm an endorser.", namespace)
+			return newQueryScanner(namespace, nil), nil
+		}
 		return nil, err
 	}
-	return newQueryScanner(namespace, db, "", internalQueryLimit, requestedLimit, "", startKey, endKey)
-}
-
-func (scanner *queryScanner) getNextStateRangeScanResults() error {
-	queryLimit := scanner.queryDefinition.internalQueryLimit
-	if scanner.paginationInfo.requestedLimit > 0 {
-		moreResultsNeeded := scanner.paginationInfo.requestedLimit - scanner.resultsInfo.totalRecordsReturned
-		if moreResultsNeeded < scanner.queryDefinition.internalQueryLimit {
-			queryLimit = moreResultsNeeded
-		}
-	}
-	queryResult, nextStartKey, err := rangeScanFilterCouchInternalDocs(scanner.db,
-		scanner.queryDefinition.startKey, scanner.queryDefinition.endKey, queryLimit)
+	queryResult, err := db.ReadDocRange(startKey, endKey, queryLimit, querySkip, false)
 	if err != nil {
-		return err
+		logger.Debugf("Error calling ReadDocRange(): %s\n", err.Error())
+		return nil, err
 	}
-	scanner.resultsInfo.results = queryResult
-	scanner.queryDefinition.startKey = nextStartKey
-	scanner.paginationInfo.cursor = 0
-	return nil
-}
-
-func rangeScanFilterCouchInternalDocs(db *couchdb.CouchDatabase,
-	startKey, endKey string, queryLimit int32,
-) ([]*couchdb.QueryResult, string, error) {
-	var finalResults []*couchdb.QueryResult
-	var finalNextStartKey string
-	for {
-		results, nextStartKey, err := db.ReadDocRange(startKey, endKey, queryLimit)
-		if err != nil {
-			logger.Debugf("Error calling ReadDocRange(): %s\n", err.Error())
-			return nil, "", err
-		}
-		var filteredResults []*couchdb.QueryResult
-		for _, doc := range results {
-			if !isCouchInternalKey(doc.ID) {
-				filteredResults = append(filteredResults, doc)
-			}
-		}
-
-		finalResults = append(finalResults, filteredResults...)
-		finalNextStartKey = nextStartKey
-		queryLimit = int32(len(results) - len(filteredResults))
-		if queryLimit == 0 || finalNextStartKey == "" {
-			break
-		}
-		startKey = finalNextStartKey
+	if len(queryResult) != 0 {
+		metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_miss")
 	}
-	var err error
-	for i := 0; isCouchInternalKey(finalNextStartKey); i++ {
-		_, finalNextStartKey, err = db.ReadDocRange(finalNextStartKey, endKey, 1)
-		logger.Debugf("i=%d, finalNextStartKey=%s", i, finalNextStartKey)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-	return finalResults, finalNextStartKey, nil
+	logger.Debugf("Exiting GetStateRangeScanIterator")
+	return newQueryScanner(namespace, queryResult), nil
 }
-
-func isCouchInternalKey(key string) bool {
-	return len(key) != 0 && key[0] == '_'
+func (vdb *VersionedDB) GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 }
-
 // ExecuteQuery implements method in VersionedDB interface
 func (vdb *VersionedDB) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
-	queryResult, err := vdb.ExecuteQueryWithMetadata(namespace, query, nil)
-	if err != nil {
-		return nil, err
-	}
-	return queryResult, nil
-}
-
-// ExecuteQueryWithMetadata implements method in VersionedDB interface
-func (vdb *VersionedDB) ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
-	logger.Debugf("Entering ExecuteQueryWithMetadata  namespace: %s,  query: %s,  metadata: %v", namespace, query, metadata)
 	// Get the querylimit from core.yaml
-	internalQueryLimit := int32(ledgerconfig.GetInternalQueryLimit())
-	bookmark := ""
-	requestedLimit := int32(0)
-	// if metadata is provided, then validate and set provided options
-	if metadata != nil {
-		err := validateQueryMetadata(metadata)
-		if err != nil {
-			return nil, err
-		}
-		if limitOption, ok := metadata[optionLimit]; ok {
-			requestedLimit = limitOption.(int32)
-		}
-		if bookmarkOption, ok := metadata[optionBookmark]; ok {
-			bookmark = bookmarkOption.(string)
-		}
-	}
-	queryString, err := applyAdditionalQueryOptions(query, internalQueryLimit, bookmark)
+	queryLimit := ledgerconfig.GetQueryLimit()
+	// Explicit paging not yet supported.
+	// Use queryLimit from config and 0 skip.
+	queryString, err := applyAdditionalQueryOptions(query, queryLimit, 0)
 	if err != nil {
-		logger.Errorf("Error calling applyAdditionalQueryOptions(): %s", err.Error())
+		logger.Debugf("Error calling applyAdditionalQueryOptions(): %s\n", err.Error())
 		return nil, err
 	}
 	db, err := vdb.getNamespaceDBHandle(namespace)
 	if err != nil {
+		if isDBNotFoundForEndorser(err) {
+			logger.Debugf("DB [%s] Not Found. Returning empty range scanner since I'm an endorser.", namespace)
+			return newQueryScanner(namespace, nil), nil
+		}
 		return nil, err
 	}
-	return newQueryScanner(namespace, db, queryString, internalQueryLimit, requestedLimit, bookmark, "", "")
-}
-
-// executeQueryWithBookmark executes a "paging" query with a bookmark, this method allows a
-// paged query without returning a new query iterator
-func (scanner *queryScanner) executeQueryWithBookmark() error {
-	queryLimit := scanner.queryDefinition.internalQueryLimit
-	if scanner.paginationInfo.requestedLimit > 0 {
-		if scanner.paginationInfo.requestedLimit-scanner.resultsInfo.totalRecordsReturned < scanner.queryDefinition.internalQueryLimit {
-			queryLimit = scanner.paginationInfo.requestedLimit - scanner.resultsInfo.totalRecordsReturned
-		}
-	}
-	queryString, err := applyAdditionalQueryOptions(scanner.queryDefinition.query,
-		queryLimit, scanner.paginationInfo.bookmark)
-	if err != nil {
-		logger.Debugf("Error calling applyAdditionalQueryOptions(): %s\n", err.Error())
-		return err
-	}
-	queryResult, bookmark, err := scanner.db.QueryDocuments(queryString)
+	queryResult, err := db.QueryDocuments(queryString)
 	if err != nil {
 		logger.Debugf("Error calling QueryDocuments(): %s\n", err.Error())
-		return err
+		return nil, err
 	}
-	scanner.resultsInfo.results = queryResult
-	scanner.paginationInfo.bookmark = bookmark
-	scanner.paginationInfo.cursor = 0
-	return nil
+	logger.Debugf("Exiting ExecuteQuery")
+	return newQueryScanner(namespace, queryResult), nil
 }
-
-func validateQueryMetadata(metadata map[string]interface{}) error {
-	for key, keyVal := range metadata {
-		switch key {
-		case optionBookmark:
-			//Verify the bookmark is a string
-			if _, ok := keyVal.(string); ok {
-				continue
-			}
-			return fmt.Errorf("Invalid entry, \"bookmark\" must be a string")
-
-		case optionLimit:
-			//Verify the limit is an integer
-			if _, ok := keyVal.(int32); ok {
-				continue
-			}
-			return fmt.Errorf("Invalid entry, \"limit\" must be an int32")
-
-		default:
-			return fmt.Errorf("Invalid entry, option %s not recognized", key)
-		}
-	}
-	return nil
-}
-
 // ApplyUpdates implements method in VersionedDB interface
 func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *version.Height) error {
+	stopWatch := metrics.StopWatch("statecouchdb_ApplyUpdates_duration")
+	defer stopWatch()
 	// TODO a note about https://jira.hyperledger.org/browse/FAB-8622
 	// the function `Apply update can be split into three functions. Each carrying out one of the following three stages`.
 	// The write lock is needed only for the stage 2.
-
 	// stage 1 - PrepareForUpdates - db transforms the given batch in the form of underlying db
 	// and keep it in memory
 	var updateBatches []batch
@@ -518,17 +380,15 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 	if err = executeBatches(updateBatches); err != nil {
 		return err
 	}
-
 	// Stgae 3 - PostUpdateProcessing - flush and record savepoint.
 	namespaces := updates.GetUpdatedNamespaces()
 	// Record a savepoint at a given height
 	if err = vdb.ensureFullCommitAndRecordSavepoint(height, namespaces); err != nil {
-		logger.Errorf("Error during recordSavepoint: %s", err.Error())
+		logger.Errorf("Error during recordSavepoint: %s\n", err.Error())
 		return err
 	}
 	return nil
 }
-
 // ClearCachedVersions clears committedVersions and revisionNumbers
 func (vdb *VersionedDB) ClearCachedVersions() {
 	logger.Debugf("Clear Cache")
@@ -536,21 +396,17 @@ func (vdb *VersionedDB) ClearCachedVersions() {
 	vdb.committedDataCache = newVersionCache()
 	vdb.verCacheLock.Unlock()
 }
-
 // Open implements method in VersionedDB interface
 func (vdb *VersionedDB) Open() error {
 	// no need to open db since a shared couch instance is used
 	return nil
 }
-
 // Close implements method in VersionedDB interface
 func (vdb *VersionedDB) Close() {
 	// no need to close db since a shared couch instance is used
 }
-
 // Savepoint docid (key) for couchdb
 const savepointDocID = "statedb_savepoint"
-
 // ensureFullCommitAndRecordSavepoint flushes all the dbs (corresponding to `namespaces`) to disk
 // and Record a savepoint in the metadata db.
 // Couch parallelizes writes in cluster or sharded setup and ordering is not guaranteed.
@@ -568,40 +424,30 @@ func (vdb *VersionedDB) ensureFullCommitAndRecordSavepoint(height *version.Heigh
 		}
 		dbs = append(dbs, db)
 	}
-	if err := vdb.ensureFullCommit(dbs); err != nil {
-		return err
-	}
-
-	// If a given height is nil, it denotes that we are committing pvt data of old blocks.
-	// In this case, we should not store a savepoint for recovery. The lastUpdatedOldBlockList
-	// in the pvtstore acts as a savepoint for pvt data.
-	if height == nil {
-		return nil
-	}
-
+	vdb.warmupAllIndexes(dbs)
 	// construct savepoint document and save
 	savepointCouchDoc, err := encodeSavepoint(height)
 	if err != nil {
 		return err
 	}
-	_, err = vdb.metadataDB.SaveDoc(savepointDocID, "", savepointCouchDoc)
+	rev, err := vdb.metadataDB.SaveDoc(savepointDocID, vdb.couchCheckpointRev, savepointCouchDoc)
 	if err != nil {
-		logger.Errorf("Failed to save the savepoint to DB %s", err.Error())
+		logger.Errorf("Failed to save the savepoint to DB %s\n", err.Error())
 		return err
 	}
+	vdb.couchCheckpointRev = rev
 	// Note: Ensure full commit on metadataDB after storing the savepoint is not necessary
 	// as CouchDB syncs states to disk periodically (every 1 second). If peer fails before
 	// syncing the savepoint to disk, ledger recovery process kicks in to ensure consistency
 	// between CouchDB and block store on peer restart
 	return nil
 }
-
 // GetLatestSavePoint implements method in VersionedDB interface
 func (vdb *VersionedDB) GetLatestSavePoint() (*version.Height, error) {
 	var err error
 	couchDoc, _, err := vdb.metadataDB.ReadDoc(savepointDocID)
 	if err != nil {
-		logger.Errorf("Failed to read savepoint data %s", err.Error())
+		logger.Errorf("Failed to read savepoint data %s\n", err.Error())
 		return nil, err
 	}
 	// ReadDoc() not found (404) will result in nil response, in these cases return height nil
@@ -610,12 +456,11 @@ func (vdb *VersionedDB) GetLatestSavePoint() (*version.Height, error) {
 	}
 	return decodeSavepoint(couchDoc)
 }
-
 // applyAdditionalQueryOptions will add additional fields to the query required for query processing
-func applyAdditionalQueryOptions(queryString string, queryLimit int32, queryBookmark string) (string, error) {
+func applyAdditionalQueryOptions(queryString string, queryLimit, querySkip int) (string, error) {
 	const jsonQueryFields = "fields"
 	const jsonQueryLimit = "limit"
-	const jsonQueryBookmark = "bookmark"
+	const jsonQuerySkip = "skip"
 	//create a generic map for the query json
 	jsonQueryMap := make(map[string]interface{})
 	//unmarshal the selector json into the generic map
@@ -632,17 +477,17 @@ func applyAdditionalQueryOptions(queryString string, queryLimit int32, queryBook
 			jsonQueryMap[jsonQueryFields] = append(fieldsJSONArray.([]interface{}),
 				idField, versionField)
 		default:
-			return "", errors.New("fields definition must be an array")
+			return "", fmt.Errorf("fields definition must be an array")
 		}
 	}
 	// Add limit
 	// This will override any limit passed in the query.
 	// Explicit paging not yet supported.
 	jsonQueryMap[jsonQueryLimit] = queryLimit
-	// Add the bookmark if provided
-	if queryBookmark != "" {
-		jsonQueryMap[jsonQueryBookmark] = queryBookmark
-	}
+	// Add skip of 0.
+	// This will override any skip passed in the query.
+	// Explicit paging not yet supported.
+	jsonQueryMap[jsonQuerySkip] = querySkip
 	//Marshal the updated json query
 	editedQuery, err := json.Marshal(jsonQueryMap)
 	if err != nil {
@@ -651,103 +496,31 @@ func applyAdditionalQueryOptions(queryString string, queryLimit int32, queryBook
 	logger.Debugf("Rewritten query: %s", editedQuery)
 	return string(editedQuery), nil
 }
-
 type queryScanner struct {
-	namespace       string
-	db              *couchdb.CouchDatabase
-	queryDefinition *queryDefinition
-	paginationInfo  *paginationInfo
-	resultsInfo     *resultsInfo
+	cursor    int
+	namespace string
+	results   []*couchdb.QueryResult
 }
-
-type queryDefinition struct {
-	startKey           string
-	endKey             string
-	query              string
-	internalQueryLimit int32
+func newQueryScanner(namespace string, queryResults []*couchdb.QueryResult) *queryScanner {
+	return &queryScanner{-1, namespace, queryResults}
 }
-
-type paginationInfo struct {
-	cursor         int32
-	requestedLimit int32
-	bookmark       string
-}
-
-type resultsInfo struct {
-	totalRecordsReturned int32
-	results              []*couchdb.QueryResult
-}
-
-func newQueryScanner(namespace string, db *couchdb.CouchDatabase, query string, internalQueryLimit,
-	limit int32, bookmark, startKey, endKey string) (*queryScanner, error) {
-	scanner := &queryScanner{namespace, db, &queryDefinition{startKey, endKey, query, internalQueryLimit}, &paginationInfo{-1, limit, bookmark}, &resultsInfo{0, nil}}
-	var err error
-	// query is defined, then execute the query and return the records and bookmark
-	if scanner.queryDefinition.query != "" {
-		err = scanner.executeQueryWithBookmark()
-	} else {
-		err = scanner.getNextStateRangeScanResults()
-	}
-	if err != nil {
-		return nil, err
-	}
-	scanner.paginationInfo.cursor = -1
-	return scanner, nil
-}
-
 func (scanner *queryScanner) Next() (statedb.QueryResult, error) {
-	//test for no results case
-	if len(scanner.resultsInfo.results) == 0 {
+	scanner.cursor++
+	if scanner.cursor >= len(scanner.results) {
 		return nil, nil
 	}
-	// increment the cursor
-	scanner.paginationInfo.cursor++
-	// check to see if additional records are needed
-	// requery if the cursor exceeds the internalQueryLimit
-	if scanner.paginationInfo.cursor >= scanner.queryDefinition.internalQueryLimit {
-		var err error
-		// query is defined, then execute the query and return the records and bookmark
-		if scanner.queryDefinition.query != "" {
-			err = scanner.executeQueryWithBookmark()
-		} else {
-			err = scanner.getNextStateRangeScanResults()
-		}
-		if err != nil {
-			return nil, err
-		}
-		//if no more results, then return
-		if len(scanner.resultsInfo.results) == 0 {
-			return nil, nil
-		}
-	}
-	//If the cursor is greater than or equal to the number of result records, return
-	if scanner.paginationInfo.cursor >= int32(len(scanner.resultsInfo.results)) {
-		return nil, nil
-	}
-	selectedResultRecord := scanner.resultsInfo.results[scanner.paginationInfo.cursor]
+	selectedResultRecord := scanner.results[scanner.cursor]
 	key := selectedResultRecord.ID
 	// remove the reserved fields from CouchDB JSON and return the value and version
 	kv, err := couchDocToKeyValue(&couchdb.CouchDoc{JSONValue: selectedResultRecord.Value, Attachments: selectedResultRecord.Attachments})
 	if err != nil {
 		return nil, err
 	}
-	scanner.resultsInfo.totalRecordsReturned++
+	logger.Infof("*** Couchdb GetStateRangeScanIterator next namespace %s key %s value %s", scanner.namespace, key, kv.VersionedValue.Value)
 	return &statedb.VersionedKV{
 		CompositeKey:   statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
 		VersionedValue: *kv.VersionedValue}, nil
 }
-
 func (scanner *queryScanner) Close() {
 	scanner = nil
-}
-
-func (scanner *queryScanner) GetBookmarkAndClose() string {
-	retval := ""
-	if scanner.queryDefinition.query != "" {
-		retval = scanner.paginationInfo.bookmark
-	} else {
-		retval = scanner.queryDefinition.startKey
-	}
-	scanner.Close()
-	return retval
 }

@@ -2,18 +2,14 @@
 Copyright IBM Corp. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
-
 package statecouchdb
-
 import (
 	"fmt"
-
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"github.com/pkg/errors"
 )
-
 // nsCommittersBuilder implements `batch` interface. Each batch operates on a specific namespace in the updates and
 // builds one or more batches of type subNsCommitter.
 type nsCommittersBuilder struct {
@@ -24,13 +20,11 @@ type nsCommittersBuilder struct {
 	ns              string
 	keyIndex        statekeyindex.StateKeyIndex
 }
-
 // subNsCommitter implements `batch` interface. Each batch commits the portion of updates within a namespace assigned to it
 type subNsCommitter struct {
 	db             *couchdb.CouchDatabase
 	batchUpdateMap map[string]*batchableDocument
 }
-
 // buildCommitters build the batches of type subNsCommitter. This functions processes different namespaces in parallel
 func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch, blockNum uint64) ([]batch, error) {
 	keyIndex, err := statekeyindex.NewProvider().OpenStateKeyIndex(vdb.chainName)
@@ -74,7 +68,6 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch, blockNum u
 	}
 	return combinedSubNsCommitters, nil
 }
-
 // execute implements the function in `batch` interface. This function builds one or more `subNsCommitter`s that
 // cover the updates for a namespace
 func (builder *nsCommittersBuilder) execute() error {
@@ -101,12 +94,10 @@ func (builder *nsCommittersBuilder) execute() error {
 	}
 	return nil
 }
-
 // execute implements the function in `batch` interface. This function commits the updates managed by a `subNsCommitter`
 func (committer *subNsCommitter) execute() error {
 	return commitUpdates(committer.db, committer.batchUpdateMap)
 }
-
 // commitUpdates commits the given updates to couchdb
 // TODO: this should be refactored to use a common commit function in the CouchDB package.
 func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchableDocument) error {
@@ -148,54 +139,45 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				logger.Warningf("CouchDB batch document update encountered an problem. Retrying update for document ID:%s", respDoc.ID)
 				// Save the individual document to couchdb
 				// Note that this will do retries as needed
-				_, err = db.SaveDoc(respDoc.ID, "", &batchUpdateDocument.CouchDoc)
+				_, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
 			}
-
 			// If the single document update or delete returns an error, then throw the error
 			if err != nil {
-				errorString := fmt.Sprintf("error saving document ID: %v. Error: %s,  Reason: %s",
+				errorString := fmt.Sprintf("Error occurred while saving document ID = %v  Error: %s  Reason: %s\n",
 					respDoc.ID, respDoc.Error, respDoc.Reason)
-
 				logger.Errorf(errorString)
-				return errors.WithMessage(err, errorString)
+				return fmt.Errorf(errorString)
 			}
 		}
 	}
 	return nil
 }
-
-// nsFlusher implements `batch` interface and a batch executes the function `couchdb.EnsureFullCommit()` for the given namespace
-type nsFlusher struct {
-	db *couchdb.CouchDatabase
-}
-
-func (vdb *VersionedDB) ensureFullCommit(dbs []*couchdb.CouchDatabase) error {
-	var flushers []batch
+func (vdb *VersionedDB) warmupAllIndexes(dbs []*couchdb.CouchDatabase) {
 	for _, db := range dbs {
-		flushers = append(flushers, &nsFlusher{db})
+		db.WarmUpAllIndexes()
 	}
-	return executeBatches(flushers)
 }
-
-func (f *nsFlusher) execute() error {
-	dbResponse, err := f.db.EnsureFullCommit()
-	if err != nil || dbResponse.Ok != true {
-		logger.Errorf("Failed to perform full commit")
-		return errors.New("failed to perform full commit")
-	}
-	return nil
-}
-
-func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
+func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex, revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
 	var missingKeys []string
 	for key := range nsUpdates {
 		_, ok := revisions[key]
 		if !ok {
-			missingKeys = append(missingKeys, key)
+			logger.Debugf("key %s not found in revisions going to search in keyIndex", key)
+			_, exists, err := keyIndex.GetMetadata(&statekeyindex.CompositeKey{Namespace: ns, Key: key})
+			if err != nil {
+				return err
+			}
+			if !exists {
+				revisions[key] = ""
+			} else {
+				missingKeys = append(missingKeys, key)
+			}
 		}
 	}
-	logger.Debugf("Pulling revisions for the [%d] keys for namsespace [%s] that were not part of the readset", len(missingKeys), db.DBName)
-	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys)
+	if len(missingKeys) > 0 {
+		logger.Warningf("Pulling revisions for the keys [%s] for namsespace [%s] that were not part of the readset", missingKeys, db.DBName)
+	}
+	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys, false)
 	if err != nil {
 		return err
 	}
@@ -204,7 +186,6 @@ func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDa
 	}
 	return nil
 }
-
 //batchableDocument defines a document for a batch
 type batchableDocument struct {
 	CouchDoc *couchdb.CouchDoc
