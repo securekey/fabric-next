@@ -17,6 +17,11 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/syndtr/goleveldb/leveldb/filter"
+	"time"
+	"bytes"
+	"strings"
+	"github.com/spf13/viper"
 )
 
 var logger = flogging.MustGetLogger("leveldbhelper")
@@ -31,7 +36,7 @@ const (
 // Conf configuration for `DB`
 // TODO: Add configuration for DB (e.g., bloom filter bits)
 type Conf struct {
-	DBPath                string
+	DBPath string
 }
 
 // DB - a wrapper on an actual store
@@ -83,6 +88,9 @@ func (dbInst *DB) Open() {
 		panic(fmt.Sprintf("Error opening leveldb: %s", err))
 	}
 	dbInst.dbState = opened
+	if viper.GetBool("logging.leveldbState") {
+		go dbInst.getState()
+	}
 }
 
 // Close closes the underlying db
