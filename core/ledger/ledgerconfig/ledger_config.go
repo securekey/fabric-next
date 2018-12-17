@@ -50,6 +50,7 @@ const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confRoles = "ledger.roles"
+const confConcurrentBlockWrites = "ledger.concurrentBlockWrites"
 const confValidationMinWaitTime = "ledger.blockchain.validation.minwaittime"
 
 // TODO: couchDB config should be in a common section rather than being under state.
@@ -482,4 +483,13 @@ func GetValidationMinWaitTime() time.Duration {
 		return defaultValidationMinWaitTime
 	}
 	return timeout
+}
+
+// GetConcurrentBlockWrites is how many concurrent writes to db
+func GetConcurrentBlockWrites() int {
+	concurrentWrites := viper.GetInt(confConcurrentBlockWrites)
+	if !viper.IsSet(confConcurrentBlockWrites) {
+		return 1
+	}
+	return concurrentWrites
 }
