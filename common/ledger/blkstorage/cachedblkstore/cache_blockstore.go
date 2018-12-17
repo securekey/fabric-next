@@ -15,16 +15,12 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/metrics"
 	cledger "github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
-)
-
-const (
-	checkpointBlockInterval = 1 // number of blocks between checkpoints.
-	blockStorageQueueLen    = checkpointBlockInterval
 )
 
 type cachedBlockStore struct {
@@ -48,8 +44,8 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 		blockCache:     blockCache,
 		cpInfoSig:      make(chan struct{}),
 		cpInfoMtx:      sync.RWMutex{},
-		blockStoreCh:   make(chan *common.Block, blockStorageQueueLen),
-		checkpointCh:   make(chan *common.Block, blockStorageQueueLen),
+		blockStoreCh:   make(chan *common.Block),
+		checkpointCh:   make(chan *common.Block),
 		writerClosedCh: make(chan struct{}),
 		doneCh:         make(chan struct{}),
 	}
@@ -60,7 +56,11 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 	}
 	s.bcInfo = curBcInfo
 
-	go s.blockWriter()
+
+	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
+	for x := 0; x < concurrentBlockWrites; x++ {
+		go s.blockWriter()
+	}
 
 	return &s, nil
 }
@@ -76,14 +76,22 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 		return errors.WithMessage(err, fmt.Sprintf("block was not cached [%d]", blockNumber))
 	}
 
+	// TODO: This is a quick patch - needs to ensure that there are no gaps as well.
 	blockNumber := block.GetHeader().GetNumber()
 	if blockNumber != 0 {
+		waitForBlock := blockNumber - uint64(ledgerconfig.GetConcurrentBlockWrites())
+
 		// Wait for underlying storage to complete commit on previous block.
-		logger.Debugf("waiting for previous block to checkpoint [%d]", blockNumber-checkpointBlockInterval)
-		s.blockStore.WaitForBlock(context.Background(), blockNumber-checkpointBlockInterval)
+		logger.Debugf("waiting for previous block to checkpoint [%d]", waitForBlock)
+		stopWatchWaitCheckpoint := metrics.StopWatch("cached_block_store_add_block_wait_checkpoint_duration")
+		s.blockStore.WaitForBlock(context.Background(), waitForBlock)
+		stopWatchWaitCheckpoint()
 		logger.Debugf("ready to store incoming block [%d]", blockNumber)
 	}
+
+	stopWatchWaitQueue := metrics.StopWatch("cached_block_store_add_block_wait_queue_duration")
 	s.blockStoreCh <- block
+	stopWatchWaitQueue()
 
 	return nil
 }
