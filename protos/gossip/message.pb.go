@@ -339,6 +339,8 @@ type GossipMessage struct {
 	//	*GossipMessage_PrivateReq
 	//	*GossipMessage_PrivateRes
 	//	*GossipMessage_PrivateData
+	//	*GossipMessage_ValidationResultsMsg
+	//	*GossipMessage_ValidationReqMsg
 	Content              isGossipMessage_Content `protobuf_oneof:"content"`
 	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
 	XXX_unrecognized     []byte                  `json:"-"`
@@ -477,7 +479,12 @@ type GossipMessage_PrivateRes struct {
 type GossipMessage_PrivateData struct {
 	PrivateData *PrivateDataMessage `protobuf:"bytes,25,opt,name=private_data,json=privateData,proto3,oneof"`
 }
-
+type GossipMessage_ValidationResultsMsg struct {
+	ValidationResultsMsg *ValidationResultsMessage `protobuf:"bytes,50,opt,name=validation_results_msg,json=validationResultsMsg,oneof"`
+}
+type GossipMessage_ValidationReqMsg struct {
+	ValidationReqMsg *DataMessage `protobuf:"bytes,51,opt,name=validation_req_msg,json=validationReqMsg,oneof"`
+}
 func (*GossipMessage_AliveMsg) isGossipMessage_Content() {}
 
 func (*GossipMessage_MemReq) isGossipMessage_Content() {}
@@ -519,6 +526,10 @@ func (*GossipMessage_PrivateReq) isGossipMessage_Content() {}
 func (*GossipMessage_PrivateRes) isGossipMessage_Content() {}
 
 func (*GossipMessage_PrivateData) isGossipMessage_Content() {}
+
+func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
+
+func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
 
 func (m *GossipMessage) GetContent() isGossipMessage_Content {
 	if m != nil {
