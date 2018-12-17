@@ -17,9 +17,11 @@ limitations under the License.
 package fsblkstorage
 
 import (
+	"context"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	 cledger "github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 )
@@ -96,11 +98,9 @@ func (store *fsBlockStore) Shutdown() {
 	store.fileMgr.close()
 }
 
-
 func (store *fsBlockStore) LastBlockNumber() uint64 {
 	return store.fileMgr.lastBlockNumber()
 }
-
 
 func (store *fsBlockStore) BlockCommitted() (uint64, chan struct{}) {
 	return store.fileMgr.blockCommitted()
