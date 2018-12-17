@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	collectionSeparator              = "~"
+	collectionSeparator = "~"
 )
 
 // blockPublisher is used for endorser-only peers to notify all interested
@@ -33,10 +33,10 @@ type blockPublisher interface {
 }
 
 type publisher struct {
-	channelID               string
-	bp                      blockPublisher
-	blockNumber             uint64
-	mutex                   sync.RWMutex
+	channelID   string
+	bp          blockPublisher
+	blockNumber uint64
+	mutex       sync.RWMutex
 }
 
 func newBlockPublisher(channelID string, bp blockPublisher, ledgerHeight uint64) *publisher {
@@ -47,9 +47,9 @@ func newBlockPublisher(channelID string, bp blockPublisher, ledgerHeight uint64)
 	logger.Infof("Initializing ledger height to %d for channel [%s]: %s", ledgerHeight, channelID)
 
 	return &publisher{
-		channelID:               channelID,
-		bp:                      bp,
-		blockNumber:             ledgerHeight - 1,
+		channelID:   channelID,
+		bp:          bp,
+		blockNumber: ledgerHeight - 1,
 	}
 }
 
