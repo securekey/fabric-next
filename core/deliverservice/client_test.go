@@ -713,11 +713,6 @@ func TestDisconnectAndDisableEndpoint(t *testing.T) {
 	cl := NewBroadcastClient(prod, clFact, onConnect, retryPol)
 	defer cl.Close()
 
-	// First connect to orderer
-	go func() {
-		cl.Recv()
-	}()
-
 	assert.True(t, waitForWithTimeout(time.Millisecond*100, func() bool {
 		return os1.ConnCount() == 1 || os2.ConnCount() == 1
 	}), "Didn't get connection to orderer")

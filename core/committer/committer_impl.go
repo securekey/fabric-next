@@ -9,9 +9,11 @@ package committer
 import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 var logger = flogging.MustGetLogger("committer")
@@ -28,7 +30,14 @@ type PeerLedgerSupport interface {
 
 	GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error)
 
+	AddBlock(blockAndPvtData *ledger.BlockAndPvtData) error
+
 	CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
+
+	// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+
+	ValidateBlockWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	CommitPvtDataOfOldBlocks(blockPvtData []*ledger.BlockPvtData) ([]*ledger.PvtdataHashMismatch, error)
 
@@ -77,10 +86,9 @@ func (lc *LedgerCommitter) AddBlock(blockAndPvtData *ledger.BlockAndPvtData) err
 	}
 
 	// Committing new block
-	if err := lc.PeerLedgerSupport.AddBlock(blockAndPvtData); err != nil {
+	if err := lc.PeerLedgerSupport.ValidateBlockWithPvtData(blockAndPvtData); err != nil {
 		return err
 	}
-
 	return nil
 }
 

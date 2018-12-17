@@ -602,6 +602,17 @@ ledger:
        # This is optional.  Creating the global changes database will require
        # additional system resources to track changes and maintain the database
        createGlobalChangesDB: false
+       # Limit on the number of idle connections to hold in the pool
+       maxIdleConns: 1000
+       # Limit on the number of idle connections to hold in the pool (per host)
+       maxIdleConnsPerHost: 100
+       # Duration before closing an idle connection
+       idleConnTimeout: 90s
+       # Duration for keep-alive
+       keepAliveTimeout: 30s
+       # enable or disable create global changes db
+       createGlobalChangesDB: true
+
 
   history:
     # enableHistoryDatabase - options are true or false

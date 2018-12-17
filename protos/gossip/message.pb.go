@@ -339,6 +339,8 @@ type GossipMessage struct {
 	//	*GossipMessage_PrivateReq
 	//	*GossipMessage_PrivateRes
 	//	*GossipMessage_PrivateData
+	//	*GossipMessage_ValidationResultsMsg
+	//	*GossipMessage_ValidationReqMsg
 	Content              isGossipMessage_Content `protobuf_oneof:"content"`
 	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
 	XXX_unrecognized     []byte                  `json:"-"`
@@ -477,48 +479,36 @@ type GossipMessage_PrivateRes struct {
 type GossipMessage_PrivateData struct {
 	PrivateData *PrivateDataMessage `protobuf:"bytes,25,opt,name=private_data,json=privateData,proto3,oneof"`
 }
+type GossipMessage_ValidationResultsMsg struct {
+	ValidationResultsMsg *ValidationResultsMessage `protobuf:"bytes,50,opt,name=validation_results_msg,json=validationResultsMsg,oneof"`
+}
+type GossipMessage_ValidationReqMsg struct {
+	ValidationReqMsg *DataMessage `protobuf:"bytes,51,opt,name=validation_req_msg,json=validationReqMsg,oneof"`
+}
 
-func (*GossipMessage_AliveMsg) isGossipMessage_Content() {}
-
-func (*GossipMessage_MemReq) isGossipMessage_Content() {}
-
-func (*GossipMessage_MemRes) isGossipMessage_Content() {}
-
-func (*GossipMessage_DataMsg) isGossipMessage_Content() {}
-
-func (*GossipMessage_Hello) isGossipMessage_Content() {}
-
-func (*GossipMessage_DataDig) isGossipMessage_Content() {}
-
-func (*GossipMessage_DataReq) isGossipMessage_Content() {}
-
-func (*GossipMessage_DataUpdate) isGossipMessage_Content() {}
-
-func (*GossipMessage_Empty) isGossipMessage_Content() {}
-
-func (*GossipMessage_Conn) isGossipMessage_Content() {}
-
-func (*GossipMessage_StateInfo) isGossipMessage_Content() {}
-
-func (*GossipMessage_StateSnapshot) isGossipMessage_Content() {}
-
-func (*GossipMessage_StateInfoPullReq) isGossipMessage_Content() {}
-
-func (*GossipMessage_StateRequest) isGossipMessage_Content() {}
-
-func (*GossipMessage_StateResponse) isGossipMessage_Content() {}
-
-func (*GossipMessage_LeadershipMsg) isGossipMessage_Content() {}
-
-func (*GossipMessage_PeerIdentity) isGossipMessage_Content() {}
-
-func (*GossipMessage_Ack) isGossipMessage_Content() {}
-
-func (*GossipMessage_PrivateReq) isGossipMessage_Content() {}
-
-func (*GossipMessage_PrivateRes) isGossipMessage_Content() {}
-
-func (*GossipMessage_PrivateData) isGossipMessage_Content() {}
+func (*GossipMessage_AliveMsg) isGossipMessage_Content()             {}
+func (*GossipMessage_MemReq) isGossipMessage_Content()               {}
+func (*GossipMessage_MemRes) isGossipMessage_Content()               {}
+func (*GossipMessage_DataMsg) isGossipMessage_Content()              {}
+func (*GossipMessage_Hello) isGossipMessage_Content()                {}
+func (*GossipMessage_DataDig) isGossipMessage_Content()              {}
+func (*GossipMessage_DataReq) isGossipMessage_Content()              {}
+func (*GossipMessage_DataUpdate) isGossipMessage_Content()           {}
+func (*GossipMessage_Empty) isGossipMessage_Content()                {}
+func (*GossipMessage_Conn) isGossipMessage_Content()                 {}
+func (*GossipMessage_StateInfo) isGossipMessage_Content()            {}
+func (*GossipMessage_StateSnapshot) isGossipMessage_Content()        {}
+func (*GossipMessage_StateInfoPullReq) isGossipMessage_Content()     {}
+func (*GossipMessage_StateRequest) isGossipMessage_Content()         {}
+func (*GossipMessage_StateResponse) isGossipMessage_Content()        {}
+func (*GossipMessage_LeadershipMsg) isGossipMessage_Content()        {}
+func (*GossipMessage_PeerIdentity) isGossipMessage_Content()         {}
+func (*GossipMessage_Ack) isGossipMessage_Content()                  {}
+func (*GossipMessage_PrivateReq) isGossipMessage_Content()           {}
+func (*GossipMessage_PrivateRes) isGossipMessage_Content()           {}
+func (*GossipMessage_PrivateData) isGossipMessage_Content()          {}
+func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
+func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
 
 func (m *GossipMessage) GetContent() isGossipMessage_Content {
 	if m != nil {
@@ -827,15 +817,15 @@ func _GossipMessage_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 			return err
 		}
 	case *GossipMessage_ValidationResultsMsg:
-		b.EncodeVarint(50<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ValidationResultsMsg); err != nil {
-			return err
-		}
+		s := proto.Size(x.ValidationResultsMsg)
+		n += proto.SizeVarint(50<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
 	case *GossipMessage_ValidationReqMsg:
-		b.EncodeVarint(51<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ValidationReqMsg); err != nil {
-			return err
-		}
+		s := proto.Size(x.ValidationReqMsg)
+		n += proto.SizeVarint(51<<3 | proto.WireBytes)
+		n += proto.SizeVarint(uint64(s))
+		n += s
 	case nil:
 	default:
 		return fmt.Errorf("GossipMessage.Content has unexpected type %T", x)
@@ -1222,12 +1212,19 @@ type Properties struct {
 	LedgerHeight         uint64       `protobuf:"varint,1,opt,name=ledger_height,json=ledgerHeight,proto3" json:"ledger_height,omitempty"`
 	LeftChannel          bool         `protobuf:"varint,2,opt,name=left_channel,json=leftChannel,proto3" json:"left_channel,omitempty"`
 	Chaincodes           []*Chaincode `protobuf:"bytes,3,rep,name=chaincodes,proto3" json:"chaincodes,omitempty"`
+	Roles                []string     `protobuf:"bytes,4,rep,name=roles" json:"roles,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *Properties) Reset()         { *m = Properties{} }
+func (m *Properties) Reset() { *m = Properties{} }
+func (m *Properties) GetRoles() []string {
+	if m != nil {
+		return m.Roles
+	}
+	return nil
+}
 func (m *Properties) String() string { return proto.CompactTextString(m) }
 func (*Properties) ProtoMessage()    {}
 func (*Properties) Descriptor() ([]byte, []int) {
