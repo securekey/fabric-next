@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7802f86b_71e4b8cd",
+        "filename": "core/ledger/ledgerconfig/ledger_config.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 53,
+      "author": {
+        "id": 1000024
+      },
+      "writtenOn": "2018-12-17T14:51:28Z",
+      "side": 1,
+      "message": "should have block/blocks in the config name",
+      "revId": "7121ac331aa461390041ab0aa3adfd9b9463dd50",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
