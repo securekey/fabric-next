@@ -97,13 +97,13 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 		}
 	}
 	//Sort non durable keys in background
-	go func() {
+	go func(chIDAndNamescpace map[string]struct{}) {
 		for k := range chIDAndNamespace {
 			s := strings.Split(k, "!")
-			kvCache, _ := p.getKVCache(s[0], s[1])
+			kvCache, _ := p.GetKVCache(s[0], s[1])
 			kvCache.sortNonDurableKeys()
 		}
-	}()
+	}(chIDAndNamespace)
 
 }
 
