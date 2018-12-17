@@ -35,8 +35,8 @@ func NewMockBlockStore() *MockBlockStore {
 
 	mbs := MockBlockStore{
 		EnvelopeByBlknumTxNum: envelopeByBlknumTxNum,
-		BlocksByNumber: blocksByNumber,
-		BlocksByHash: blocksByHash,
+		BlocksByNumber:        blocksByNumber,
+		BlocksByHash:          blocksByHash,
 	}
 
 	return &mbs
@@ -87,7 +87,7 @@ func (mock *MockBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, err
 
 // BlockStore.RetrieveBlocks()
 func (mock *MockBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
-	return &MockBlockStoreItr{Blocks:mock.ItrBlocks}, nil
+	return &MockBlockStoreItr{Blocks: mock.ItrBlocks}, nil
 }
 
 type MockBlockStoreItr struct {
@@ -132,4 +132,3 @@ func (mock *MockBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.Tx
 func (mock *MockBlockStore) Shutdown() {
 	mock.IsShutdown = true
 }
-

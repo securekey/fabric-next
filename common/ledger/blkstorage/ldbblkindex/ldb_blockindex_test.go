@@ -75,11 +75,11 @@ func TestRetrieveTxLoc(t *testing.T) {
 
 	// txn 0
 	em0 := txMetadata{
-		blockNumber: 0,
+		blockNumber:      0,
 		txValidationCode: peer.TxValidationCode_VALID,
 		locPointer: &locPointer{
-			txnNumber: 0,
-			offset: 4,
+			txnNumber:   0,
+			offset:      4,
 			bytesLength: 85,
 		},
 	}
@@ -94,11 +94,11 @@ func TestRetrieveTxLoc(t *testing.T) {
 
 	// txn 1
 	em1 := txMetadata{
-		blockNumber: 0,
+		blockNumber:      0,
 		txValidationCode: peer.TxValidationCode_VALID,
 		locPointer: &locPointer{
-			txnNumber: 1,
-			offset: 89,
+			txnNumber:   1,
+			offset:      89,
 			bytesLength: 88,
 		},
 	}
@@ -113,11 +113,11 @@ func TestRetrieveTxLoc(t *testing.T) {
 
 	// txn 2
 	em2 := txMetadata{
-		blockNumber: 0,
+		blockNumber:      0,
 		txValidationCode: peer.TxValidationCode_MVCC_READ_CONFLICT,
 		locPointer: &locPointer{
-			txnNumber: 2,
-			offset: 177,
+			txnNumber:   2,
+			offset:      177,
 			bytesLength: 92,
 		},
 	}
@@ -132,11 +132,11 @@ func TestRetrieveTxLoc(t *testing.T) {
 
 	// txn 3
 	em3 := txMetadata{
-		blockNumber: 1,
+		blockNumber:      1,
 		txValidationCode: peer.TxValidationCode_VALID,
 		locPointer: &locPointer{
-			txnNumber: 0,
-			offset: 4,
+			txnNumber:   0,
+			offset:      4,
 			bytesLength: 83,
 		},
 	}
@@ -151,11 +151,11 @@ func TestRetrieveTxLoc(t *testing.T) {
 
 	// txn 4
 	em4 := txMetadata{
-		blockNumber: 1,
+		blockNumber:      1,
 		txValidationCode: peer.TxValidationCode_BAD_PROPOSAL_TXID,
 		locPointer: &locPointer{
-			txnNumber: 1,
-			offset: 87,
+			txnNumber:   1,
+			offset:      87,
 			bytesLength: 82,
 		},
 	}
@@ -179,7 +179,6 @@ func assertTxLoc(t *testing.T, e blkstorage.TxLoc, a blkstorage.TxLoc) {
 	assert.Equal(t, e.BlockNumber(), a.BlockNumber(), "unexpected transaction location (block number)")
 	assert.Equal(t, e.TxNumber(), a.TxNumber(), "unexpected transaction location (tx number)")
 }
-
 
 func TestDuplicateTx(t *testing.T) {
 	bi, cleanup, err := newMockMockBlockIndex()
@@ -207,11 +206,11 @@ func TestDuplicateTx(t *testing.T) {
 
 	// txn 0
 	em0 := txMetadata{
-		blockNumber: 0,
+		blockNumber:      0,
 		txValidationCode: peer.TxValidationCode_VALID,
 		locPointer: &locPointer{
-			txnNumber: 0,
-			offset: 4,
+			txnNumber:   0,
+			offset:      4,
 			bytesLength: 85,
 		},
 	}
@@ -222,11 +221,11 @@ func TestDuplicateTx(t *testing.T) {
 
 	// txn 1
 	em1 := txMetadata{
-		blockNumber: 0,
+		blockNumber:      0,
 		txValidationCode: peer.TxValidationCode_VALID,
 		locPointer: &locPointer{
-			txnNumber: 1,
-			offset: 89,
+			txnNumber:   1,
+			offset:      89,
 			bytesLength: 88,
 		},
 	}

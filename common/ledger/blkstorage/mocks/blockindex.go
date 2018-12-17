@@ -12,7 +12,7 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 )
 
-type MockBlockIndex struct{
+type MockBlockIndex struct {
 	TxLocsByTxID           map[string]blkstorage.TxLoc
 	TxLocsByNum            map[uint64]map[uint64]blkstorage.TxLoc
 	TxValidationCodeByTxID map[string]peer.TxValidationCode
@@ -39,8 +39,8 @@ func NewMockBlockIndex() *MockBlockIndex {
 	txValidationCodeByTxID := make(map[string]peer.TxValidationCode)
 
 	mbi := MockBlockIndex{
-		TxLocsByTxID: txLocsByTxID,
-		TxLocsByNum: txLocsByNum,
+		TxLocsByTxID:           txLocsByTxID,
+		TxLocsByNum:            txLocsByNum,
 		TxValidationCodeByTxID: txValidationCodeByTxID,
 	}
 

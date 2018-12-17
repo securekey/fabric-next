@@ -35,11 +35,11 @@ import (
 )
 
 const (
-	txIDIdxKeyPrefix               = 't'
+	txIDIdxKeyPrefix = 't'
 	//blockNumTranNumIdxKeyPrefix    = 'a'
 	//blockTxIDIdxKeyPrefix          = 'b'
 	//txValidationResultIdxKeyPrefix = 'v'
-	indexCheckpointKeyStr          = "indexCheckpointKey"
+	indexCheckpointKeyStr = "indexCheckpointKey"
 )
 
 var indexCheckpointKey = []byte(indexCheckpointKeyStr)
@@ -88,10 +88,10 @@ func (index *blockIndex) AddBlock(block *common.Block) error {
 	}
 	//save the index in the database
 	idxInfo := blockIdxInfo{
-		blockNum: block.Header.Number,
+		blockNum:  block.Header.Number,
 		blockHash: blockHash,
 		txOffsets: txOffsets,
-		metadata: block.Metadata,
+		metadata:  block.Metadata,
 	}
 
 	return index.indexBlock(&idxInfo)
@@ -137,9 +137,9 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 			txLoc := txoffset.loc
 			logger.Debugf("Adding txLoc [%s] for tx ID: [%s] to txid-index", txLoc, txoffset.txID)
 			tm := txMetadata{
-				blockNumber: blockIdxInfo.blockNum,
+				blockNumber:      blockIdxInfo.blockNum,
 				txValidationCode: txsfltr.Flag(idx),
-				locPointer:txLoc,
+				locPointer:       txLoc,
 			}
 			tmBytes, marshalErr := tm.marshal()
 			if marshalErr != nil {
@@ -150,46 +150,46 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 	}
 
 	/*
-	// This index is not being used by our higher level cached block provider.
-	//Index4 - Store BlockNumTranNum will be used to query history data
-	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockNumTranNum]; ok {
-		for txIterator, txoffset := range txOffsets {
-			txLoc := txoffset.loc
-			logger.Debugf("Adding txLoc [%s] for tx number:[%d] ID: [%s] to blockNumTranNum index", txLoc, txIterator, txoffset.txID)
-			blockTxLoc := txMetadata{blockNumber:blockIdxInfo.blockNum,locPointer:txLoc}
-			txFlpBytes, marshalErr := blockTxLoc.marshal()
-			if marshalErr != nil {
-				return marshalErr
+		// This index is not being used by our higher level cached block provider.
+		//Index4 - Store BlockNumTranNum will be used to query history data
+		if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockNumTranNum]; ok {
+			for txIterator, txoffset := range txOffsets {
+				txLoc := txoffset.loc
+				logger.Debugf("Adding txLoc [%s] for tx number:[%d] ID: [%s] to blockNumTranNum index", txLoc, txIterator, txoffset.txID)
+				blockTxLoc := txMetadata{blockNumber:blockIdxInfo.blockNum,locPointer:txLoc}
+				txFlpBytes, marshalErr := blockTxLoc.marshal()
+				if marshalErr != nil {
+					return marshalErr
+				}
+				batch.Put(constructBlockNumTranNumKey(blockIdxInfo.blockNum, uint64(txIterator)), txFlpBytes)
 			}
-			batch.Put(constructBlockNumTranNumKey(blockIdxInfo.blockNum, uint64(txIterator)), txFlpBytes)
 		}
-	}
 	*/
 
 	/*
-	// The current implementation of TxLoc indices contains the block number.
-	// Index5 - Store BlockNumber will be used to find block by transaction id
-	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockTxID]; ok {
-		for _, txoffset := range txOffsets {
-			if txoffset.isDuplicate { // do not overwrite txid entry in the index - FAB-8557
-				continue
+		// The current implementation of TxLoc indices contains the block number.
+		// Index5 - Store BlockNumber will be used to find block by transaction id
+		if _, ok := index.indexItemsMap[blkstorage.IndexableAttrBlockTxID]; ok {
+			for _, txoffset := range txOffsets {
+				if txoffset.isDuplicate { // do not overwrite txid entry in the index - FAB-8557
+					continue
+				}
+				batch.Put(constructBlockTxIDKey(txoffset.txID), encodeBlockNum(blockIdxInfo.blockNum))
 			}
-			batch.Put(constructBlockTxIDKey(txoffset.txID), encodeBlockNum(blockIdxInfo.blockNum))
 		}
-	}
 	*/
 
 	/*
-	// The current implementation of TxLoc indices contains the validation code.
-	// Index6 - Store transaction validation result by transaction id
-	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxValidationCode]; ok {
-		for idx, txoffset := range txOffsets {
-			if txoffset.isDuplicate { // do not overwrite txid entry in the index - FAB-8557
-				continue
+		// The current implementation of TxLoc indices contains the validation code.
+		// Index6 - Store transaction validation result by transaction id
+		if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxValidationCode]; ok {
+			for idx, txoffset := range txOffsets {
+				if txoffset.isDuplicate { // do not overwrite txid entry in the index - FAB-8557
+					continue
+				}
+				batch.Put(constructTxValidationCodeIDKey(txoffset.txID), []byte{byte(txsfltr.Flag(idx))})
 			}
-			batch.Put(constructTxValidationCodeIDKey(txoffset.txID), []byte{byte(txsfltr.Flag(idx))})
 		}
-	}
 	*/
 
 	batch.Put(indexCheckpointKey, encodeBlockNum(blockIdxInfo.blockNum))
@@ -289,7 +289,6 @@ func (index *blockIndex) RetrieveTxValidationCodeByTxID(txID string) (peer.TxVal
 	return tm.txValidationCode, nil
 }
 
-
 /*
 func (index *blockIndex) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
 	if _, ok := index.indexItemsMap[blkstorage.IndexableAttrTxValidationCode]; !ok {
@@ -347,7 +346,7 @@ func decodeBlockNum(blockNumBytes []byte) uint64 {
 }
 
 type txMetadata struct {
-	blockNumber uint64
+	blockNumber      uint64
 	txValidationCode peer.TxValidationCode
 	*locPointer
 }

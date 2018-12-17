@@ -108,9 +108,9 @@ func TestLookupTxLoc(t *testing.T) {
 	bc := newBlockCache(0)
 
 	const (
-		txnID0="a"
-		txnID1="b"
-		txnID2="c"
+		txnID0 = "a"
+		txnID1 = "b"
+		txnID2 = "c"
 	)
 
 	b0 := mocks.CreateBlock(0,
@@ -249,9 +249,9 @@ func TestEvictionCleanup(t *testing.T) {
 	bc := newBlockCache(1)
 
 	const (
-		txnID0="a"
-		txnID1="b"
-		txnID2="c"
+		txnID0 = "a"
+		txnID1 = "b"
+		txnID2 = "c"
 	)
 
 	b1 := mocks.CreateBlock(1,

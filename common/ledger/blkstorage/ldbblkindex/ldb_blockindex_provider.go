@@ -17,8 +17,8 @@ var logger = flogging.MustGetLogger("ldbblkindex")
 
 // MemBlockCacheProvider provides block cache in memory
 type LevelBlockIndexProvider struct {
-	conf        *Conf
-	indexConfig *blkstorage.IndexConfig
+	conf            *Conf
+	indexConfig     *blkstorage.IndexConfig
 	leveldbProvider *leveldbhelper.Provider
 }
 

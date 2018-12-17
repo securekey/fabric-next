@@ -139,7 +139,7 @@ func NewTransactionWithMockKey(txID string, key string, validationCode peer.TxVa
 		Type:      int32(common.HeaderType_ENDORSER_TRANSACTION),
 	}
 
-	txn := 	CreateTransaction(
+	txn := CreateTransaction(
 		&rwsetutil.NsRwSet{
 			NameSpace: namespace,
 			KvRwSet: &kvrwset.KVRWSet{
@@ -168,7 +168,7 @@ func newConfigTransaction(txID string, validationCode peer.TxValidationCode) *Tr
 		TxId:      txID,
 		Type:      int32(common.HeaderType_CONFIG),
 	}
-	txn := 	CreateTransaction(
+	txn := CreateTransaction(
 		&rwsetutil.NsRwSet{
 			NameSpace: namespace,
 			KvRwSet: &kvrwset.KVRWSet{

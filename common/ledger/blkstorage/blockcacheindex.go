@@ -55,4 +55,3 @@ type BlockIndex interface {
 	//RetrieveTxLocByBlockNumTranNum(blockNum uint64, tranNum uint64) (TxLoc, error)
 	RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error)
 }
-

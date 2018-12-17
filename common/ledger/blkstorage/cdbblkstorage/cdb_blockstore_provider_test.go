@@ -69,7 +69,7 @@ func addBlock(store *cdbBlockStore, number uint64) {
 	b := mocks.CreateSimpleMockBlock(number)
 	store.AddBlock(b)
 	store.CheckpointBlock(b)
-	ctx, cancel := context.WithTimeout(context.Background(), 500 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	store.WaitForBlock(ctx, number)
 	cancel()
 }

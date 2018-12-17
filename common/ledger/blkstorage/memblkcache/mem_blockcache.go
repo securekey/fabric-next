@@ -19,14 +19,14 @@ import (
 )
 
 type blockCache struct {
-	blocks          *lru.Cache
-	pinnedBlocks    map[uint64]*common.Block
-	hashToNumber    map[string]uint64
-	numberToHash    map[uint64]string
-	txnLocs         map[string]*txnLoc
-	numberToTxnIDs  map[uint64][]string
-	configBlockNum  uint64
-	mtx             sync.RWMutex
+	blocks         *lru.Cache
+	pinnedBlocks   map[uint64]*common.Block
+	hashToNumber   map[string]uint64
+	numberToHash   map[uint64]string
+	txnLocs        map[string]*txnLoc
+	numberToTxnIDs map[uint64][]string
+	configBlockNum uint64
+	mtx            sync.RWMutex
 }
 
 func newBlockCache(blockCacheSize int) *blockCache {
@@ -94,7 +94,7 @@ func (c *blockCache) OnBlockStored(blockNum uint64) bool {
 		return c.onGenesisBlockStored(b)
 	}
 
-	if utils.IsConfigBlock(b)  {
+	if utils.IsConfigBlock(b) {
 		return c.onConfigBlockStored(b)
 	}
 
@@ -151,7 +151,7 @@ func createTxnLocsFromBlock(block *common.Block) (map[string]*txnLoc, error) {
 		}
 
 		if txnID != "" {
-			txnLoc := txnLoc{blockNumber:blockNumber, txNumber:uint64(i)}
+			txnLoc := txnLoc{blockNumber: blockNumber, txNumber: uint64(i)}
 			txns[txnID] = &txnLoc
 		}
 	}
@@ -173,7 +173,7 @@ func (c *blockCache) LookupBlockByNumber(number uint64) (*common.Block, bool) {
 	return b, true
 }
 
-func (c *blockCache) lookupBlockFromLRU(number uint64) (*common.Block, bool){
+func (c *blockCache) lookupBlockFromLRU(number uint64) (*common.Block, bool) {
 	b, ok := c.blocks.Get(number)
 	if !ok {
 		return nil, false

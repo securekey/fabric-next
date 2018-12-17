@@ -24,7 +24,7 @@ func retrieveCheckpointInfo(db *couchdb.CouchDatabase) (checkpointInfo, error) {
 	}
 
 	var lastBlock *common.Block
-	for i := 1; i <= min(info.DocCount, numMetaDocs + 1); i++ {
+	for i := 1; i <= min(info.DocCount, numMetaDocs+1); i++ {
 		doc, _, err := db.ReadDoc(blockNumberToKey(uint64(info.DocCount - i)))
 		if err != nil {
 			return checkpointInfo{}, err
@@ -44,7 +44,7 @@ func retrieveCheckpointInfo(db *couchdb.CouchDatabase) (checkpointInfo, error) {
 	}
 
 	return checkpointInfo{
-		isChainEmpty: false,
+		isChainEmpty:    false,
 		lastBlockNumber: lastBlock.GetHeader().GetNumber(),
 	}, nil
 }

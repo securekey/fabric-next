@@ -33,8 +33,8 @@ type blockStoreWithCheckpoint interface {
 func NewProvider(storageProvider blkstorage.BlockStoreProvider, indexProvider blkstorage.BlockIndexProvider, cacheProvider blkstorage.BlockCacheProvider) *CachedBlockstoreProvider {
 	p := CachedBlockstoreProvider{
 		storageProvider: storageProvider,
-		cacheProvider: cacheProvider,
-		indexProvider: indexProvider,
+		cacheProvider:   cacheProvider,
+		indexProvider:   indexProvider,
 	}
 
 	return &p
@@ -66,7 +66,6 @@ func (p *CachedBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.B
 	if err != nil {
 		return nil, err
 	}
-
 
 	s, err := newCachedBlockStore(blockStoreWithCheckpoint, blockIndex, blockCache)
 	if err != nil {

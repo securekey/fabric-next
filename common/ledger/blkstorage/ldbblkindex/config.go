@@ -27,12 +27,12 @@ const (
 	// ChainsDir is the name of the directory containing the channel ledgers.
 	ChainsDir = "chains"
 	// IndexDir is the name of the directory containing all transaction indexes across ledgers.
-	IndexDir  = "txindex"
+	IndexDir = "txindex"
 )
 
 // Conf encapsulates all the configurations for `FsBlockStore`
 type Conf struct {
-	blockStorageDir  string
+	blockStorageDir string
 }
 
 // NewConf constructs new `Conf`.
