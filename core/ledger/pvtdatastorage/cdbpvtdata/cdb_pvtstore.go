@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -20,9 +21,10 @@ import (
 )
 
 type store struct {
-	db            *couchdb.CouchDatabase
-	purgeInterval uint64
-	pendingDocs   []*couchdb.CouchDoc
+	db             *couchdb.CouchDatabase
+	purgeInterval  uint64
+	pendingDocs    []*couchdb.CouchDoc
+	pendingDocsMtx sync.Mutex
 
 	commonStore
 }
@@ -73,7 +75,9 @@ func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 		}
 
 		if blockDoc != nil {
+			s.pendingDocsMtx.Lock()
 			s.pendingDocs = append(s.pendingDocs, blockDoc)
+			s.pendingDocsMtx.Unlock()
 		}
 	}
 
