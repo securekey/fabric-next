@@ -346,7 +346,8 @@ func (s *store) getLastCommittedBlockFromPvtStore() (uint64, error) {
 		return 0, nil
 	}
 	// since this function is called for endorsers only, this error should be just a warning on the endorser side
-	if lastCommittedBlock > s.lastCommittedBlock {
+	// this lastCommittedBlock check is applicable only for the committer as it updates it when writing to the DB
+	if ledgerconfig.IsCommitter() && lastCommittedBlock > s.lastCommittedBlock {
 		logger.Debugf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
 		// no need to worry about this error
 		return 0, errors.Errorf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
