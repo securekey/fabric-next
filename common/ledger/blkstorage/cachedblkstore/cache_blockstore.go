@@ -35,6 +35,7 @@ type cachedBlockStore struct {
 	checkpointCh   chan *common.Block
 	writerClosedCh chan struct{}
 	doneCh         chan struct{}
+	blockReadyCh   chan bool
 }
 
 func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) (*cachedBlockStore, error) {
@@ -48,6 +49,7 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 		checkpointCh:   make(chan *common.Block),
 		writerClosedCh: make(chan struct{}),
 		doneCh:         make(chan struct{}),
+		blockReadyCh:   make(chan bool),
 	}
 
 	curBcInfo, err := blockStore.GetBlockchainInfo()
@@ -55,7 +57,6 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 		return nil, err
 	}
 	s.bcInfo = curBcInfo
-
 
 	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
 	for x := 0; x < concurrentBlockWrites; x++ {
@@ -78,7 +79,7 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 
 	// TODO: This is a quick patch - needs to ensure that there are no gaps as well.
 	blockNumber := block.GetHeader().GetNumber()
-	if blockNumber != 0 {
+	if blockNumber > uint64(ledgerconfig.GetConcurrentBlockWrites()) {
 		waitForBlock := blockNumber - uint64(ledgerconfig.GetConcurrentBlockWrites())
 
 		// Wait for underlying storage to complete commit on previous block.
@@ -97,6 +98,7 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 }
 
 func (s *cachedBlockStore) CheckpointBlock(block *common.Block) error {
+	<-s.blockReadyCh
 	s.checkpointCh <- block
 
 	s.cpInfoMtx.Lock()
@@ -134,6 +136,7 @@ func (s *cachedBlockStore) blockWriter() {
 				stopWatch()
 				panic(panicMsg)
 			}
+			s.blockReadyCh <- true
 			stopWatch()
 		case block := <-s.checkpointCh:
 			stopWatch := metrics.StopWatch("cached_block_store_blockCheckPoint_processing")
