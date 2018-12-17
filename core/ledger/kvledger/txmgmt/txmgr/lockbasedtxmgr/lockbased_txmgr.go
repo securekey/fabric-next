@@ -8,8 +8,6 @@ package lockbasedtxmgr
 import (
 	"sync"
 
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -45,9 +43,10 @@ type LockBasedTxMgr struct {
 	StopWatch1       tally.Stopwatch
 	StopWatch1Access string
 	btlPolicy        pvtdatapolicy.BTLPolicy
+	committedBlock   *ledger.BlockAndPvtData
 
 	commitCh   chan *update
-	notifier   txmgr.BlockCommitted
+	commitDone chan struct{}
 	shutdownCh chan struct{}
 	doneCh     chan struct{}
 }
@@ -69,14 +68,14 @@ func (c *update) maxTxNumber() uint64 {
 
 // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
 func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
-	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, notifier txmgr.BlockCommitted) (*LockBasedTxMgr, error) {
+	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider) (*LockBasedTxMgr, error) {
 	db.Open()
 	txmgr := &LockBasedTxMgr{
 		ledgerid:       ledgerid,
 		db:             db,
 		stateListeners: stateListeners,
 		commitCh:       make(chan *update),
-		notifier:       notifier,
+		commitDone:     make(chan struct{}),
 		shutdownCh:     make(chan struct{}),
 		doneCh:         make(chan struct{}),
 		btlPolicy:      btlPolicy,
@@ -332,17 +331,31 @@ func (txmgr *LockBasedTxMgr) committer() {
 			logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
 			clearWatch.Stop()
 
+			close(txmgr.commitDone)
+			txmgr.commitDone = make(chan struct{})
+			txmgr.committedBlock = current.blockAndPvtData
+
 			txmgr.commitRWLock.Unlock()
 			close(current.commitDoneCh)
 
 			//notify kv ledger that commit is done for given block and private data
-			txmgr.notifier.OnBlockCommit(current.blockAndPvtData)
 
 			if metrics.IsDebug() {
 				commitWatch.Stop()
 			}
 		}
 	}
+}
+
+//BlockCommitted returns recent block committed and chan to notify next block commit
+func (txmgr *LockBasedTxMgr) BlockCommitted() (*ledger.BlockAndPvtData, chan struct{}) {
+
+	txmgr.commitRWLock.RLock()
+	blockCommitted := txmgr.committedBlock
+	commitDone := txmgr.commitDone
+	txmgr.commitRWLock.RUnlock()
+
+	return blockCommitted, commitDone
 }
 
 func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []string) ledger.StateUpdates {

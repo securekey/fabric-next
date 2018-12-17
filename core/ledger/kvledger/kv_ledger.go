@@ -48,12 +48,11 @@ type kvLedger struct {
 	blockAPIsRWLock        *sync.RWMutex
 	bcInfo                 *common.BlockchainInfo
 
-	stateCommitDoneCh chan *ledger.BlockAndPvtData
-	commitCh          chan *ledger.BlockAndPvtData
-	indexCh           chan *indexUpdate
-	stoppedCommitCh   chan struct{}
-	stoppedIndexCh    chan struct{}
-	doneCh            chan struct{}
+	commitCh        chan *ledger.BlockAndPvtData
+	indexCh         chan *indexUpdate
+	stoppedCommitCh chan struct{}
+	stoppedIndexCh  chan struct{}
+	doneCh          chan struct{}
 }
 
 // NewKVLedger constructs new `KVLedger`
@@ -71,18 +70,17 @@ func newKVLedger(
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
 	l := &kvLedger{
-		ledgerID:          ledgerID,
-		blockStore:        blockStore,
-		historyDB:         historyDB,
-		versionedDB:       versionedDB,
-		kvCacheProvider:   versionedDB.GetKVCacheProvider(),
-		blockAPIsRWLock:   &sync.RWMutex{},
-		stateCommitDoneCh: make(chan *ledger.BlockAndPvtData),
-		commitCh:          make(chan *ledger.BlockAndPvtData),
-		indexCh:           make(chan *indexUpdate),
-		stoppedCommitCh:   make(chan struct{}),
-		stoppedIndexCh:    make(chan struct{}),
-		doneCh:            make(chan struct{}),
+		ledgerID:        ledgerID,
+		blockStore:      blockStore,
+		historyDB:       historyDB,
+		versionedDB:     versionedDB,
+		kvCacheProvider: versionedDB.GetKVCacheProvider(),
+		blockAPIsRWLock: &sync.RWMutex{},
+		commitCh:        make(chan *ledger.BlockAndPvtData),
+		indexCh:         make(chan *indexUpdate),
+		stoppedCommitCh: make(chan struct{}),
+		stoppedIndexCh:  make(chan struct{}),
+		doneCh:          make(chan struct{}),
 	}
 
 	// TODO Move the function `GetChaincodeEventListener` to ledger interface and
@@ -127,7 +125,7 @@ func newKVLedger(
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, &commitWatcher{l.stateCommitDoneCh})
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider)
 	return err
 }
 
@@ -466,7 +464,6 @@ func (l *kvLedger) Close() {
 
 	close(l.doneCh)
 	<-l.stoppedCommitCh
-	<-l.stateCommitDoneCh
 	<-l.stoppedIndexCh
 
 	l.blockStore.Shutdown()

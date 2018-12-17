@@ -40,6 +40,7 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 	}
 
 	blockNo, nextBlockCh := store.BlockCommitted()
+	pvtdataAndBlock, commitDoneCh := l.txtmgmt.BlockCommitted()
 
 	type blockCommitProgress struct {
 		nextBlock                                   *common.Block
@@ -73,7 +74,8 @@ func (l *kvLedger) commitWatcher(btlPolicy pvtdatapolicy.BTLPolicy) {
 		case <-l.doneCh: // kvledger is shutting down.
 			close(l.stoppedCommitCh)
 			return
-		case pvtdataAndBlock := <-l.stateCommitDoneCh: // State has been committed - unpin keys from cache
+		case <-commitDoneCh: // State has been committed - unpin keys from cache
+			pvtdataAndBlock, commitDoneCh = l.txtmgmt.BlockCommitted()
 
 			block := pvtdataAndBlock.Block
 			pvtData := pvtdataAndBlock.BlockPvtData
