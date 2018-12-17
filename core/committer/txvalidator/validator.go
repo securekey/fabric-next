@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/common/validation"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/gossip/comm"
@@ -34,6 +35,8 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
+	"sort"
+	"sync"
 )
 
 // Support provides all of the needed to evaluate the VSCC
@@ -61,6 +64,10 @@ type Support interface {
 	Capabilities() channelconfig.ApplicationCapabilities
 }
 
+type mvccValidator interface {
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+}
+
 //Validator interface which defines API to validate block transactions
 // and return the bit array mask indicating invalid transactions which
 // didn't pass validation.
@@ -86,6 +93,8 @@ type TxValidator struct {
 }
 
 var logger = flogging.MustGetLogger("committer.txvalidator")
+// ignoreCancel is a cancel function that does nothing
+var ignoreCancel = func() {}
 
 type blockValidationRequest struct {
 	block *common.Block
@@ -131,6 +140,8 @@ type ValidationResults struct {
 	// Empty means local peer.
 	Endpoint string
 }
+
+
 
 // Validate performs the validation of a block. The validation
 // of each transaction in the block is performed in parallel.
@@ -279,6 +290,55 @@ func (v *TxValidator) ValidatePartial(ctx context.Context, block *common.Block) 
 		Endpoint: committer.Endpoint,
 		PKIID:    committer.PKIid,
 	})
+}
+
+type validators []*roleutil.Member
+
+func (p validators) Len() int {
+	return len(p)
+}
+func (p validators) Less(i, j int) bool {
+	// Committers should always come first
+	if p.isCommitter(i) {
+		return true
+	}
+	if p.isCommitter(j) {
+		return false
+	}
+	return p[i].Endpoint < p[j].Endpoint
+}
+
+func (p validators) Swap(i, j int) {
+	p[i], p[j] = p[j], p[i]
+}
+
+func (p validators) isCommitter(i int) bool {
+	if p[i].Properties == nil {
+		return false
+	}
+	roles := gossipimpl.Roles(p[i].Properties.Roles)
+	return roles.HasRole(ledgerconfig.CommitterRole)
+}
+
+func getValidationWaitTime(numTransactions int) time.Duration {
+	minWaitTime := ledgerconfig.GetValidationMinWaitTime()
+	waitTime := time.Duration(numTransactions) * ledgerconfig.GetValidationWaitTimePerTx()
+	if waitTime < minWaitTime {
+		return minWaitTime
+	}
+	return waitTime
+}
+
+// flagsToString used in debugging
+func flagsToString(flags ledgerUtil.TxValidationFlags) string {
+	str := "["
+	for i := range flags {
+		str += fmt.Sprintf("[%d]=[%s]", i, flags.Flag(i))
+		if i+1 < len(flags) {
+			str += ","
+		}
+	}
+	return str + "]"
 }
 
 func (v *TxValidator) validateRemaining(ctx context.Context, block *common.Block, notValidated map[int]struct{}, resultsChan chan *ValidationResults) {
@@ -799,7 +859,7 @@ func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, 
 	// if returned error is nil, it means that there is already a tx in
 	// the ledger with the supplied id
 	if err == nil {
-		logger.Error("Duplicate transaction found, ", txID, ", skipping")
+		logger.Info("Duplicate transaction found, ", txID, ", skipping")
 		return &blockValidationResult{
 			tIdx:           tIdx,
 			validationCode: peer.TxValidationCode_DUPLICATE_TXID,
