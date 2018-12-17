@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	checkpointBlockInterval = 1 // number of blocks between checkpoints.
+	checkpointBlockInterval = 6 // number of blocks between checkpoints.
 	blockStorageQueueLen    = checkpointBlockInterval
 )
 
@@ -60,7 +60,9 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 	}
 	s.bcInfo = curBcInfo
 
-	go s.blockWriter()
+	for x := 0; x < checkpointBlockInterval; x++ {
+		go s.blockWriter()
+	}
 
 	return &s, nil
 }
@@ -76,6 +78,7 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 		return errors.WithMessage(err, fmt.Sprintf("block was not cached [%d]", blockNumber))
 	}
 
+	/*
 	blockNumber := block.GetHeader().GetNumber()
 	if blockNumber != 0 {
 		// Wait for underlying storage to complete commit on previous block.
@@ -83,7 +86,11 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 		s.blockStore.WaitForBlock(context.Background(), blockNumber-checkpointBlockInterval)
 		logger.Debugf("ready to store incoming block [%d]", blockNumber)
 	}
+	*/
+
+	stopWatchWait := metrics.StopWatch("cached_block_store_add_block_wait_queue_duration")
 	s.blockStoreCh <- block
+	stopWatchWait()
 
 	return nil
 }
