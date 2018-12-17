@@ -40,9 +40,11 @@ type TxMgr interface {
 	Shutdown()
 }
 
-//LockBasedTxMgr - an extension of TxMgr interface which allows to lock/unlock txmgr rwlock
+//LockBasedTxMgr - an extension of TxMgr interface which allows to lock/unlock txmgr rwlock and also provides notification
+//on block commit
 type LockBasedTxMgr interface {
 	TxMgr
+	BlockCommitted() (*ledger.BlockAndPvtData, chan struct{})
 	RLock()
 	RUnlock()
 	Lock()
