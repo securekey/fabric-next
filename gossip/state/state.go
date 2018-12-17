@@ -177,18 +177,30 @@ type GossipStateProviderImpl struct {
 
 	stopCh chan struct{}
 
+	validationResponseChan chan *txvalidator.ValidationResults
+
+	pendingValidations *blockCache
+
 	done sync.WaitGroup
 
 	once sync.Once
 
 	stateTransferActive int32
+
+	peerLedger ledger.PeerLedger
+
+	blockPublisher *publisher
+
+	ctxProvider *validationctx.Provider
+
+	roleUtil *roleutil.RoleUtil
 }
 
 var logger = util.GetLogger(util.StateLogger, "")
 
 // NewGossipStateProvider creates state provider with coordinator instance
 // to orchestrate arrival of private rwsets and blocks before committing them into the ledger.
-func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources) GossipStateProvider {
+func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, peerLedger ledger.PeerLedger, transientStore privdata2.TransientStore) GossipStateProvider {
 
 	gossipChan, _ := services.Accept(func(message interface{}) bool {
 		// Get only data messages
@@ -694,7 +706,35 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 		}
 	}
 }
+func (s *GossipStateProviderImpl) loadBlocksInRange(fromBlock, toBlock uint64) ([]*proto.Payload, error) {
+	logger.Debugf("Loading blocks in range %d to %d for channel [%s]", fromBlock, toBlock, s.chainID)
 
+	var payloads []*proto.Payload
+
+	for num := fromBlock; num <= toBlock; num++ {
+		// Don't need to load the private data since we don't actually do anything with it on the endorser.
+		logger.Debugf("Getting block %d for channel [%s]...", num, s.chainID)
+		block, err := s.peerLedger.GetBlockByNumber(num)
+		if err != nil {
+			return nil, errors.WithMessage(err, fmt.Sprintf("Error reading block and private data for block %d", num))
+		}
+
+		blockBytes, err := pb.Marshal(block)
+		if err != nil {
+			logger.Errorf("Could not marshal block: %+v", errors.WithStack(err))
+			return nil, errors.WithMessage(err, fmt.Sprintf("Error marshalling block %d", num))
+		}
+
+		payloads = append(payloads,
+			&proto.Payload{
+				SeqNum: num,
+				Data:   blockBytes,
+			},
+		)
+	}
+
+	return payloads, nil
+}
 func (s *GossipStateProviderImpl) waitForBufferReady() bool {
 	stopWatch := metrics.StopWatch(fmt.Sprintf("gossip_state_%s_wait_for_buffer_ready", metrics.FilterMetricName(s.chainID)))
 	defer stopWatch()
@@ -961,6 +1001,23 @@ func (s *GossipStateProviderImpl) hasRequiredHeight(height uint64) func(peer dis
 
 // AddPayload adds new payload into state.
 func (s *GossipStateProviderImpl) AddPayload(payload *proto.Payload) error {
+	if !ledgerconfig.IsCommitter() {
+		// Only the committer processes the payload from the orderer.
+		// Other roles receive the block via gossip.
+		return nil
+	}
+
+	// Gossip the unvalidated block to other validators (if any)
+	// so that they can perform validation on the block.
+	validators := s.roleUtil.Validators(false)
+	if len(validators) > 0 {
+		gossipMsg := createValidationRequestGossipMsg(s.chainID, payload)
+		logger.Debugf("[%s] Gossiping block [%d] to [%d] validator(s)", s.chainID, payload.SeqNum, len(validators))
+		s.mediator.Send(gossipMsg, asRemotePeers(validators)...)
+	} else {
+		logger.Debugf("[%s] Not gossiping block [%d] since no other validators were found", s.chainID, payload.SeqNum)
+	}
+
 	blockingMode := blocking
 	if viper.GetBool("peer.gossip.nonBlockingCommitMode") {
 		blockingMode = false
