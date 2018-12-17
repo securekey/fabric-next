@@ -201,7 +201,6 @@ func (c *KVCache) addNonDurable(validatedTx *ValidatedPvtData) {
 			(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 			logger.Debugf("Adding key[%s] to expiring private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
 			c.nonDurablePvtCache[validatedTx.Key] = validatedTx
-			c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
 			c.keys[validatedTx.Key] = defVal
 			c.addKeyToExpiryMap(validatedTx.Level1ExpiringBlock, validatedTx.Key)
 			if len(c.nonDurablePvtCache) > ledgerconfig.GetKVCacheNonDurableSize() {
