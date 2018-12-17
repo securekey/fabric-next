@@ -50,13 +50,15 @@ type PayloadsBufferImpl struct {
 	mutex sync.RWMutex
 
 	logger util.Logger
+
+	ready bool
 }
 
 // NewPayloadsBuffer is factory function to create new payloads buffer
 func NewPayloadsBuffer(next uint64) PayloadsBuffer {
 	return &PayloadsBufferImpl{
 		buf:       make(map[uint64]*proto.Payload),
-		readyChan: make(chan struct{}, 1),
+		readyChan: make(chan struct{}),
 		next:      next,
 		logger:    util.GetLogger(util.StateLogger, ""),
 	}

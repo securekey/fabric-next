@@ -604,6 +604,8 @@ func (p *puller) filterNotEligible(dig2rwSets Dig2PvtRWSetWithConfig, shouldChec
 		}
 		logger.Debug("Found", len(rwSets.RWSet), "for TxID", d.TxId, ", collection", d.Collection, "for", endpoint)
 		if len(rwSets.RWSet) == 0 {
+			// FIXME: Change to Debug
+			logger.Warning("RWSet is empty for private data for TxID", dig.TxId, ", collection", dig.Collection, "for", message.GetConnectionInfo().Endpoint)
 			continue
 		}
 
