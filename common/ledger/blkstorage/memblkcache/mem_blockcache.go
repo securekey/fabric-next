@@ -77,8 +77,8 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 
 	c.hashToNumber[blockHashHex] = blockNumber
 	c.numberToHash[blockNumber] = blockHashHex
-
-	c.pinnedBlocks[block.GetHeader().Number] = block
+	c.pinnedBlocks[blockNumber] = block
+	
 	return nil
 }
 
