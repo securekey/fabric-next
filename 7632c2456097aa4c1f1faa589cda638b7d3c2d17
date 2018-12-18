@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "f0027a5f_b1515ba4",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 90,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2018-12-18T22:53:50Z",
+      "side": 1,
+      "message": "we don\u0027t fetch the next block number to commit anymore",
+      "parentUuid": "0b589a22_806c7003",
+      "range": {
+        "startLine": 90,
+        "startChar": 23,
+        "endLine": 90,
+        "endChar": 31
+      },
+      "revId": "7632c2456097aa4c1f1faa589cda638b7d3c2d17",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "9fd2ef2e_380a6401",
         "filename": "core/ledger/pvtdatastorage/mempvtdatacache/mem_blockcache.go",
         "patchSetId": 2
