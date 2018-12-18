@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package cachedpvtdatastore
 
 import (
+	"context"
+
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
@@ -15,20 +17,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	pvtDataStorageQueueLen = 1
-)
-
 type cachedPvtDataStore struct {
 	pvtDataStore      pvtdatastorage.Store
 	pvtDataCache      pvtdatastorage.Store
 	pvtDataStoreCh    chan *pvtPrepareData
+	pvtDataCommitCh   chan *pvtPrepareData
+	pvtDataRollbackCh chan *pvtPrepareData
 	writerClosedCh    chan struct{}
-	commitReadyCh     chan bool
-	prepareReadyCh    chan bool
 	doneCh            chan struct{}
-	commitImmediately bool
-	firstExecuteDone  bool
+	pvtReadyCh        chan bool
+	sigCh             chan struct{}
 }
 
 type pvtPrepareData struct {
@@ -40,16 +38,19 @@ func newCachedPvtDataStore(pvtDataStore pvtdatastorage.Store, pvtDataCache pvtda
 	c := cachedPvtDataStore{
 		pvtDataStore:      pvtDataStore,
 		pvtDataCache:      pvtDataCache,
-		pvtDataStoreCh:    make(chan *pvtPrepareData, pvtDataStorageQueueLen),
+		pvtDataStoreCh:    make(chan *pvtPrepareData),
+		pvtDataCommitCh:   make(chan *pvtPrepareData),
+		pvtDataRollbackCh: make(chan *pvtPrepareData),
 		writerClosedCh:    make(chan struct{}),
-		commitReadyCh:     make(chan bool),
-		prepareReadyCh:    make(chan bool),
 		doneCh:            make(chan struct{}),
-		commitImmediately: false,
-		firstExecuteDone:  false,
+		pvtReadyCh:        make(chan bool),
+		sigCh:             make(chan struct{}),
 	}
 
-	go c.pvtDataWriter()
+	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
+	for x := 0; x < concurrentBlockWrites; x++ {
+		go c.pvtDataWriter()
+	}
 
 	return &c, nil
 }
@@ -65,15 +66,20 @@ func (c *cachedPvtDataStore) Prepare(blockNum uint64, pvtData []*ledger.TxPvtDat
 	if err != nil {
 		return errors.WithMessage(err, "Prepare pvtdata in cache failed")
 	}
-	if blockNum == 0 {
-		c.commitImmediately = true
-		return c.pvtDataStore.Prepare(blockNum, pvtData)
+
+	if blockNum > uint64(ledgerconfig.GetConcurrentBlockWrites()) {
+		waitForPvt := blockNum - uint64(ledgerconfig.GetConcurrentBlockWrites())
+		// Wait for underlying storage to complete commit on previous block.
+		logger.Debugf("waiting for previous block to checkpoint [%d]", waitForPvt)
+		stopWatchWaitBlock := metrics.StopWatch("cached_pvt_store_prepare_wait_block_duration")
+		c.waitForPvt(context.Background(), waitForPvt)
+		stopWatchWaitBlock()
+		logger.Debugf("ready to store incoming block [%d]", blockNum)
 	}
-	if c.firstExecuteDone {
-		<-c.prepareReadyCh
-	}
-	c.firstExecuteDone = true
+
+	stopWatchWaitQueue := metrics.StopWatch("cached_pvt_store_prepare_wait_queue_duration")
 	c.pvtDataStoreCh <- &pvtPrepareData{blockNum: blockNum, pvtData: pvtData}
+	stopWatchWaitQueue()
 	return nil
 
 }
@@ -89,43 +95,36 @@ func (c *cachedPvtDataStore) pvtDataWriter() {
 			return
 		case pvtPrepareData := <-c.pvtDataStoreCh:
 			logger.Debugf("prepare pvt data for storage [%d], length of pvtData:%d", pvtPrepareData.blockNum, len(pvtPrepareData.pvtData))
-			if len(pvtPrepareData.pvtData) > 0 || !ledgerconfig.IsCouchDBEnabled() {
-				err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
-				if err != nil {
-					logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
-					panic(panicMsg)
-				}
-				// we will wait until
-				commitReady := <-c.commitReadyCh
-				if commitReady {
-					if err := c.pvtDataStore.Commit(); err != nil {
-						logger.Errorf("pvt data was not committed to db [%d, %s]", pvtPrepareData.blockNum, err)
-						panic(panicMsg)
-					}
-				} else {
-					if err := c.pvtDataStore.Rollback(); err != nil {
-						logger.Errorf("pvt data rollback in db failed [%d, %s]", pvtPrepareData.blockNum, err)
-						panic(panicMsg)
-					}
-				}
+			err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
+			if err != nil {
+				logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
+				panic(panicMsg)
 			}
-			c.prepareReadyCh <- true
+			c.pvtReadyCh <- true
+		case pvtPrepareData := <-c.pvtDataCommitCh:
+			if err := c.pvtDataStore.Commit(pvtPrepareData.blockNum); err != nil {
+				logger.Errorf("pvt data was not committed to db [%d, %s]", pvtPrepareData.blockNum, err)
+				panic(panicMsg)
+			}
+			close(c.sigCh)
+			c.sigCh = make(chan struct{})
+		case pvtPrepareData := <-c.pvtDataRollbackCh:
+			if err := c.pvtDataStore.Rollback(pvtPrepareData.blockNum); err != nil {
+				logger.Errorf("pvt data rollback in db failed [%d, %s]", pvtPrepareData.blockNum, err)
+				panic(panicMsg)
+			}
 		}
 	}
 }
 
 // Commit pvt data in cache and call background pvtDataWriter go routine to commit data
-func (c *cachedPvtDataStore) Commit() error {
-	err := c.pvtDataCache.Commit()
+func (c *cachedPvtDataStore) Commit(blockNum uint64) error {
+	err := c.pvtDataCache.Commit(blockNum)
 	if err != nil {
 		return errors.WithMessage(err, "Commit pvtdata in cache failed")
 	}
-	if c.commitImmediately {
-		c.commitImmediately = false
-		return c.pvtDataStore.Commit()
-	}
-	// send signal to pvtDataWriter func to commit the pvt data
-	c.commitReadyCh <- true
+	<-c.pvtReadyCh
+	c.pvtDataCommitCh <- &pvtPrepareData{blockNum: blockNum}
 	return nil
 }
 
@@ -196,12 +195,13 @@ func (c *cachedPvtDataStore) IsEmpty() (bool, error) {
 }
 
 // Rollback pvt data in cache and call background pvtDataWriter go routine to rollback data
-func (c *cachedPvtDataStore) Rollback() error {
-	err := c.pvtDataCache.Rollback()
+func (c *cachedPvtDataStore) Rollback(blockNum uint64) error {
+	err := c.pvtDataCache.Rollback(blockNum)
 	if err != nil {
 		return errors.WithMessage(err, "Rollback pvtdata in cache failed")
 	}
-	c.commitReadyCh <- false
+	<-c.pvtReadyCh
+	c.pvtDataRollbackCh <- &pvtPrepareData{blockNum: blockNum}
 	return nil
 }
 
@@ -210,4 +210,27 @@ func (c *cachedPvtDataStore) Shutdown() {
 	<-c.writerClosedCh
 	c.pvtDataCache.Shutdown()
 	c.pvtDataStore.Shutdown()
+}
+
+func (c *cachedPvtDataStore) waitForPvt(ctx context.Context, blockNum uint64) {
+	var lastBlockNumber uint64
+PvtLoop:
+	for {
+		lastBlockNumber, _ = c.pvtDataStore.LastCommittedBlockHeight()
+		// LastCommittedBlockHeight return LastCommittedBlockHeight+1
+		lastBlockNumber = lastBlockNumber - 1
+
+		if lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer pvt blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break PvtLoop
+		case <-c.sigCh:
+		}
+	}
+
+	logger.Debugf("finished waiting for pvt blocks [%d, %d]", lastBlockNumber, blockNum)
 }

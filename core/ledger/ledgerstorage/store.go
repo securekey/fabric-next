@@ -177,7 +177,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	writtenToPvtStore := false
 	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
-		if len(blockAndPvtdata.BlockPvtData) > 0 || !ledgerconfig.IsCouchDBEnabled() {
+		if blockNum != 0 {
 			// when re-processing blocks (rejoin the channel or re-fetching last few block),
 			// skip the pvt data commit to the pvtdata blockstore
 			logger.Debugf("Writing block [%d] to pvt block store", blockNum)
@@ -188,11 +188,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 			if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
 				return err
 			}
-
 			writtenToPvtStore = true
-		} else {
-			metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
-			logger.Debugf("Skipping writing block [%d] to pvt block store as block is empty", blockNum)
 		}
 	} else {
 		metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
@@ -200,12 +196,11 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 	}
 
 	if err := s.AddBlock(blockAndPvtdata.Block); err != nil {
-		s.pvtdataStore.Rollback()
+		s.pvtdataStore.Rollback(blockAndPvtdata.Block.Header.Number)
 		return err
 	}
-
 	if writtenToPvtStore {
-		return s.pvtdataStore.Commit()
+		return s.pvtdataStore.Commit(blockAndPvtdata.Block.Header.Number)
 	}
 	return nil
 }
@@ -337,11 +332,11 @@ func (s *Store) syncPvtdataStoreWithBlockStore() error {
 	}
 
 	if bcInfo.Height == pvtdataStoreHt {
-		return s.pvtdataStore.Rollback()
+		return s.pvtdataStore.Rollback(bcInfo.Height)
 	}
 
 	if bcInfo.Height == pvtdataStoreHt+1 {
-		return s.pvtdataStore.Commit()
+		return s.pvtdataStore.Commit(bcInfo.Height)
 	}
 
 	return fmt.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)

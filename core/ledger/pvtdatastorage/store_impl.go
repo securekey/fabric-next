@@ -145,7 +145,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
 }
 
 // Commit implements the function in the interface `Store`
-func (s *store) Commit() error {
+func (s *store) Commit(blockNum uint64) error {
 	if !s.batchPending {
 		return &ErrIllegalCall{"No pending batch to commit"}
 	}
@@ -168,7 +168,7 @@ func (s *store) Commit() error {
 // Rollback implements the function in the interface `Store`
 // Not deleting the existing data entries and expiry entries for now
 // Because the next try would have exact same entries and will overwrite those
-func (s *store) Rollback() error {
+func (s *store) Rollback(blockNum uint64) error {
 	if !s.batchPending {
 		return &ErrIllegalCall{"No pending batch to rollback"}
 	}

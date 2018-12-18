@@ -105,7 +105,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUp
 		if err != nil {
 			return nil, err
 		}
-		err = pvtCache.Commit()
+		err = pvtCache.Commit(block.Header.Number)
 		if err != nil {
 			return nil, err
 		}
