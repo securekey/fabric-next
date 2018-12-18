@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/transientstore"
+	"github.com/hyperledger/fabric/gossip/privdata/collpolicy"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
 	gossip2 "github.com/hyperledger/fabric/protos/gossip"
@@ -865,6 +866,7 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 		ownedRWsets:          ownedRWsets,
 		privateRWsetsInBlock: privateRWsetsInBlock,
 		coordinator:          c,
+		policyCache:          collpolicy.NewCache(c.ChainID, c.accessPolicyForCollection),
 	}
 
 	txList := newAsyncTxnIterator(bi.inspectTransaction, c.semaphore).forEachTxn(block.Data.Data)
@@ -905,6 +907,7 @@ type transactionInspector struct {
 	sources              map[rwSetKey][]*peer.Endorsement
 	ownedRWsets          map[rwSetKey][]byte
 	mutex                sync.RWMutex
+	policyCache          *collpolicy.Cache
 }
 
 func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement) {
@@ -913,7 +916,7 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 			if !containsWrites(chdr.TxId, ns.NameSpace, hashedCollection) {
 				continue
 			}
-			policy := bi.accessPolicyForCollection(chdr, ns.NameSpace, hashedCollection.CollectionName)
+			policy := bi.policyCache.Get(ns.NameSpace, hashedCollection.CollectionName)
 			if policy == nil {
 				logger.Errorf("Failed to retrieve collection config for channel [%s], chaincode [%s], collection name [%s] for txID [%s]. Skipping.",
 					chdr.ChannelId, ns.NameSpace, hashedCollection.CollectionName, chdr.TxId)
@@ -958,12 +961,11 @@ func (bi *transactionInspector) addKey(key rwSetKey, missingKeySource []*peer.En
 
 // accessPolicyForCollection retrieves a CollectionAccessPolicy for a given namespace, collection name
 // that corresponds to a given ChannelHeader
-func (c *coordinator) accessPolicyForCollection(chdr *common.ChannelHeader, namespace string, col string) privdata.CollectionAccessPolicy {
+func (c *coordinator) accessPolicyForCollection(channelID, namespace, col string) privdata.CollectionAccessPolicy {
 	cp := common.CollectionCriteria{
-		Channel:    chdr.ChannelId,
+		Channel:    channelID,
 		Namespace:  namespace,
 		Collection: col,
-		TxId:       chdr.TxId,
 	}
 	sp, err := c.CollectionStore.RetrieveCollectionAccessPolicy(cp)
 	if err != nil {
