@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "504873cc_82604d90",
+        "filename": "gossip/privdata/coordinator.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 903,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-12-18T16:45:14Z",
+      "side": 1,
+      "message": "Yes, it\u0027s recreated for every block.",
+      "parentUuid": "a10b2123_58196115",
+      "range": {
+        "startLine": 903,
+        "startChar": 5,
+        "endLine": 903,
+        "endChar": 25
+      },
+      "revId": "60ee8009ca454be55c6adb62c8d7d772d3bb97a4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "dfeb1ace_f94efea3",
         "filename": "gossip/privdata/coordinator.go",
         "patchSetId": 1
@@ -36,6 +60,30 @@
       "writtenOn": "2018-12-18T16:34:16Z",
       "side": 1,
       "message": "delete?",
+      "range": {
+        "startLine": 969,
+        "startChar": 2,
+        "endLine": 969,
+        "endChar": 27
+      },
+      "revId": "60ee8009ca454be55c6adb62c8d7d772d3bb97a4",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7b2c53b1_824eb669",
+        "filename": "gossip/privdata/coordinator.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 969,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2018-12-18T16:45:14Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "dfeb1ace_f94efea3",
       "range": {
         "startLine": 969,
         "startChar": 2,
