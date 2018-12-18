@@ -615,7 +615,11 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 			// Check duplicate transactions
 			txID = chdr.TxId
 			// GetTransactionByID will return:
+			// TODO: remove metric
+			stopWatchDupGetTxn := metrics.StopWatch(fmt.Sprintf("validator_%s_duplicate_check", metrics.FilterMetricName(v.ChainID)))
 			_, err := v.Support.Ledger().GetTransactionByID(txID)
+			stopWatchDupGetTxn()
+
 			// 1) err == nil => there is already a tx in the ledger with the supplied id
 			if err == nil {
 				logger.Debug("Duplicate transaction found, ", txID, ", skipping")
