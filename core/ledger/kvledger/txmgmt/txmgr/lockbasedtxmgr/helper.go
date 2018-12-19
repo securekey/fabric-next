@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/ledger/queryresult"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
@@ -211,7 +212,7 @@ func (h *queryHelper) getPrivateDataRangeScanIterator(namespace, collection, sta
 	}
 
 	if btl != 0 && btl < blocksToLiveInCache {
-		metrics.IncrementCounter("getnondurableprivatedatarangescaniterator_cache_request_hit")
+		//metrics.IncrementCounter("getnondurableprivatedatarangescaniterator_cache_request_hit")
 		logger.Debugf("GetNonDurablePrivateDataRangeScanIterator namespace %s collection %s startKey %s endKey %s", namespace, collection, startKey)
 		dbItr, err := h.txmgr.db.GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
 		if err != nil {
@@ -304,11 +305,11 @@ func (h *queryHelper) done() {
 	defer func() {
 		h.txmgr.commitRWLock.RUnlock()
 		if h.txmgr.StopWatchAccess != "" {
-			h.txmgr.StopWatch.Stop()
+			//h.txmgr.StopWatch.Stop()
 			h.txmgr.StopWatchAccess = ""
 		}
 		if h.txmgr.StopWatch1Access != "" {
-			h.txmgr.StopWatch1.Stop()
+			//h.txmgr.StopWatch1.Stop()
 			h.txmgr.StopWatch1Access = ""
 		}
 		h.doneInvoked = true

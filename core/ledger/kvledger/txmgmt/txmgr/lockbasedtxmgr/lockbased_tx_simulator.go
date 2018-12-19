@@ -29,7 +29,7 @@ func newLockBasedTxSimulator(txmgr *LockBasedTxMgr, txid string) (*lockBasedTxSi
 	rwsetBuilder := rwsetutil.NewRWSetBuilder()
 	helper := newQueryHelper(txmgr, rwsetBuilder)
 	logger.Debugf("constructing new tx simulator txid = [%s]", txid)
-	return &lockBasedTxSimulator{lockBasedQueryExecutor{helper, txid}, rwsetBuilder, false, false, false, false}, nil
+	return &lockBasedTxSimulator{lockBasedQueryExecutor{helper, txid, txmgr.btlPolicy}, rwsetBuilder, false, false, false, false}, nil
 }
 
 // SetState implements method in interface `ledger.TxSimulator`

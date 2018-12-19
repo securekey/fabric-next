@@ -8,18 +8,20 @@ package lockbasedtxmgr
 import (
 	commonledger "github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 )
 
 // LockBasedQueryExecutor is a query executor used in `LockBasedTxMgr`
 type lockBasedQueryExecutor struct {
 	helper *queryHelper
 	txid   string
+	btlPolicy pvtdatapolicy.BTLPolicy
 }
 
-func newQueryExecutor(txmgr *LockBasedTxMgr, txid string) *lockBasedQueryExecutor {
+func newQueryExecutor(txmgr *LockBasedTxMgr, txid string, btlPolicy pvtdatapolicy.BTLPolicy) *lockBasedQueryExecutor {
 	helper := newQueryHelper(txmgr, nil)
 	logger.Debugf("constructing new query executor txid = [%s]", txid)
-	return &lockBasedQueryExecutor{helper, txid}
+	return &lockBasedQueryExecutor{helper, txid, btlPolicy}
 }
 
 // GetState implements method in interface `ledger.QueryExecutor`
@@ -87,7 +89,7 @@ func (q *lockBasedQueryExecutor) GetPrivateDataMultipleKeys(namespace, collectio
 
 // GetPrivateDataRangeScanIterator implements method in interface `ledger.QueryExecutor`
 func (q *lockBasedQueryExecutor) GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (commonledger.ResultsIterator, error) {
-	return q.helper.getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey)
+	return q.helper.getPrivateDataRangeScanIterator(namespace, collection, startKey, endKey, q.btlPolicy)
 }
 
 // ExecuteQueryOnPrivateData implements method in interface `ledger.QueryExecutor`
