@@ -102,6 +102,10 @@ noverify = [
   name = "github.com/syndtr/goleveldb"
 
 [[constraint]]
+  name = "github.com/uber-go/tally"
+  version = "3.3.2"
+
+[[constraint]]
   branch = "master"
   name = "golang.org/x/crypto"
 
