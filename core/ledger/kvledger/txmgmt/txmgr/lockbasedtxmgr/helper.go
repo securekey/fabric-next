@@ -121,8 +121,8 @@ func (h *queryHelper) getPrivateData(ns, coll, key string) ([]byte, error) {
 	}
 	if !version.AreSame(hashVersion, ver) {
 		return nil, &txmgr.ErrPvtdataNotAvailable{Msg: fmt.Sprintf(
-			"Private data matching public hash version is not available. Public hash version = %#v, Private data version = %#v",
-			hashVersion, ver)}
+			"Private data matching public hash version is not available. Public hash version = %#v, Private data version = %#v key=%s namespace=%s coll=%s",
+			hashVersion, ver, key, ns, coll)}
 	}
 	if h.rwsetBuilder != nil {
 		h.rwsetBuilder.AddToHashedReadSet(ns, coll, key, ver)

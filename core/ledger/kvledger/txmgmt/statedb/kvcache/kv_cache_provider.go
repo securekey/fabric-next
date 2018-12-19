@@ -14,6 +14,7 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
@@ -202,30 +203,36 @@ func (p *KVCacheProvider) PrepareIndexUpdates(validatedTxOps []ValidatedTxOp, va
 			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
-
+	blocksToLiveInCache := ledgerconfig.GetKVCacheBlocksToLive()
 	for _, v := range validatedPvtData {
+		// Add pvt hash to index if it durable
 		namespace := DerivePvtDataNs(v.Namespace, v.Collection)
-		if v.IsDeleted {
-			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
-		} else {
-			indexUpdate := statekeyindex.IndexUpdate{
-				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
-				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+		if v.PolicyBTL == 0 || v.PolicyBTL < blocksToLiveInCache {
+			if v.IsDeleted {
+				indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+			} else {
+				indexUpdate := statekeyindex.IndexUpdate{
+					Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+					Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+				}
+				indexUpdates = append(indexUpdates, &indexUpdate)
 			}
-			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
 
 	for _, v := range validatedPvtHashData {
-		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
-		if v.IsDeleted {
-			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
-		} else {
-			indexUpdate := statekeyindex.IndexUpdate{
-				Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
-				Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+		// Add pvt hash to index if it durable
+		if v.PolicyBTL == 0 || v.PolicyBTL < blocksToLiveInCache {
+			namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
+			if v.IsDeleted {
+				indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
+			} else {
+				indexUpdate := statekeyindex.IndexUpdate{
+					Key:   statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace},
+					Value: statekeyindex.Metadata{BlockNumber: v.BlockNum, TxNumber: uint64(v.IndexInBlock)},
+				}
+				indexUpdates = append(indexUpdates, &indexUpdate)
 			}
-			indexUpdates = append(indexUpdates, &indexUpdate)
 		}
 	}
 
