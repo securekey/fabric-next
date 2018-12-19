@@ -2,6 +2,29 @@
   "comments": [
     {
       "key": {
+        "uuid": "376402aa_1afa8f9a",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 180,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-19T15:24:03Z",
+      "side": 1,
+      "message": "I think this condition should be fully removed (original code before skipping empty pvt data commits) and make Prepare/Commit skip committing for empty (which I believe is already done, but need to double check lastCommittedBlock #)",
+      "range": {
+        "startLine": 180,
+        "startChar": 2,
+        "endLine": 180,
+        "endChar": 20
+      },
+      "revId": "7632c2456097aa4c1f1faa589cda638b7d3c2d17",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "a0aafb43_85211c39",
         "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
         "patchSetId": 2

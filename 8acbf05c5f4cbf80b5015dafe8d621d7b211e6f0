@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "46423e15_80fda06b",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 180,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-19T15:24:03Z",
+      "side": 0,
+      "message": "this condition was introduced to avoid writing empty pvt data to the store.. only for CouchDB..",
+      "range": {
+        "startLine": 180,
+        "startChar": 2,
+        "endLine": 180,
+        "endChar": 80
+      },
+      "revId": "8acbf05c5f4cbf80b5015dafe8d621d7b211e6f0",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
