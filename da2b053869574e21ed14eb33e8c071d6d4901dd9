@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "da6349d8_d596a761",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 245,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2018-12-19T15:44:31Z",
+      "side": 1,
+      "message": "sequenced",
+      "range": {
+        "startLine": 245,
+        "startChar": 39,
+        "endLine": 245,
+        "endChar": 47
+      },
+      "revId": "da2b053869574e21ed14eb33e8c071d6d4901dd9",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
