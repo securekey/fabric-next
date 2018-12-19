@@ -197,7 +197,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
 								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(block.Header.Number, btl),
-								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl)})
+								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl), PolicyBTL: btl})
 					}
 				}
 			}
@@ -289,7 +289,8 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 							kvcache.ValidatedPvtData{ValidatedTxOp: kvcache.ValidatedTxOp{ValidatedTx: kvcache.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
 								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(blockNumber, btl),
-								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(blockNumber, btl)})
+								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(blockNumber, btl),
+								PolicyBTL:           btl})
 					}
 				}
 			}
