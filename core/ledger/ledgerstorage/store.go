@@ -177,19 +177,17 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 
 	writtenToPvtStore := false
 	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
-		if blockNum != 0 {
-			// when re-processing blocks (rejoin the channel or re-fetching last few block),
-			// skip the pvt data commit to the pvtdata blockstore
-			logger.Debugf("Writing block [%d] to pvt block store", blockNum)
-			var pvtdata []*ledger.TxPvtData
-			for _, v := range blockAndPvtdata.BlockPvtData {
-				pvtdata = append(pvtdata, v)
-			}
-			if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
-				return err
-			}
-			writtenToPvtStore = true
+		// when re-processing blocks (rejoin the channel or re-fetching last few block),
+		// skip the pvt data commit to the pvtdata blockstore
+		logger.Debugf("Writing block [%d] to pvt block store", blockNum)
+		var pvtdata []*ledger.TxPvtData
+		for _, v := range blockAndPvtdata.BlockPvtData {
+			pvtdata = append(pvtdata, v)
 		}
+		if err := s.pvtdataStore.Prepare(blockAndPvtdata.Block.Header.Number, pvtdata); err != nil {
+			return err
+		}
+		writtenToPvtStore = true
 	} else {
 		metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
