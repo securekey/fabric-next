@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "a0aafb43_85211c39",
+        "filename": "core/ledger/pvtdatastorage/cachedpvtdatastore/cache_pvtdatastore.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 219,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-19T15:00:38Z",
+      "side": 1,
+      "message": "should be called blockHeigt",
+      "revId": "7632c2456097aa4c1f1faa589cda638b7d3c2d17",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "0b589a22_806c7003",
         "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
         "patchSetId": 2
@@ -49,6 +66,23 @@
     },
     {
       "key": {
+        "uuid": "c9d6a58f_ee38ffcd",
+        "filename": "core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 112,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-19T15:00:38Z",
+      "side": 1,
+      "message": "we should review using last committed block",
+      "revId": "7632c2456097aa4c1f1faa589cda638b7d3c2d17",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "9fd2ef2e_380a6401",
         "filename": "core/ledger/pvtdatastorage/mempvtdatacache/mem_blockcache.go",
         "patchSetId": 2
@@ -69,6 +103,23 @@
       "revId": "7632c2456097aa4c1f1faa589cda638b7d3c2d17",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ff3380d6_07eca0fc",
+        "filename": "core/ledger/pvtdatastorage/store_impl_test.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 115,
+      "author": {
+        "id": 1000038
+      },
+      "writtenOn": "2018-12-19T15:00:38Z",
+      "side": 1,
+      "message": "any new tests for concurrent writes?",
+      "revId": "7632c2456097aa4c1f1faa589cda638b7d3c2d17",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
