@@ -241,6 +241,9 @@ func (s *store) HasPendingBatch() (bool, error) {
 	return len(s.pendingPvtDocs) != 0, nil
 }
 
+// Warning
+// LastCommittedBlockHeight return non sequence block height
+// if concurrentBlockWrites bigger than 1
 func (s *store) LastCommittedBlockHeight() (uint64, error) {
 	if s.isEmpty {
 		return 0, nil
