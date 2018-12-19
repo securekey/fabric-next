@@ -197,7 +197,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
 								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(block.Header.Number, btl),
-								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl)})
+								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl), PolicyBTL: btl})
 					}
 				}
 			}
