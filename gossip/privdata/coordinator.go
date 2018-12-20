@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -38,7 +37,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/uber-go/tally"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -151,7 +149,6 @@ type coordinator struct {
 	selfSignedData common.SignedData
 	Support
 	transientBlockRetention uint64
-	semaphore               *semaphore.Weighted
 }
 
 // NewCoordinator creates a new instance of coordinator
@@ -161,18 +158,7 @@ func NewCoordinator(support Support, selfSignedData common.SignedData) Coordinat
 		logger.Warning("Configuration key", transientBlockRetentionConfigKey, "isn't set, defaulting to", transientBlockRetentionDefault)
 		transientBlockRetention = transientBlockRetentionDefault
 	}
-
-	nWorkers := viper.GetInt("peer.validatorPoolSize")
-	if nWorkers <= 0 {
-		nWorkers = runtime.NumCPU()
-	}
-
-	return &coordinator{
-		Support:                 support,
-		selfSignedData:          selfSignedData,
-		transientBlockRetention: transientBlockRetention,
-		semaphore:               semaphore.NewWeighted(int64(nWorkers)),
-	}
+	return &coordinator{Support: support, selfSignedData: selfSignedData, transientBlockRetention: transientBlockRetention}
 }
 
 // StorePvtData used to persist private date into transient store
@@ -271,7 +257,7 @@ func (c *coordinator) validateBlockAndPvtData(block *common.Block, privateDataSe
 		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_duration").Start()
 	}
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
-		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo.missingKeys)
+		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
 		// If succeeded to fetch everything, no need to sleep before
 		// retry
@@ -432,61 +418,26 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 }
 
 func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte, sources map[rwSetKey][]*peer.Endorsement) {
-	var mutex sync.Mutex
-	var wg sync.WaitGroup
-
-	ctx := context.Background()
-	filters := missing.FiltersByTxIDs()
-	wg.Add(len(filters))
-
-	go func() {
-		for txAndSeq, filter := range filters {
-			if err := c.semaphore.Acquire(ctx, 1); err != nil {
-				// This should never happen with background context
-				panic(fmt.Sprintf("Unable to acquire semaphore: %s", err))
+	// Check transient store
+	for txAndSeq, filter := range missing.FiltersByTxIDs() {
+		var endorsers []*peer.Endorsement
+		for key, value := range sources {
+			if key.txID == txAndSeq.txID && key.seqInBlock == txAndSeq.seqInBlock {
+				endorsers = value
+				break
 			}
-
-			txs := txAndSeq
-			fltr := filter
-
-			go func() {
-				rwSets := c.fetchFromTransientStore(txs, fltr, getEndorsements(sources, txAndSeq))
-				if len(rwSets) > 0 {
-					mutex.Lock()
-					for key, value := range rwSets {
-						ownedRWsets[key] = value
-					}
-					mutex.Unlock()
-				}
-				c.semaphore.Release(1)
-				wg.Done()
-			}()
 		}
-	}()
-	wg.Wait()
-}
-
-func getEndorsements(sources map[rwSetKey][]*peer.Endorsement, txs txAndSeqInBlock) []*peer.Endorsement {
-	var endorsers []*peer.Endorsement
-	for key, value := range sources {
-		if key.txID == txs.txID && key.seqInBlock == txs.seqInBlock {
-			endorsers = value
-			break
-		}
+		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets, endorsers)
 	}
-	return endorsers
 }
 
-func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) map[rwSetKey][]byte {
+func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte, endorsers []*peer.Endorsement) {
 	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter, endorsers)
 	if err != nil {
 		logger.Warning("Failed obtaining iterator from transient store:", err)
-		return nil
+		return
 	}
 	defer iterator.Close()
-
-	ownedRWsets := make(map[rwSetKey][]byte)
-
 	for {
 		res, err := iterator.NextWithConfig()
 		if err != nil {
@@ -521,7 +472,6 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			} // iterating over all collections
 		} // iterating over all namespaces
 	} // iterating over the TxPvtRWSet results
-	return ownedRWsets
 }
 
 // computeOwnedRWsets identifies which block private data we already have
@@ -698,131 +648,67 @@ func (k *rwSetKey) toTxPvtReadWriteSet(rws []byte) *rwset.TxPvtReadWriteSet {
 }
 
 type txns []string
-
-type txnIterator struct {
-	consumer  blockConsumer
-	evaluate  func(data [][]byte) txns
-	semaphore *semaphore.Weighted
-}
-
-func newTxnIterator(consumer blockConsumer) *txnIterator {
-	o := &txnIterator{consumer: consumer}
-	o.evaluate = o.doSync
-	return o
-}
-
-func newAsyncTxnIterator(consumer blockConsumer, semaphore *semaphore.Weighted) *txnIterator {
-	o := &txnIterator{consumer: consumer, semaphore: semaphore}
-	o.evaluate = o.doAsync
-	return o
-}
-
+type blockData [][]byte
 type blockConsumer func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement)
 
-func (o *txnIterator) forEachTxn(data [][]byte) txns {
-	return o.evaluate(data)
-}
-
-func (o *txnIterator) doSync(data [][]byte) txns {
-	var txIDs txns
+func (data blockData) forEachTxn(consumer blockConsumer) txns {
+	var txList []string
 	for seqInBlock, envBytes := range data {
-		txID := o.evaluateTxn(uint64(seqInBlock), envBytes)
-		if txID != "" {
-			txIDs = append(txIDs, txID)
+		env, err := utils.GetEnvelopeFromBlock(envBytes)
+		if err != nil {
+			logger.Warning("Invalid envelope:", err)
+			continue
 		}
-	}
-	return txIDs
-}
 
-func (o *txnIterator) doAsync(data [][]byte) txns {
-	var txIDs txns
-	var mutex sync.Mutex
-	var wg sync.WaitGroup
-
-	wg.Add(len(data))
-	ctx := context.Background()
-
-	go func() {
-		for seqInBlock, envBytes := range data {
-			if err := o.semaphore.Acquire(ctx, 1); err != nil {
-				// This should never happen with background context
-				panic(fmt.Sprintf("Unable to acquire semaphore: %s", err))
-			}
-
-			seq := seqInBlock
-			bytes := envBytes
-
-			go func() {
-				txID := o.evaluateTxn(uint64(seq), bytes)
-				if txID != "" {
-					mutex.Lock()
-					txIDs = append(txIDs, txID)
-					mutex.Unlock()
-				}
-				o.semaphore.Release(1)
-				wg.Done()
-			}()
+		payload, err := utils.GetPayload(env)
+		if err != nil {
+			logger.Warning("Invalid payload:", err)
+			continue
 		}
-	}()
-	wg.Wait()
 
-	return txIDs
-}
+		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+		if err != nil {
+			logger.Warning("Invalid channel header:", err)
+			continue
+		}
 
-func (o *txnIterator) evaluateTxn(seqInBlock uint64, envBytes []byte) string {
-	env, err := utils.GetEnvelopeFromBlock(envBytes)
-	if err != nil {
-		logger.Warning("Invalid envelope:", err)
-		return ""
+		if chdr.Type != int32(common.HeaderType_ENDORSER_TRANSACTION) {
+			continue
+		}
+
+		txList = append(txList, chdr.TxId)
+
+		respPayload, err := utils.GetActionFromEnvelope(envBytes)
+		if err != nil {
+			logger.Warning("Failed obtaining action from envelope", err)
+			continue
+		}
+
+		tx, err := utils.GetTransaction(payload.Data)
+		if err != nil {
+			logger.Warning("Invalid transaction in payload data for tx ", chdr.TxId, ":", err)
+			continue
+		}
+
+		ccActionPayload, err := utils.GetChaincodeActionPayload(tx.Actions[0].Payload)
+		if err != nil {
+			logger.Warning("Invalid chaincode action in payload for tx", chdr.TxId, ":", err)
+			continue
+		}
+
+		if ccActionPayload.Action == nil {
+			logger.Warning("Action in ChaincodeActionPayload for", chdr.TxId, "is nil")
+			continue
+		}
+
+		txRWSet := &rwsetutil.TxRwSet{}
+		if err = txRWSet.FromProtoBytes(respPayload.Results); err != nil {
+			logger.Warning("Failed obtaining TxRwSet from ChaincodeAction's results", err)
+			continue
+		}
+		consumer(uint64(seqInBlock), chdr, txRWSet, ccActionPayload.Action.Endorsements)
 	}
-
-	payload, err := utils.GetPayload(env)
-	if err != nil {
-		logger.Warning("Invalid payload:", err)
-		return ""
-	}
-
-	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
-	if err != nil {
-		logger.Warning("Invalid channel header:", err)
-		return ""
-	}
-
-	if chdr.Type != int32(common.HeaderType_ENDORSER_TRANSACTION) {
-		return ""
-	}
-
-	respPayload, err := utils.GetActionFromEnvelope(envBytes)
-	if err != nil {
-		logger.Warning("Failed obtaining action from envelope", err)
-		return chdr.TxId
-	}
-
-	tx, err := utils.GetTransaction(payload.Data)
-	if err != nil {
-		logger.Warning("Invalid transaction in payload data for tx ", chdr.TxId, ":", err)
-		return chdr.TxId
-	}
-
-	ccActionPayload, err := utils.GetChaincodeActionPayload(tx.Actions[0].Payload)
-	if err != nil {
-		logger.Warning("Invalid chaincode action in payload for tx", chdr.TxId, ":", err)
-		return chdr.TxId
-	}
-
-	if ccActionPayload.Action == nil {
-		logger.Warning("Action in ChaincodeActionPayload for", chdr.TxId, "is nil")
-		return chdr.TxId
-	}
-
-	txRWSet := &rwsetutil.TxRwSet{}
-	if err = txRWSet.FromProtoBytes(respPayload.Results); err != nil {
-		logger.Warning("Failed obtaining TxRwSet from ChaincodeAction's results", err)
-		return chdr.TxId
-	}
-
-	o.consumer(uint64(seqInBlock), chdr, txRWSet, ccActionPayload.Action.Endorsements)
-	return chdr.TxId
+	return txList
 }
 
 func endorsersFromOrgs(ns string, col string, endorsers []*peer.Endorsement, orgs []string) []*peer.Endorsement {
@@ -859,7 +745,7 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 	sources := make(map[rwSetKey][]*peer.Endorsement)
 	privateRWsetsInBlock := make(map[rwSetKey]struct{})
 	missing := make(rwSetKeysByTxIDs)
-
+	data := blockData(block.Data.Data)
 	bi := &transactionInspector{
 		sources:              sources,
 		missingKeys:          missing,
@@ -868,8 +754,7 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 		coordinator:          c,
 		policyCache:          collpolicy.NewCache(c.ChainID, c.accessPolicyForCollection),
 	}
-
-	txList := newAsyncTxnIterator(bi.inspectTransaction, c.semaphore).forEachTxn(block.Data.Data)
+	txList := data.forEachTxn(bi.inspectTransaction)
 
 	privateInfo := &privateDataInfo{
 		sources:            sources,
@@ -935,28 +820,17 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 				namespace:  ns.NameSpace,
 				collection: hashedCollection.CollectionName,
 			}
-			var missingKeySources []*peer.Endorsement
+			bi.privateRWsetsInBlock[key] = struct{}{}
 			if _, exists := bi.ownedRWsets[key]; !exists {
-				missingKeySources = endorsersFromOrgs(ns.NameSpace, hashedCollection.CollectionName, endorsers, policy.MemberOrgs())
+				txAndSeq := txAndSeqInBlock{
+					txID:       chdr.TxId,
+					seqInBlock: seqInBlock,
+				}
+				bi.missingKeys[txAndSeq] = append(bi.missingKeys[txAndSeq], key)
+				bi.sources[key] = endorsersFromOrgs(ns.NameSpace, hashedCollection.CollectionName, endorsers, policy.MemberOrgs())
 			}
-			bi.addKey(key, missingKeySources)
 		} // for all hashed RW sets
 	} // for all RW sets
-}
-
-func (bi *transactionInspector) addKey(key rwSetKey, missingKeySource []*peer.Endorsement) {
-	bi.mutex.Lock()
-	defer bi.mutex.Unlock()
-
-	bi.privateRWsetsInBlock[key] = struct{}{}
-	if missingKeySource != nil {
-		bi.sources[key] = missingKeySource
-		txAndSeq := txAndSeqInBlock{
-			txID:       key.txID,
-			seqInBlock: key.seqInBlock,
-		}
-		bi.missingKeys[txAndSeq] = append(bi.missingKeys[txAndSeq], key)
-	}
 }
 
 // accessPolicyForCollection retrieves a CollectionAccessPolicy for a given namespace, collection name
@@ -1040,7 +914,8 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 	}
 
 	seqs2Namespaces := aggregatedCollections(make(map[seqAndDataModel]map[string][]*rwset.CollectionPvtReadWriteSet))
-	newTxnIterator(func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
+	data := blockData(blockAndPvtData.Block.Data.Data)
+	data.forEachTxn(func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
 		item, exists := blockAndPvtData.BlockPvtData[seqInBlock]
 		if !exists {
 			return
@@ -1071,7 +946,7 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 				seqs2Namespaces.addCollection(seqInBlock, item.WriteSet.DataModel, ns.Namespace, col)
 			}
 		}
-	}).forEachTxn(blockAndPvtData.Block.Data.Data)
+	})
 
 	return blockAndPvtData.Block, seqs2Namespaces.asPrivateData(), nil
 }
