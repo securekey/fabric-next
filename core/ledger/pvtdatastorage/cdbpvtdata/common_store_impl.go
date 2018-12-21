@@ -121,31 +121,8 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	if !s.isEmpty || len(s.pendingPvtDocs) != 0 {
 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
 	}
-
 	s.isEmpty = false
 	s.lastCommittedBlock = blockNum
-
-	pvtstoreLastCommittedBlock, notEmpty, err := lookupLastBlock(s.db)
-	if err != nil {
-		return err
-	}
-	//TODO add logic to support non-contiguous pvt blocks removal
-	if notEmpty && pvtstoreLastCommittedBlock > blockNum {
-		// delete all documents above blockNum
-		for i := blockNum + 1; i <= pvtstoreLastCommittedBlock+numMetaDocs+1; i++ {
-			doc, rev, e := s.db.ReadDoc(blockNumberToKey(i))
-			if e != nil {
-				return e
-			}
-			if doc != nil {
-				e = s.db.DeleteDoc(blockNumberToKey(i), rev)
-				if e != nil {
-					return e
-				}
-			}
-		}
-	}
-
 	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
 	return nil
 }
@@ -325,30 +302,5 @@ func (s *store) Shutdown() {
 }
 
 func (s *store) getLastCommittedBlock() (uint64, error) {
-	if ledgerconfig.IsCommitter() {
-		return s.lastCommittedBlock, nil
-	}
-	logger.Debugf("I am not a committer so looking up last committed block from meta data for [%s]", s.db.DBName)
-	return s.getLastCommittedBlockFromPvtStore()
-}
-
-func (s *store) getLastCommittedBlockFromPvtStore() (uint64, error) {
-	lastCommittedBlock, ok, err := lookupLastBlock(s.db)
-	if err != nil {
-		logger.Errorf("Error looking up last committed block for [%s]: %s", s.db.DBName, err)
-		return 0, err
-	}
-	if !ok {
-		logger.Debugf("data for [%s] is empty", s.db.DBName)
-		return 0, nil
-	}
-	// since this function is called for endorsers only, this error should be just a warning on the endorser side
-	// this lastCommittedBlock check is applicable only for the committer as it updates it when writing to the DB
-	if ledgerconfig.IsCommitter() && lastCommittedBlock > s.lastCommittedBlock {
-		logger.Debugf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
-		// no need to worry about this error
-		return 0, errors.Errorf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
-	}
-	logger.Debugf("Returning lastCommittedBlock %d for [%s]", lastCommittedBlock, s.db.DBName)
-	return lastCommittedBlock + 1, nil
+	return s.lastCommittedBlock, nil
 }

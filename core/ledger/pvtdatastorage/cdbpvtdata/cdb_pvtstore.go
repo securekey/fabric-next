@@ -35,28 +35,9 @@ func newStore(db *couchdb.CouchDatabase) (*store, error) {
 		purgeInterval:  ledgerconfig.GetPvtdataStorePurgeInterval(),
 		pendingPvtDocs: make(map[uint64][]*couchdb.CouchDoc),
 	}
-
-	if ledgerconfig.IsCommitter() {
-		err := s.initState()
-		if err != nil {
-			return nil, err
-		}
-	}
+	s.isEmpty = true
 
 	return &s, nil
-}
-
-func (s *store) initState() error {
-	lastCommittedBlock, ok, err := lookupLastBlock(s.db)
-	if err != nil {
-		return err
-	}
-
-	s.isEmpty = !ok
-	if ok {
-		s.lastCommittedBlock = lastCommittedBlock
-	}
-	return nil
 }
 
 func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {

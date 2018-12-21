@@ -170,43 +170,6 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry) (*expiryInfo, error)
 	return &ei, nil
 }
 
-// lookupLastBlock will lookup the last committed block in the pvt store and return it
-// this function query pvt storage to get the last committed block, it may be different than block storage
-func lookupLastBlock(db *couchdb.CouchDatabase) (uint64, bool, error) {
-	info, err := db.GetDatabaseInfo()
-	if err != nil {
-		return 0, false, err
-	}
-
-	var lastBlockNum uint64
-	var found bool
-
-	mc := min(info.DocCount, numMetaDocs+1)
-	for i := 1; i <= mc; i++ {
-		doc, _, e := db.ReadDoc(blockNumberToKey(uint64(info.DocCount - i)))
-		if e != nil {
-			return 0, false, err
-		}
-
-		if doc != nil {
-			lastBlockNum = uint64(info.DocCount - i)
-			var lastPvtDataResp blockPvtDataResponse
-			er := json.Unmarshal(doc.JSONValue, &lastPvtDataResp)
-			if er != nil {
-				return 0, false, errors.Wrapf(er, "block from couchDB document could not be unmarshaled")
-			}
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return 0, false, nil
-	}
-
-	return lastBlockNum, true, nil
-}
-
 type blockPvtDataResponse struct {
 	ID            string            `json:"_id"`
 	Rev           string            `json:"_rev"`
