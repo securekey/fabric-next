@@ -109,16 +109,22 @@ func (h *queryHelper) getPrivateData(ns, coll, key string) ([]byte, error) {
 	var hashVersion *version.Height
 	var versionedValue *statedb.VersionedValue
 
+	keyHash := util.ComputeStringHash(key)
+	if hashVersion, err = h.txmgr.db.GetKeyHashVersion(ns, coll, keyHash); err != nil {
+		return nil, err
+	}
+
+	if hashVersion == nil {
+		// If the hash isn't found then the private data does not exist. No need to check the private store.
+		return nil, nil
+	}
+
 	if versionedValue, err = h.txmgr.db.GetPrivateData(ns, coll, key); err != nil {
 		return nil, err
 	}
 
 	val, ver := decomposeVersionedValue(versionedValue)
 
-	keyHash := util.ComputeStringHash(key)
-	if hashVersion, err = h.txmgr.db.GetKeyHashVersion(ns, coll, keyHash); err != nil {
-		return nil, err
-	}
 	if !version.AreSame(hashVersion, ver) {
 		return nil, &txmgr.ErrPvtdataNotAvailable{Msg: fmt.Sprintf(
 			"Private data matching public hash version is not available. Public hash version = %#v, Private data version = %#v",
