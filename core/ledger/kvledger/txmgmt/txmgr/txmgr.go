@@ -35,8 +35,8 @@ type TxMgr interface {
 	GetLastSavepoint() (*version.Height, error)
 	ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error)
 	CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error
-	Commit() error
-	Rollback()
+	Commit(blockNum uint64) error
+	Rollback(blockNum uint64)
 	Shutdown()
 }
 

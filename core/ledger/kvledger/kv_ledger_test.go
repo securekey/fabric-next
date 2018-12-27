@@ -282,7 +282,7 @@ func TestKVLedgerDBRecovery(t *testing.T) {
 	assert.NoError(t, ledger.(*kvLedger).txtmgmt.ValidateAndPrepare(blockAndPvtdata3, true))
 	assert.NoError(t, ledger.(*kvLedger).blockStore.CommitWithPvtData(blockAndPvtdata3))
 	// committing the transaction to state DB
-	assert.NoError(t, ledger.(*kvLedger).txtmgmt.Commit())
+	assert.NoError(t, ledger.(*kvLedger).txtmgmt.Commit(blockAndPvtdata3.Block.Header.Number))
 
 	// assume that peer fails here after committing the transaction to state DB but before history DB
 	checkBCSummaryForTest(t, ledger,
