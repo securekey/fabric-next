@@ -441,9 +441,7 @@ func (txmgr *LockBasedTxMgr) waitForBlock(ctx context.Context, blockNum uint64) 
 	var lastBlockNumber uint64
 BlockLoop:
 	for {
-		txmgr.commitRWLock.RLock()
 		lastBlockNumber = txmgr.lastCommittedBlockNum
-		txmgr.commitRWLock.RUnlock()
 		if lastBlockNumber == 0 || lastBlockNumber >= blockNum {
 			break
 		}
