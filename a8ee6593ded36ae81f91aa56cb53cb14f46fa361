@@ -16,6 +16,24 @@
       "revId": "a8ee6593ded36ae81f91aa56cb53cb14f46fa361",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "1958a590_e331f03d",
+        "filename": "core/ledger/ledgermgmt/ledger_mgmt.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000117
+      },
+      "writtenOn": "2019-01-02T20:23:07Z",
+      "side": 1,
+      "message": "ledger_mgmt_test.go file is using this variable.",
+      "parentUuid": "77d54a69_7eef8c40",
+      "revId": "a8ee6593ded36ae81f91aa56cb53cb14f46fa361",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
     }
   ]
 }
