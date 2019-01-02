@@ -34,7 +34,7 @@ func TestKVCache(t *testing.T) {
 			IndexInBlock: theIndex,
 		}
 
-		kvCache.Put(theValidatedTx)
+		kvCache.Put(theValidatedTx, false)
 		validatedTx, ok := kvCache.Get(theKey)
 		testutil.AssertEquals(t, ok, true)
 		testutil.AssertEquals(t, theValidatedTx.Key, validatedTx.Key)
@@ -63,7 +63,7 @@ func TestKVCache(t *testing.T) {
 			IndexInBlock: theIndex,
 		}
 
-		kvCache2.Put(theValidatedTx)
+		kvCache2.Put(theValidatedTx, false)
 		validatedTx, ok := kvCache2.Get(theKey)
 		testutil.AssertEquals(t, ok, true)
 		testutil.AssertEquals(t, theValidatedTx.Key, validatedTx.Key)
@@ -113,7 +113,7 @@ func TestKVCachePrivate(t *testing.T) {
 
 		pvtData := &ValidatedPvtData{Level1ExpiringBlock: uint64(i), Level2ExpiringBlock: 1, ValidatedTxOp: ValidatedTxOp{ChId: "MyCh", Namespace: namespace, ValidatedTx: theValidatedTx}, Collection: "mycoll"}
 
-		kvCache.PutPrivate(pvtData)
+		kvCache.PutPrivate(pvtData, false)
 		validatedTx, ok := kvCache.Get(theKey)
 		testutil.AssertEquals(t, ok, true)
 		testutil.AssertEquals(t, theValidatedTx.Key, validatedTx.Key)
