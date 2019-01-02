@@ -37,6 +37,9 @@ var logger = flogging.MustGetLogger("ledgermgmt")
 // ErrLedgerMgmtNotInitialized is thrown when ledger mgmt is used before initializing this
 var ErrLedgerMgmtNotInitialized = errors.New("ledger mgmt should be initialized before using")
 
+// ErrLedgerAlreadyOpened is thrown by a CreateLedger call if a ledger with the given id is already opened
+var ErrLedgerAlreadyOpened = errors.New("Ledger already opened")
+
 var openedLedgers map[string]ledger.PeerLedger
 var ledgerProvider ledger.PeerLedgerProvider
 var lock sync.Mutex
