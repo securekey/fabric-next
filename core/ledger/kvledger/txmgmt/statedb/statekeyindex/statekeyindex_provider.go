@@ -56,7 +56,7 @@ func NewProvider() *LevelStateKeyIndexProvider {
 		lock.Unlock()
 		return instance
 	}
-	dbPath := ledgerconfig.GetStateLevelDBPath()
+	dbPath := ledgerconfig.GetStateKeyLevelDBPath()
 	logger.Debugf("constructing LevelStateKeyIndexProvider dbPath=%s", dbPath)
 	instance = &LevelStateKeyIndexProvider{leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})}
 	lock.Unlock()

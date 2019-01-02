@@ -7,11 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package ledgerconfig
 
 import (
-	"github.com/hyperledger/fabric/common/flogging"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hyperledger/fabric/common/flogging"
 
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
@@ -32,6 +33,7 @@ const confPeerFileSystemPath = "peer.fileSystemPath"
 const confLedgersData = "ledgersData"
 const confLedgerProvider = "ledgerProvider"
 const confStateleveldb = "stateLeveldb"
+const confStateKeyleveldb = "stateKeyLeveldb"
 const confHistoryLeveldb = "historyLeveldb"
 const confBookkeeper = "bookkeeper"
 const confConfigHistory = "configHistory"
@@ -133,6 +135,11 @@ func GetLedgerProviderPath() string {
 // GetStateLevelDBPath returns the filesystem path that is used to maintain the state level db
 func GetStateLevelDBPath() string {
 	return filepath.Join(GetRootPath(), confStateleveldb)
+}
+
+// GetStateKeyLevelDBPath returns the filesystem path that is used to maintain the state key level db
+func GetStateKeyLevelDBPath() string {
+	return filepath.Join(GetRootPath(), confStateKeyleveldb)
 }
 
 // GetHistoryLevelDBPath returns the filesystem path that is used to maintain the history level db

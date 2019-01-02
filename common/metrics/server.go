@@ -13,8 +13,6 @@ import (
 
 	"sync"
 
-	"strings"
-
 	"runtime"
 
 	"regexp"
@@ -37,15 +35,6 @@ const (
 	defaultStatsdReporterFlushInterval = 2 * time.Second
 	defaultStatsdReporterFlushBytes    = 1432
 )
-
-const (
-	peerConfigFileName = "core"
-	peerConfigPath     = "/etc/hyperledger/fabric"
-	cmdRootPrefix      = "core"
-)
-
-var peerConfig *viper.Viper
-var peerConfigPathOverride string
 
 // RootScope tally.NoopScope is a scope that does nothing
 var RootScope = tally.NoopScope
@@ -85,20 +74,15 @@ var reg *regexp.Regexp
 // Initialize ...
 func Initialize() {
 
-	// load peer config
-	if err := initPeerConfig(); err != nil {
-		panic(fmt.Sprintf("error initPeerConfig %v", err))
-	}
-
-	if peerConfig.GetBool("peer.profile.enabled") {
+	if viper.GetBool("peer.profile.enabled") {
 		runtime.SetMutexProfileFraction(5)
 	}
-	if peerConfig.GetBool("metrics.enabled") {
-		debugOn = peerConfig.GetBool("metrics.debug.enabled")
+	if viper.GetBool("metrics.enabled") {
+		debugOn = viper.GetBool("metrics.debug.enabled")
 	}
 
 	// start metric server
-	opts := NewOpts(peerConfig)
+	opts := NewOpts()
 	err := Start(opts)
 	if err != nil {
 		logger.Errorf("Failed to start metrics collection: %s", err)
@@ -113,37 +97,19 @@ func FilterMetricName(name string) string {
 	return reg.ReplaceAllString(name, "_")
 }
 
-func initPeerConfig() error {
-	peerConfig = viper.New()
-	peerConfig.AddConfigPath(peerConfigPath)
-	if peerConfigPathOverride != "" {
-		peerConfig.AddConfigPath(peerConfigPathOverride)
-	}
-	peerConfig.SetConfigName(peerConfigFileName)
-	peerConfig.SetEnvPrefix(cmdRootPrefix)
-	peerConfig.AutomaticEnv()
-	peerConfig.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	err := peerConfig.ReadInConfig()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // NewOpts create metrics options based config file.
 // TODO: Currently this is only for peer node which uses global viper.
 // As for orderer, which uses its local viper, we are unable to get
 // metrics options with the function NewOpts()
-func NewOpts(peerConfig *viper.Viper) Opts {
+func NewOpts() Opts {
 	opts := Opts{}
-	opts.Enabled = peerConfig.GetBool("metrics.enabled")
-	if report := peerConfig.GetString("metrics.reporter"); report != "" {
+	opts.Enabled = viper.GetBool("metrics.enabled")
+	if report := viper.GetString("metrics.reporter"); report != "" {
 		opts.Reporter = report
 	} else {
 		opts.Reporter = defaultReporterType
 	}
-	if interval := peerConfig.GetDuration("metrics.interval"); interval > 0 {
+	if interval := viper.GetDuration("metrics.interval"); interval > 0 {
 		opts.Interval = interval
 	} else {
 		opts.Interval = defaultInterval
@@ -151,17 +117,17 @@ func NewOpts(peerConfig *viper.Viper) Opts {
 
 	if opts.Reporter == statsdReporterType {
 		statsdOpts := StatsdReporterOpts{}
-		statsdOpts.Address = peerConfig.GetString("metrics.statsdReporter.address")
-		statsdOpts.Prefix = peerConfig.GetString("metrics.statsdReporter.prefix")
-		if statsdOpts.Prefix == "" && !peerConfig.IsSet("peer.id") {
-			statsdOpts.Prefix = peerConfig.GetString("peer.id")
+		statsdOpts.Address = viper.GetString("metrics.statsdReporter.address")
+		statsdOpts.Prefix = viper.GetString("metrics.statsdReporter.prefix")
+		if statsdOpts.Prefix == "" && !viper.IsSet("peer.id") {
+			statsdOpts.Prefix = viper.GetString("peer.id")
 		}
-		if flushInterval := peerConfig.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
+		if flushInterval := viper.GetDuration("metrics.statsdReporter.flushInterval"); flushInterval > 0 {
 			statsdOpts.FlushInterval = flushInterval
 		} else {
 			statsdOpts.FlushInterval = defaultStatsdReporterFlushInterval
 		}
-		if flushBytes := peerConfig.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
+		if flushBytes := viper.GetInt("metrics.statsdReporter.flushBytes"); flushBytes > 0 {
 			statsdOpts.FlushBytes = flushBytes
 		} else {
 			statsdOpts.FlushBytes = defaultStatsdReporterFlushBytes
@@ -171,7 +137,7 @@ func NewOpts(peerConfig *viper.Viper) Opts {
 
 	if opts.Reporter == promReporterType {
 		promOpts := PromReporterOpts{}
-		promOpts.ListenAddress = peerConfig.GetString("metrics.fabric.PromReporter.listenAddress")
+		promOpts.ListenAddress = viper.GetString("metrics.fabric.PromReporter.listenAddress")
 		opts.PromReporterOpts = promOpts
 	}
 
@@ -259,7 +225,7 @@ func StopWatch(timerName string) func() {
 	if IsDebug() {
 		stopWatch := RootScope.Timer(timerName).Start()
 
-		return func() {stopWatch.Stop()}
+		return func() { stopWatch.Stop() }
 	}
 	return func() {}
 }
