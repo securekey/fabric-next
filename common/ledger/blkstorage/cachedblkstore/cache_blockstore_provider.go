@@ -8,6 +8,7 @@ package cachedblkstore
 
 import (
 	"context"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/pkg/errors"
@@ -33,8 +34,8 @@ type blockStoreWithCheckpoint interface {
 func NewProvider(storageProvider blkstorage.BlockStoreProvider, indexProvider blkstorage.BlockIndexProvider, cacheProvider blkstorage.BlockCacheProvider) *CachedBlockstoreProvider {
 	p := CachedBlockstoreProvider{
 		storageProvider: storageProvider,
-		cacheProvider: cacheProvider,
-		indexProvider: indexProvider,
+		cacheProvider:   cacheProvider,
+		indexProvider:   indexProvider,
 	}
 
 	return &p
@@ -67,7 +68,6 @@ func (p *CachedBlockstoreProvider) OpenBlockStore(ledgerid string) (blkstorage.B
 		return nil, err
 	}
 
-
 	s, err := newCachedBlockStore(blockStoreWithCheckpoint, blockIndex, blockCache)
 	if err != nil {
 		return nil, err
@@ -91,5 +91,6 @@ func (p *CachedBlockstoreProvider) List() ([]string, error) {
 // Close cleans up the Provider
 func (p *CachedBlockstoreProvider) Close() {
 	p.cacheProvider.Close()
+	p.indexProvider.Close()
 	p.storageProvider.Close()
 }

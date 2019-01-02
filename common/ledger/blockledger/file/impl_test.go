@@ -93,6 +93,10 @@ func (mbs *mockBlockStore) RetrieveBlocks(startNum uint64) (cl.ResultsIterator, 
 	return mbs.resultsIterator, mbs.defaultError
 }
 
+func (mbs *mockBlockStore) CheckpointBlock(block *cb.Block) error {
+	return nil
+}
+
 func (mbs *mockBlockStore) RetrieveBlockByHash(blockHash []byte) (*cb.Block, error) {
 	return mbs.block, mbs.defaultError
 }
