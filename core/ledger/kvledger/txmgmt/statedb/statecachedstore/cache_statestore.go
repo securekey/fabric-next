@@ -203,9 +203,11 @@ func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, p
 			notPreloaded = append(notPreloaded, key)
 		}
 	}
-	err := c.bulkOptimizable.LoadCommittedVersions(notPreloaded, preloaded)
-	if err != nil {
-		return err
+	if c.bulkOptimizable != nil {
+		err := c.bulkOptimizable.LoadCommittedVersions(notPreloaded, preloaded)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -225,14 +227,19 @@ func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKe
 
 		}
 	}
-	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
-	if err != nil {
-		return err
+	if c.bulkOptimizable != nil {
+		err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (c *cachedStateStore) GetWSetCacheLock() *sync.RWMutex {
+	if c.bulkOptimizable == nil {
+		return nil
+	}
 	return c.bulkOptimizable.GetWSetCacheLock()
 }
 
@@ -240,10 +247,15 @@ func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Hei
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)
 }
 func (c *cachedStateStore) ClearCachedVersions() {
-	c.bulkOptimizable.ClearCachedVersions()
+	if c.bulkOptimizable != nil {
+		c.bulkOptimizable.ClearCachedVersions()
+	}
 }
 
 func (c *cachedStateStore) GetDBType() string {
+	if c.indexCapable == nil {
+		return ""
+	}
 	return c.indexCapable.GetDBType()
 }
 func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error {

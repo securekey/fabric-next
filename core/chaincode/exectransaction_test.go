@@ -340,7 +340,9 @@ func endTxSimulation(chainID string, ccid *pb.ChaincodeID, txsim ledger.TxSimula
 					WriteSet:   txSimulationResults.PvtSimulationResults,
 				}
 			}
-
+			if err := lgr.ValidateBlockWithPvtData(blockAndPvtData); err != nil {
+				return err
+			}
 			if err := lgr.CommitWithPvtData(blockAndPvtData); err != nil {
 				return err
 			}

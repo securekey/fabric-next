@@ -6,8 +6,10 @@ import (
 
 	commonledger "github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
+	"golang.org/x/net/context"
 )
 
 type PeerLedger struct {
@@ -246,6 +248,14 @@ func (fake *PeerLedger) GetBlockchainInfoCallCount() int {
 	return len(fake.getBlockchainInfoArgsForCall)
 }
 
+func (fake *PeerLedger) AddBlock(blockAndPvtdata *ledger.BlockAndPvtData) error {
+	return nil
+}
+
+func (fake *PeerLedger) GetState(namespace string, key string) ([]byte, error) {
+	return nil, nil
+}
+
 func (fake *PeerLedger) GetBlockchainInfoReturns(result1 *common.BlockchainInfo, result2 error) {
 	fake.GetBlockchainInfoStub = nil
 	fake.getBlockchainInfoReturns = struct {
@@ -385,8 +395,15 @@ func (fake *PeerLedger) CloseCallCount() int {
 	defer fake.closeMutex.RUnlock()
 	return len(fake.closeArgsForCall)
 }
+func (fake *PeerLedger) ValidateBlockWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
+	return nil
+}
 
-func (fake *PeerLedger) GetTransactionByID(txID string) (*peer.ProcessedTransaction, error) {
+func (fake *PeerLedger) ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error {
+	return nil
+}
+
+func (fake *PeerLedger) GetTransactionByID(txID string, hints ...ledger.SearchHint) (*peer.ProcessedTransaction, error) {
 	fake.getTransactionByIDMutex.Lock()
 	ret, specificReturn := fake.getTransactionByIDReturnsOnCall[len(fake.getTransactionByIDArgsForCall)]
 	fake.getTransactionByIDArgsForCall = append(fake.getTransactionByIDArgsForCall, struct {
