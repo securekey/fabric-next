@@ -131,7 +131,10 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 		select {
 		case data := <-v.preLoadCommittedVersionOfWSetCh:
 			stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
-			v.db.GetWSetCacheLock().Lock()
+			lock := v.db.GetWSetCacheLock()
+			if lock != nil {
+				lock.Lock()
+			}
 			// Collect both public and hashed keys in read sets of all transactions in a given block
 			var pubKeys []*statedb.CompositeKey
 			var hashedKeys []*privacyenabledstate.HashedCompositeKey
@@ -214,7 +217,9 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 					logger.Errorf("LoadCommittedVersionsOfPubAndHashedKeys failed %s", err)
 				}
 			}
-			v.db.GetWSetCacheLock().Unlock()
+			if lock != nil {
+				lock.Unlock()
+			}
 			stopWatch()
 
 		}

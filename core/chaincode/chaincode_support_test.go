@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/common/metrics"
 	mc "github.com/hyperledger/fabric/common/mocks/config"
 	mocklgr "github.com/hyperledger/fabric/common/mocks/ledger"
 	mockpeer "github.com/hyperledger/fabric/common/mocks/peer"
@@ -1276,6 +1277,7 @@ func cc2SameCC(t *testing.T, chainID, chainID2, ccname string, ccSide *mockpeer.
 }
 
 func TestCCFramework(t *testing.T) {
+	metrics.Initialize()
 	//register 2 channels
 	chainID := "mockchainid"
 	chainID2 := "secondchain"
