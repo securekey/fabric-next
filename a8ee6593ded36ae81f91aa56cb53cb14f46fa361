@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "77d54a69_7eef8c40",
+        "filename": "core/ledger/ledgermgmt/ledger_mgmt.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2019-01-02T20:21:23Z",
+      "side": 1,
+      "message": "who is using this variable",
+      "revId": "a8ee6593ded36ae81f91aa56cb53cb14f46fa361",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
