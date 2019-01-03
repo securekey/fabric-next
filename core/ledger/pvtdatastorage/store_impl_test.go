@@ -57,15 +57,15 @@ func TestStoreBasicCommitAndRetrieval(t *testing.T) {
 
 	// no pvt data with block 0
 	assert.NoError(store.Prepare(0, nil))
-	assert.NoError(store.Commit())
+	assert.NoError(store.Commit(0))
 
 	// pvt data with block 1 - commit
 	assert.NoError(store.Prepare(1, testData))
-	assert.NoError(store.Commit())
+	assert.NoError(store.Commit(1))
 
 	// pvt data with block 2 - rollback
 	assert.NoError(store.Prepare(2, testData))
-	assert.NoError(store.Rollback())
+	assert.NoError(store.Rollback(2))
 
 	// pvt data retrieval for block 0 should return nil
 	var nilFilter ledger.PvtNsCollFilter
