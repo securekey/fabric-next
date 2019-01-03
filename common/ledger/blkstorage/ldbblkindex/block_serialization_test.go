@@ -16,15 +16,7 @@ limitations under the License.
 
 package ldbblkindex
 
-import (
-	"testing"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/common/ledger/testutil"
-	putils "github.com/hyperledger/fabric/protos/utils"
-)
-
-func TestBlockSerialization(t *testing.T) {
+/*func TestBlockSerialization(t *testing.T) {
 	block := testutil.ConstructTestBlock(t, 1, 10, 100)
 	bb, _, err := serializeBlock(block)
 	testutil.AssertNoError(t, err, "")
@@ -64,3 +56,4 @@ func TestSerializedBlockInfo(t *testing.T) {
 		testutil.AssertEquals(t, txEnvBytesFromBB, txEnvBytes)
 	}
 }
+*/
