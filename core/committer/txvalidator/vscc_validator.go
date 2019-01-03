@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/common/cauthdsl"
 	commonerrors "github.com/hyperledger/fabric/common/errors"
 	coreUtil "github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/core/committer/txvalidator/validationinfo"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/handlers/validation/api"
@@ -30,23 +31,28 @@ import (
 // the vscc chaincode and validate block transactions
 type VsccValidatorImpl struct {
 	chainID         string
+	block           *common.Block
 	support         Support
 	sccprovider     sysccprovider.SystemChaincodeProvider
 	pluginValidator *PluginValidator
+	valInfoCache    *validationinfo.Cache
 }
 
 // newVSCCValidator creates new vscc validator
-func newVSCCValidator(chainID string, support Support, sccp sysccprovider.SystemChaincodeProvider, pluginValidator *PluginValidator) *VsccValidatorImpl {
-	return &VsccValidatorImpl{
+func newVSCCValidator(chainID string, block *common.Block, support Support, sccp sysccprovider.SystemChaincodeProvider, pluginValidator *PluginValidator) *VsccValidatorImpl {
+	v := &VsccValidatorImpl{
 		chainID:         chainID,
+		block:           block,
 		support:         support,
 		sccprovider:     sccp,
 		pluginValidator: pluginValidator,
 	}
+	v.valInfoCache = validationinfo.NewCache(v.GetInfoForValidate)
+	return v
 }
 
 // VSCCValidateTx executes vscc validation for transaction
-func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode) {
+func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte) (error, peer.TxValidationCode) {
 	chainID := v.chainID
 	logger.Debugf("[%s] VSCCValidateTx starts for bytes %p", chainID, envBytes)
 
@@ -179,7 +185,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 		// validate *EACH* read write set according to its chaincode's endorsement policy
 		for _, ns := range wrNamespace {
 			// Get latest chaincode version, vscc and validate policy
-			txcc, vscc, policy, err := v.GetInfoForValidate(chdr, ns)
+			txcc, vscc, policy, err := v.valInfoCache.Get(chdr.ChannelId, ns)
 			if err != nil {
 				logger.Errorf("GetInfoForValidate for txId = %s returned error: %+v", chdr.TxId, err)
 				return err, peer.TxValidationCode_INVALID_OTHER_REASON
@@ -189,7 +195,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 			// invoked, we check that the version of the cc that was
 			// invoked corresponds to the version that lscc has returned
 			if ns == ccID && txcc.ChaincodeVersion != ccVer {
-				err = errors.Errorf("chaincode %s:%s/%s didn't match %s:%s/%s in lscc", ccID, ccVer, chdr.ChannelId, txcc.ChaincodeName, txcc.ChaincodeVersion, chdr.ChannelId)
+				err = errors.Errorf("chaincode %s:%s/%s didn't match %s:%s/%s in lscc", ccID, ccVer, chdr.ChannelId, txcc.ChaincodeName, vscc.ChaincodeVersion, chdr.ChannelId)
 				logger.Errorf("%+v", err)
 				return err, peer.TxValidationCode_EXPIRED_CHAINCODE
 			}
@@ -198,7 +204,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 			ctx := &Context{
 				Seq:       seq,
 				Envelope:  envBytes,
-				Block:     block,
+				Block:     v.block,
 				TxID:      chdr.TxId,
 				Channel:   chdr.ChannelId,
 				Namespace: ns,
@@ -225,7 +231,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 		}
 
 		// Get latest chaincode version, vscc and validate policy
-		_, vscc, policy, err := v.GetInfoForValidate(chdr, ccID)
+		_, vscc, policy, err := v.valInfoCache.Get(chdr.ChannelId, ccID)
 		if err != nil {
 			logger.Errorf("GetInfoForValidate for txId = %s returned error: %+v", chdr.TxId, err)
 			return err, peer.TxValidationCode_INVALID_OTHER_REASON
@@ -239,7 +245,7 @@ func (v *VsccValidatorImpl) VSCCValidateTx(seq int, payload *common.Payload, env
 		ctx := &Context{
 			Seq:       seq,
 			Envelope:  envBytes,
-			Block:     block,
+			Block:     v.block,
 			TxID:      chdr.TxId,
 			Channel:   chdr.ChannelId,
 			Namespace: ccID,
@@ -312,14 +318,14 @@ func (v *VsccValidatorImpl) getCDataForCC(chid, ccid string) (ccprovider.Chainco
 }
 
 // GetInfoForValidate gets the ChaincodeInstance(with latest version) of tx, vscc and policy from lscc
-func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID string) (*sysccprovider.ChaincodeInstance, *sysccprovider.ChaincodeInstance, []byte, error) {
+func (v *VsccValidatorImpl) GetInfoForValidate(channelID, ccID string) (*sysccprovider.ChaincodeInstance, *sysccprovider.ChaincodeInstance, []byte, error) {
 	cc := &sysccprovider.ChaincodeInstance{
-		ChainID:          chdr.ChannelId,
+		ChainID:          channelID,
 		ChaincodeName:    ccID,
 		ChaincodeVersion: coreUtil.GetSysCCVersion(),
 	}
 	vscc := &sysccprovider.ChaincodeInstance{
-		ChainID:          chdr.ChannelId,
+		ChainID:          channelID,
 		ChaincodeName:    "vscc",                     // default vscc for system chaincodes
 		ChaincodeVersion: coreUtil.GetSysCCVersion(), // Get vscc version
 	}
@@ -331,9 +337,9 @@ func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID 
 		// of VSCC and of the policy that should be used
 
 		// obtain name of the VSCC and the policy
-		cd, err := v.getCDataForCC(chdr.ChannelId, ccID)
+		cd, err := v.getCDataForCC(channelID, ccID)
 		if err != nil {
-			msg := fmt.Sprintf("Unable to get chaincode data from ledger for txid %s, due to %s", chdr.TxId, err)
+			msg := fmt.Sprintf("Unable to get chaincode data from ledger due to %s", err)
 			logger.Errorf(msg)
 			return nil, nil, nil, err
 		}
@@ -344,7 +350,7 @@ func (v *VsccValidatorImpl) GetInfoForValidate(chdr *common.ChannelHeader, ccID 
 		// when we are validating a system CC, we use the default
 		// VSCC and a default policy that requires one signature
 		// from any of the members of the channel
-		p := cauthdsl.SignedByAnyMember(v.support.GetMSPIDs(chdr.ChannelId))
+		p := cauthdsl.SignedByAnyMember(v.support.GetMSPIDs(channelID))
 		policy, err = utils.Marshal(p)
 		if err != nil {
 			return nil, nil, nil, err

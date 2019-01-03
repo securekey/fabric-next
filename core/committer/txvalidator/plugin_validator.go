@@ -12,6 +12,8 @@ import (
 
 	"github.com/hyperledger/fabric/common/cauthdsl"
 	ledger2 "github.com/hyperledger/fabric/common/ledger"
+	"github.com/hyperledger/fabric/common/policies"
+	"github.com/hyperledger/fabric/core/committer/txvalidator/ccpolicy"
 	"github.com/hyperledger/fabric/core/handlers/validation/api"
 	. "github.com/hyperledger/fabric/core/handlers/validation/api/capabilities"
 	. "github.com/hyperledger/fabric/core/handlers/validation/api/identities"
@@ -167,6 +169,8 @@ func (pbc *pluginsByChannel) createPluginIfAbsent(channel string) (validation.Pl
 
 func (pbc *pluginsByChannel) initPlugin(plugin validation.Plugin, channel string) (validation.Plugin, error) {
 	pe := &PolicyEvaluator{IdentityDeserializer: pbc.pv.IdentityDeserializer}
+	pe.ccPolicyCache = ccpolicy.NewCache(pe.getPolicy)
+
 	sf := &StateFetcherImpl{QueryExecutorCreator: pbc.pv}
 	if err := plugin.Init(pe, sf, pbc.pv.capabilities); err != nil {
 		return nil, errors.Wrap(err, "failed initializing plugin")
@@ -176,16 +180,22 @@ func (pbc *pluginsByChannel) initPlugin(plugin validation.Plugin, channel string
 
 type PolicyEvaluator struct {
 	msp.IdentityDeserializer
+	ccPolicyCache *ccpolicy.Cache
 }
 
 // Evaluate takes a set of SignedData and evaluates whether this set of signatures satisfies the policy
 func (id *PolicyEvaluator) Evaluate(policyBytes []byte, signatureSet []*common.SignedData) error {
-	pp := cauthdsl.NewPolicyProvider(id.IdentityDeserializer)
-	policy, _, err := pp.NewPolicy(policyBytes)
+	policy, err := id.ccPolicyCache.Get(policyBytes)
 	if err != nil {
 		return err
 	}
 	return policy.Evaluate(signatureSet)
+}
+
+func (id *PolicyEvaluator) getPolicy(policyBytes []byte) (policies.Policy, error) {
+	pp := cauthdsl.NewPolicyProvider(id.IdentityDeserializer)
+	policy, _, err := pp.NewPolicy(policyBytes)
+	return policy, err
 }
 
 // DeserializeIdentity unmarshals the given identity to msp.Identity

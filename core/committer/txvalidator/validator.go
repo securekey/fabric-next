@@ -74,7 +74,7 @@ type Validator interface {
 // and vscc execution, in order to increase
 // testability of TxValidator
 type vsccValidator interface {
-	VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode)
+	VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte) (error, peer.TxValidationCode)
 }
 
 type mvccValidator interface {
@@ -85,12 +85,13 @@ type mvccValidator interface {
 // reference to the ledger to enable tx simulation
 // and execution of vscc
 type TxValidator struct {
-	ChainID       string
-	Support       Support
-	Vscc          vsccValidator
-	gossip        gossip2.Gossip
-	mvccValidator mvccValidator
-	roleUtil      *roleutil.RoleUtil
+	ChainID         string
+	Support         Support
+	gossip          gossip2.Gossip
+	mvccValidator   mvccValidator
+	roleUtil        *roleutil.RoleUtil
+	sccp            sysccprovider.SystemChaincodeProvider
+	pluginValidator *PluginValidator
 }
 
 var logger *logging.Logger // package-level logger
@@ -101,12 +102,6 @@ var ignoreCancel = func() {}
 func init() {
 	// Init logger with module name
 	logger = flogging.MustGetLogger("committer/txvalidator")
-}
-
-type blockValidationRequest struct {
-	block *common.Block
-	d     []byte
-	tIdx  int
 }
 
 type blockValidationResult struct {
@@ -124,12 +119,13 @@ func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemCh
 	pluginValidator := NewPluginValidator(pm, support.Ledger(), &dynamicDeserializer{support: support}, &dynamicCapabilities{support: support})
 
 	return &TxValidator{
-		ChainID:       chainID,
-		Support:       support,
-		Vscc:          newVSCCValidator(chainID, support, sccp, pluginValidator),
-		gossip:        gossip,
-		mvccValidator: mvccValidator,
-		roleUtil:      roleutil.NewRoleUtil(chainID, gossip),
+		ChainID:         chainID,
+		Support:         support,
+		gossip:          gossip,
+		mvccValidator:   mvccValidator,
+		roleUtil:        roleutil.NewRoleUtil(chainID, gossip),
+		sccp:            sccp,
+		pluginValidator: pluginValidator,
 	}
 }
 
@@ -431,6 +427,12 @@ func (v *TxValidator) validateBlock(ctx context.Context, block *common.Block, sh
 		transactions[tIdx] = struct{}{}
 	}
 
+	blockValidator := &blockValidator{
+		block:   block,
+		support: v.Support,
+		vscc:    newVSCCValidator(v.ChainID, block, v.Support, v.sccp, v.pluginValidator),
+	}
+
 	results := make(chan *blockValidationResult, 10)
 
 	go func() {
@@ -461,11 +463,7 @@ func (v *TxValidator) validateBlock(ctx context.Context, block *common.Block, sh
 			go func(index int, data []byte) {
 				defer v.Support.Release(1)
 
-				v.validateTx(&blockValidationRequest{
-					d:     data,
-					block: block,
-					tIdx:  index,
-				}, results)
+				blockValidator.validateTx(data, index, results)
 				logger.Debugf("[%s] ... finished validating tx index [%d] in block %d", v.ChainID, index, block.Header.Number)
 			}(tIdx, d)
 		}
@@ -546,10 +544,14 @@ func (v *TxValidator) getTxFilter() ledgerUtil.TxFilter {
 	}
 }
 
-func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *blockValidationResult) {
-	block := req.block
-	d := req.d
-	tIdx := req.tIdx
+type blockValidator struct {
+	channelID string
+	block     *common.Block
+	vscc      vsccValidator
+	support   Support
+}
+
+func (v *blockValidator) validateTx(d []byte, tIdx int, results chan<- *blockValidationResult) {
 	txID := ""
 
 	if d == nil {
@@ -572,15 +574,15 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		// chain binding proposal to endorsements to tx holds. We do
 		// NOT check the validity of endorsements, though. That's a
 		// job for VSCC below
-		logger.Debugf("[%s] validateTx starts for block %p env %p txn %d", v.ChainID, block, env, tIdx)
-		defer logger.Debugf("[%s] validateTx completes for block %p env %p txn %d", v.ChainID, block, env, tIdx)
+		logger.Debugf("[%s] validateTx starts for block %p env %p txn %d", v.channelID, v.block, env, tIdx)
+		defer logger.Debugf("[%s] validateTx completes for block %p env %p txn %d", v.channelID, v.block, env, tIdx)
 		var payload *common.Payload
 		var err error
 		var txResult peer.TxValidationCode
 		var txsChaincodeName *sysccprovider.ChaincodeInstance
 		var txsUpgradedChaincode *sysccprovider.ChaincodeInstance
 
-		if payload, txResult = validation.ValidateTransaction(env, v.Support.Capabilities()); txResult != peer.TxValidationCode_VALID {
+		if payload, txResult = validation.ValidateTransaction(env, v.support.Capabilities()); txResult != peer.TxValidationCode_VALID {
 			logger.Errorf("Invalid transaction with index %d", tIdx)
 			results <- &blockValidationResult{
 				tIdx:           tIdx,
@@ -602,22 +604,23 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 		channel := chdr.ChannelId
 		logger.Debugf("Transaction is for channel %s", channel)
 
-		if !v.chainExists(channel) {
-			logger.Errorf("Dropping transaction for non-existent channel %s", channel)
-			results <- &blockValidationResult{
-				tIdx:           tIdx,
-				validationCode: peer.TxValidationCode_TARGET_CHAIN_NOT_FOUND,
-			}
-			return
-		}
+		// FIXME: Is this even required? We wouldn' be here if the channel didn't exist
+		// if !v.chainExists(channel) {
+		// 	logger.Errorf("Dropping transaction for non-existent channel %s", channel)
+		// 	results <- &blockValidationResult{
+		// 		tIdx:           tIdx,
+		// 		validationCode: peer.TxValidationCode_TARGET_CHAIN_NOT_FOUND,
+		// 	}
+		// 	return
+		// }
 
 		if common.HeaderType(chdr.Type) == common.HeaderType_ENDORSER_TRANSACTION {
 			// Check duplicate transactions
 			txID = chdr.TxId
 			// GetTransactionByID will return:
 			// TODO: remove metric
-			stopWatchDupGetTxn := metrics.StopWatch(fmt.Sprintf("validator_%s_duplicate_check", metrics.FilterMetricName(v.ChainID)))
-			_, err := v.Support.Ledger().GetTransactionByID(txID)
+			stopWatchDupGetTxn := metrics.StopWatch(fmt.Sprintf("validator_%s_duplicate_check", metrics.FilterMetricName(v.channelID)))
+			_, err := v.support.Ledger().GetTransactionByID(txID)
 			stopWatchDupGetTxn()
 
 			// 1) err == nil => there is already a tx in the ledger with the supplied id
@@ -642,7 +645,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 
 			// Validate tx with vscc and policy
 			logger.Debug("Validating transaction vscc tx validate")
-			err, cde := v.Vscc.VSCCValidateTx(tIdx, payload, d, block)
+			err, cde := v.vscc.VSCCValidateTx(tIdx, payload, d)
 			if err != nil {
 				logger.Errorf("VSCCValidateTx for transaction txId = %s returned error: %s", txID, err)
 				switch err.(type) {
@@ -693,7 +696,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 				return
 			}
 
-			if err := v.Support.Apply(configEnvelope); err != nil {
+			if err := v.support.Apply(configEnvelope); err != nil {
 				err = errors.WithMessage(err, "error validating config which passed initial validity checks")
 				logger.Criticalf("%+v", err)
 				results <- &blockValidationResult{
@@ -705,7 +708,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 			logger.Debugf("config transaction received for chain %s", channel)
 		} else {
 			logger.Warningf("Unknown transaction type [%s] in block number [%d] transaction index [%d]",
-				common.HeaderType(chdr.Type), block.Header.Number, tIdx)
+				common.HeaderType(chdr.Type), v.block.Header.Number, tIdx)
 			results <- &blockValidationResult{
 				tIdx:           tIdx,
 				validationCode: peer.TxValidationCode_UNKNOWN_TX_TYPE,
@@ -791,7 +794,7 @@ func (v *TxValidator) invalidTXsForUpgradeCC(txsChaincodeNames map[int]*sysccpro
 	}
 }
 
-func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upgradeCCIns *sysccprovider.ChaincodeInstance, err error) {
+func (v *blockValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upgradeCCIns *sysccprovider.ChaincodeInstance, err error) {
 	// This is duplicated unpacking work, but make test easier.
 	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 	if err != nil {
@@ -851,7 +854,7 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
 	return invokeIns, nil, nil
 }
 
-func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
+func (v *blockValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
 	cds, err := utils.GetChaincodeDeploymentSpec(cdsBytes)
 	if err != nil {
 		return nil, err

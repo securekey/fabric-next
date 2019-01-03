@@ -274,6 +274,7 @@ func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 	//update local block chain info
 	err = l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
 	if err != nil {
+		l.blockAPIsRWLock.Unlock()
 		return err
 	}
 
