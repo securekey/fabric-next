@@ -17,6 +17,7 @@ limitations under the License.
 package fsblkstorage
 
 import (
+	"context"
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
@@ -73,7 +74,7 @@ func (store *fsBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
-func (store *fsBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*common.Envelope, error) {
+func (store *fsBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 	return store.fileMgr.retrieveTransactionByID(txID)
 }
 
