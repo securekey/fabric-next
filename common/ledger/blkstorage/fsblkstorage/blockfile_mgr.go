@@ -12,6 +12,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"context"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
@@ -97,8 +98,13 @@ func newBlockfileMgr(id string, conf *Conf, indexConfig *blkstorage.IndexConfig,
 		panic(fmt.Sprintf("Error creating block storage root dir [%s]: %s", rootDir, err))
 	}
 	// Instantiate the manager, i.e. blockFileMgr structure
-	mgr := &blockfileMgr{rootDir: rootDir, conf: conf, db: indexStore}
-
+	mgr := &blockfileMgr{
+		rootDir:   rootDir,
+		conf:      conf,
+		db:        indexStore,
+		cpInfoSig: make(chan struct{}),
+		cpInfoMtx: sync.RWMutex{},
+	}
 	// cp = checkpointInfo, retrieve from the database the file suffix or number of where blocks were stored.
 	// It also retrieves the current size of that file and the last block number that was written to that file.
 	// At init checkpointInfo:latestFileChunkSuffixNum=[0], latestFileChunksize=[0], lastBlockNumber=[0]
