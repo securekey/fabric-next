@@ -18,35 +18,49 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
+type cacheKey struct {
+	channelID string
+	namespace string
+}
+
+func newCacheKey(channelID, namesapce string) cacheKey {
+	return cacheKey{channelID: channelID, namespace: namesapce}
+}
+
 type KVCacheProvider struct {
-	kvCacheMap map[string]*KVCache
-	kvCacheMtx sync.Mutex
+	kvCacheMap map[cacheKey]*KVCache
+	kvCacheMtx sync.RWMutex
 }
 
 func NewKVCacheProvider() *KVCacheProvider {
-	return &KVCacheProvider{kvCacheMap: make(map[string]*KVCache), kvCacheMtx: sync.Mutex{}}
+	return &KVCacheProvider{kvCacheMap: make(map[cacheKey]*KVCache)}
 }
 
-func (p *KVCacheProvider) getKVCache(chId string, namespace string) (*KVCache, error) {
-	cacheName := chId
-	if len(namespace) > 0 {
-		cacheName = cacheName + "_" + namespace
-	}
-
-	kvCache, found := p.kvCacheMap[cacheName]
+func (p *KVCacheProvider) getKVCache(channelID, namespace string) (*KVCache, error) {
+	key := newCacheKey(channelID, namespace)
+	kvCache, found := p.kvCacheMap[key]
 	if !found {
+		cacheName := channelID
+		if len(namespace) > 0 {
+			cacheName = cacheName + "_" + namespace
+		}
 		kvCache = newKVCache(cacheName)
-		p.kvCacheMap[cacheName] = kvCache
+		p.kvCacheMap[key] = kvCache
 	}
-
 	return kvCache, nil
 }
 
-func (p *KVCacheProvider) GetKVCache(chId string, namespace string) (*KVCache, error) {
+func (p *KVCacheProvider) GetKVCache(channelID, namespace string) (*KVCache, error) {
+	p.kvCacheMtx.RLock()
+	kvCache, found := p.kvCacheMap[newCacheKey(channelID, namespace)]
+	p.kvCacheMtx.RUnlock()
+	if found {
+		return kvCache, nil
+	}
+
 	p.kvCacheMtx.Lock()
 	defer p.kvCacheMtx.Unlock()
-
-	return p.getKVCache(chId, namespace)
+	return p.getKVCache(channelID, namespace)
 }
 
 func (p *KVCacheProvider) purgeNonDurable(blockNumber uint64) {
