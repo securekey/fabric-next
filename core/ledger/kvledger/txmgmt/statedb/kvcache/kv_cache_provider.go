@@ -18,35 +18,26 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
+type cacheKey struct {
+	channelID string
+	namespace string
+}
+
+func newCacheKey(channelID, namesapce string) cacheKey {
+	return cacheKey{channelID: channelID, namespace: namesapce}
+}
+
 type KVCacheProvider struct {
-	kvCacheMap map[string]*KVCache
-	kvCacheMtx sync.Mutex
+	kvCacheMap map[cacheKey]*KVCache
+	kvCacheMtx sync.RWMutex
 }
 
 func NewKVCacheProvider() *KVCacheProvider {
-	return &KVCacheProvider{kvCacheMap: make(map[string]*KVCache), kvCacheMtx: sync.Mutex{}}
+	return &KVCacheProvider{kvCacheMap: make(map[cacheKey]*KVCache)}
 }
 
-func (p *KVCacheProvider) getKVCache(chId string, namespace string) (*KVCache, error) {
-	cacheName := chId
-	if len(namespace) > 0 {
-		cacheName = cacheName + "_" + namespace
-	}
-
-	kvCache, found := p.kvCacheMap[cacheName]
-	if !found {
-		kvCache = newKVCache(cacheName)
-		p.kvCacheMap[cacheName] = kvCache
-	}
-
-	return kvCache, nil
-}
-
-func (p *KVCacheProvider) GetKVCache(chId string, namespace string) (*KVCache, error) {
-	p.kvCacheMtx.Lock()
-	defer p.kvCacheMtx.Unlock()
-
-	return p.getKVCache(chId, namespace)
+func (p *KVCacheProvider) GetKVCache(channelID, namespace string) (*KVCache, error) {
+	return p.getCache(channelID, namespace, true)
 }
 
 func (p *KVCacheProvider) purgeNonDurable(blockNumber uint64) {
@@ -291,4 +282,40 @@ func (p *KVCacheProvider) GetNonDurableSortedKeys(chId, namespace string) []stri
 	keys := kvCache.getNonDurableSortedKeys()
 	stopWatch()
 	return keys
+}
+
+func (p *KVCacheProvider) getKVCache(channelID, namespace string) (*KVCache, error) {
+	return p.getCache(channelID, namespace, false)
+}
+
+func (p *KVCacheProvider) getCache(channelID, namespace string, lock bool) (*KVCache, error) {
+	key := newCacheKey(channelID, namespace)
+
+	var kvCache *KVCache
+	var found bool
+
+	if lock {
+		p.kvCacheMtx.RLock()
+		kvCache, found = p.kvCacheMap[key]
+		p.kvCacheMtx.RUnlock()
+
+		if found {
+			return kvCache, nil
+		}
+
+		p.kvCacheMtx.Lock()
+		defer p.kvCacheMtx.Unlock()
+	}
+
+	kvCache, found = p.kvCacheMap[key]
+	if !found {
+		cacheName := channelID
+		if len(namespace) > 0 {
+			cacheName = cacheName + "_" + namespace
+		}
+		kvCache = newKVCache(cacheName)
+		p.kvCacheMap[key] = kvCache
+	}
+
+	return kvCache, nil
 }

@@ -8,6 +8,8 @@ package kvcache
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/hyperledger/fabric/common/ledger/testutil"
@@ -153,4 +155,79 @@ func TestKVCachePrivate(t *testing.T) {
 	testutil.AssertEquals(t, ok, false)
 	testutil.AssertNil(t, pvtData)
 
+}
+
+func TestConcurrency(t *testing.T) {
+	writers := 10
+	readers := 100
+	witerations := 10000
+	riterations := 20000
+	channelID := "testchannel"
+	namespaces := []string{"ns1", "ns2", "ns3", "ns4", "ns5", "ns6", "ns7", "ns8"}
+
+	provider := NewKVCacheProvider()
+
+	rdone := make(chan struct{})
+	wdone := make(chan struct{})
+
+	go func() {
+		var wgw sync.WaitGroup
+		for w := 0; w < writers; w++ {
+			wgw.Add(1)
+			go func() {
+				for i := 0; i < witerations; i++ {
+					theKey := fmt.Sprintf("%s-%d", "Key", i)
+					theValue := fmt.Sprintf("%s-%d", "Val", i)
+					theBlockNum := uint64(i / 100)
+					theIndex := 100
+
+					theValidatedTx := &ValidatedTx{
+						Key:          theKey,
+						Value:        []byte(theValue),
+						BlockNum:     theBlockNum,
+						IndexInBlock: theIndex,
+					}
+
+					provider.put(channelID, namespaces[rand.Intn(len(namespaces))], theValidatedTx, false)
+				}
+				wgw.Done()
+			}()
+		}
+		wgw.Wait()
+		wdone <- struct{}{}
+	}()
+
+	go func() {
+		var wgr sync.WaitGroup
+		for w := 0; w < readers; w++ {
+			wgr.Add(1)
+			go func() {
+				for i := 0; i < riterations; i++ {
+					theKey := fmt.Sprintf("%s-%d", "Key", i)
+					provider.GetFromKVCache(channelID, namespaces[rand.Intn(len(namespaces))], theKey)
+				}
+				wgr.Done()
+			}()
+		}
+		wgr.Wait()
+		rdone <- struct{}{}
+	}()
+
+	for n := 0; n < 2; n++ {
+		fmt.Printf("Waiting...\n")
+		select {
+		case <-wdone:
+			fmt.Printf("Writers are done\n")
+		case <-rdone:
+			fmt.Printf("Readers are done\n")
+		}
+	}
+}
+
+func (p *KVCacheProvider) put(channelID, ns string, tx *ValidatedTx, pin bool) {
+	p.kvCacheMtx.Lock()
+	defer p.kvCacheMtx.Unlock()
+
+	kvCache, _ := p.getKVCache(channelID, ns)
+	kvCache.Put(tx, false)
 }
