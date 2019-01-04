@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "04702855_5a9b6c59",
+        "filename": "common/ledger/blkstorage/ldbblkindex/block_serialization_test.go",
+        "patchSetId": 6
+      },
+      "lineNbr": 19,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-04T21:26:06Z",
+      "side": 1,
+      "message": "Should all this code be commented out?",
+      "revId": "6009ba13c0e43f0c409897cdbb43b5e75d39d708",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
