@@ -450,7 +450,7 @@ func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, o
 			fltr := filter
 
 			go func() {
-				rwSets := c.fetchFromTransientStore(txs, fltr, getEndorsements(sources, txAndSeq))
+				rwSets := c.fetchFromTransientStore(txs, fltr, getEndorsements(sources, txs))
 				if len(rwSets) > 0 {
 					mutex.Lock()
 					for key, value := range rwSets {
@@ -467,14 +467,12 @@ func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, o
 }
 
 func getEndorsements(sources map[rwSetKey][]*peer.Endorsement, txs txAndSeqInBlock) []*peer.Endorsement {
-	var endorsers []*peer.Endorsement
 	for key, value := range sources {
 		if key.txID == txs.txID && key.seqInBlock == txs.seqInBlock {
-			endorsers = value
-			break
+			return value
 		}
 	}
-	return endorsers
+	return nil
 }
 
 func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) map[rwSetKey][]byte {
@@ -935,21 +933,21 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 				namespace:  ns.NameSpace,
 				collection: hashedCollection.CollectionName,
 			}
-			var missingKeySources []*peer.Endorsement
 			if _, exists := bi.ownedRWsets[key]; !exists {
-				missingKeySources = endorsersFromOrgs(ns.NameSpace, hashedCollection.CollectionName, endorsers, policy.MemberOrgs())
+				bi.addKey(key, true, endorsersFromOrgs(ns.NameSpace, hashedCollection.CollectionName, endorsers, policy.MemberOrgs()))
+			} else {
+				bi.addKey(key, false, nil)
 			}
-			bi.addKey(key, missingKeySources)
 		} // for all hashed RW sets
 	} // for all RW sets
 }
 
-func (bi *transactionInspector) addKey(key rwSetKey, missingKeySource []*peer.Endorsement) {
+func (bi *transactionInspector) addKey(key rwSetKey, missing bool, missingKeySource []*peer.Endorsement) {
 	bi.mutex.Lock()
 	defer bi.mutex.Unlock()
 
 	bi.privateRWsetsInBlock[key] = struct{}{}
-	if missingKeySource != nil {
+	if missing {
 		bi.sources[key] = missingKeySource
 		txAndSeq := txAndSeqInBlock{
 			txID:       key.txID,
