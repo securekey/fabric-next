@@ -510,6 +510,11 @@ func (*GossipMessage_PrivateData) isGossipMessage_Content()          {}
 func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
 func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
 
+
+func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
+
+func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
+
 func (m *GossipMessage) GetContent() isGossipMessage_Content {
 	if m != nil {
 		return m.Content
@@ -1216,6 +1221,8 @@ type Properties struct {
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
+	Roles        []string     `protobuf:"bytes,4,rep,name=roles" json:"roles,omitempty"`
+
 }
 
 func (m *Properties) Reset() { *m = Properties{} }

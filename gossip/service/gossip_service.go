@@ -12,7 +12,6 @@ import (
 	"github.com/hyperledger/fabric/core/committer"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/common/privdata"
-	"github.com/hyperledger/fabric/core/deliverservice"
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/gossip/api"
@@ -27,6 +26,8 @@ import (
 	gproto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/pkg/errors"
+	"github.com/hyperledger/fabric/core/deliverservice"
+
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
@@ -247,24 +248,14 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 		Fetcher:         fetcher,
 	}, g.createSelfSignedData())
 
-	reconcilerConfig := privdata2.GetReconcilerConfig()
-	var reconciler privdata2.PvtDataReconciler
-
-	if reconcilerConfig.IsEnabled {
-		reconciler = privdata2.NewReconciler(support.Committer, fetcher, reconcilerConfig)
-	} else {
-		reconciler = &privdata2.NoOpReconciler{}
-	}
-
 	g.privateHandlers[chainID] = privateHandler{
 		support:     support,
 		coordinator: coordinator,
 		distributor: privdata2.NewDistributor(chainID, g, collectionAccessFactory),
-		reconciler:  reconciler,
 	}
 	g.privateHandlers[chainID].reconciler.Start()
 
-	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator)
+	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator, support.Ledger, support.Store)
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, endpoints, g.mcs)
