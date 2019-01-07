@@ -13,7 +13,6 @@ import (
 
 	"sort"
 
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
@@ -29,10 +28,9 @@ type cachedStateStore struct {
 	bulkOptimizable statedb.BulkOptimizable
 	indexCapable    statedb.IndexCapable
 	ledgerID        string
-	stateKeyIndex   statekeyindex.StateKeyIndex
 }
 
-func newCachedStateStore(vdb statedb.VersionedDB, stateKeyIndex statekeyindex.StateKeyIndex, ledgerID string) *cachedStateStore {
+func newCachedBlockStore(vdb statedb.VersionedDB, ledgerID string) *cachedStateStore {
 	bulkOptimizable, _ := vdb.(statedb.BulkOptimizable)
 	indexCapable, _ := vdb.(statedb.IndexCapable)
 
@@ -41,7 +39,6 @@ func newCachedStateStore(vdb statedb.VersionedDB, stateKeyIndex statekeyindex.St
 		ledgerID:        ledgerID,
 		bulkOptimizable: bulkOptimizable,
 		indexCapable:    indexCapable,
-		stateKeyIndex:   stateKeyIndex,
 	}
 	return &s
 }
@@ -62,8 +59,8 @@ func (c *cachedStateStore) ValidateKeyValue(key string, value []byte) error {
 }
 
 // BytesKeySuppoted implements method in VersionedDB interface
-func (c *cachedStateStore) BytesKeySuppoted() bool {
-	return c.vdb.BytesKeySuppoted()
+func (c *cachedStateStore) BytesKeySupported() bool {
+	return c.vdb.BytesKeySupported()
 }
 
 func (c *cachedStateStore) GetKVCacheProvider() *kvcache.KVCacheProvider {
@@ -74,8 +71,8 @@ func (c *cachedStateStore) GetKVCacheProvider() *kvcache.KVCacheProvider {
 func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	if versionedValue, ok := c.vdb.GetKVCacheProvider().GetFromKVCache(c.ledgerID, namespace, key); ok {
 		logger.Debugf("[%s] state retrieved from cache [ns=%s, key=%s]", c.ledgerID, namespace, key)
-		metrics.IncrementCounter("cachestatestore_getstate_cache_request_hit")
-		return &statedb.VersionedValue{versionedValue.Value, versionedValue.Version}, nil
+		/*metrics.IncrementCounter("cachestatestore_getstate_cache_request_hit")*/
+		return &statedb.VersionedValue{versionedValue.Value, nil , versionedValue.Version}, nil
 	}
 	versionedValue, err := c.vdb.GetState(namespace, key)
 
@@ -149,8 +146,8 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 	}
 
 	dbItr.Prev()
-	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
-
+/*	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
+*/
 	return newKVScanner(namespace, keyRange, dbItr, c), nil
 }
 
@@ -185,50 +182,6 @@ func (c *cachedStateStore) ApplyUpdates(batch *statedb.UpdateBatch, height *vers
 func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 	return c.vdb.GetLatestSavePoint()
 }
-
-func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
-	preloaded := make(map[*statedb.CompositeKey]*version.Height)
-	notPreloaded := make([]*statedb.CompositeKey, 0)
-	for _, key := range keys {
-		metadata, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
-		if err != nil {
-			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
-		}
-		if found {
-			preloaded[key] = version.NewHeight(metadata.BlockNumber, metadata.TxNumber)
-		} else {
-			notPreloaded = append(notPreloaded, key)
-		}
-	}
-	err := c.bulkOptimizable.LoadCommittedVersions(notPreloaded, preloaded)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
-	keysExist = make([]*statedb.CompositeKey, 0)
-	keysNotExist := make([]*statedb.CompositeKey, 0)
-	for _, key := range keys {
-		_, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
-		if err != nil {
-			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
-		}
-		if found {
-			keysExist = append(keysExist, key)
-		} else {
-			keysNotExist = append(keysNotExist, key)
-
-		}
-	}
-	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (c *cachedStateStore) GetWSetCacheLock() *sync.RWMutex {
 	return c.bulkOptimizable.GetWSetCacheLock()
 }

@@ -14,13 +14,13 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 )
 
 var logger = flogging.MustGetLogger("privacyenabledstate")
@@ -34,11 +34,10 @@ const (
 // CommonStorageDBProvider implements interface DBProvider
 type CommonStorageDBProvider struct {
 	statedb.VersionedDBProvider
-	bookkeepingProvider bookkeeping.Provider
 }
 
 // NewCommonStorageDBProvider constructs an instance of DBProvider
-func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metricsProvider metrics.Provider) (DBProvider, error) {
+func NewCommonStorageDBProvider(metricsProvider metrics.Provider) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
@@ -48,7 +47,9 @@ func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metrics
 	} else {
 		vdbProvider = stateleveldb.NewVersionedDBProvider()
 	}
-	return &CommonStorageDBProvider{vdbProvider, bookkeeperProvider}, nil
+
+	return &CommonStorageDBProvider{statecachedstore.NewProvider(vdbProvider)}, nil
+
 }
 
 // GetDBHandle implements function from interface DBProvider
@@ -57,9 +58,7 @@ func (p *CommonStorageDBProvider) GetDBHandle(id string) (DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	bookkeeper := p.bookkeepingProvider.GetDBHandle(id, bookkeeping.MetadataPresenceIndicator)
-	metadataHint := newMetadataHint(bookkeeper)
-	return NewCommonStorageDB(vdb, id, metadataHint)
+	return NewCommonStorageDB(vdb, id)
 }
 
 // Close implements function from interface DBProvider
@@ -71,15 +70,13 @@ func (p *CommonStorageDBProvider) Close() {
 // both the public and private data
 type CommonStorageDB struct {
 	statedb.VersionedDB
-	metadataHint *metadataHint
 }
 
 // NewCommonStorageDB wraps a VersionedDB instance. The public data is managed directly by the wrapped versionedDB.
 // For managing the hashed data and private data, this implementation creates separate namespaces in the wrapped db
-func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerid string, metadataHint *metadataHint) (DB, error) {
-	return &CommonStorageDB{vdb, metadataHint}, nil
+func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerID string) (DB, error) {
+	return &CommonStorageDB{VersionedDB: vdb}, nil
 }
-
 // IsBulkOptimizable implements corresponding function in interface DB
 func (s *CommonStorageDB) IsBulkOptimizable() bool {
 	_, ok := s.VersionedDB.(statedb.BulkOptimizable)
@@ -94,9 +91,55 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	if !ok {
 		return nil
 	}
+	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, nil)
+	pubKeys = append(pubKeys, deriveKeys...)
+
+	err := bulkOptimizable.LoadCommittedVersions(pubKeys, make(map[*statedb.CompositeKey]*version.Height))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+// LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
+func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
+	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey, blockNum uint64) error {
+
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if !ok {
+		return nil
+	}
+	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, pvtKeys)
+	pubKeys = append(pubKeys, deriveKeys...)
+	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil, blockNum)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ClearCachedVersions implements corresponding function in interface DB
+func (s *CommonStorageDB) ClearCachedVersions() {
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if ok {
+		bulkOptimizable.ClearCachedVersions()
+	}
+}
+
+// GetChaincodeEventListener implements corresponding function in interface DB
+func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifecycleEventListener {
+	_, ok := s.VersionedDB.(statedb.IndexCapable)
+	if ok {
+		return s
+	}
+	return nil
+}
+func (s *CommonStorageDB) deriveHashedKeysAndPvtKeys(hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey) []*statedb.CompositeKey {
+	deriveKeys := make([]*statedb.CompositeKey, 0)
 	// Here, hashedKeys are merged into pubKeys to get a combined set of keys for combined loading
 	for _, key := range hashedKeys {
-		ns := deriveHashedDataNs(key.Namespace, key.CollectionName)
+		ns := DeriveHashedDataNs(key.Namespace, key.CollectionName)
 		// No need to check for duplicates as hashedKeys are in separate namespace
 		var keyHashStr string
 		if !s.BytesKeySupported() {
@@ -119,24 +162,6 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 	return deriveKeys
 
 }
-
-// ClearCachedVersions implements corresponding function in interface DB
-func (s *CommonStorageDB) ClearCachedVersions() {
-	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
-	if ok {
-		bulkOptimizable.ClearCachedVersions()
-	}
-}
-
-// GetChaincodeEventListener implements corresponding function in interface DB
-func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifecycleEventListener {
-	_, ok := s.VersionedDB.(statedb.IndexCapable)
-	if ok {
-		return s
-	}
-	return nil
-}
-
 // GetPrivateData implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateData(namespace, collection, key string) (*statedb.VersionedValue, error) {
 	return s.GetState(DerivePvtDataNs(namespace, collection), key)
@@ -148,7 +173,7 @@ func (s *CommonStorageDB) GetValueHash(namespace, collection string, keyHash []b
 	if !s.BytesKeySupported() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetState(deriveHashedDataNs(namespace, collection), keyHashStr)
+	return s.GetState(DeriveHashedDataNs(namespace, collection), keyHashStr)
 }
 
 // GetKeyHashVersion implements corresponding function in interface DB
@@ -157,7 +182,8 @@ func (s *CommonStorageDB) GetKeyHashVersion(namespace, collection string, keyHas
 	if !s.BytesKeySupported() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return s.GetVersion(deriveHashedDataNs(namespace, collection), keyHashStr)
+	return s.GetVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
+
 }
 
 // GetCachedKeyHashVersion retrieves the keyhash version from cache
@@ -171,22 +197,28 @@ func (s *CommonStorageDB) GetCachedKeyHashVersion(namespace, collection string, 
 	if !s.BytesKeySupported() {
 		keyHashStr = base64.StdEncoding.EncodeToString(keyHash)
 	}
-	return bulkOptimizable.GetCachedVersion(deriveHashedDataNs(namespace, collection), keyHashStr)
+	return bulkOptimizable.GetCachedVersion(DeriveHashedDataNs(namespace, collection), keyHashStr)
 }
 
 // GetPrivateDataMultipleKeys implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([]*statedb.VersionedValue, error) {
-	return s.GetStateMultipleKeys(derivePvtDataNs(namespace, collection), keys)
+	return s.GetStateMultipleKeys(DerivePvtDataNs(namespace, collection), keys)
 }
 
 // GetPrivateDataRangeScanIterator implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error) {
-	return s.GetStateRangeScanIterator(derivePvtDataNs(namespace, collection), startKey, endKey)
+	return s.GetStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
+}
+
+
+// GetNonDurablePrivateDataRangeScanIterator implements corresponding function in interface DB
+func (s *CommonStorageDB) GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error) {
+	return s.GetNonDurableStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
 }
 
 // ExecuteQueryOnPrivateData implements corresponding function in interface DB
 func (s CommonStorageDB) ExecuteQueryOnPrivateData(namespace, collection, query string) (statedb.ResultsIterator, error) {
-	return s.ExecuteQuery(derivePvtDataNs(namespace, collection), query)
+	return s.ExecuteQuery(DerivePvtDataNs(namespace, collection), query)
 }
 
 // ApplyUpdates overrides the function in statedb.VersionedDB and throws appropriate error message
@@ -201,7 +233,6 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 	combinedUpdates := updates.PubUpdates
 	addPvtUpdates(combinedUpdates, updates.PvtUpdates)
 	addHashedUpdates(combinedUpdates, updates.HashUpdates, !s.BytesKeySupported())
-	s.metadataHint.setMetadataUsedFlag(updates)
 	return s.VersionedDB.ApplyUpdates(combinedUpdates.UpdateBatch, height)
 }
 
@@ -211,27 +242,27 @@ func (s *CommonStorageDB) ApplyPrivacyAwareUpdates(updates *UpdateBatch, height 
 // in the validation and commit path. This saves the chaincodes from paying unnecessary performance
 // penality if they do not use features that leverage metadata (such as key-level endorsement),
 func (s *CommonStorageDB) GetStateMetadata(namespace, key string) ([]byte, error) {
-	if !s.metadataHint.metadataEverUsedFor(namespace) {
+	/*if !s.metadataHint.metadataEverUsedFor(namespace) {
 		return nil, nil
-	}
+	}*/
 	vv, err := s.GetState(namespace, key)
 	if err != nil || vv == nil {
 		return nil, err
 	}
-	return vv.Metadata, nil
+	return vv.Value, nil
 }
 
 // GetPrivateDataMetadataByHash implements corresponding function in interface DB. For additional details, see
 // decription of the similar function 'GetStateMetadata'
 func (s *CommonStorageDB) GetPrivateDataMetadataByHash(namespace, collection string, keyHash []byte) ([]byte, error) {
-	if !s.metadataHint.metadataEverUsedFor(namespace) {
+/*	if !s.ledgerID.metadataEverUsedFor(namespace) {
 		return nil, nil
-	}
+	}*/
 	vv, err := s.GetValueHash(namespace, collection, keyHash)
 	if err != nil || vv == nil {
 		return nil, err
 	}
-	return vv.Metadata, nil
+	return vv.Value, nil
 }
 
 // HandleChaincodeDeploy initializes database artifacts for the database associated with the namespace
@@ -280,7 +311,7 @@ func (s *CommonStorageDB) HandleChaincodeDeploy(chaincodeDefinition *cceventmgmt
 			if !ok {
 				logger.Errorf("Error processing index for chaincode [%s]: cannot create an index for an undefined collection=[%s]", chaincodeDefinition.Name, collectionName)
 			} else {
-				err := indexCapable.ProcessIndexesForChaincodeDeploy(derivePvtDataNs(chaincodeDefinition.Name, collectionName),
+				err := indexCapable.ProcessIndexesForChaincodeDeploy(DerivePvtDataNs(chaincodeDefinition.Name, collectionName),
 					archiveDirectoryEntries)
 				if err != nil {
 					logger.Errorf("Error processing collection index for chaincode [%s]: %s", chaincodeDefinition.Name, err)
