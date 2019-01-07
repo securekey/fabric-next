@@ -205,25 +205,68 @@ func (p *puller) waitForMembership() []discovery.NetworkMember {
 	}
 }
 
-func (p *puller) fetch(dig2src dig2sources) (*privdatacommon.FetchedPvtDataContainer, error) {
+func (p *puller) fetch(dig2src dig2sources, blockSeq uint64) (*FetchedPvtDataContainer, error) {
 	// computeFilters returns a map from a digest to a routing filter
 	dig2Filter, err := p.computeFilters(dig2src)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return p.fetchPrivateData(dig2Filter)
-}
-
-func (p *puller) FetchReconciledItems(dig2collectionConfig privdatacommon.Dig2CollectionConfig) (*privdatacommon.FetchedPvtDataContainer, error) {
-	// computeFilters returns a map from a digest to a routing filter
-	dig2Filter, err := p.computeReconciliationFilters(dig2collectionConfig)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	// Get a list of peers per channel
+	allFilters := dig2Filter.flattenFilterValues()
+	members := p.waitForMembership()
+	logger.Debug("Total members in channel:", members)
+	members = filter.AnyMatch(members, allFilters...)
+	logger.Debug("Total members that fit some digest:", members)
+	if len(members) == 0 {
+		logger.Warning("Do not know any peer in the channel(", p.channel, ") that matches the policies , aborting")
+		return nil, errors.New("Empty membership")
 	}
-	return p.fetchPrivateData(dig2Filter)
+	members = randomizeMemberList(members)
+	res := &FetchedPvtDataContainer{}
+	// Distribute requests to peers, and obtain subscriptions for all their messages
+	// matchDigestToPeer returns a map from a peer to the digests which we would ask it for
+	var peer2digests peer2Digests
+	// We expect all private RWSets represented as digests to be collected
+	itemsLeftToCollect := len(dig2Filter)
+	// As long as we still have some data to collect and new members to ask the data for:
+	for itemsLeftToCollect > 0 && len(members) > 0 {
+		purgedPvt := p.getPurgedCollections(members, dig2Filter, blockSeq)
+		// Need to remove purged digest from mapping
+		for _, dig := range purgedPvt {
+			res.PurgedElements = append(res.PurgedElements, dig)
+			// remove digest so we won't even try to pull purged data
+			delete(dig2Filter, *dig)
+			itemsLeftToCollect--
+		}
+		if itemsLeftToCollect == 0 {
+			logger.Debug("No items left to collect")
+			return res, nil
+		}
+		peer2digests, members = p.assignDigestsToPeers(members, dig2Filter)
+		if len(peer2digests) == 0 {
+			logger.Warning("No available peers for digests request, "+
+				"cannot pull missing private data for following digests [%+v], peer membership: [%+v]",
+				dig2Filter.digests(), members)
+			return res, nil
+		}
+		logger.Debug("Matched", len(dig2Filter), "digests to", len(peer2digests), "peer(s)")
+		subscriptions := p.scatterRequests(peer2digests)
+		responses := p.gatherResponses(subscriptions)
+		for _, resp := range responses {
+			if len(resp.Payload) == 0 {
+				logger.Debug("Got empty response for", resp.Digest)
+				continue
+			}
+			delete(dig2Filter, *resp.Digest)
+			itemsLeftToCollect--
+		}
+		res.AvailableElemenets = append(res.AvailableElemenets, responses...)
+	}
+	return res, nil
 }
 
-func (p *puller) fetchPrivateData(dig2Filter digestToFilterMapping) (*privdatacommon.FetchedPvtDataContainer, error) {
+
+func (p *puller) fetchPrivateData(dig2Filter digestToFilterMapping, blockSeq uint64) (*privdatacommon.FetchedPvtDataContainer, error) {
 	// Get a list of peers per channel
 	allFilters := dig2Filter.flattenFilterValues()
 	members := p.waitForMembership()
@@ -243,7 +286,7 @@ func (p *puller) fetchPrivateData(dig2Filter digestToFilterMapping) (*privdataco
 	itemsLeftToCollect := len(dig2Filter)
 	// As long as we still have some data to collect and new members to ask the data for:
 	for itemsLeftToCollect > 0 && len(members) > 0 {
-		purgedPvt := p.getPurgedCollections(members, dig2Filter)
+		purgedPvt := p.getPurgedCollections(members, dig2Filter, blockSeq)
 		// Need to remove purged digest from mapping
 		for _, dig := range purgedPvt {
 			res.PurgedElements = append(res.PurgedElements, &proto.PvtDataDigest{
@@ -362,7 +405,7 @@ func (p *puller) assignDigestsToPeers(members []discovery.NetworkMember, dig2Fil
 	// Create a mapping between peer and digests to ask for
 	for dig, collectionFilter := range dig2Filter {
 		// Find a peer that is a preferred peer
-		selectedPeer := filter.First(members, collectionFilter.preferredPeer)
+		selectedPeer := filter.First(members, collectionFilter.endorser)
 		if selectedPeer == nil {
 			logger.Debug("No preferred peer found for", dig)
 			// Find some peer that is in the collection
@@ -393,18 +436,17 @@ func (p *puller) assignDigestsToPeers(members []discovery.NetworkMember, dig2Fil
 
 	return res, noneSelectedPeers
 }
-
 type collectionRoutingFilter struct {
-	anyPeer       filter.RoutingFilter
-	preferredPeer filter.RoutingFilter
+	anyPeer  filter.RoutingFilter
+	endorser filter.RoutingFilter
 }
 
-type digestToFilterMapping map[privdatacommon.DigKey]collectionRoutingFilter
+type digestToFilterMapping map[proto.PvtDataDigest]collectionRoutingFilter
 
 func (dig2f digestToFilterMapping) flattenFilterValues() []filter.RoutingFilter {
 	var filters []filter.RoutingFilter
 	for _, f := range dig2f {
-		filters = append(filters, f.preferredPeer)
+		filters = append(filters, f.endorser)
 		filters = append(filters, f.anyPeer)
 	}
 	return filters
@@ -438,13 +480,33 @@ func (dig2f digestToFilterMapping) String() string {
 }
 
 func (p *puller) computeFilters(dig2src dig2sources) (digestToFilterMapping, error) {
-	filters := make(map[privdatacommon.DigKey]collectionRoutingFilter)
+	filters := make(map[proto.PvtDataDigest]collectionRoutingFilter)
 	for digest, sources := range dig2src {
-		anyPeerInCollection, err := p.getLatestCollectionConfigRoutingFilter(digest.Namespace, digest.Collection)
+		cc := fcommon.CollectionCriteria{
+			Channel:    p.channel,
+			TxId:       digest.TxId,
+			Collection: digest.Collection,
+			Namespace:  digest.Namespace,
+		}
+		collection, err := p.cs.RetrieveCollectionAccessPolicy(cc)
+		if err != nil {
+			return nil, errors.WithMessage(err, fmt.Sprintf("failed obtaining collection policy for channel %s, txID %s, collection %s", p.channel, digest.TxId, digest.Collection))
+		}
+		f := collection.AccessFilter()
+		if f == nil {
+			return nil, errors.Errorf("Failed obtaining collection filter for channel %s, txID %s, collection %s", p.channel, digest.TxId, digest.Collection)
+		}
+		anyPeerInCollection, err := p.PeerFilter(common.ChainID(p.channel), func(peerSignature api.PeerSignature) bool {
+			return f(fcommon.SignedData{
+				Signature: peerSignature.Signature,
+				Identity:  peerSignature.PeerIdentity,
+				Data:      peerSignature.Message,
+			})
+		})
+
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-
 		sources := sources
 		endorserPeer, err := p.PeerFilter(common.ChainID(p.channel), func(peerSignature api.PeerSignature) bool {
 			for _, endorsement := range sources {
@@ -454,53 +516,20 @@ func (p *puller) computeFilters(dig2src dig2sources) (digestToFilterMapping, err
 			}
 			return false
 		})
+
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 
-		filters[digest] = collectionRoutingFilter{
-			anyPeer:       anyPeerInCollection,
-			preferredPeer: endorserPeer,
+		filters[*digest] = collectionRoutingFilter{
+			anyPeer:  anyPeerInCollection,
+			endorser: endorserPeer,
 		}
 	}
 	return filters, nil
 }
 
-func (p *puller) computeReconciliationFilters(dig2collectionConfig privdatacommon.Dig2CollectionConfig) (digestToFilterMapping, error) {
-	filters := make(map[privdatacommon.DigKey]collectionRoutingFilter)
-	for digest, originalCollectionConfig := range dig2collectionConfig {
-		anyPeerInCollection, err := p.getLatestCollectionConfigRoutingFilter(digest.Namespace, digest.Collection)
-		if err != nil {
-			return nil, err
-		}
 
-		originalConfigFilter, err := p.cs.AccessFilter(p.channel, originalCollectionConfig.MemberOrgsPolicy)
-		if err != nil {
-			return nil, err
-		}
-		if originalConfigFilter == nil {
-			return nil, errors.Errorf("Failed obtaining original collection filter for channel %s, config %s", p.channel, digest.Collection)
-		}
-
-		// get peers that were in the collection config while the missing data was created
-		peerFromDataCreation, err := p.getMatchAllRoutingFilter(originalConfigFilter)
-		if err != nil {
-			return nil, err
-		}
-
-		// prefer peers that are in the collection from the time the data was created rather than ones that were added later.
-		// the assumption is that the longer the peer is in the collection config, the chances it has the data are bigger.
-		preferredPeer := func(member discovery.NetworkMember) bool {
-			return peerFromDataCreation(member) && anyPeerInCollection(member)
-		}
-
-		filters[digest] = collectionRoutingFilter{
-			anyPeer:       anyPeerInCollection,
-			preferredPeer: preferredPeer,
-		}
-	}
-	return filters, nil
-}
 
 func (p *puller) getLatestCollectionConfigRoutingFilter(chaincode string, collection string) (filter.RoutingFilter, error) {
 	cc := fcommon.CollectionCriteria{
@@ -538,28 +567,29 @@ func (p *puller) getMatchAllRoutingFilter(filt privdata.Filter) (filter.RoutingF
 	return routingFilter, err
 }
 
-func (p *puller) getPurgedCollections(members []discovery.NetworkMember, dig2Filter digestToFilterMapping) []privdatacommon.DigKey {
-	var res []privdatacommon.DigKey
+func (p *puller) getPurgedCollections(members []discovery.NetworkMember,
+	dig2Filter digestToFilterMapping, blockSeq uint64) []*proto.PvtDataDigest {
+	var res []*proto.PvtDataDigest
 	for dig := range dig2Filter {
-		purged, err := p.purgedFilter(dig)
+		dig := dig
+		purged, err := p.purgedFilter(dig, blockSeq)
 		if err != nil {
 			logger.Debug("Failed to obtain purged filter for digest %v", dig, "error", err)
 			continue
 		}
-
 		membersWithPurgedData := filter.AnyMatch(members, purged)
 		// at least one peer already purged the data
 		if len(membersWithPurgedData) > 0 {
 			logger.Debugf("Private data on channel [%s], chaincode [%s], collection name [%s] for txID = [%s],"+
 				"has been purged at peers [%v]", p.channel, dig.Namespace,
 				dig.Collection, dig.TxId, membersWithPurgedData)
-			res = append(res, dig)
+			res = append(res, &dig)
 		}
 	}
 	return res
 }
 
-func (p *puller) purgedFilter(dig privdatacommon.DigKey) (filter.RoutingFilter, error) {
+func (p *puller) purgedFilter(dig proto.PvtDataDigest, blockSeq uint64) (filter.RoutingFilter, error) {
 	cc := fcommon.CollectionCriteria{
 		Channel:    p.channel,
 		TxId:       dig.TxId,
@@ -570,7 +600,6 @@ func (p *puller) purgedFilter(dig privdatacommon.DigKey) (filter.RoutingFilter, 
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
 	return func(peer discovery.NetworkMember) bool {
 		if peer.Properties == nil {
 			logger.Debugf("No properties provided for peer %s", peer.Endpoint)
@@ -581,9 +610,8 @@ func (p *puller) purgedFilter(dig privdatacommon.DigKey) (filter.RoutingFilter, 
 			return false
 		}
 		// handle overflow
-		expirationSeqNum := addWithOverflow(dig.BlockSeq, colPersistConfig.BlockToLive())
+		expirationSeqNum := addWithOverflow(blockSeq, colPersistConfig.BlockToLive())
 		peerLedgerHeightWithMargin := addWithOverflow(peer.Properties.LedgerHeight, p.btlPullMargin)
-
 		isPurged := peerLedgerHeightWithMargin >= expirationSeqNum
 		if isPurged {
 			logger.Debugf("skipping peer [%s], since pvt for channel [%s], txID = [%s], "+
@@ -604,6 +632,8 @@ func (p *puller) filterNotEligible(dig2rwSets Dig2PvtRWSetWithConfig, shouldChec
 		}
 		logger.Debug("Found", len(rwSets.RWSet), "for TxID", d.TxId, ", collection", d.Collection, "for", endpoint)
 		if len(rwSets.RWSet) == 0 {
+			// FIXME: Change to Debug
+			logger.Warning("RWSet is empty for private data for TxID", d.TxId, ", collection", d.Collection, "for", endpoint)
 			continue
 		}
 
