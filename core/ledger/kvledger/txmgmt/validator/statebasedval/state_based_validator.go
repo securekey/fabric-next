@@ -7,31 +7,61 @@ package statebasedval
 
 import (
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/internal"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/spf13/viper"
+	"golang.org/x/sync/semaphore"
+	"golang.org/x/net/context"
+	"runtime"
 )
 
 var logger = flogging.MustGetLogger("statebasedval")
-
+const (
+	preLoadCommittedVersionOfWSetQueueLen = 1
+)
 // Validator validates a tx against the latest committed state
 // and preceding valid transactions with in the same block
 type Validator struct {
-	db privacyenabledstate.DB
+	db                              privacyenabledstate.DB
+	preLoadCommittedVersionOfWSetCh chan *blockAndPvtData
+	semaphore                       *semaphore.Weighted
+}
+
+//blockAndPvtData contain current block and pvt data
+type blockAndPvtData struct {
+	block   *internal.Block
+	pvtdata map[uint64]*ledger.TxPvtData
+	txFilter util.TxFilter
+
 }
 
 // NewValidator constructs StateValidator
-func NewValidator(db privacyenabledstate.DB) *Validator {
-	return &Validator{db}
+func NewValidator(channelID string, db privacyenabledstate.DB) *Validator {
+	nWorkers := viper.GetInt("peer.validatorPoolSize")
+	if nWorkers <= 0 {
+		nWorkers = runtime.NumCPU()
+	}
+
+	v := &Validator{
+		db: db,
+		preLoadCommittedVersionOfWSetCh: make(chan *blockAndPvtData, preLoadCommittedVersionOfWSetQueueLen),
+		semaphore:                       semaphore.NewWeighted(int64(nWorkers)),
+	}
+	go v.preLoadCommittedVersionOfWSet()
+	return v
 }
+
 
 // preLoadCommittedVersionOfRSet loads committed version of all keys in each
 // transaction's read set into a cache.
-func (v *Validator) preLoadCommittedVersionOfRSet(block *internal.Block) error {
+func (v *Validator) preLoadCommittedVersionOfRSet(block *internal.Block, shouldLoad util.TxFilter) error {
 
 	// Collect both public and hashed keys in read sets of all transactions in a given block
 	var pubKeys []*statedb.CompositeKey
@@ -91,33 +121,210 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *internal.Block) error {
 	return nil
 }
 
-// ValidateAndPrepareBatch implements method in Validator interface
-func (v *Validator) ValidateAndPrepareBatch(block *internal.Block, doMVCCValidation bool) (*internal.PubAndHashUpdates, error) {
+// preLoadCommittedVersionOfWSet loads committed version of all keys in each
+// transaction's write set into a cache.
+func (v *Validator) preLoadCommittedVersionOfWSet() {
+	/*stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
+	defer stopWatch()*/
+
+	for {
+		select {
+		case data := <-v.preLoadCommittedVersionOfWSetCh:
+			v.db.GetWSetCacheLock().Lock()
+			// Collect both public and hashed keys in read sets of all transactions in a given block
+			var pubKeys []*statedb.CompositeKey
+			var hashedKeys []*privacyenabledstate.HashedCompositeKey
+			var pvtKeys []*privacyenabledstate.PvtdataCompositeKey
+
+			// pubKeysMap and hashedKeysMap are used to avoid duplicate entries in the
+			// pubKeys and hashedKeys. Though map alone can be used to collect keys in
+			// read sets and pass as an argument in LoadCommittedVersionOfPubAndHashedKeys(),
+			// array is used for better code readability. On the negative side, this approach
+			// might use some extra memory.
+			pubKeysMap := make(map[statedb.CompositeKey]interface{})
+			hashedKeysMap := make(map[privacyenabledstate.HashedCompositeKey]interface{})
+			pvtKeysMap := make(map[privacyenabledstate.PvtdataCompositeKey]interface{})
+
+			for i, tx := range data.block.Txs {
+				if !data.txFilter(i) {
+					continue
+				}
+				for _, nsRWSet := range tx.RWSet.NsRwSets {
+					logger.Debugf("Pre-loading %d write sets for Tx index %d in block %d", len(nsRWSet.KvRwSet.Writes), i, data.block.Num)
+					for _, kvWrite := range nsRWSet.KvRwSet.Writes {
+						compositeKey := statedb.CompositeKey{
+							Namespace: nsRWSet.NameSpace,
+							Key:       kvWrite.Key,
+						}
+						if _, ok := pubKeysMap[compositeKey]; !ok {
+							pubKeysMap[compositeKey] = nil
+							pubKeys = append(pubKeys, &compositeKey)
+						}
+
+					}
+					logger.Debugf("Pre-loading %d coll hashed write sets for Tx index %d in block %d", len(nsRWSet.CollHashedRwSets), i, data.block.Num)
+					for _, colHashedRwSet := range nsRWSet.CollHashedRwSets {
+						for _, kvHashedWrite := range colHashedRwSet.HashedRwSet.HashedWrites {
+							hashedCompositeKey := privacyenabledstate.HashedCompositeKey{
+								Namespace:      nsRWSet.NameSpace,
+								CollectionName: colHashedRwSet.CollectionName,
+								KeyHash:        string(kvHashedWrite.KeyHash),
+							}
+							if _, ok := hashedKeysMap[hashedCompositeKey]; !ok {
+								hashedKeysMap[hashedCompositeKey] = nil
+								hashedKeys = append(hashedKeys, &hashedCompositeKey)
+							}
+						}
+					}
+				}
+			}
+			for _, txPvtdata := range data.pvtdata {
+				pvtRWSet, err := rwsetutil.TxPvtRwSetFromProtoMsg(txPvtdata.WriteSet)
+				if err != nil {
+					logger.Errorf("TxPvtRwSetFromProtoMsg failed %s", err)
+					continue
+				}
+				for _, nsPvtdata := range pvtRWSet.NsPvtRwSet {
+					for _, collPvtRwSets := range nsPvtdata.CollPvtRwSets {
+						ns := nsPvtdata.NameSpace
+						coll := collPvtRwSets.CollectionName
+						if err != nil {
+							logger.Errorf("collPvtRwSets.CollectionName failed %s", err)
+							continue
+						}
+						logger.Debugf("Pre-loading %d private data write sets in block %d", len(collPvtRwSets.KvRwSet.Writes), data.block.Num)
+						for _, write := range collPvtRwSets.KvRwSet.Writes {
+							pvtCompositeKey := privacyenabledstate.PvtdataCompositeKey{
+								Namespace:      ns,
+								Key:            write.Key,
+								CollectionName: coll,
+							}
+							if _, ok := pvtKeysMap[pvtCompositeKey]; !ok {
+								pvtKeysMap[pvtCompositeKey] = nil
+								pvtKeys = append(pvtKeys, &pvtCompositeKey)
+							}
+						}
+					}
+				}
+
+			}
+
+			// Load committed version of all keys into a cache
+			if len(pubKeys) > 0 || len(hashedKeys) > 0 || len(pvtKeys) > 0 {
+				err := v.db.LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys, hashedKeys, pvtKeys, data.block.Num)
+				if err != nil {
+					logger.Errorf("LoadCommittedVersionsOfPubAndHashedKeys failed %s", err)
+				}
+			}
+			v.db.GetWSetCacheLock().Unlock()
+		}
+	}
+
+}
+type validationResponse struct {
+	txIdx int
+	err   error
+}
+// ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
+func (v *Validator) ValidateMVCC(block *internal.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
 	// Check whether statedb implements BulkOptimizable interface. For now,
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.
 	if v.db.IsBulkOptimizable() {
-		err := v.preLoadCommittedVersionOfRSet(block)
+		err := v.preLoadCommittedVersionOfRSet(block, acceptTx)
 		if err != nil {
-			return nil, err
+			return err
 		}
+		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: block, txFilter: acceptTx}
+	}
+
+	var txs []*internal.Transaction
+	for _, tx := range block.Txs {
+		if !acceptTx(tx.IndexInBlock) {
+			continue
+		}
+
+		txStatus := txsFilter.Flag(tx.IndexInBlock)
+		if txStatus != peer.TxValidationCode_NOT_VALIDATED {
+			logger.Debugf("Not performing MVCC validation of transaction index [%d] in block [%d] TxId [%s] since it has already been set to %s", tx.IndexInBlock, block.Num, tx.ID, txStatus)
+			continue
+		}
+		txs = append(txs, tx)
+	}
+
+	responseChan := make(chan *validationResponse)
+
+	go func() {
+		for _, tx := range txs {
+			// ensure that we don't have too many concurrent validation workers
+			v.semaphore.Acquire(context.Background(), 1)
+
+			go func(tx *internal.Transaction) {
+				defer v.semaphore.Release(1)
+
+				validationCode, err := v.validateTxMVCC(tx.RWSet)
+				if err != nil {
+					logger.Infof("Got error validating block for MVCC conflicts [%d] Transaction index [%d] TxId [%s]", block.Num, tx.IndexInBlock, tx.ID)
+					responseChan <- &validationResponse{txIdx: tx.IndexInBlock, err: err}
+					return
+				}
+
+				if validationCode == peer.TxValidationCode_VALID {
+					logger.Debugf("MVCC validation of block [%d] at TxIdx [%d] and TxId [%s] marked as valid by state validator. Reason code [%s]",
+						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
+				} else {
+					logger.Warningf("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
+						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
+				}
+				tx.ValidationCode = validationCode
+				responseChan <- &validationResponse{txIdx: tx.IndexInBlock}
+			}(tx)
+		}
+	}()
+
+	// Wait for all responses
+	var err error
+	for i := 0; i < len(txs); i++ {
+		response := <-responseChan
+		if response.err != nil {
+			logger.Warningf("Error in MVCC validation of block [%d] at TxIdx [%d]: %s", block.Num, response.txIdx, response.err)
+			// Just set the error and wait for all responses
+			err = response.err
+		}
+	}
+
+	return err
+}
+
+// ValidateAndPrepareBatch implements method in Validator interface
+func (v *Validator) ValidateAndPrepareBatch(block *internal.Block, doMVCCValidation bool, pvtdata map[uint64]*ledger.TxPvtData) (*internal.PubAndHashUpdates, error) {
+	// Check whether statedb implements BulkOptimizable interface. For now,
+	// only CouchDB implements BulkOptimizable to reduce the number of REST
+	// API calls from peer to CouchDB instance.
+	if v.db.IsBulkOptimizable() {
+		// Just preload the private data since the block has already been preloaded during MVCC validation
+		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: &internal.Block{Num: block.Num}, pvtdata: pvtdata}
 	}
 
 	updates := internal.NewPubAndHashUpdates()
 	for _, tx := range block.Txs {
+		if tx.ValidationCode != peer.TxValidationCode_VALID {
+			continue
+		}
 		var validationCode peer.TxValidationCode
 		var err error
 		if validationCode, err = v.validateEndorserTX(tx.RWSet, doMVCCValidation, updates); err != nil {
+			logger.Infof("Got error validating block [%d] Transaction index [%d] TxId [%s]: %s", block.Num, tx.IndexInBlock, tx.ID, err)
 			return nil, err
 		}
 
 		tx.ValidationCode = validationCode
 		if validationCode == peer.TxValidationCode_VALID {
-			logger.Debugf("Block [%d] Transaction index [%d] TxId [%s] marked as valid by state validator", block.Num, tx.IndexInBlock, tx.ID)
+			logger.Debugf("Validating Block [%d] Transaction index [%d] TxId [%s] marked as valid by state validator", block.Num, tx.IndexInBlock, tx.ID)
 			committingTxHeight := version.NewHeight(block.Num, uint64(tx.IndexInBlock))
 			updates.ApplyWriteSet(tx.RWSet, committingTxHeight, v.db)
 		} else {
-			logger.Warningf("Block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
+			logger.Warningf("Validating Block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
 				block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 		}
 	}
@@ -138,7 +345,35 @@ func (v *Validator) validateEndorserTX(
 	}
 	return validationCode, err
 }
-
+func (v *Validator) validateTxMVCC(txRWSet *rwsetutil.TxRwSet) (peer.TxValidationCode, error) {
+	// Uncomment the following only for local debugging. Don't want to print data in the logs in production
+	//logger.Debugf("validateTx - validating txRWSet: %s", spew.Sdump(txRWSet))
+	for _, nsRWSet := range txRWSet.NsRwSets {
+		ns := nsRWSet.NameSpace
+		// Validate public reads
+		if valid, err := v.validateReadSetMVCC(ns, nsRWSet.KvRwSet.Reads); !valid || err != nil {
+			if err != nil {
+				return peer.TxValidationCode(-1), err
+			}
+			return peer.TxValidationCode_MVCC_READ_CONFLICT, nil
+		}
+		// Validate range queries for phantom items
+		if valid, err := v.validateRangeQueriesMVCC(ns, nsRWSet.KvRwSet.RangeQueriesInfo); !valid || err != nil {
+			if err != nil {
+				return peer.TxValidationCode(-1), err
+			}
+			return peer.TxValidationCode_PHANTOM_READ_CONFLICT, nil
+		}
+		// Validate hashes for private reads
+		if valid, err := v.validateNsHashedReadSetsMVCC(ns, nsRWSet.CollHashedRwSets); !valid || err != nil {
+			if err != nil {
+				return peer.TxValidationCode(-1), err
+			}
+			return peer.TxValidationCode_MVCC_READ_CONFLICT, nil
+		}
+	}
+	return peer.TxValidationCode_VALID, nil
+}
 func (v *Validator) validateTx(txRWSet *rwsetutil.TxRwSet, updates *internal.PubAndHashUpdates) (peer.TxValidationCode, error) {
 	// Uncomment the following only for local debugging. Don't want to print data in the logs in production
 	//logger.Debugf("validateTx - validating txRWSet: %s", spew.Sdump(txRWSet))
@@ -238,7 +473,7 @@ func (v *Validator) validateRangeQueries(ns string, rangeQueriesInfo []*kvrwset.
 	return true, nil
 }
 
-// validateRangeQuery performs a phantom read check i.e., it
+// validateRangeQueryMVCC performs a phantom read check i.e., it
 // checks whether the results of the range query are still the same when executed on the
 // statedb (latest state as of last committed block)
 func (v *Validator) validateRangeQueryMVCC(ns string, rangeQueryInfo *kvrwset.RangeQueryInfo) (bool, error) {

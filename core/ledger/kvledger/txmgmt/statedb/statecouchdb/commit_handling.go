@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
@@ -49,21 +50,21 @@ func (vdb *VersionedDB) buildCommitters(updates *statedb.UpdateBatch, blockNum u
 		if nsRevs == nil {
 			nsRevs = make(nsRevisions)
 		}
-		vdb.GetWSetCacheLock().RLock()
+	//	vdb.GetWSetCacheLock().Lock()
 		if committedWSetDataCache := vdb.committedWSetDataCache[blockNum]; committedWSetDataCache != nil {
 			nsWSetRevs := committedWSetDataCache.revs[ns]
 			for k, v := range nsWSetRevs {
 				nsRevs[k] = v
 			}
 		}
-		vdb.GetWSetCacheLock().RUnlock()
+	//	vdb.GetWSetCacheLock().RUnlock()
 		// for each namespace, construct one builder with the corresponding couchdb handle and couch revisions
 		// that are already loaded into cache (during validation phase)
 		nsCommitterBuilder = append(nsCommitterBuilder, &nsCommittersBuilder{ns: ns, updates: nsUpdates, db: db, revisions: nsRevs, keyIndex: keyIndex})
 	}
-	vdb.GetWSetCacheLock().Lock()
+	// vdb.GetWSetCacheLock().Lock()
 	vdb.committedWSetDataCache[blockNum] = nil
-	vdb.GetWSetCacheLock().Unlock()
+	// vdb.GetWSetCacheLock().Unlock()
 	if err := executeBatches(nsCommitterBuilder); err != nil {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func commitUpdates(db *couchdb.CouchDatabase, batchUpdateMap map[string]*batchab
 				logger.Warningf("CouchDB batch document update encountered an problem. Retrying update for document ID:%s", respDoc.ID)
 				// Save the individual document to couchdb
 				// Note that this will do retries as needed
-				_, err = db.SaveDoc(respDoc.ID, "", &batchUpdateDocument.CouchDoc)
+				_, err = db.SaveDoc(respDoc.ID, "", batchUpdateDocument.CouchDoc)
 			}
 
 			// If the single document update or delete returns an error, then throw the error
@@ -186,16 +187,27 @@ func (f *nsFlusher) execute() error {
 	return nil
 }
 
-func addRevisionsForMissingKeys(revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
+func addRevisionsForMissingKeys(ns string, keyIndex statekeyindex.StateKeyIndex, revisions map[string]string, db *couchdb.CouchDatabase, nsUpdates map[string]*statedb.VersionedValue) error {
 	var missingKeys []string
 	for key := range nsUpdates {
 		_, ok := revisions[key]
 		if !ok {
-			missingKeys = append(missingKeys, key)
+			logger.Debugf("key %s not found in revisions going to search in keyIndex", key)
+			_, exists, err := keyIndex.GetMetadata(&statekeyindex.CompositeKey{Namespace: ns, Key: key})
+			if err != nil {
+				return err
+			}
+			if !exists {
+				revisions[key] = ""
+			} else {
+				missingKeys = append(missingKeys, key)
+			}
 		}
 	}
-	logger.Debugf("Pulling revisions for the [%d] keys for namsespace [%s] that were not part of the readset", len(missingKeys), db.DBName)
-	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys)
+	if len(missingKeys) > 0 {
+		logger.Warningf("Pulling revisions for the keys [%s] for namsespace [%s] that were not part of the readset", missingKeys, db.DBName)
+	}
+	retrievedMetadata, err := retrieveNsMetadata(db, missingKeys, false)
 	if err != nil {
 		return err
 	}

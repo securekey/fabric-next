@@ -8,12 +8,11 @@ package ledgerconfig
 
 import (
 	"path/filepath"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
+	"time"
+	"strings"
+	"sync"
 )
 
 //IsCouchDBEnabled exposes the useCouchDB variable
@@ -24,11 +23,11 @@ func IsCouchDBEnabled() bool {
 	}
 	return false
 }
-
 const confPeerFileSystemPath = "peer.fileSystemPath"
 const confLedgersData = "ledgersData"
 const confLedgerProvider = "ledgerProvider"
 const confStateleveldb = "stateLeveldb"
+const confStateKeyleveldb = "stateKeyLeveldb"
 const confHistoryLeveldb = "historyLeveldb"
 const confBookkeeper = "bookkeeper"
 const confConfigHistory = "configHistory"
@@ -40,9 +39,83 @@ const confEnableHistoryDatabase = "ledger.history.enableHistoryDatabase"
 const confMaxBatchSize = "ledger.state.couchDBConfig.maxBatchUpdateSize"
 const confAutoWarmIndexes = "ledger.state.couchDBConfig.autoWarmIndexes"
 const confWarmIndexesAfterNBlocks = "ledger.state.couchDBConfig.warmIndexesAfterNBlocks"
+const confBlockCacheSize = "ledger.blockchain.blockCacheSize"
+const confKVCacheSize = "ledger.blockchain.kvCacheSize"
+const confPvtDataCacheSize = "ledger.blockchain.pvtDataCacheSize"
+const confKVCacheBlocksToLive = "ledger.blockchain.kvCacheBlocksToLive"
+const confKVCacheNonDurableSize = "ledger.blockchain.kvCacheNonDurableSize"
+const confBlockStorage = "ledger.blockchain.blockStorage"
+const confPvtDataStorage = "ledger.blockchain.pvtDataStorage"
+const confHistoryStorage = "ledger.state.historyStorage"
+const confTransientStorage = "ledger.blockchain.transientStorage"
+const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
+const confRoles = "ledger.roles"
+const confConcurrentBlockWrites = "ledger.concurrentBlockWrites"
+const confValidationMinWaitTime = "ledger.blockchain.validation.minwaittime"
+// TODO: couchDB config should be in a common section rather than being under state.
+const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
+const confCouchDBMaxIdleConnsPerHost = "ledger.state.couchDBConfig.maxIdleConnsPerHost"
+const confCouchDBIdleConnTimeout = "ledger.state.couchDBConfig.idleConnTimeout"
+const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout"
+
+const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
+
+const defaultValidationMinWaitTime = 50 * time.Millisecond
 
 var confCollElgProcMaxDbBatchSize = &conf{"ledger.pvtdataStore.collElgProcMaxDbBatchSize", 5000}
 var confCollElgProcDbBatchesInterval = &conf{"ledger.pvtdataStore.collElgProcDbBatchesInterval", 1000}
+
+// BlockStorageProvider holds the configuration names of the available storage providers
+type BlockStorageProvider int
+
+const (
+	// FilesystemLedgerStorage stores blocks in a raw file with a LevelDB index (default)
+	FilesystemLedgerStorage BlockStorageProvider = iota
+	// CouchDBLedgerStorage stores blocks in CouchDB
+	CouchDBLedgerStorage
+)
+
+// PvtDataStorageProvider holds the configuration names of the available storage providers
+type PvtDataStorageProvider int
+
+const (
+	// LevelDBPvtDataStorage stores private data in LevelDB (default)
+	LevelDBPvtDataStorage PvtDataStorageProvider = iota
+	// CouchDBPvtDataStorage stores private data in CouchDB
+	CouchDBPvtDataStorage
+)
+
+// HistoryStorageProvider holds the configuration names of the available history storage providers
+type HistoryStorageProvider int
+
+const (
+	// LevelDBHistoryStorage stores history in LevelDB (default)
+	LevelDBHistoryStorage HistoryStorageProvider = iota
+	// CouchDBHistoryStorage stores history in CouchDB
+	CouchDBHistoryStorage
+)
+
+// TransientStorageProvider holds the configuration names of the available transient storage providers
+type TransientStorageProvider int
+
+const (
+	// LevelDBPvtDataStorage stores transient data in LevelDB (default)
+	LevelDBTransientStorage TransientStorageProvider = iota
+	// CouchDBTransientStorage stores transient data in CouchDB
+	CouchDBTransientStorage
+	// MemoryTransientStorage stores transient data in Memory
+	MemoryTransientStorage
+)
+
+// ConfigHistoryStorageProvider holds the configuration names of the available config history storage providers
+type ConfigHistoryStorageProvider int
+
+const (
+	// LevelDBConfigHistoryStorage stores config history data in LevelDB (default)
+	LevelDBConfigHistoryStorage ConfigHistoryStorageProvider = iota
+	// CouchDBConfigHistoryStorage stores config history data in CouchDB
+	CouchDBConfigHistoryStorage
+)
 
 // GetRootPath returns the filesystem path.
 // All ledger related contents are expected to be stored under this path
@@ -178,7 +251,61 @@ func IsAutoWarmIndexesEnabled() bool {
 	return true
 
 }
+// GetBlockCacheSize returns the number of blocks to keep the in the LRU cache
+func GetBlockCacheSize() int {
+	blockCacheSize := viper.GetInt(confBlockCacheSize)
+	if !viper.IsSet(confBlockCacheSize) {
+		blockCacheSize = 300
+	}
+	return blockCacheSize
+}
 
+// GetPvtDataCacheSize returns the number of pvt data per block to keep the in the LRU cache
+func GetPvtDataCacheSize() int {
+	pvtDataCacheSize := viper.GetInt(confPvtDataCacheSize)
+	if !viper.IsSet(confPvtDataCacheSize) {
+		pvtDataCacheSize = 10
+	}
+	return pvtDataCacheSize
+}
+
+func GetKVCacheSize() int {
+	kvCacheSize := viper.GetInt(confKVCacheSize)
+	if !viper.IsSet(confKVCacheSize) {
+		kvCacheSize = 64 * 1024
+	}
+	return kvCacheSize
+}
+
+func GetKVCacheBlocksToLive() uint64 {
+	if !viper.IsSet(confKVCacheBlocksToLive) {
+		return 120
+	}
+	return uint64(viper.GetInt(confKVCacheBlocksToLive))
+}
+
+func GetKVCacheNonDurableSize() int {
+	if !viper.IsSet(confKVCacheNonDurableSize) {
+		return 64 * 1024
+	}
+	return viper.GetInt(confKVCacheNonDurableSize)
+}
+
+// GetTransientStoreProvider returns the transient storage provider specified in the configuration
+func GetTransientStoreProvider() TransientStorageProvider {
+	transientStorageConfig := viper.GetString(confTransientStorage)
+
+	switch transientStorageConfig {
+	case "CouchDB":
+		return CouchDBTransientStorage
+	case "Memory":
+		return MemoryTransientStorage
+	default:
+		fallthrough
+	case "goleveldb":
+		return LevelDBTransientStorage
+	}
+}
 //GetWarmIndexesAfterNBlocks exposes the warmIndexesAfterNBlocks variable
 func GetWarmIndexesAfterNBlocks() int {
 	warmAfterNBlocks := viper.GetInt(confWarmIndexesAfterNBlocks)
@@ -188,7 +315,83 @@ func GetWarmIndexesAfterNBlocks() int {
 	}
 	return warmAfterNBlocks
 }
+// Role is the role of the peer
+type Role string
 
+const (
+	// CommitterRole indicates that the peer commits data to the ledger
+	CommitterRole Role = "committer"
+	// EndorserRole indicates that the peer endorses transaction proposals
+	EndorserRole Role = "endorser"
+	// ValidatorRole indicates that the peer validates the block
+	ValidatorRole Role = "validator"
+)
+
+var initOnce sync.Once
+var roles map[Role]struct{}
+
+// HasRole returns true if the peer has the given role
+func HasRole(role Role) bool {
+	initOnce.Do(func() {
+		roles = getRoles()
+	})
+
+	if len(roles) == 0 {
+		// No roles were explicitly set, therefore the peer is assumed to have all roles.
+		return true
+	}
+
+	_, ok := roles[role]
+	return ok
+}
+
+// IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
+func IsCommitter() bool {
+	return HasRole(CommitterRole)
+}
+
+// IsEndorser returns true if the peer is an endorser
+func IsEndorser() bool {
+	return HasRole(EndorserRole)
+}
+
+// IsValidator returns true if the peer is a validator
+func IsValidator() bool {
+	return HasRole(ValidatorRole)
+}
+
+// Roles returns the roles for the peer
+func Roles() []Role {
+	var ret []Role
+	for role := range roles {
+		ret = append(ret, role)
+	}
+	return ret
+}
+
+// RolesAsString returns the roles for the peer
+func RolesAsString() []string {
+	var ret []string
+	for role := range roles {
+		ret = append(ret, string(role))
+	}
+	return ret
+}
+
+func getRoles() map[Role]struct{} {
+	exists := struct{}{}
+	strRoles := viper.GetString(confRoles)
+	if strRoles == "" {
+		// The peer has all roles by default
+		return map[Role]struct{}{}
+	}
+
+	roles := make(map[Role]struct{})
+	for _, r := range strings.Split(strRoles, ",") {
+		roles[Role(r)] = exists
+	}
+	return roles
+}
 type conf struct {
 	Name       string
 	DefaultVal int

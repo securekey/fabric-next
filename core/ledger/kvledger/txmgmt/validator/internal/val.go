@@ -12,6 +12,10 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/core/ledger"
+
+
 )
 
 var logger = flogging.MustGetLogger("valinternal")
@@ -19,7 +23,8 @@ var logger = flogging.MustGetLogger("valinternal")
 // Validator is supposed to validate the transactions based on public data and hashes present in a block
 // and returns a batch that should be used to update the state
 type Validator interface {
-	ValidateAndPrepareBatch(block *Block, doMVCCValidation bool) (*PubAndHashUpdates, error)
+	ValidateMVCC(block *Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error
+	ValidateAndPrepareBatch(block *Block, doMVCCValidation bool, pvtdata map[uint64]*ledger.TxPvtData) (*PubAndHashUpdates, error)
 }
 
 // Block is used to used to hold the information from its proto format to a structure

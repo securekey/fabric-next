@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/pkg/errors"
 )
 
@@ -199,36 +200,33 @@ func (vdb *VersionedDB) GetDBType() string {
 // A bulk retrieve from couchdb is used to populate the cache.
 // committedVersions cache will be used for state validation of readsets
 // revisionNumbers cache will be used during commit phase for couchdb bulk updates
-func (vdb *VersionedDB) LoadCommittedVersions(keys []*statedb.CompositeKey) error {
-	nsKeysMap := map[string][]string{}
+func (vdb *VersionedDB) LoadCommittedVersions(notPreloaded []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
+	nsKeysMap := make(map[string][]string)
 	committedDataCache := newVersionCache()
-	for _, compositeKey := range keys {
+	for _, compositeKey := range notPreloaded {
 		ns, key := compositeKey.Namespace, compositeKey.Key
-		committedDataCache.setVerAndRev(ns, key, nil, "")
+		committedDataCache.setVer(ns, key, nil)
 		logger.Debugf("Load into version cache: %s~%s", ns, key)
 		nsKeysMap[ns] = append(nsKeysMap[ns], key)
 	}
-	nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap)
-	logger.Debugf("nsKeysMap=%s", nsKeysMap)
-	logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
-	if err != nil {
-		return err
-	}
-	for ns, nsMetadata := range nsMetadataMap {
-		for _, keyMetadata := range nsMetadata {
-			// TODO - why would version be ever zero if loaded from db?
-			if len(keyMetadata.Version) != 0 {
-				version, _, err := decodeVersionAndMetadata(keyMetadata.Version)
-				if err != nil {
-					return err
-				}
-				committedDataCache.setVerAndRev(ns, keyMetadata.ID, version, keyMetadata.Rev)
-			}
-		}
-	}
+	//nsMetadataMap, err := vdb.retrieveMetadata(nsKeysMap, true)
+	//nsMetadataMap := make(map[string][]*couchdb.DocMetadata)
+	//logger.Debugf("nsKeysMap=%s", nsKeysMap)
+	//logger.Debugf("nsMetadataMap=%s", nsMetadataMap)
+	//for ns, nsMetadata := range nsMetadataMap {
+	//	for _, keyMetadata := range nsMetadata {
+	//		// TODO - why would version be ever zero if loaded from db?
+	//		if len(keyMetadata.Version) != 0 {
+	//			committedDataCache.setVerAndRev(ns, keyMetadata.ID, createVersionHeightFromVersionString(keyMetadata.Version), keyMetadata.Rev)
+	//		}
+	//	}
+	//}
 	vdb.verCacheLock.Lock()
 	defer vdb.verCacheLock.Unlock()
 	vdb.committedDataCache = committedDataCache
+	for key, height := range preLoaded {
+		vdb.committedDataCache.setVer(key.Namespace, key.Key, height)
+	}
 	return nil
 }
 
@@ -293,8 +291,8 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 	}
 
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
-	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
-	return kv.VersionedValue, nil
+/*	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
+*/	return kv.VersionedValue, nil
 }
 
 // GetStateMultipleKeys implements method in VersionedDB interface
