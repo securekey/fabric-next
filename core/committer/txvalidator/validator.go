@@ -34,6 +34,8 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
+	"sync"
+	"sort"
 )
 
 // Support provides all of the needed to evaluate the VSCC
@@ -76,6 +78,9 @@ type vsccValidator interface {
 	VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode)
 }
 
+type mvccValidator interface {
+	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+}
 // implementation of Validator interface, keeps
 // reference to the ledger to enable tx simulation
 // and execution of vscc
@@ -83,9 +88,20 @@ type TxValidator struct {
 	ChainID string
 	Support Support
 	Vscc    vsccValidator
+	gossip        gossip2.Gossip
+	mvccValidator mvccValidator
+	roleUtil      *roleutil.RoleUtil
 }
 
 var logger = flogging.MustGetLogger("committer.txvalidator")
+// ignoreCancel is a cancel function that does nothing
+var ignoreCancel = func() {}
+
+func init() {
+	// Init logger with module name
+	logger = flogging.MustGetLogger("committer/txvalidator")
+}
+
 
 type blockValidationRequest struct {
 	block *common.Block
