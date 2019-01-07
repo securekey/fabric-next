@@ -21,8 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Fabric 1.3 (Oct 3, 2018)
-git checkout v1.3.0
+# Fabric v1.4.0-rc2 (Dec 20, 2018)
+git checkout v1.4.0-rc2
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -30,11 +30,10 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 # **Temporary** metrics collection
-git am $MY_PATH/../patches/0001-Ledger-metrics.patch
+# TODO DEV-11471
+#git am $MY_PATH/../patches/0001-Ledger-metrics.patch
 
 #apply patch for GREP11 (5151f212d3edd89fbabc12fbe702cecea0cb4b3a + local fixes)
-#git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
-git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP-metrics.patch
+git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
+#git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP-metrics.patch
 
-# cherry pick fix for golint path change
-git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/37/26937/1 && git cherry-pick FETCH_HEAD
