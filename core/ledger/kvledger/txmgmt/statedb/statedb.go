@@ -13,6 +13,8 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
+	"sync"
 )
 
 //go:generate counterfeiter -o mock/results_iterator.go -fake-name ResultsIterator . ResultsIterator
@@ -41,6 +43,12 @@ type VersionedDB interface {
 	// endKey is exclusive
 	// The returned ResultsIterator contains results of type *VersionedKV
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
+    // GetNonDurableStateRangeScanIterator returns an iterator that contains all the key-values between given key ranges.
+	// startKey is inclusive
+	// endKey is exclusive
+	// The returned ResultsIterator contains results of type *VersionedKV
+	GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
+
 	// GetStateRangeScanIteratorWithMetadata returns an iterator that contains all the key-values between given key ranges.
 	// startKey is inclusive
 	// endKey is exclusive
@@ -107,6 +115,7 @@ type VersionedValue struct {
 	Metadata []byte
 	Version  *version.Height
 }
+
 
 // IsDelete returns true if this update indicates delete of a key
 func (vv *VersionedValue) IsDelete() bool {
@@ -176,12 +185,12 @@ func (batch *UpdateBatch) PutValAndMetadata(ns string, key string, value []byte,
 	if value == nil {
 		panic("Nil value not allowed. Instead call 'Delete' function")
 	}
-	batch.Update(ns, key, &VersionedValue{value, metadata, version})
+	batch.Update(ns, key, &VersionedValue{value,nil ,  version })
 }
 
 // Delete deletes a Key and associated value
 func (batch *UpdateBatch) Delete(ns string, key string, version *version.Height) {
-	batch.Update(ns, key, &VersionedValue{nil, nil, version})
+	batch.Update(ns, key, &VersionedValue{nil,  nil,  version })
 }
 
 // Exists checks whether the given key exists in the batch
@@ -235,6 +244,11 @@ func (batch *UpdateBatch) GetRangeScanIterator(ns string, startKey string, endKe
 	return newNsIterator(ns, startKey, endKey, batch)
 }
 
+// GetRangeScanIteratorIncludingEndKey is the same as GetRangeScanIterator except that it includes endKey in the result set
+func (batch *UpdateBatch) GetRangeScanIteratorIncludingEndKey(ns string, startKey string, endKey string) ResultsIterator {
+		return newNsIterator(ns, startKey, endKey, batch)
+}
+
 func (batch *UpdateBatch) getOrCreateNsUpdates(ns string) *nsUpdates {
 	nsUpdates := batch.updates[ns]
 	if nsUpdates == nil {
@@ -252,7 +266,7 @@ type nsIterator struct {
 	lastIndex  int
 }
 
-func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch, includeEndKey bool) *nsIterator {
+func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch) *nsIterator {
 	nsUpdates, ok := batch.updates[ns]
 	if !ok {
 		return &nsIterator{}
@@ -269,9 +283,6 @@ func newNsIterator(ns string, startKey string, endKey string, batch *UpdateBatch
 		lastIndex = len(sortedKeys)
 	} else {
 		lastIndex = sort.SearchStrings(sortedKeys, endKey)
-		if includeEndKey {
-			lastIndex++
-		}
 	}
 	return &nsIterator{ns, nsUpdates, sortedKeys, nextIndex, lastIndex}
 }
@@ -284,7 +295,7 @@ func (itr *nsIterator) Next() (QueryResult, error) {
 	key := itr.sortedKeys[itr.nextIndex]
 	vv := itr.nsUpdates.m[key]
 	itr.nextIndex++
-	return &VersionedKV{CompositeKey{itr.ns, key}, VersionedValue{vv.Value, vv.Metadata, vv.Version}}, nil
+	return &VersionedKV{CompositeKey{itr.ns, key}, VersionedValue{vv.Value, nil, vv.Version}}, nil
 }
 
 // Close implements the method from QueryResult interface

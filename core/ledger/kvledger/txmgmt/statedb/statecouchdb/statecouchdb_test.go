@@ -13,13 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/commontests"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache/commontests"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	ledgertestutil "github.com/hyperledger/fabric/core/ledger/testutil"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -402,14 +401,14 @@ func TestHandleChaincodeDeployErroneousIndexFile(t *testing.T) {
 	_, err = db.ExecuteQuery("ns1", `{"selector":{"owner":"fred"}, "sort": [{"size": "desc"}]}`)
 	assert.NoError(t, err)
 }
-
+/*
 func TestIsBulkOptimizable(t *testing.T) {
-	var db statedb.VersionedDB = &VersionedDB{}
+	 var db statedb.VersionedDB = &VersionedDB{}
 	_, ok := db.(statedb.BulkOptimizable)
 	if !ok {
 		t.Fatal("state couch db is expected to implement interface statedb.BulkOptimizable")
 	}
-}
+}*/
 
 func TestPreloadCommittedVersions(t *testing.T) {
 	preloaded := make(map[*statedb.CompositeKey]*version.Height)
@@ -718,7 +717,7 @@ func TestRangeScanWithCouchInternalDocsPresent(t *testing.T) {
 	defer env.Cleanup()
 	db, err := env.DBProvider.GetDBHandle("testrangescanfiltercouchinternaldocs")
 	assert.NoError(t, err)
-	couchDatabse, err := db.(*VersionedDB).getNamespaceDBHandle("ns")
+	couchDatabse, err := db.(VersionedDB).getNamespaceDBHandle("ns")
 	assert.NoError(t, err)
 	db.Open()
 	defer db.Close()

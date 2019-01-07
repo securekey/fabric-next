@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 )
 
 var logger = flogging.MustGetLogger("stateleveldb")
@@ -130,6 +131,9 @@ func (vdb *versionedDB) GetStateRangeScanIterator(namespace string, startKey str
 	return vdb.GetStateRangeScanIteratorWithMetadata(namespace, startKey, endKey, nil)
 }
 
+func (vdb *versionedDB) GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+		return vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
+	}
 const optionLimit = "limit"
 
 // GetStateRangeScanIteratorWithMetadata implements method in VersionedDB interface
