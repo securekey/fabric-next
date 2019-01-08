@@ -236,13 +236,13 @@ func validateConfigBlock(block *common.Block) error {
 // Since it is the first block, it is the genesis block containing configuration
 // for this chain, so we want to update the Chain object with this info
 func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider) pb.Response {
-	if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
-		return shim.Error(err.Error())
+	if ledgerconfig.IsCommitter() {
+		// Only a committer can create a new channel in the DB
+		cnflogger.Debugf("Creating channel [%s]", chainID)
+		if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
+			return shim.Error(err.Error())
+		}
 	}
-
-	peer.InitChain(chainID)
-
-	return shim.Success(nil)
 }
 
 // Return the current configuration block for the specified chainID. If the

@@ -173,23 +173,13 @@ func (b *blocksProviderImpl) DeliverBlocks() {
 				logger.Errorf("[%s] Error verifying block with sequnce number %d, due to %s", b.chainID, blockNum, err)
 				continue
 			}
-
-			numberOfPeers := len(b.gossip.PeersOfChannel(gossipcommon.ChainID(b.chainID)))
 			// Create payload with a block received
 			payload := createPayload(blockNum, marshaledBlock)
-			// Use payload to create gossip message
-			gossipMsg := createGossipMsg(b.chainID, payload)
 
 			logger.Debugf("[%s] Adding payload to local buffer, blockNum = [%d]", b.chainID, blockNum)
 			// Add payload to local state payloads buffer
 			if err := b.gossip.AddPayload(b.chainID, payload); err != nil {
 				logger.Warningf("Block [%d] received from ordering service wasn't added to payload buffer: %v", blockNum, err)
-			}
-
-			// Gossip messages with other nodes
-			logger.Debugf("[%s] Gossiping block [%d], peers number [%d]", b.chainID, blockNum, numberOfPeers)
-			if !b.isDone() {
-				b.gossip.Gossip(gossipMsg)
 			}
 		default:
 			logger.Warningf("[%s] Received unknown: %v", b.chainID, t)

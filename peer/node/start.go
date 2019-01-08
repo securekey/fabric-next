@@ -850,7 +850,12 @@ func initGossipService(policyMgr policies.ChannelPolicyManagerGetter, peerServer
 		certs.TLSServerCert.Store(&serverCert)
 		certs.TLSClientCert.Store(&clientCert)
 	}
-
+	if ledgerconfig.HasRole(ledgerconfig.EndorserRole) {
+		logger.Infof("This peer is an endorser")
+	}
+	if ledgerconfig.HasRole(ledgerconfig.CommitterRole) {
+		logger.Infof("This peer is a committer")
+	}
 	messageCryptoService := peergossip.NewMCS(
 		policyMgr,
 		localmsp.NewSigner(),

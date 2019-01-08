@@ -54,6 +54,20 @@ func (s *DiscoverySupport) Peers() discovery.Members {
 	return discovery.Members(peers).Filter(discovery.HasExternalEndpoint).Map(sanitizeEnvelope)
 }
 
+// endorsersOnly filters out any peer that is NOT an endorser
+func endorsersOnly(members discovery.Members) discovery.Members {
+	var ret discovery.Members
+	for _, member := range members {
+		if member.Properties != nil {
+			roles := gossip2.Roles(member.Properties.Roles)
+			if roles.HasRole(ledgerconfig.EndorserRole) {
+				ret = append(ret, member)
+			}
+		}
+	}
+	return ret
+}
+
 func sanitizeEnvelope(member discovery.NetworkMember) discovery.NetworkMember {
 	// Make a local copy of the member
 	returnedMember := member
