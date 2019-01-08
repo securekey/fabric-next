@@ -12,13 +12,23 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cachedpvtdatastore"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/cdbpvtdata"
+	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/mempvtdatacache"
+
 	lutil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
+
+
 )
 
 var logger = flogging.MustGetLogger("ledgerstorage")
@@ -138,8 +148,8 @@ func (s *Store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 // CommitWithPvtData commits the block and the corresponding pvt data in an atomic operation
 func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error {
-	stopWatch := metrics.StopWatch("ledgerstorage_CommitWithPvtData_duration")
-	defer stopWatch()
+	//stopWatch := metrics.StopWatch("ledgerstorage_CommitWithPvtData_duration")
+	//defer stopWatch()
 
 	blockNum := blockAndPvtdata.Block.Header.Number
 	s.rwlock.Lock()
@@ -149,9 +159,9 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 	if err != nil {
 		return err
 	}
-	if metrics.IsDebug() {
+	/*if metrics.IsDebug() {
 		metrics.RootScope.Gauge("ledgerstorage_CommitWithPvtData_BlockDiff").Update(float64(blockNum - pvtBlkStoreHt))
-	}
+	}*/
 
 	writtenToPvtStore := false
 	if pvtBlkStoreHt < blockNum+1 { // The pvt data store sanity check does not allow rewriting the pvt data.
@@ -182,7 +192,7 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 		}
 		writtenToPvtStore = true
 	} else {
-		metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
+		//metrics.IncrementCounter("ledgerstorage_CommitWithPvtData_SkipCount")
 		logger.Debugf("Skipping writing block [%d] to pvt block store as the store height is [%d]", blockNum, pvtBlkStoreHt)
 	}
 
@@ -238,8 +248,8 @@ func (s *Store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPv
 // GetPvtDataAndBlockByNum returns the block and the corresponding pvt data.
 // The pvt data is filtered by the list of 'collections' supplied
 func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsCollFilter) (*ledger.BlockAndPvtData, error) {
-	stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataAndBlockByNum_duration")
-	defer stopWatch()
+	//stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataAndBlockByNum_duration")
+	//defer stopWatch()
 
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
@@ -260,8 +270,8 @@ func (s *Store) GetPvtDataAndBlockByNum(blockNum uint64, filter ledger.PvtNsColl
 // The pvt data is filtered by the list of 'ns/collections' supplied in the filter
 // A nil filter does not filter any results
 func (s *Store) GetPvtDataByNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-	stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataByNum_duration")
-	defer stopWatch()
+	//stopWatch := metrics.StopWatch("ledgerstorage_GetPvtDataByNum_duration")
+	//defer stopWatch()
 
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
@@ -394,6 +404,35 @@ func (s *Store) syncPvtdataStoreWithBlockStore() error {
 	}
 
 	return errors.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)
+}
+
+func (s *Store) initCouchDB() error {
+	if !ledgerconfig.IsCommitter() {
+		return s.initPvtdataStoreFromExistingBlockchainCouchDB()
+	}
+
+	return nil
+}
+
+// initPvtdataStoreFromExistingBlockchainCouchDB updates the initial state of the pvtdata store
+// if an existing block store has a blockchain and the pvtdata store is empty. Scenario for CouchDB
+func (s *Store) initPvtdataStoreFromExistingBlockchainCouchDB() error {
+	var bcInfo *common.BlockchainInfo
+	var err error
+
+	if bcInfo, err = s.BlockStore.GetBlockchainInfo(); err != nil {
+		return err
+	}
+	if _, err = s.pvtdataStore.IsEmpty(); err != nil {
+		return err
+	}
+	if bcInfo.Height > 0 {
+		if err = s.pvtdataStore.InitLastCommittedBlock(bcInfo.Height - 1); err != nil {
+			return err
+		}
+		return nil
+	}
+	return nil
 }
 
 func constructPvtdataMap(pvtdata []*ledger.TxPvtData) map[uint64]*ledger.TxPvtData {
