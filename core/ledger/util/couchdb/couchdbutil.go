@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/common/metrics"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/pkg/errors"
+	"net"
 )
 
 var expectedDatabaseNamePattern = `[a-z][a-z0-9.$_()+-]*`
@@ -73,7 +75,22 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 
 	return couchInstance, nil
 }
-
+func createHTTPTransport() (*http.Transport, error) {
+	// Copy of http.DefaultTransport with overrides.
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: ledgerconfig.GetCouchDBKeepAliveTimeout(),
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          ledgerconfig.GetCouchDBMaxIdleConns(),
+		MaxIdleConnsPerHost:   ledgerconfig.GetCouchDBMaxIdleConnsPerHost(),
+		IdleConnTimeout:       ledgerconfig.GetCouchDBIdleConnTimeout(),
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}, nil
+}
 //checkCouchDBVersion verifies CouchDB is at least 2.0.0
 func checkCouchDBVersion(version string) error {
 

@@ -45,7 +45,9 @@ type DBOperationResponse struct {
 	id  string
 	rev string
 }
-
+type dbResponseError struct {
+		*DBReturn
+	}
 // DBInfo is body for database information.
 type DBInfo struct {
 	DbName    string `json:"db_name"`
@@ -1498,7 +1500,7 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 		return nil, errors.Wrap(err, "error reading response body")
 	}
 
-	var jsonResponse = &BatchRetrieveDocMetadataResponse{}
+	var jsonResponse = &BatchRetrieveDocResponse{}
 
 	err2 := json.Unmarshal(jsonResponseRaw, &jsonResponse)
 	if err2 != nil {
@@ -1508,8 +1510,8 @@ func (dbclient *CouchDatabase) BatchRetrieveDocumentMetadata(keys []string) ([]*
 	docMetadataArray := []*DocMetadata{}
 
 	for _, row := range jsonResponse.Rows {
-		docMetadata := &DocMetadata{ID: row.ID, Rev: row.DocMetadata.Rev, Version: row.DocMetadata.Version}
-		docMetadataArray = append(docMetadataArray, docMetadata)
+		docMetadata := DocMetadata{ID: row.ID, Rev: row.Value.Rev, Version: row.Doc.Version}
+		docMetadataArray = append(docMetadataArray, &docMetadata)
 	}
 
 	logger.Debugf("[%s] Exiting BatchRetrieveDocumentMetadata()", dbclient.DBName)

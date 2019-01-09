@@ -58,9 +58,9 @@ func (dbclient *CouchDatabase) CreateNewIndexWithRetry(indexdefinition string, d
 
 // Exists determines if the database exists
 func (dbclient *CouchDatabase) Exists() (bool, error) {
-	_, err := dbclient.GetDatabaseInfo()
+	_, _, err := dbclient.GetDatabaseInfo()
 	if err != nil {
-		dbErr, ok := err.(*dbResponseError)
+		dbErr, ok := err.(dbResponseError)
 		if !ok || dbErr.StatusCode != http.StatusNotFound {
 			return false, err
 		}

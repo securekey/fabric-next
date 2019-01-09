@@ -191,6 +191,49 @@ func GetPvtdataStoreCollElgProcDbBatchesInterval() int {
 	}
 	return collElgProcDbBatchesInterval
 }
+
+// GetCouchDBMaxIdleConns returns the number of idle connections to hold in the connection pool for couchDB.
+func GetCouchDBMaxIdleConns() int {
+	// TODO: this probably be the default golang version (100)
+	const defaultMaxIdleConns = 1000
+	if !viper.IsSet(confCouchDBMaxIdleConns) {
+		return defaultMaxIdleConns
+	}
+
+	return viper.GetInt(confCouchDBMaxIdleConns)
+}
+
+// GetCouchDBMaxIdleConnsPerHost returns the number of idle connections to allow per host in the connection pool for couchDB.
+func GetCouchDBMaxIdleConnsPerHost() int {
+	// TODO: this probably be the default golang version (http.DefaultMaxIdleConnsPerHost)
+	const defaultMaxIdleConnsPerHost = 100
+	if !viper.IsSet(confCouchDBMaxIdleConnsPerHost) {
+		return defaultMaxIdleConnsPerHost
+	}
+
+	return viper.GetInt(confCouchDBMaxIdleConnsPerHost)
+}
+
+// GetCouchDBIdleConnTimeout returns the duration before closing an idle connection.
+func GetCouchDBIdleConnTimeout() time.Duration {
+	const defaultIdleConnTimeout = 90 * time.Second
+
+	if !viper.IsSet(confCouchDBIdleConnTimeout) {
+		return defaultIdleConnTimeout
+	}
+
+	return viper.GetDuration(confCouchDBIdleConnTimeout)
+}
+// GetCouchDBKeepAliveTimeout returns the duration for keep alive.
+func GetCouchDBKeepAliveTimeout() time.Duration {
+	const defaultKeepAliveTimeout = 30 * time.Second
+
+	if !viper.IsSet(confCouchDBKeepAliveTimeout) {
+		return defaultKeepAliveTimeout
+	}
+
+	return viper.GetDuration(confCouchDBKeepAliveTimeout)
+}
 //IsHistoryDBEnabled exposes the historyDatabase variable
 func IsHistoryDBEnabled() bool {
 	return viper.GetBool(confEnableHistoryDatabase)
@@ -337,6 +380,11 @@ func getRoles() map[Role]struct{} {
 	}
 	return roles
 }
+// CouchDBHTTPTraceEnabled returns true if HTTP tracing is enabled for Couch DB
+func CouchDBHTTPTraceEnabled() bool {
+	return viper.GetBool(confCouchDBHTTPTraceEnabled)
+}
+
 type conf struct {
 	Name       string
 	DefaultVal int
