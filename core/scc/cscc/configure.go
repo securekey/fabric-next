@@ -242,7 +242,19 @@ func joinChain(chainID string, block *common.Block, ccp ccprovider.ChaincodeProv
 		if err := peer.CreateChainFromBlock(block, ccp, sccp); err != nil {
 			return shim.Error(err.Error())
 		}
+
+		cnflogger.Debugf("Initializing channel [%s]", chainID)
+		peer.InitChain(chainID)
+	} else {
+		cnflogger.Debugf("I am not a commiter - initializing channel [%s]...", chainID)
+		if err := initializeChannel(chainID); err != nil {
+			cnflogger.Errorf("Error initializing channel [%s]: %s", chainID, err)
+			return shim.Error(fmt.Sprintf("Error initializing channel [%s]: %s", chainID, err))
+		}
+		cnflogger.Debugf("... successfully initializing channel [%s].", chainID)
 	}
+
+	return shim.Success(nil)
 }
 
 // Return the current configuration block for the specified chainID. If the
