@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
@@ -217,6 +216,7 @@ func (p *KVCacheProvider) PrepareIndexUpdates(validatedTxOps []ValidatedTxOp, va
 	}
 
 	for _, v := range validatedPvtHashData {
+
 		namespace := DerivePvtHashDataNs(v.Namespace, v.Collection)
 		if v.IsDeleted {
 			indexDeletes = append(indexDeletes, statekeyindex.CompositeKey{Key: v.Key, Namespace: namespace})
@@ -296,8 +296,9 @@ func (p *KVCacheProvider) GetNonDurableSortedKeys(chId, namespace string) []stri
 	defer p.kvCacheMtx.Unlock()
 
 	kvCache, _ := p.getKVCache(chId, namespace)
-	stopWatch := metrics.StopWatch("getnondurablesortedkeys_duration")
-	keys := kvCache.getNonDurableSortedKeys()
-	stopWatch()
+/*	stopWatch := metrics.StopWatch("getnondurablesortedkeys_duration")
+*/
+    keys := kvCache.getNonDurableSortedKeys()
+	//stopWatch()
 	return keys
 }

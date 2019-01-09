@@ -90,7 +90,7 @@ func (r *nsMetadataRetriever) String() string {
 
 func (b *subNsMetadataRetriever) execute() error {
 	var err error
-	if b.executionResult, err = b.db.BatchRetrieveDocumentMetadata(b.keys, b.includeDocs); err != nil {
+	if b.executionResult, err = b.db.BatchRetrieveDocumentMetadata(b.keys); err != nil {
 		return err
 	}
 	return nil

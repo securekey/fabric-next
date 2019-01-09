@@ -37,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"sort"
 	"sync"
+
 )
 
 // Support provides all of the needed to evaluate the VSCC
@@ -90,11 +91,20 @@ type TxValidator struct {
 	ChainID string
 	Support Support
 	Vscc    vsccValidator
+	gossip        gossip2.Gossip
+	mvccValidator mvccValidator
+	roleUtil      *roleutil.RoleUtil
 }
 
 var logger = flogging.MustGetLogger("committer.txvalidator")
 // ignoreCancel is a cancel function that does nothing
 var ignoreCancel = func() {}
+
+func init() {
+	// Init logger with module name
+	logger = flogging.MustGetLogger("committer/txvalidator")
+}
+
 
 type blockValidationRequest struct {
 	block *common.Block
