@@ -14,7 +14,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/mocks"
-	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/hyperledger/fabric/integration/runner"
@@ -31,8 +30,8 @@ func TestCanReturnProvider(t *testing.T) {
 	def, cleanup := startCouchDB()
 	defer cleanup()
 	provider, err := NewHistoryDBProvider(def)
-	testutil.AssertNoError(t, err, "cannot create historycouchdb provider")
-	testutil.AssertNotNil(t, provider)
+	assert.NoError(t, err, "cannot create historycouchdb provider")
+	assert.NotNil(t, provider)
 }
 
 // Can get a DBHandle from the HistoryDBProvider
@@ -41,8 +40,8 @@ func TestProviderCanGetDbHandle(t *testing.T) {
 	defer cleanup()
 	provider, _ := NewHistoryDBProvider(def)
 	handle, err := provider.GetDBHandle("historydb")
-	testutil.AssertNoError(t, err, "cannot get DBHandle from historycouchdb provider")
-	testutil.AssertNotNil(t, handle)
+	assert.NoError(t, err, "cannot get DBHandle from historycouchdb provider")
+	assert.NotNil(t, handle)
 }
 
 // DBHandle.Commit() only saves write sets to database for valid transactions that are endorsed.
@@ -590,7 +589,7 @@ func queryCouchDbById(def *couchdb.CouchDBDef, dbname, id string) (*couchdb.Couc
 
 // Query CouchDB for writesets for the given namespace and key.
 func queryCouchDbByNsAndKey(def *couchdb.CouchDBDef, dbname, namespace, key string) ([]*couchdb.QueryResult, error) {
-	return newCouchDbClient(
+	queryResult, _ , err := newCouchDbClient(
 		def,
 		couchdb.ConstructBlockchainDBName(dbname, dbNameSuffix),
 	).QueryDocuments(fmt.Sprintf(`
@@ -601,6 +600,7 @@ func queryCouchDbByNsAndKey(def *couchdb.CouchDBDef, dbname, namespace, key stri
 			}
 		}
 	`, namespace, key))
+	return queryResult, err
 }
 
 // Start a CouchDB test instance.
@@ -626,7 +626,7 @@ func newCouchDbClient(def *couchdb.CouchDBDef, dbname string) *couchdb.CouchData
 	instance, err := couchdb.CreateCouchInstance(
 		def.URL, def.Username, def.Password,
 		def.MaxRetries, def.MaxRetriesOnStartup,
-		def.RequestTimeout, false,
+		def.RequestTimeout, false, nil,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("cannot create couchdb instance. error: %s", err))

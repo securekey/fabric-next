@@ -99,7 +99,7 @@ func (iter *resultsIter) loadNextPage() error {
 		}`,
 		iter.namespace, iter.key, writesetIndexDesignDoc, iter.pageNum*iter.pageSize, iter.pageSize,
 	)
-	results, err := iter.couchDB.QueryDocuments(query)
+	results, _, err := iter.couchDB.QueryDocuments(query)
 	if err != nil {
 		return errors.Wrapf(err, "failed to query HistoryDB on CouchDB; query: [%s]", query)
 	}
