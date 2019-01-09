@@ -233,6 +233,8 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 
 	pluginMapper = pm
 	chainInitializer = init
+	ccProvider = ccp
+	sccProvider = sccp
 
 	var cb *common.Block
 	var ledger ledger.PeerLedger
@@ -268,6 +270,36 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 
 		InitChain(cid)
 	}
+}
+
+// InitializeChannel initializes the given channel from persistence
+func InitializeChannel(cid string) error {
+	peerLogger.Infof("Loading channel [%s]", cid)
+
+	var err error
+	var ledger ledger.PeerLedger
+	if ledger, err = ledgermgmt.OpenLedger(cid); err != nil {
+		peerLogger.Warningf("Failed to load ledger %s(%s)", cid, err)
+		peerLogger.Debugf("Error while loading ledger %s with message %s. We continue to the next ledger rather than abort.", cid, err)
+		return err
+	}
+
+	var cb *common.Block
+	if cb, err = getCurrConfigBlockFromLedger(ledger); err != nil {
+		peerLogger.Warningf("Failed to find config block on ledger %s(%s)", cid, err)
+		peerLogger.Debugf("Error while looking for config block on ledger %s with message %s. We continue to the next ledger rather than abort.", cid, err)
+		return err
+	}
+
+	// Create a chain if we get a valid ledger with config block
+	if err = createChain(cid, ledger, cb, ccProvider, sccProvider, pluginMapper); err != nil {
+		peerLogger.Warningf("Failed to load chain %s(%s)", cid, err)
+		peerLogger.Debugf("Error reloading chain %s with message %s. We continue to the next chain rather than abort.", cid, err)
+		return err
+	}
+
+	InitChain(cid)
+	return nil
 }
 
 // InitChain takes care to initialize chain after peer joined, for example deploys system CCs
