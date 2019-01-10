@@ -197,7 +197,7 @@ func (r *retriever) mostRecentEntryBelow(blockNum uint64, ns, key, ccName string
    ]
 }`
 
-	results, err := r.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase)), ccName))
+	results,_, err := r.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(blockNum, blockNumberBase)), ccName))
 	if err != nil {
 		return nil, err
 	}

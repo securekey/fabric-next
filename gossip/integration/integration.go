@@ -45,7 +45,7 @@ func newConfig(selfEndpoint string, externalEndpoint string, certs *common.TLSCe
 		MaxPropagationBurstSize:    util.GetIntOrDefault("peer.gossip.maxPropagationBurstSize", 10),
 		PropagateIterations:        util.GetIntOrDefault("peer.gossip.propagateIterations", 1),
 		PropagatePeerNum:           util.GetIntOrDefault("peer.gossip.propagatePeerNum", 3),
-		PullInterval:               util.GetDurationOrDefault("peer.gossip.pullInterval", 4*time.Second),
+		PullInterval:               pullInterval,
 		PullPeerNum:                util.GetIntOrDefault("peer.gossip.pullPeerNum", 3),
 		InternalEndpoint:           selfEndpoint,
 		ExternalEndpoint:           externalEndpoint,

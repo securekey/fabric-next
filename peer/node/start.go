@@ -123,7 +123,7 @@ var nodeStartCmd = &cobra.Command{
 
 func serve(args []string) error {
 
-	metrics.Initialize()
+	//metrics.Initialize()
 
 	// currently the peer only works with the standard MSP
 	// because in certain scenarios the MSP has to make sure
