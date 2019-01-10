@@ -41,7 +41,7 @@ func NewVersionedDBProvider(metricsProvider metrics.Provider) (*VersionedDBProvi
 	logger.Debugf("constructing CouchDB VersionedDBProvider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, metricsProvider)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
 	if err != nil {
 		return nil, err
 	}
@@ -406,6 +406,9 @@ func rangeScanFilterCouchInternalDocs(db *couchdb.CouchDatabase,
 
 func isCouchInternalKey(key string) bool {
 	return len(key) != 0 && key[0] == '_'
+}
+func (vdb *VersionedDB) GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
+	return vdb.GetStateRangeScanIterator(namespace, startKey, endKey)
 }
 
 // ExecuteQuery implements method in VersionedDB interface

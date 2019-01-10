@@ -44,7 +44,7 @@ func (c *CachedPvtDataProvider) OpenStore(ledgerID string) (pvtdatastorage.Store
 		return nil, err
 	}
 
-	return s, nil
+	return s.pvtDataStore, nil
 }
 
 // Close cleans up the Provider

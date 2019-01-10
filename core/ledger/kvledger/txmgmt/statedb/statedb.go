@@ -11,9 +11,9 @@ import (
 	"sort"
 
 	"github.com/hyperledger/fabric/core/common/ccprovider"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"sync"
 )
 
@@ -31,7 +31,7 @@ type VersionedDBProvider interface {
 // VersionedDB lists methods that a db is supposed to implement
 type VersionedDB interface {
 	// GetKVCacheProvider gets the KVCacheProvider that does caching for this VersionedDB
-	GetKVCacheProvider() (*kvcache.KVCacheProvider)
+	GetKVCacheProvider() *kvcache.KVCacheProvider
 	// GetState gets the value for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
 	GetState(namespace string, key string) (*VersionedValue, error)
 	// GetVersion gets the version for given namespace and key. For a chaincode, the namespace corresponds to the chaincodeId
@@ -43,21 +43,14 @@ type VersionedDB interface {
 	// endKey is exclusive
 	// The returned ResultsIterator contains results of type *VersionedKV
 	GetStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
-    // GetNonDurableStateRangeScanIterator returns an iterator that contains all the key-values between given key ranges.
+	// GetNonDurableStateRangeScanIterator returns an iterator that contains all the key-values between given key ranges.
 	// startKey is inclusive
 	// endKey is exclusive
 	// The returned ResultsIterator contains results of type *VersionedKV
 	GetNonDurableStateRangeScanIterator(namespace string, startKey string, endKey string) (ResultsIterator, error)
-
-	// GetStateRangeScanIteratorWithMetadata returns an iterator that contains all the key-values between given key ranges.
-	// startKey is inclusive
-	// endKey is exclusive
-	// metadata is a map of additional query parameters
-	// The returned ResultsIterator contains results of type *VersionedKV
-	GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (QueryResultsIterator, error)
 	// ExecuteQuery executes the given query and returns an iterator that contains results of type *VersionedKV.
 	ExecuteQuery(namespace, query string) (ResultsIterator, error)
-	// ExecuteQueryWithMetadata executes the given query with associated query options and
+	//ExecuteQueryWithMetadata executes the given query with associated query options and
 	// returns an iterator that contains results of type *VersionedKV.
 	// metadata is a map of additional query parameters
 	ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (QueryResultsIterator, error)
@@ -115,7 +108,6 @@ type VersionedValue struct {
 	Metadata []byte
 	Version  *version.Height
 }
-
 
 // IsDelete returns true if this update indicates delete of a key
 func (vv *VersionedValue) IsDelete() bool {
@@ -185,12 +177,12 @@ func (batch *UpdateBatch) PutValAndMetadata(ns string, key string, value []byte,
 	if value == nil {
 		panic("Nil value not allowed. Instead call 'Delete' function")
 	}
-	batch.Update(ns, key, &VersionedValue{value,nil ,  version })
+	batch.Update(ns, key, &VersionedValue{value, nil, version})
 }
 
 // Delete deletes a Key and associated value
 func (batch *UpdateBatch) Delete(ns string, key string, version *version.Height) {
-	batch.Update(ns, key, &VersionedValue{nil,  nil,  version })
+	batch.Update(ns, key, &VersionedValue{nil, nil, version})
 }
 
 // Exists checks whether the given key exists in the batch
@@ -246,7 +238,7 @@ func (batch *UpdateBatch) GetRangeScanIterator(ns string, startKey string, endKe
 
 // GetRangeScanIteratorIncludingEndKey is the same as GetRangeScanIterator except that it includes endKey in the result set
 func (batch *UpdateBatch) GetRangeScanIteratorIncludingEndKey(ns string, startKey string, endKey string) ResultsIterator {
-		return newNsIterator(ns, startKey, endKey, batch)
+	return newNsIterator(ns, startKey, endKey, batch)
 }
 
 func (batch *UpdateBatch) getOrCreateNsUpdates(ns string) *nsUpdates {

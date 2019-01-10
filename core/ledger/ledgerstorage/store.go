@@ -11,11 +11,11 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/cachedblkstore"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
+	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
-	"github.com/hyperledger/fabric/common/ledger/blkstorage/cdbblkstorage"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
@@ -27,8 +27,6 @@ import (
 	lutil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/pkg/errors"
-
-
 )
 
 var logger = flogging.MustGetLogger("ledgerstorage")
