@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"golang.org/x/net/context"
+
 )
 
 // TxMgr - an interface that a transaction manager should implement

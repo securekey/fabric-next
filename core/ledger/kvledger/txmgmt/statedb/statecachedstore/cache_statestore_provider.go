@@ -27,7 +27,7 @@ func NewProvider(dbProvider statedb.VersionedDBProvider) *CachedStateProvider {
 }
 
 // GetDBHandle gets the handle to a named database
-func (provider *CachedStateProvider) GetDBHandle(dbName string) (*cachedStateStore , error) {
+func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.VersionedDB , error) {
 
 	dbProvider, err := provider.dbProvider.GetDBHandle(dbName)
 	if err != nil {

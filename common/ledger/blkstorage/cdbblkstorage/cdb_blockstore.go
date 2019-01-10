@@ -18,7 +18,6 @@ import (
 
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	"github.com/hyperledger/fabric/common/metrics"
 	cledger "github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -76,8 +75,8 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 		return nil
 	}
 
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_addBlock_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("blkstorage_couchdb_addBlock_duration")
+	defer stopWatch()*/
 
 	logger.Debugf("Preparing block for storage %d", block.Header.Number)
 	pendingDoc, err := blockToCouchDoc(block)
@@ -94,8 +93,8 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
 
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_checkpointBlock_duration")
-	defer stopWatch()
+/*	stopWatch := metrics.StopWatch("blkstorage_couchdb_checkpointBlock_duration")
+	defer stopWatch()*/
 
 	if ledgerconfig.IsCommitter() {
 		//save the checkpoint information in the database
@@ -124,22 +123,22 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 
 // GetBlockchainInfo returns the current info about blockchain
 func (s *cdbBlockStore) GetBlockchainInfo() (*common.BlockchainInfo, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_getBlockchainInfo_duration")
-	defer stopWatch()
+/*	stopWatch := metrics.StopWatch("blkstorage_couchdb_getBlockchainInfo_duration")
+	defer stopWatch()*/
 	return s.bcInfo.Load().(*common.BlockchainInfo), nil
 }
 
 // RetrieveBlocks returns an iterator that can be used for iterating over a range of blocks
 func (s *cdbBlockStore) RetrieveBlocks(startNum uint64) (ledger.ResultsIterator, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlocks_duration")
-	defer stopWatch()
+/*	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlocks_duration")
+	defer stopWatch()*/
 	return newBlockItr(s, startNum), nil
 }
 
 // RetrieveBlockByHash returns the block for given block-hash
 func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlockByHash_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlockByHash_duration")
+	defer stopWatch()*/
 	blockHashHex := hex.EncodeToString(blockHash)
 	const queryFmt = `
 	{
@@ -167,8 +166,8 @@ func (s *cdbBlockStore) RetrieveBlockByHash(blockHash []byte) (*common.Block, er
 
 // RetrieveBlockByNumber returns the block at a given blockchain height
 func (s *cdbBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlockByNumber_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlockByNumber_duration")
+	defer stopWatch()*/
 
 	// interpret math.MaxUint64 as a request for last block
 	if blockNum == math.MaxUint64 {
@@ -207,8 +206,8 @@ func retrieveBlockByNumber(blockStore *couchdb.CouchDatabase, blockNum uint64) (
 
 // RetrieveTxByID returns a transaction for given transaction id
 func (s *cdbBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*common.Envelope, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveTxByID_duration")
-	defer stopWatch()
+/*	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveTxByID_duration")
+	defer stopWatch()*/
 
 	block, err := s.RetrieveBlockByTxID(txID)
 	if err != nil {
@@ -221,8 +220,8 @@ func (s *cdbBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*c
 
 // RetrieveTxByBlockNumTranNum returns a transaction for given block number and transaction number
 func (s *cdbBlockStore) RetrieveTxByBlockNumTranNum(blockNum uint64, tranNum uint64) (*common.Envelope, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveTxByBlockNumTranNum_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveTxByBlockNumTranNum_duration")
+	defer stopWatch()*/
 
 	block, err := s.RetrieveBlockByNumber(blockNum)
 	if err != nil {
@@ -246,8 +245,8 @@ func extractEnvelopeFromBlock(block *common.Block, tranNum uint64) (*common.Enve
 
 // RetrieveBlockByTxID returns a block for a given transaction ID
 func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlockByTxID_duration")
-	defer stopWatch()
+/*	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveBlockByTxID_duration")
+	defer stopWatch()*/
 	const queryFmt = `
 	{
 		"selector": {
@@ -276,8 +275,8 @@ func (s *cdbBlockStore) RetrieveBlockByTxID(txID string) (*common.Block, error) 
 
 // RetrieveTxValidationCodeByTxID returns a TX validation code for a given transaction ID
 func (s *cdbBlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error) {
-	stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveTxValidationCodeByTxID_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("blkstorage_couchdb_retrieveTxValidationCodeByTxID_duration")
+	defer stopWatch()*/
 	block, err := s.RetrieveBlockByTxID(txID)
 
 	if err != nil {

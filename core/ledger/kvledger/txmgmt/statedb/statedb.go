@@ -54,10 +54,10 @@ type VersionedDB interface {
 	// endKey is exclusive
 	// metadata is a map of additional query parameters
 	// The returned ResultsIterator contains results of type *VersionedKV
-	GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (QueryResultsIterator, error)
+	/*GetStateRangeScanIteratorWithMetadata(namespace string, startKey string, endKey string, metadata map[string]interface{}) (QueryResultsIterator, error)*/
 	// ExecuteQuery executes the given query and returns an iterator that contains results of type *VersionedKV.
 	ExecuteQuery(namespace, query string) (ResultsIterator, error)
-	// ExecuteQueryWithMetadata executes the given query with associated query options and
+	//ExecuteQueryWithMetadata executes the given query with associated query options and
 	// returns an iterator that contains results of type *VersionedKV.
 	// metadata is a map of additional query parameters
 	ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (QueryResultsIterator, error)

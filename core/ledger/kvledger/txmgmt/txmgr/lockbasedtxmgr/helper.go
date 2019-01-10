@@ -368,9 +368,9 @@ func newResultsItr(ns string, startKey string, endKey string, metadata map[strin
 	var dbItr statedb.ResultsIterator
 	if metadata == nil {
 		dbItr, err = db.GetStateRangeScanIterator(ns, startKey, endKey)
-	} else {
+	} /*else {
 		dbItr, err = db.GetStateRangeScanIteratorWithMetadata(ns, startKey, endKey, metadata)
-	}
+	}*/
 	if err != nil {
 		return nil, err
 	}
