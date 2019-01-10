@@ -41,7 +41,7 @@ type Store interface {
 	GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error)
 	// GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
 	// most recent `maxBlock` blocks which miss at least a private data of a eligible collection.
-	GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error)
+	//GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error)
 	// Prepare prepares the Store for commiting the pvt data and storing both eligible and ineligible
 	// missing private data --- `eligible` denotes that the missing private data belongs to a collection
 	// for which this peer is a member; `ineligible` denotes that the missing private data belong to a
@@ -60,18 +60,18 @@ type Store interface {
 	// existing collection. Parameter 'committingBlk' refers to the block number that contains the corresponding
 	// collection upgrade transaction and the parameter 'nsCollMap' contains the collections for which the peer
 	// is now eligible to recieve pvt data
-	ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error
+	//ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error
 	// CommitPvtDataOfOldBlocks commits the pvtData (i.e., previously missing data) of old blocks.
 	// The parameter `blocksPvtData` refers a list of old block's pvtdata which are missing in the pvtstore.
 	// This call stores an additional entry called `lastUpdatedOldBlocksList` which keeps the exact list
 	// of updated blocks. This list would be used during recovery process. Once the stateDB is updated with
 	// these pvtData, the `lastUpdatedOldBlocksList` must be removed. During the peer startup,
 	// if the `lastUpdatedOldBlocksList` exists, stateDB needs to be updated with the appropriate pvtData.
-	CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error
+	//CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error
 	// GetLastUpdatedOldBlocksPvtData returns the pvtdata of blocks listed in `lastUpdatedOldBlocksList`
-	GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error)
+	//  GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error)
 	// ResetLastUpdatedOldBlocksList removes the `lastUpdatedOldBlocksList` entry from the store
-	ResetLastUpdatedOldBlocksList() error
+	//ResetLastUpdatedOldBlocksList() error
 	// IsEmpty returns true if the store does not have any block committed yet
 	IsEmpty() (bool, error)
 	// LastCommittedBlockHeight returns the height of the last committed block

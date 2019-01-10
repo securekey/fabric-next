@@ -13,7 +13,6 @@ import (
 
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
-	"github.com/hyperledger/fabric/common/metrics"
 	cledger "github.com/hyperledger/fabric/core/ledger"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -67,8 +66,8 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 
 // AddBlock adds a new block
 func (s *cachedBlockStore) AddBlock(block *common.Block) error {
-	stopWatch := metrics.StopWatch("cached_block_store_add_block_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("cached_block_store_add_block_duration")
+	defer stopWatch()*/
 
 	err := s.blockCache.AddBlock(block)
 	if err != nil {

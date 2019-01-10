@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
+	"sync"
 )
 
 var logger = flogging.MustGetLogger("privacyenabledstate")
@@ -101,23 +102,6 @@ func (s *CommonStorageDB) LoadCommittedVersionsOfPubAndHashedKeys(pubKeys []*sta
 
 	return nil
 }
-// LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
-func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
-	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey, blockNum uint64) error {
-
-	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
-	if !ok {
-		return nil
-	}
-	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, pvtKeys)
-	pubKeys = append(pubKeys, deriveKeys...)
-	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil, blockNum)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // ClearCachedVersions implements corresponding function in interface DB
 func (s *CommonStorageDB) ClearCachedVersions() {
@@ -133,6 +117,32 @@ func (s *CommonStorageDB) GetChaincodeEventListener() cceventmgmt.ChaincodeLifec
 	if ok {
 		return s
 	}
+	return nil
+}
+func (s *CommonStorageDB) GetWSetCacheLock() *sync.RWMutex {
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if !ok {
+		return nil
+	}
+	//TODO find better way to acquire lock not through interface
+	return bulkOptimizable.GetWSetCacheLock()
+}
+
+// LoadWSetCommittedVersionsOfPubAndHashedKeys implements corresponding function in interface DB
+func (s *CommonStorageDB) LoadWSetCommittedVersionsOfPubAndHashedKeys(pubKeys []*statedb.CompositeKey,
+	hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey, blockNum uint64) error {
+
+	bulkOptimizable, ok := s.VersionedDB.(statedb.BulkOptimizable)
+	if !ok {
+		return nil
+	}
+	deriveKeys := s.deriveHashedKeysAndPvtKeys(hashedKeys, pvtKeys)
+	pubKeys = append(pubKeys, deriveKeys...)
+	err := bulkOptimizable.LoadWSetCommittedVersions(pubKeys, nil, blockNum)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 func (s *CommonStorageDB) deriveHashedKeysAndPvtKeys(hashedKeys []*HashedCompositeKey, pvtKeys []*PvtdataCompositeKey) []*statedb.CompositeKey {
@@ -328,7 +338,7 @@ func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 }
 
 func DerivePvtDataNs(namespace, collection string) string {
-	return namespace + nsJoiner + pvtDataPrefix + collection
+	return namespace +nsJoiner + pvtDataPrefix + collection
 }
 
 func DeriveHashedDataNs(namespace, collection string) string {
