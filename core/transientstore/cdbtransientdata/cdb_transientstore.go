@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -102,7 +101,7 @@ func (s *store) getTxPvtRWSetByTxidDB(txid string, filter ledger.PvtNsCollFilter
 	var results []*couchdb.QueryResult
 	var err error
 	logger.Errorf("getTxPvtRWSetByTxidDB txID %s from local peer db %s", txid, s.db.DBName)
-	results, err = s.db.QueryDocuments(fmt.Sprintf(queryByTxIDFmt, txid))
+	results,_, err = s.db.QueryDocuments(fmt.Sprintf(queryByTxIDFmt, txid))
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +122,7 @@ func (s *store) getTxPvtRWSetByTxidDB(txid string, filter ledger.PvtNsCollFilter
 		if err != nil {
 			return nil, err
 		}
-		results, err = db.QueryDocuments(fmt.Sprintf(queryByTxIDFmt, txid))
+		results,_, err = db.QueryDocuments(fmt.Sprintf(queryByTxIDFmt, txid))
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +159,7 @@ func (s *store) getMinTransientBlkHtDB() (uint64, error) {
 }`
 
 	logger.Debugf("getMinTransientBlkHtDB from local peer db %s", s.db.DBName)
-	results, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(0, blockNumberBase))))
+	results,_, err := s.db.QueryDocuments(fmt.Sprintf(queryFmt, fmt.Sprintf("%064s", strconv.FormatUint(0, blockNumberBase))))
 	if err != nil {
 		return 0, err
 	}
@@ -255,8 +254,8 @@ func (scanner *RwsetScanner) Next() (*transientstore.EndorserPvtSimulationResult
 	}
 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
 
-	stopWatch := metrics.StopWatch("cdbtransientdata_couchdb_next_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("cdbtransientdata_couchdb_next_duration")
+	defer stopWatch()*/
 
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {
@@ -306,8 +305,8 @@ func (scanner *RwsetScanner) NextWithConfig() (*transientstore.EndorserPvtSimula
 	}
 	defer func() { scanner.results = append(scanner.results[:0], scanner.results[1:]...) }()
 
-	stopWatch := metrics.StopWatch("cdbtransientdata_couchdb_nextwithconfig_duration")
-	defer stopWatch()
+/*	stopWatch := metrics.StopWatch("cdbtransientdata_couchdb_nextwithconfig_duration")
+	defer stopWatch()*/
 
 	dbKey, err := hex.DecodeString(scanner.results[0].ID)
 	if err != nil {

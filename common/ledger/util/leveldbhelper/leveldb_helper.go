@@ -7,14 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 package leveldbhelper
 
 import (
+	"bytes"
 	"fmt"
-	"sync"
-
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/spf13/viper"
+	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
 )
@@ -31,7 +36,7 @@ const (
 // Conf configuration for `DB`
 // TODO: Add configuration for DB (e.g., bloom filter bits)
 type Conf struct {
-	DBPath                string
+	DBPath string
 }
 
 // DB - a wrapper on an actual store
@@ -83,6 +88,10 @@ func (dbInst *DB) Open() {
 		panic(fmt.Sprintf("Error opening leveldb: %s", err))
 	}
 	dbInst.dbState = opened
+	if viper.GetBool("logging.leveldbState") {
+		go dbInst.getState()
+	}
+
 }
 
 // Close closes the underlying db

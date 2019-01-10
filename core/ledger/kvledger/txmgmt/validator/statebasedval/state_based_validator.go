@@ -226,7 +226,7 @@ type validationResponse struct {
 	err   error
 }
 // ValidateMVCC validates block for MVCC conflicts and phantom reads against committed data
-func (v *Validator) ValidateMVCC(block *internal.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
+func (v *Validator) ValidateMVCC(ctx context.Context,block *internal.Block, txsFilter util.TxValidationFlags, acceptTx util.TxFilter) error {
 	// Check whether statedb implements BulkOptimizable interface. For now,
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.

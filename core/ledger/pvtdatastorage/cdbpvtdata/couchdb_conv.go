@@ -213,7 +213,7 @@ func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataRe
 func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtDataResponse, error) {
 
 	purgeInterval := ledgerconfig.GetPvtdataStorePurgeInterval()
-	limit := ledgerconfig.GetQueryLimit()
+	limit := ledgerconfig.GetInternalQueryLimit()
 	if purgeInterval > uint64(limit) {
 		return nil, errors.Errorf("Purge cannot be performed successfully since purge interval[%d] is greater than query limit[%d]", purgeInterval, limit)
 	}
@@ -233,7 +233,7 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
     	"skip": %d
 	}`
 
-	results, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
+	results,_, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
 	if err != nil {
 		return nil, err
 	}

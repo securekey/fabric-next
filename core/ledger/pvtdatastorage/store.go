@@ -60,6 +60,7 @@ type Store interface {
 	// existing collection. Parameter 'committingBlk' refers to the block number that contains the corresponding
 	// collection upgrade transaction and the parameter 'nsCollMap' contains the collections for which the peer
 	// is now eligible to recieve pvt data
+
 	ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error
 	// CommitPvtDataOfOldBlocks commits the pvtData (i.e., previously missing data) of old blocks.
 	// The parameter `blocksPvtData` refers a list of old block's pvtdata which are missing in the pvtstore.
