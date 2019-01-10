@@ -36,8 +36,9 @@ func (c *ConfigHistoryMgr) InterestedInNamespaces() []string {
 	return []string{lsccNamespace}
 }
 
-func (c *ConfigHistoryMgr) HandleStateUpdates(ledgerID string, stateUpdates ledger.StateUpdates, commitHeight uint64) error {
-	return c.prepareDBBatch(stateUpdates, commitHeight, ledgerID)
+func (c *ConfigHistoryMgr) HandleStateUpdates(trigger *ledger.StateUpdateTrigger) error {
+//TODO: This function is completely changed in 1.4 Has to be re written
+	return nil
 }
 
 func (c *ConfigHistoryMgr) StateCommitDone(channelID string) {

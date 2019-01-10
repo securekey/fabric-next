@@ -9,14 +9,19 @@ package leveldbhelper
 import (
 	"fmt"
 	"sync"
-
+	"strings"
+	"bytes"
+	"time"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	goleveldbutil "github.com/syndtr/goleveldb/leveldb/util"
+	"github.com/syndtr/goleveldb/leveldb/filter"
+	"github.com/spf13/viper"
 )
 
 var logger = flogging.MustGetLogger("leveldbhelper")
@@ -83,6 +88,11 @@ func (dbInst *DB) Open() {
 		panic(fmt.Sprintf("Error opening leveldb: %s", err))
 	}
 	dbInst.dbState = opened
+		if viper.GetBool("logging.leveldbState") {
+			go dbInst.getState()
+			}
+
+
 }
 
 // Close closes the underlying db
