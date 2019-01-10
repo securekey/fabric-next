@@ -82,10 +82,9 @@ func (c *pvtDataCache) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	c.btlPolicy = btlPolicy
 }
 
-func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData,missingPvtData ledger.TxMissingPvtDataMap) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-
 	if c.batchPending {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
@@ -240,7 +239,25 @@ func (c *pvtDataCache) Rollback() error {
 // Shutdown closes the storage instance
 func (c *pvtDataCache) Shutdown() {
 }
+// GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
+// most recent `maxBlock` blocks which miss at least a private data of a eligible collection.
+func (c *pvtDataCache) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	return c.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+}
+func (c *pvtDataCache) CommitPvtDataOfOldBlocks (blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	return c.CommitPvtDataOfOldBlocks(blocksPvtData)
+}
 
+func (c *pvtDataCache) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error){
+	return c.GetLastUpdatedOldBlocksPvtData()
+}
+
+func (c *pvtDataCache) ResetLastUpdatedOldBlocksList() error {
+	return c.ResetLastUpdatedOldBlocksList()
+}
+func (c *pvtDataCache)  ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	return c.ProcessCollsEligibilityEnabled(committingBlk,nsCollMap)
+}
 func preparePvtDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) (map[string][]byte, error) {
 	data := make(map[string][]byte)
 	for _, txPvtdata := range pvtData {

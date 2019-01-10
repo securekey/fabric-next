@@ -133,7 +133,7 @@ func queryInventory(db *couchdb.CouchDatabase, inventoryType string) ([]*couchdb
 		"use_index": ["_design/` + inventoryTypeIndexDoc + `", "` + inventoryTypeIndexName + `"]
 	}`
 
-	results, err := db.QueryDocuments(fmt.Sprintf(queryFmt, inventoryType))
+	results, _, err := db.QueryDocuments(fmt.Sprintf(queryFmt, inventoryType))
 	if err != nil {
 		return nil, err
 	}

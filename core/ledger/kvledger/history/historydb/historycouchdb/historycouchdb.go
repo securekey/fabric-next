@@ -107,7 +107,7 @@ func (sets writeSets) asCouchDbDocs() ([]*couchdb.CouchDoc, error) {
 func NewHistoryDBProvider(couchDBDef *couchdb.CouchDBDef) (historydb.HistoryDBProvider, error) {
 	logger.Debugf("constructing CouchDB historyDB storage provider")
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, nil)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB HistoryDB provider failed")
 	}

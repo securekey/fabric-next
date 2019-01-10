@@ -167,12 +167,14 @@ func (c *cachedStateStore) GetNonDurableStateRangeScanIterator(namespace string,
 	}
 	return &nonDurableKVScanner{namespace, sortedKeys, nextIndex, lastIndex, c}, nil
 }
-
 // ExecuteQuery implements method in VersionedDB interface
 func (c *cachedStateStore) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
 	return c.vdb.ExecuteQuery(namespace, query)
 }
-
+// ExecuteQuery implements method in VersionedDB interface
+func (c *cachedStateStore) ExecuteQueryWithMetadata(namespace, query string,metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
+	return c.vdb.ExecuteQueryWithMetadata(namespace, query, metadata)
+}
 // ApplyUpdates implements method in VersionedDB interface
 func (c *cachedStateStore) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
 	return c.vdb.ApplyUpdates(batch, height)

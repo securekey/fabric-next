@@ -309,7 +309,7 @@ func (s *Store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData
 	return s.pvtdataStore.GetLastUpdatedOldBlocksPvtData()
 }
 
-// ResetLastUpdatedOldBlocksList invokes the function on underlying pvtdata store
+//  ResetLastUpdatedOldBlocksList invokes the function on underlying pvtdata store
 func (s *Store) ResetLastUpdatedOldBlocksList() error {
 	return s.pvtdataStore.ResetLastUpdatedOldBlocksList()
 }
