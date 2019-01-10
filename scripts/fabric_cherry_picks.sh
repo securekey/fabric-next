@@ -21,8 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Fabric v1.4.0-rc2 (Dec 20, 2018)
-git checkout v1.4.0-rc2
+# Fabric v1.4.0 (Jan 09, 2019)
+git checkout v1.4.0
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
