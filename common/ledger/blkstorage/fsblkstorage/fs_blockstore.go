@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
+	cledger "github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 )
@@ -74,7 +75,7 @@ func (store *fsBlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block
 }
 
 // RetrieveTxByID returns a transaction for given transaction id
-func (store *fsBlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
+func (store *fsBlockStore) RetrieveTxByID(txID string, _ ...cledger.SearchHint) (*common.Envelope, error) {
 	return store.fileMgr.retrieveTransactionByID(txID)
 }
 

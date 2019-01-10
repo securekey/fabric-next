@@ -18,7 +18,7 @@ type checkpointInfo struct {
 
 //Get the current checkpoint information that is stored in the database
 func retrieveCheckpointInfo(db *couchdb.CouchDatabase) (checkpointInfo, error) {
-	info,_, err := db.GetDatabaseInfo()
+	info, err := db.GetDatabaseInfo()
 	if err != nil {
 		return checkpointInfo{}, err
 	}

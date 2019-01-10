@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 )
 
 // PurgeMgr manages purging of the expired pvtdata
@@ -31,6 +32,11 @@ type PurgeMgr interface {
 	// UpdateBookkeepingForPvtDataOfOldBlocks updates the existing expiry entries in the bookkeeper with the given pvtUpdates
 	UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error
 	// BlockCommitDone is a callback to the PurgeMgr when the block is committed to the ledger
+	// RemoveNonDurable updates the bookkeeping and modifies the update batch by removing non-durable items
+	RemoveNonDurable(
+		pvtUpdateBatch *privacyenabledstate.PvtUpdateBatch,
+		hashedUpdateBatch *privacyenabledstate.HashedUpdateBatch) error
+
 	BlockCommitDone() error
 }
 
@@ -88,7 +94,48 @@ func (p *purgeMgr) WaitForPrepareToFinish() {
 	p.lock.Lock()
 	p.lock.Unlock()
 }
+// RemoveNonDurable implements function in the interface 'PurgeMgr'
+func (p *purgeMgr) RemoveNonDurable(
+	pvtUpdates *privacyenabledstate.PvtUpdateBatch,
+	hashedUpdates *privacyenabledstate.HashedUpdateBatch) error {
 
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	if p.workingset.err != nil {
+		return p.workingset.err
+	}
+
+	blocksToLiveInCache := ledgerconfig.GetKVCacheBlocksToLive()
+	for ns, nsBatch := range pvtUpdates.UpdateMap {
+		for _, coll := range nsBatch.GetCollectionNames() {
+			btl, err := p.btlPolicy.GetBTL(ns, coll)
+			if err != nil {
+				return err
+			}
+			if btl != 0 && btl < blocksToLiveInCache {
+				logger.Debugf("Collection policy[%s] blocks to live[%d] is less than blocks to live in cache[%d] - no need to store collection entries for data",
+					coll, btl, blocksToLiveInCache)
+				nsBatch.RemoveUpdates(coll)
+			}
+		}
+	}
+
+	for ns, nsBatch := range hashedUpdates.UpdateMap {
+		for _, coll := range nsBatch.GetCollectionNames() {
+			btl, err := p.btlPolicy.GetBTL(ns, coll)
+			if err != nil {
+				return err
+			}
+			if btl != 0 && btl < blocksToLiveInCache {
+				logger.Debugf("Collection policy[%s] blocks to live[%d] is less than blocks to live in cache[%d] - no need to store collection entries for hashes",
+					coll, btl, blocksToLiveInCache)
+				nsBatch.RemoveUpdates(coll)
+			}
+		}
+	}
+
+	return nil
+}
 func (p *purgeMgr) UpdateBookkeepingForPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error {
 	builder := newExpiryScheduleBuilder(p.btlPolicy)
 	pvtUpdateCompositeKeyMap := pvtUpdates.ToCompositeKeyMap()

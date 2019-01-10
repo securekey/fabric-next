@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/pkg/errors"
@@ -36,7 +35,7 @@ var collectionNameAllowedLength = 50
 
 //CreateCouchInstance creates a CouchDB instance
 func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
-	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool, metricsProvider metrics.Provider) (*CouchInstance, error) {
+	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool) (*CouchInstance, error) {
 
 	couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
 		id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout, createGlobalChangesDB)
@@ -56,15 +55,9 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 
 	//Create the CouchDB instance
 	couchInstance := &CouchInstance{conf: *couchConf, client: client}
-	couchInstance.stats = newStats(metricsProvider)
-	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
+	connectInfo, verifyErr := couchInstance.VerifyCouchConfig()
 	if verifyErr != nil {
 		return nil, verifyErr
-	}
-
-	//return an error if the http return value is not 200
-	if retVal.StatusCode != 200 {
-		return nil, errors.Errorf("CouchDB connection error, expecting return code of 200, received %v", retVal.StatusCode)
 	}
 
 	//check the CouchDB version number, return an error if the version is not at least 2.0.0

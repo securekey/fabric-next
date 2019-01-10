@@ -82,10 +82,9 @@ func (c *pvtDataCache) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	c.btlPolicy = btlPolicy
 }
 
-func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData,missingPvtData ledger.TxMissingPvtDataMap) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-
 	if c.batchPending {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
 			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
