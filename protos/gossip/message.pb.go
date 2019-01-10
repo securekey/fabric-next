@@ -510,11 +510,6 @@ func (*GossipMessage_PrivateData) isGossipMessage_Content()          {}
 func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
 func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
 
-
-func (*GossipMessage_ValidationResultsMsg) isGossipMessage_Content() {}
-
-func (*GossipMessage_ValidationReqMsg) isGossipMessage_Content()     {}
-
 func (m *GossipMessage) GetContent() isGossipMessage_Content {
 	if m != nil {
 		return m.Content
@@ -822,15 +817,15 @@ func _GossipMessage_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 			return err
 		}
 	case *GossipMessage_ValidationResultsMsg:
-		s := proto.Size(x.ValidationResultsMsg)
-		n += proto.SizeVarint(50<<3 | proto.WireBytes)
-		n += proto.SizeVarint(uint64(s))
-		n += s
+		b.EncodeVarint(50<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ValidationResultsMsg); err != nil {
+			return err
+		}
 	case *GossipMessage_ValidationReqMsg:
-		s := proto.Size(x.ValidationReqMsg)
-		n += proto.SizeVarint(51<<3 | proto.WireBytes)
-		n += proto.SizeVarint(uint64(s))
-		n += s
+		b.EncodeVarint(51<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ValidationReqMsg); err != nil {
+			return err
+		}
 	case nil:
 	default:
 		return fmt.Errorf("GossipMessage.Content has unexpected type %T", x)
@@ -1221,8 +1216,6 @@ type Properties struct {
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
-	Roles        []string     `protobuf:"bytes,4,rep,name=roles" json:"roles,omitempty"`
-
 }
 
 func (m *Properties) Reset() { *m = Properties{} }
@@ -2692,7 +2685,7 @@ type ValidationResultsMessage struct {
 func (m *ValidationResultsMessage) Reset()                    { *m = ValidationResultsMessage{} }
 func (m *ValidationResultsMessage) String() string            { return proto.CompactTextString(m) }
 func (*ValidationResultsMessage) ProtoMessage()               {}
-func (*ValidationResultsMessage) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{34} }
+func (*ValidationResultsMessage) Descriptor() ([]byte, []int) { return fileDescriptor_message_7c42328ef5ef9997, []int{34} }
 
 func (m *ValidationResultsMessage) GetSeqNum() uint64 {
 	if m != nil {

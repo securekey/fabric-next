@@ -1500,7 +1500,7 @@ diff a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
  
 -				//Log the 500 error with the retry count and continue
 -				logger.Warningf("Retrying couchdb request in %s. Attempt:%v  Couch DB Error:%s,  Status Code:%v  Reason:%v",
--					waitDuration.String(), attempts+1, couchDBReturn.Error, resp.Status, couchDBReturn.Reason)
+-					waitDuration.String(), attempts+1, couchDBmake , resp.Status, couchDBReturn.Reason)
 +	//Create request based on URL for couchdb operation
 +	req, err := newHTTPRequest(method, connectURL, payloadData)
 +	if err != nil {
