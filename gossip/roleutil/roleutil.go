@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = util.GetLogger(util.LoggingGossipModule, "")
+var logger = util.GetLogger(util.GossipLogger, "")
 
 // RoleUtil provides functions to retrieve peers based on roles
 type RoleUtil struct {

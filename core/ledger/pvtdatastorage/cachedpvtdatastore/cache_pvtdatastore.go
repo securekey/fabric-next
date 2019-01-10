@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package cachedpvtdatastore
 
 import (
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
@@ -33,6 +32,7 @@ type cachedPvtDataStore struct {
 type pvtPrepareData struct {
 	blockNum uint64
 	pvtData  []*ledger.TxPvtData
+	missingPvtData ledger.TxMissingPvtDataMap
 }
 
 func newCachedPvtDataStore(pvtDataStore pvtdatastorage.Store, pvtDataCache pvtdatastorage.Store) (*cachedPvtDataStore, error) {
@@ -59,14 +59,14 @@ func (c *cachedPvtDataStore) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 }
 
 // Prepare pvt data in cache and send pvt data to background prepare/commit go routine
-func (c *cachedPvtDataStore) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	err := c.pvtDataCache.Prepare(blockNum, pvtData)
+func (c *cachedPvtDataStore) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, pvtMissingDataMap ledger.TxMissingPvtDataMap) error {
+	err := c.pvtDataCache.Prepare(blockNum, pvtData, pvtMissingDataMap )
 	if err != nil {
 		return errors.WithMessage(err, "Prepare pvtdata in cache failed")
 	}
 	if blockNum == 0 {
 		c.commitImmediately = true
-		return c.pvtDataStore.Prepare(blockNum, pvtData)
+		return c.pvtDataStore.Prepare(blockNum, pvtData, pvtMissingDataMap )
 	}
 	if c.firstExecuteDone {
 		<-c.prepareReadyCh
@@ -88,7 +88,7 @@ func (c *cachedPvtDataStore) pvtDataWriter() {
 			return
 		case pvtPrepareData := <-c.pvtDataStoreCh:
 			logger.Debugf("prepare pvt data for storage [%d]", pvtPrepareData.blockNum)
-			err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData)
+			err := c.pvtDataStore.Prepare(pvtPrepareData.blockNum, pvtPrepareData.pvtData, pvtPrepareData.missingPvtData)
 			if err != nil {
 				logger.Errorf("pvt data was not added [%d, %s]", pvtPrepareData.blockNum, err)
 				panic(panicMsg)
@@ -157,7 +157,7 @@ func (c *cachedPvtDataStore) GetPvtDataByBlockNum(blockNum uint64, filter ledger
 		return nil, errors.WithMessage(err, "GetPvtDataByBlockNum in cache failed")
 	}
 	if data != nil {
-		metrics.IncrementCounter("cachepvtdatastore_getpvtdatabyblocknum_request_hit")
+		//metrics.IncrementCounter("cachepvtdatastore_getpvtdatabyblocknum_request_hit")
 		return data, nil
 	}
 	logger.Warningf("GetPvtDataByBlockNum didn't find pvt data in cache for blockNum %d", blockNum)
@@ -166,7 +166,7 @@ func (c *cachedPvtDataStore) GetPvtDataByBlockNum(blockNum uint64, filter ledger
 		return nil, err
 	}
 	if len(data) > 0 {
-		metrics.IncrementCounter("cachepvtdatastore_getpvtdatabyblocknum_request_miss")
+		//metrics.IncrementCounter("cachepvtdatastore_getpvtdatabyblocknum_request_miss")
 	}
 
 	return data, nil

@@ -46,8 +46,9 @@ const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confRoles = "ledger.roles"
-const confConcurrentBlockWrites = "ledger.concurrentBlockWrites"
 const confValidationMinWaitTime = "ledger.blockchain.validation.minwaittime"
+const confValidationWaitTimePerTx = "ledger.blockchain.validation.waittimepertx"
+const confConcurrentBlockWrites = "ledger.concurrentBlockWrites"
 // TODO: couchDB config should be in a common section rather than being under state.
 const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
 const confCouchDBMaxIdleConnsPerHost = "ledger.state.couchDBConfig.maxIdleConnsPerHost"
@@ -55,6 +56,7 @@ const confCouchDBIdleConnTimeout = "ledger.state.couchDBConfig.idleConnTimeout"
 const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout"
 const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
 const defaultValidationMinWaitTime = 50 * time.Millisecond
+const defaultValidationWaitTimePerTx = 5 * time.Millisecond
 var confCollElgProcMaxDbBatchSize = &conf{"ledger.pvtdataStore.collElgProcMaxDbBatchSize", 5000}
 var confCollElgProcDbBatchesInterval = &conf{"ledger.pvtdataStore.collElgProcDbBatchesInterval", 1000}
 // BlockStorageProvider holds the configuration names of the available storage providers
@@ -315,6 +317,26 @@ func GetWarmIndexesAfterNBlocks() int {
 	}
 	return warmAfterNBlocks
 }
+// GetValidationWaitTimePerTx is used by the committer in distributed validation and is the time
+// per transaction to wait for validation responses from other validators.
+// For example, if there are 20 transactions to validate and ValidationWaitTimePerTx=100ms
+// then the committer will wait 20*50ms for responses from other validators.
+func GetValidationWaitTimePerTx() time.Duration {
+		if viper.IsSet(confValidationWaitTimePerTx) {
+				return viper.GetDuration(confValidationWaitTimePerTx)
+			}
+		return defaultValidationWaitTimePerTx
+	}
+
+// GetValidationMinWaitTime is used by the committer in distributed validation and is the minimum
+// time to wait for Tx validation responses from other validators.
+func GetValidationMinWaitTime() time.Duration {
+		timeout := viper.GetDuration(confValidationMinWaitTime)
+		if timeout == 0 {
+				return defaultValidationMinWaitTime
+			}
+		return timeout
+	}
 // Role is the role of the peer
 type Role string
 const (
