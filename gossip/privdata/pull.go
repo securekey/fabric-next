@@ -297,7 +297,7 @@ func (p *puller) fetchPrivateData(dig2Filter digestToFilterMapping, blockSeq uin
 				Collection: dig.Collection,
 			})
 			// remove digest so we won't even try to pull purged data
-			delete(dig2Filter, dig)
+			delete(dig2Filter,peer2digests)
 			itemsLeftToCollect--
 		}
 

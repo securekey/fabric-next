@@ -864,7 +864,7 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 	data.forEachTxn(make(txValidationFlags, len(data)), func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
 		item, exists := blockAndPvtData.PvtData[seqInBlock]
 		if !exists {
-			return nil
+			return
 		}
 
 		for _, ns := range item.WriteSet.NsPvtRwset {
