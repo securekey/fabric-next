@@ -172,7 +172,7 @@ func blockNumberToKey(blockNum uint64) string {
 }
 
 func retrieveBlockQuery(db *couchdb.CouchDatabase, query string) (*common.Block, error) {
-	results, err := db.QueryDocuments(query)
+	results,_, err := db.QueryDocuments(query)
 	if err != nil {
 		return nil, err
 	}

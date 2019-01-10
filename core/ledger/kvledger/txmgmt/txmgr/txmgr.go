@@ -22,15 +22,14 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
-	"golang.org/x/net/context"
 )
 
 // TxMgr - an interface that a transaction manager should implement
 type TxMgr interface {
 	NewQueryExecutor(txid string) (ledger.QueryExecutor, error)
 	NewTxSimulator(txid string) (ledger.TxSimulator, error)
-	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
-	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*TxStatInfo, error)
+	ValidateMVCC(block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
+	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool)  error
 	RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error
 	GetLastSavepoint() (*version.Height, error)
 	ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error)
