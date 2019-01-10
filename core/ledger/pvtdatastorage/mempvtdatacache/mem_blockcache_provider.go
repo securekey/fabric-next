@@ -8,7 +8,6 @@ package mempvtdatacache
 
 import (
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 )
 
 var logger = flogging.MustGetLogger("peer")
@@ -24,10 +23,10 @@ func NewProvider(cacheLimit int) *MemPvtDataCacheProvider {
 }
 
 // OpenPvtDataCache opens the pvt data cache for the given ledger ID
-func (p *MemPvtDataCacheProvider) OpenStore(ledgerID string) (pvtdatastorage.Store, error) {
+/*func (p *MemPvtDataCacheProvider) OpenStore(ledgerID string) (pvtdatastorage.Store, error) {
 	s := newPvtDataCache(p.cacheLimit, ledgerID)
 	return s, nil
-}
+}*/
 
 // Close cleans up the Provider
 func (p *MemPvtDataCacheProvider) Close() {

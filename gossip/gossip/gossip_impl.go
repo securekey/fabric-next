@@ -28,6 +28,7 @@ import (
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -679,7 +680,7 @@ func (g *gossipServiceImpl) getPeersToSendTo(membership []discovery.NetworkMembe
 		peers2send = append(peers2send, peersFromEndorser...)
 	}
 
-	if g.logger.IsEnabledFor(logging.DEBUG) {
+	if g.logger.IsEnabledFor(zapcore.DebugLevel) {
 		g.logger.Debugf("Sending private data to the following peers:")
 		for _, p := range peers2send {
 			g.logger.Debugf("- [%s]", p.Endpoint)

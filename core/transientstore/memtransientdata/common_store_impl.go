@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package memtransientdata
 
 import (
-	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
@@ -24,20 +23,20 @@ func (s *store) Persist(txid string, blockHeight uint64, privateSimulationResult
 }
 
 func (s *store) PersistWithConfig(txid string, blockHeight uint64, privateSimulationResultsWithConfig *pb.TxPvtReadWriteSetWithConfigInfo) error {
-	stopWatch := metrics.StopWatch("memtransientdata_persistwithconfig_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("memtransientdata_persistwithconfig_duration")
+	defer stopWatch()*/
 	return s.persistWithConfigDB(txid, blockHeight, privateSimulationResultsWithConfig)
 }
 
 func (s *store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) (transientstore.RWSetScanner, error) {
-	stopWatch := metrics.StopWatch("memtransientdata_gettxpvtrwsetbytxid_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("memtransientdata_gettxpvtrwsetbytxid_duration")
+	defer stopWatch()*/
 	return s.getTxPvtRWSetByTxidDB(txid, filter, endorsers)
 }
 
 func (s *store) PurgeByTxids(txids []string) error {
-	stopWatch := metrics.StopWatch("memtransientdata_purgebytxids_duration")
-	defer stopWatch()
+	/*stopWatch := metrics.StopWatch("memtransientdata_purgebytxids_duration")
+	defer stopWatch()*/
 	return s.purgeByTxidsDB(txids)
 }
 

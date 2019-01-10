@@ -37,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"sort"
 	"sync"
+	"go.uber.org/zap/zapcore"
 
 )
 
@@ -460,7 +461,7 @@ func (v *TxValidator) validate(ctx context.Context, block *common.Block, shouldV
 	// First phase validation includes validating the block for proper structure, no duplicate transactions, signatures.
 	logger.Debugf("[%s] Starting phase 1 validation of block %d ...", v.ChainID, block.Header.Number)
 	txFlags, numValidated, err := v.validateBlock(ctx, block, shouldValidate)
-	if logger.IsEnabledFor(logging.DEBUG) {
+	if logger.IsEnabledFor(zapcore.DebugLevel) {
 		logger.Debugf("[%s] ... finished phase 1 validation of block %d. Flags: %s", v.ChainID, block.Header.Number, flagsToString(txFlags))
 	}
 	if err != nil {
@@ -475,7 +476,7 @@ func (v *TxValidator) validate(ctx context.Context, block *common.Block, shouldV
 		return nil, 0, err
 	}
 
-	if logger.IsEnabledFor(logging.DEBUG) {
+	if logger.IsEnabledFor(zapcore.DebugLevel) {
 		logger.Debugf("[%s] Returning flags from phase1 validation of block %d: %s", v.ChainID, block.Header.Number, flagsToString(txFlags))
 	}
 
@@ -616,7 +617,7 @@ func (v *TxValidator) getTxFilter() util.TxFilter {
 	sortedValidators := validators(v.roleUtil.Validators(true))
 	sort.Sort(sortedValidators)
 
-	if logger.IsEnabledFor(logging.DEBUG) {
+	if logger.IsEnabledFor(zapcore.DebugLevel) {
 		logger.Debugf("[%s] All validators:", v.ChainID)
 		for _, m := range sortedValidators {
 			logger.Debugf("- [%s], MSPID [%s], - Roles: %s", m.Endpoint, m.MSPID, m.Properties.Roles)
