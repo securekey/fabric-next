@@ -39,16 +39,15 @@ type indexUpdate struct {
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
 	block := pvtdataAndBlock.Block
-	pvtData := pvtdataAndBlock.BlockPvtData
+	pvtData := pvtdataAndBlock.PvtData
 	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
 
-	btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
-	_, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
+		_, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, l.btlPolicy)
 	if err != nil {
 		return err
 	}
 
-	pvtDataKeys, _, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
+	pvtDataKeys, _, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, l.btlPolicy)
 	if err != nil {
 		return err
 	}
@@ -65,16 +64,16 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUpdate, error) {
 
 	block := pvtdataAndBlock.Block
-	pvtData := pvtdataAndBlock.BlockPvtData
+	pvtData := pvtdataAndBlock.PvtData
+	missingPvtData := pvtdataAndBlock.MissingPvtData
 	logger.Debugf("*** cacheBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
 
-	btlPolicy := pvtdatapolicy.NewBTLPolicy(l)
-	validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, btlPolicy)
+	validatedTxOps, pvtDataHashedKeys, txValidationFlags, err := l.getKVFromBlock(block, l.btlPolicy)
 	if err != nil {
 		return nil, err
 	}
 
-	pvtDataKeys, validPvtData, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, btlPolicy)
+	pvtDataKeys, validPvtData, err := getPrivateDataKV(block.Header.Number, l.ledgerID, pvtData, txValidationFlags, l.btlPolicy)
 
 	if err != nil {
 		return nil, err
@@ -93,7 +92,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUp
 		if err != nil {
 			return nil, err
 		}
-		err = pvtCache.Prepare(block.Header.Number, validPvtData)
+		err = pvtCache.Prepare(block.Header.Number, validPvtData, missingPvtData)
 		if err != nil {
 			return nil, err
 		}

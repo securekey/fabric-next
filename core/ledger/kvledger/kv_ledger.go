@@ -48,6 +48,7 @@ type kvLedger struct {
 	blockAPIsRWLock        *sync.RWMutex
 	stats                  *ledgerStats
 	bcInfo                 *common.BlockchainInfo
+	btlPolicy              pvtdatapolicy.BTLPolicy
 
 	stateCommitDoneCh chan *ledger.BlockAndPvtData
 	commitCh          chan *ledger.BlockAndPvtData
@@ -100,6 +101,7 @@ func newKVLedger(
 		return nil, err
 	}
 	l.initBlockStore(btlPolicy)
+	l.btlPolicy = btlPolicy
 	if ledgerconfig.IsCommitter() {
 		//Recover both state DB and history DB if they are out of sync with block storage
 		if err := l.recoverDBs(); err != nil {
