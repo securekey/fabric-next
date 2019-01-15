@@ -1,0 +1,174 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5352a083_f8045f94",
+        "filename": "common/ledger/util/leveldbhelper/leveldb_helper.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 91,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "Looks like this needs gofmt",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e69a0a0d_f7185c03",
+        "filename": "core/ledger/confighistory/cdbconfighistory/common_mgr_impl.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "Does this cause a compile issue? Maybe create a JIRA ticket for this?",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4b3ec962_3a2fe869",
+        "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 342,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "gofmt??",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "01cffe95_bfe0b490",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statedb.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "I believe the metadata methods were added in 1.4... not sure if they should be removed",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "1942b3a5_3e406514",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 160,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "This change isn\u0027t needed. Also may need gofmt",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "2861f443_4a403a9f",
+        "filename": "core/ledger/kvledger/txmgmt/txmgr/txmgr.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 26,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "Run gofmt",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "17e5a5f1_dd5cf2d7",
+        "filename": "core/ledger/kvledger/txmgmt/validator/valimpl/default_impl.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 20,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "gofmt",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4640828a_6d4eb073",
+        "filename": "core/ledger/ledgerstorage/store.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 312,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "No change needed",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a479a411_14b224b5",
+        "filename": "core/ledger/pvtdatastorage/store.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 63,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "What are these extra comments in the file for?",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3ac26111_52bd6826",
+        "filename": "core/ledger/util/couchdb/couchdb.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 4,
+      "author": {
+        "id": 1000036
+      },
+      "writtenOn": "2019-01-15T22:29:30Z",
+      "side": 1,
+      "message": "GOFMT!!!",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
