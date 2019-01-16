@@ -36,6 +36,24 @@
     },
     {
       "key": {
+        "uuid": "5eca2d23_ca2f35ee",
+        "filename": "core/ledger/confighistory/cdbconfighistory/common_mgr_impl.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1000117
+      },
+      "writtenOn": "2019-01-16T17:17:46Z",
+      "side": 1,
+      "message": "Its no longer creating compile issue. I fixed it",
+      "parentUuid": "e69a0a0d_f7185c03",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "4b3ec962_3a2fe869",
         "filename": "core/ledger/kvledger/txmgmt/privacyenabledstate/common_storage_db.go",
         "patchSetId": 10
@@ -64,6 +82,24 @@
       "writtenOn": "2019-01-15T22:29:30Z",
       "side": 1,
       "message": "I believe the metadata methods were added in 1.4... not sure if they should be removed",
+      "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f32cda1d_5bce3b92",
+        "filename": "core/ledger/kvledger/txmgmt/statedb/statedb.go",
+        "patchSetId": 10
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000117
+      },
+      "writtenOn": "2019-01-16T17:17:46Z",
+      "side": 1,
+      "message": "Code compile with this being commented. I can remove it and we always have history if this is required",
+      "parentUuid": "01cffe95_bfe0b490",
       "revId": "1d8ece5319f7c7f2a374c83f8ac5fde67a593503",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": true
