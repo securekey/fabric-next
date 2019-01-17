@@ -14,15 +14,15 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/pkg/errors"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecachedstore"
 	"sync"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
 )
 
 var logger = flogging.MustGetLogger("privacyenabledstate")
@@ -39,7 +39,7 @@ type CommonStorageDBProvider struct {
 }
 
 // NewCommonStorageDBProvider constructs an instance of DBProvider
-func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider,metricsProvider metrics.Provider) (DBProvider, error) {
+func NewCommonStorageDBProvider(bookkeeperProvider bookkeeping.Provider, metricsProvider metrics.Provider) (DBProvider, error) {
 	var vdbProvider statedb.VersionedDBProvider
 	var err error
 	if ledgerconfig.IsCouchDBEnabled() {
@@ -79,6 +79,7 @@ type CommonStorageDB struct {
 func NewCommonStorageDB(vdb statedb.VersionedDB, ledgerID string) (DB, error) {
 	return &CommonStorageDB{VersionedDB: vdb}, nil
 }
+
 // IsBulkOptimizable implements corresponding function in interface DB
 func (s *CommonStorageDB) IsBulkOptimizable() bool {
 	_, ok := s.VersionedDB.(statedb.BulkOptimizable)
@@ -173,6 +174,7 @@ func (s *CommonStorageDB) deriveHashedKeysAndPvtKeys(hashedKeys []*HashedComposi
 	return deriveKeys
 
 }
+
 // GetPrivateData implements corresponding function in interface DB
 func (s *CommonStorageDB) GetPrivateData(namespace, collection, key string) (*statedb.VersionedValue, error) {
 	return s.GetState(DerivePvtDataNs(namespace, collection), key)
@@ -221,7 +223,6 @@ func (s *CommonStorageDB) GetPrivateDataRangeScanIterator(namespace, collection,
 	return s.GetStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
 }
 
-
 // GetNonDurablePrivateDataRangeScanIterator implements corresponding function in interface DB
 func (s *CommonStorageDB) GetNonDurablePrivateDataRangeScanIterator(namespace, collection, startKey, endKey string) (statedb.ResultsIterator, error) {
 	return s.GetNonDurableStateRangeScanIterator(DerivePvtDataNs(namespace, collection), startKey, endKey)
@@ -266,7 +267,7 @@ func (s *CommonStorageDB) GetStateMetadata(namespace, key string) ([]byte, error
 // GetPrivateDataMetadataByHash implements corresponding function in interface DB. For additional details, see
 // decription of the similar function 'GetStateMetadata'
 func (s *CommonStorageDB) GetPrivateDataMetadataByHash(namespace, collection string, keyHash []byte) ([]byte, error) {
-/*	if !s.ledgerID.metadataEverUsedFor(namespace) {
+	/*	if !s.ledgerID.metadataEverUsedFor(namespace) {
 		return nil, nil
 	}*/
 	vv, err := s.GetValueHash(namespace, collection, keyHash)
@@ -339,7 +340,7 @@ func (s *CommonStorageDB) ChaincodeDeployDone(succeeded bool) {
 }
 
 func DerivePvtDataNs(namespace, collection string) string {
-	return namespace +nsJoiner + pvtDataPrefix + collection
+	return namespace + nsJoiner + pvtDataPrefix + collection
 }
 
 func DeriveHashedDataNs(namespace, collection string) string {

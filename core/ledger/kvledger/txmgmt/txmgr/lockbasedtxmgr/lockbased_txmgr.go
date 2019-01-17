@@ -28,7 +28,6 @@ import (
 	//"github.com/uber-go/tally"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 	"golang.org/x/net/context"
-
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
@@ -48,7 +47,7 @@ type LockBasedTxMgr struct {
 	lastCommittedBlockNum uint64
 
 	//StopWatch        tally.Stopwatch
-	StopWatchAccess  string
+	StopWatchAccess string
 	//StopWatch1       tally.Stopwatch
 	StopWatch1Access string
 	btlPolicy        pvtdatapolicy.BTLPolicy
@@ -145,14 +144,14 @@ func (txmgr *LockBasedTxMgr) ValidateMVCC(ctx context.Context, block *common.Blo
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*txmgr.TxStatInfo, error) {
 	if !txmgr.waitForPreviousToFinish() {
-		return nil,  errors.New("shutdown has been requested")
+		return nil, errors.New("shutdown has been requested")
 	}
 
 	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
 	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
 
 	logger.Debugf("Validating new block %d with num trans = [%d]", blockAndPvtdata.Block.Header.Number, len(blockAndPvtdata.Block.Data.Data))
-	batch,txstatsInfo, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
+	batch, txstatsInfo, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
 		txmgr.reset()
 		return nil, err
