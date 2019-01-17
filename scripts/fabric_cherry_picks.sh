@@ -40,3 +40,14 @@ git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 #apply cherry pick
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/34/28534/1 && git cherry-pick FETCH_HEAD
 
+#cherry pick metrics
+
+#[FAB-12916] gossip state metrics
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/92/28692/7 && git cherry-pick FETCH_HEAD
+
+#add endorser metrics
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/54/27854/12 && git cherry-pick FETCH_HEAD
+
+#[FAB-12915] gossip leader election metrics
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/79/28779/1 && git cherry-pick FETCH_HEAD
+
