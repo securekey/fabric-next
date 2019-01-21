@@ -1,9 +1,0 @@
-diff a/core/ledger/kvledger/txmgmt/statedb/statecouchdb/couchdoc_conv.go b/core/ledger/kvledger/txmgmt/statedb/statecouchdb/couchdoc_conv.go	(rejected hunks)
-@@ -108,6 +108,7 @@ func keyValToCouchDoc(kv *keyValue, revision string) (*couchdb.CouchDoc, error)
- 		kvTypeDelete = iota
- 		kvTypeJSON
- 		kvTypeAttachment
-+		kvTypeEmpty
- 	)
- 	key, value, version := kv.key, kv.VersionedValue.Value, kv.VersionedValue.Version
- 	jsonMap := make(jsonValue)
