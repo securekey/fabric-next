@@ -15,10 +15,10 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
 	"github.com/pkg/errors"
 )
 
@@ -27,6 +27,9 @@ var logger = flogging.MustGetLogger("statecouchdb")
 // querySkip is implemented for future use by query paging
 // currently defaulted to 0 and is not used
 const querySkip = 0
+
+// LsccCacheSize denotes the number of entries allowed in the lsccStateCache
+const lsccCacheSize = 50
 
 // VersionedDBProvider implements interface VersionedDBProvider
 type VersionedDBProvider struct {
@@ -82,6 +85,56 @@ type VersionedDB struct {
 	mux                    sync.RWMutex
 	committedWSetDataCache map[uint64]*versionsCache // Used as a local cache during bulk processing of a block.
 	verWSetCacheLock       *sync.RWMutex
+	lsccStateCache         *lsccStateCache
+}
+
+type lsccStateCache struct {
+	cache   map[string]*statedb.VersionedValue
+	rwMutex sync.RWMutex
+}
+
+func (l *lsccStateCache) getState(key string) *statedb.VersionedValue {
+	l.rwMutex.RLock()
+	defer l.rwMutex.RUnlock()
+
+	if versionedValue, ok := l.cache[key]; ok {
+		logger.Debugf("key:[%s] found in the lsccStateCache", key)
+		return versionedValue
+	}
+	return nil
+}
+
+func (l *lsccStateCache) updateState(key string, value *statedb.VersionedValue) {
+	l.rwMutex.Lock()
+	defer l.rwMutex.Unlock()
+
+	if _, ok := l.cache[key]; ok {
+		logger.Debugf("key:[%s] is updated in lsccStateCache", key)
+		l.cache[key] = value
+	}
+}
+
+func (l *lsccStateCache) setState(key string, value *statedb.VersionedValue) {
+	l.rwMutex.Lock()
+	defer l.rwMutex.Unlock()
+
+	if l.isCacheFull() {
+		l.evictARandomEntry()
+	}
+
+	logger.Debugf("key:[%s] is stoed in lsccStateCache", key)
+	l.cache[key] = value
+}
+
+func (l *lsccStateCache) isCacheFull() bool {
+	return len(l.cache) == lsccCacheSize
+}
+
+func (l *lsccStateCache) evictARandomEntry() {
+	for key := range l.cache {
+		delete(l.cache, key)
+		return
+	}
 }
 
 // newVersionedDB constructs an instance of VersionedDB
@@ -97,8 +150,20 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 
 	kvCacheProvider := kvcache.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
-	return &VersionedDB{kvCacheProvider: kvCacheProvider, couchInstance: couchInstance, metadataDB: metadataDB, chainName: chainName, namespaceDBs: namespaceDBMap,
-		committedDataCache: newVersionCache(), mux: sync.RWMutex{}, committedWSetDataCache: make(map[uint64]*versionsCache), verWSetCacheLock: &sync.RWMutex{}}, nil
+	return &VersionedDB{
+		kvCacheProvider:    kvCacheProvider,
+		couchInstance:      couchInstance,
+		metadataDB:         metadataDB,
+		chainName:          chainName,
+		namespaceDBs:       namespaceDBMap,
+		committedDataCache: newVersionCache(),
+		mux:                sync.RWMutex{},
+		committedWSetDataCache: make(map[uint64]*versionsCache),
+		verWSetCacheLock:       &sync.RWMutex{},
+		lsccStateCache: &lsccStateCache{
+			cache: make(map[string]*statedb.VersionedValue),
+		},
+	}, nil
 }
 
 func createCouchDatabase(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
@@ -192,6 +257,7 @@ func (vdb *VersionedDB) ProcessIndexesForChaincodeDeploy(namespace string, fileE
 	return nil
 }
 
+// GetDBType returns the hosted stateDB
 func (vdb *VersionedDB) GetDBType() string {
 	return "couchdb"
 }
@@ -271,6 +337,13 @@ func (vdb *VersionedDB) BytesKeySupported() bool {
 func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.VersionedValue, error) {
 	logger.Debugf("GetState(). ns=%s, key=%s", namespace, key)
 	db, err := vdb.getNamespaceDBHandle(namespace)
+
+	if namespace == "lscc" {
+		if value := vdb.lsccStateCache.getState(key); value != nil {
+			return value, nil
+		}
+	}
+
 	if err != nil {
 		if isDBNotFoundForEndorser(err) {
 			logger.Debugf("DB [%s] Not Found. Returning nil since I'm an endorser.", namespace)
@@ -290,9 +363,13 @@ func (vdb *VersionedDB) GetState(namespace string, key string) (*statedb.Version
 		return nil, err
 	}
 
+	if namespace == "lscc" {
+		vdb.lsccStateCache.setState(key, kv.VersionedValue)
+	}
+
 	logger.Debugf("state retrieved from DB. ns=%s, chainName=%s, key=%s", namespace, vdb.chainName, key)
-/*	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
-*/	return kv.VersionedValue, nil
+	/*	metrics.IncrementCounter("cachestatestore_getstate_cache_request_miss")
+	 */return kv.VersionedValue, nil
 }
 
 // GetStateMultipleKeys implements method in VersionedDB interface
@@ -527,6 +604,12 @@ func (vdb *VersionedDB) ApplyUpdates(updates *statedb.UpdateBatch, height *versi
 		logger.Errorf("Error during recordSavepoint: %s", err.Error())
 		return err
 	}
+
+	lsccUpdates := updates.GetUpdates("lscc")
+	for key, value := range lsccUpdates {
+		vdb.lsccStateCache.updateState(key, value)
+	}
+
 	return nil
 }
 
