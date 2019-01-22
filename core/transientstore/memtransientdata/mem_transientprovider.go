@@ -11,7 +11,7 @@ import (
 	"github.com/hyperledger/fabric/core/transientstore"
 )
 
-var logger = flogging.MustGetLogger("transientstore/mem")
+var logger = flogging.MustGetLogger("transientstore.mem")
 
 type Provider struct {
 }

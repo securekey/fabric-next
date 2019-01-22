@@ -103,7 +103,7 @@ var ignoreCancel = func() {}
 
 func init() {
 	// Init logger with module name
-	logger = flogging.MustGetLogger("committer/txvalidator")
+	logger = flogging.MustGetLogger("committer.txvalidator")
 }
 
 

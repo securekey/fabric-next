@@ -22,7 +22,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("transientstore/couchdb")
+var logger = flogging.MustGetLogger("transientstore.couchdb")
 
 const (
 	transientDataStoreName = "transientdata_%s"
