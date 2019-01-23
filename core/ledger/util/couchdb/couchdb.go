@@ -44,10 +44,6 @@ type DBOperationResponse struct {
 	id  string
 	rev string
 }
-type dbResponseError struct {
-	*DBReturn
-	err error
-}
 
 // DBInfo is body for database information.
 type DBInfo struct {
@@ -370,10 +366,6 @@ func (dbclient *CouchDatabase) createDatabase() error {
 	return nil
 }
 
-// Error returns the formatted couchDB
-func (e *dbResponseError) Error() string {
-	return fmt.Sprintf("Error in formatted couchDB %s", e.Error())
-}
 
 //applyDatabaseSecurity
 func (dbclient *CouchDatabase) applyDatabasePermissions() error {
@@ -1457,7 +1449,13 @@ func (dbclient *CouchDatabase) handleRequestWithRevisionRetry(id, method string,
 	resp := respUT.(*http.Response)
 	return resp, nil
 }
+type dbResponseError struct {
+	*DBReturn
+}
 
+func (err *dbResponseError) Error() string {
+	return fmt.Sprintf("HTTP response contains unsuccesful status [%d, %s]", err.StatusCode, err.Reason)
+}
 //handleRequest method is a generic http request handler.
 // If it returns an error, it ensures that the response body is closed, else it is the
 // callee's responsibility to close response correctly.
@@ -1493,7 +1491,7 @@ func (couchInstance *CouchInstance) handleRequest(method, connectURL string, dat
 				if err != nil {
 					return nil, err
 				}
-				return resp, &dbResponseError{dbReturn, err}
+				return resp, &dbResponseError{dbReturn}
 			}
 
 			return resp, nil
