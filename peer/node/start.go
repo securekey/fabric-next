@@ -59,6 +59,7 @@ import (
 	"github.com/hyperledger/fabric/events/producer"
 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/service"
+	"github.com/hyperledger/fabric/gossip/validationpolicy"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/peer/common"
@@ -451,6 +452,7 @@ func registerDiscoveryService(peerServer *comm.GRPCServer, polMgr policies.Chann
 	gSup := gossip.NewDiscoverySupport(service.GetGossipService())
 	ccSup := ccsupport.NewDiscoverySupport(lc)
 	ea := endorsement.NewEndorsementAnalyzer(gSup, ccSup, acl, lc)
+	validationpolicy.RegisterValidatorDiscovery(ea)
 	confSup := config.NewDiscoverySupport(config.CurrentConfigBlockGetterFunc(peer.GetCurrConfigBlock))
 	support := discsupport.NewDiscoverySupport(acl, gSup, ea, confSup, acl)
 	svc := discovery.NewService(discovery.Config{

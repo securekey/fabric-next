@@ -66,6 +66,11 @@ func (g *GossipMock) PeersOfChannel(chainID common.ChainID) []discovery.NetworkM
 	return args.Get(0).([]discovery.NetworkMember)
 }
 
+func (g *GossipMock) ValidatorsOfChannel(chainID common.ChainID) discovery.Members {
+	args := g.Called(chainID)
+	return args.Get(0).([]discovery.NetworkMember)
+}
+
 func (g *GossipMock) UpdateMetadata(metadata []byte) {
 	g.Called(metadata)
 }

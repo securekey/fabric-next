@@ -1958,8 +1958,10 @@ func (m *Chaincode) GetMetadata() []byte {
 
 // ValidationResultsMessage is the message containing block validation results
 type ValidationResultsMessage struct {
-	SeqNum  uint64 `protobuf:"varint,1,opt,name=seq_num,json=seqNum" json:"seq_num,omitempty"`
-	TxFlags []byte `protobuf:"bytes,2,opt,name=txFlags,proto3" json:"txFlags,omitempty"`
+	SeqNum    uint64 `protobuf:"varint,1,opt,name=seq_num,json=seqNum" json:"seq_num,omitempty"`
+	TxFlags   []byte `protobuf:"bytes,2,opt,name=txFlags,proto3" json:"txFlags,omitempty"`
+	Signature []byte `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	Identity  []byte `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
 }
 
 func (m *ValidationResultsMessage) Reset()                    { *m = ValidationResultsMessage{} }
@@ -1977,6 +1979,20 @@ func (m *ValidationResultsMessage) GetSeqNum() uint64 {
 func (m *ValidationResultsMessage) GetTxFlags() []byte {
 	if m != nil {
 		return m.TxFlags
+	}
+	return nil
+}
+
+func (m *ValidationResultsMessage) GetSignature() []byte {
+	if m != nil {
+		return m.Signature
+	}
+	return nil
+}
+
+func (m *ValidationResultsMessage) GetIdentity() []byte {
+	if m != nil {
+		return m.Identity
 	}
 	return nil
 }

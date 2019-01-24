@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/gossip/privdata/collpolicy"
 	"github.com/hyperledger/fabric/gossip/util"
+	"github.com/hyperledger/fabric/gossip/validationpolicy"
 	"github.com/hyperledger/fabric/protos/common"
 	gossip2 "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
@@ -92,7 +93,7 @@ type Coordinator interface {
 	PublishBlock(*ledger.BlockAndPvtData, []string) error
 
 	// ValidateBlock validate block
-	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *validationpolicy.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
 
 	// ValidatePartialBlock is called by the validator to validate only a subset of the transactions within the block
 	ValidatePartialBlock(ctx context.Context, block *common.Block)
@@ -180,7 +181,7 @@ func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtR
 	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
 }
 
-func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, resultsChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error) {
+func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, resultsChan chan *validationpolicy.ValidationResults) (*ledger.BlockAndPvtData, []string, error) {
 	if block.Data == nil {
 		return nil, nil, errors.New("Block data is empty")
 	}
