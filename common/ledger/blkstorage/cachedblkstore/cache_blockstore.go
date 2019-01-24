@@ -14,16 +14,12 @@ import (
 	"github.com/hyperledger/fabric/common/ledger"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	cledger "github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
-)
-
-const (
-	checkpointBlockInterval = 1 // number of blocks between checkpoints.
-	blockStorageQueueLen    = checkpointBlockInterval
 )
 
 type cachedBlockStore struct {
@@ -38,6 +34,7 @@ type cachedBlockStore struct {
 	checkpointCh   chan *common.Block
 	writerClosedCh chan struct{}
 	doneCh         chan struct{}
+	blockReadyCh   chan bool
 }
 
 func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstorage.BlockIndex, blockCache blkstorage.BlockCache) (*cachedBlockStore, error) {
@@ -47,10 +44,11 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 		blockCache:     blockCache,
 		cpInfoSig:      make(chan struct{}),
 		cpInfoMtx:      sync.RWMutex{},
-		blockStoreCh:   make(chan *common.Block, blockStorageQueueLen),
-		checkpointCh:   make(chan *common.Block, blockStorageQueueLen),
+		blockStoreCh:   make(chan *common.Block),
+		checkpointCh:   make(chan *common.Block),
 		writerClosedCh: make(chan struct{}),
 		doneCh:         make(chan struct{}),
+		blockReadyCh:   make(chan bool),
 	}
 
 	curBcInfo, err := blockStore.GetBlockchainInfo()
@@ -59,7 +57,10 @@ func newCachedBlockStore(blockStore blockStoreWithCheckpoint, blockIndex blkstor
 	}
 	s.bcInfo = curBcInfo
 
-	go s.blockWriter()
+	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
+	for x := 0; x < concurrentBlockWrites; x++ {
+		go s.blockWriter()
+	}
 
 	return &s, nil
 }
@@ -75,19 +76,28 @@ func (s *cachedBlockStore) AddBlock(block *common.Block) error {
 		return errors.WithMessage(err, fmt.Sprintf("block was not cached [%d]", blockNumber))
 	}
 
+	// TODO: This is a quick patch - needs to ensure that there are no gaps as well.
 	blockNumber := block.GetHeader().GetNumber()
-	if blockNumber != 0 {
+	if blockNumber > uint64(ledgerconfig.GetConcurrentBlockWrites()) {
+		waitForBlock := blockNumber - uint64(ledgerconfig.GetConcurrentBlockWrites())
+
 		// Wait for underlying storage to complete commit on previous block.
-		logger.Debugf("waiting for previous block to checkpoint [%d]", blockNumber-checkpointBlockInterval)
-		s.blockStore.WaitForBlock(context.Background(), blockNumber-checkpointBlockInterval)
+		logger.Debugf("waiting for previous block to checkpoint [%d]", waitForBlock)
+		//stopWatchWaitBlock := metrics.StopWatch("cached_block_store_add_block_wait_block_duration")
+		s.blockStore.WaitForBlock(context.Background(), waitForBlock)
+		//stopWatchWaitBlock()
 		logger.Debugf("ready to store incoming block [%d]", blockNumber)
 	}
+
+	//stopWatchWaitQueue := metrics.StopWatch("cached_block_store_add_block_wait_queue_duration")
 	s.blockStoreCh <- block
+	//stopWatchWaitQueue()
 
 	return nil
 }
 
 func (s *cachedBlockStore) CheckpointBlock(block *common.Block) error {
+	<-s.blockReadyCh
 	s.checkpointCh <- block
 
 	s.cpInfoMtx.Lock()
@@ -108,39 +118,44 @@ func (s *cachedBlockStore) blockWriter() {
 			close(s.writerClosedCh)
 			return
 		case block := <-s.blockStoreCh:
-			//startBlockStorage := time.Now()
+			//stopWatch := metrics.StopWatch("cached_block_store_blockWriter_blockStore")
 			blockNumber := block.GetHeader().GetNumber()
 			logger.Debugf("processing block for storage [%d]", blockNumber)
 
 			err := s.blockStore.AddBlock(block)
 			if err != nil {
 				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				//stopWatch()
 				panic(panicMsg)
 			}
 
 			err = s.blockIndex.AddBlock(block)
 			if err != nil {
 				logger.Errorf("block was not indexed [%d, %s]", blockNumber, err)
+				//stopWatch()
 				panic(panicMsg)
 			}
-
-			//elapsedBlockStorage := time.Since(startBlockStorage) / time.Millisecond // duration in ms
-			//logger.Debugf("Stored block [%d] in %dms", block.Header.Number, elapsedBlockStorage)
+			s.blockReadyCh <- true
+			//stopWatch()
 		case block := <-s.checkpointCh:
+			//stopWatch := metrics.StopWatch("cached_block_store_blockCheckPoint_processing")
 			blockNumber := block.GetHeader().GetNumber()
 			logger.Debugf("processing block checkpoint [%d]", blockNumber)
 			err := s.blockStore.CheckpointBlock(block)
 			if err != nil {
 				blockNumber := block.GetHeader().GetNumber()
 				logger.Errorf("block was not added [%d, %s]", blockNumber, err)
+				//stopWatch()
 				panic(panicMsg)
 			}
 
 			ok := s.blockCache.OnBlockStored(blockNumber)
 			if !ok {
 				logger.Errorf("block cache does not contain block [%d]", blockNumber)
+				//stopWatch()
 				panic(panicMsg)
 			}
+			//stopWatch()
 		}
 	}
 }

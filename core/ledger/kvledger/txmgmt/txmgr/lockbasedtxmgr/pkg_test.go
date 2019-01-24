@@ -135,7 +135,7 @@ func (h *txMgrTestHelper) validateAndCommitRWSet(txRWSet *rwset.TxReadWriteSet) 
 		}
 	}
 	assert.Equal(h.t, 0, invalidTxNum)
-	err = h.txMgr.Commit()
+	err = h.txMgr.Commit(block.Header.Number)
 	assert.NoError(h.t, err)
 }
 
