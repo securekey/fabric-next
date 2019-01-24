@@ -24,7 +24,37 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
+
+const (
+	Org0MSP = "Org0MSP"
+	Org1MSP = "Org1MSP"
+	Org2MSP = "Org2MSP"
+	Org3MSP = "Org3MSP"
+	Org4MSP = "Org4MSP"
+	Org5MSP = "Org5MSP"
+)
+
+// var pkiID2MSPID = map[string]string{
+// 	"p0": "Org0MSP",
+// 	"p1": "Org0MSP",
+// 	"p2": "Org0MSP",
+
+// 	"p3": "Org1MSP",
+// 	"p4": "Org1MSP",
+
+// 	"p5": "Org2MSP",
+
+// 	"p6": "Org3MSP",
+// 	"p7": "Org3MSP",
+// 	"p8": "Org3MSP",
+// 	"p9": "Org3MSP",
+
+// 	"p10": "Org4MSP",
+// 	"p11": "Org4MSP",
+// 	"p12": "Org4MSP",
+// }
 
 var pkiID2MSPID = map[string]string{
 	"p0":  "Org0MSP",
@@ -328,6 +358,112 @@ func TestPeersForEndorsement(t *testing.T) {
 	})
 }
 
+func TestPeersForValidation(t *testing.T) {
+	principal := func(mspID string) *msp.MSPPrincipal {
+		return &msp.MSPPrincipal{
+			PrincipalClassification: msp.MSPPrincipal_ROLE,
+			Principal: utils.MarshalOrPanic(&msp.MSPRole{
+				MspIdentifier: mspID,
+				Role:          msp.MSPRole_PEER,
+			}),
+		}
+	}
+	extractPeers := func(desc *discoveryprotos.ValidationDescriptor) map[string]struct{} {
+		res := make(map[string]struct{})
+		for _, endorsers := range desc.ValidatorsByGroups {
+			for _, p := range endorsers.Peers {
+				res[string(p.Identity)] = struct{}{}
+				assert.Equal(t, string(p.Identity), string(p.MembershipInfo.Payload))
+				assert.Equal(t, string(p.Identity), string(p.StateInfo.Payload))
+			}
+		}
+		return res
+	}
+
+	validatorRole := "validator"
+	endorserRole := "endorser"
+
+	cc := "chaincode"
+	mf := &metadataFetcher{}
+	g := &gossipMock{}
+	pf := &policyFetcherMock{}
+	channel := common.ChainID("test")
+	alivePeers := peerSet{
+		newPeer(0),
+		newPeer(2),
+		newPeer(4),
+		newPeer(6),
+		newPeer(8),
+		newPeer(10),
+		newPeer(11),
+		newPeer(12),
+
+		newPeer(1),
+		newPeer(3),
+		newPeer(5),
+		newPeer(7),
+		newPeer(9),
+	}
+
+	identities := identitySet(pkiID2MSPID)
+
+	chanPeers := peerSet{
+		newPeer(0).withRoles(validatorRole),
+		newPeer(3).withRoles(validatorRole),
+		newPeer(6).withRoles(validatorRole),
+		newPeer(9).withRoles(validatorRole),
+		newPeer(11).withRoles(validatorRole),
+		newPeer(12).withRoles(endorserRole, validatorRole),
+
+		newPeer(1).withRoles(validatorRole),
+		newPeer(2).withRoles(validatorRole),
+		newPeer(4).withRoles(validatorRole),
+		newPeer(5).withRoles(validatorRole),
+		newPeer(7).withRoles(validatorRole),
+		newPeer(8).withRoles(validatorRole),
+		newPeer(10).withRoles(validatorRole),
+	}
+	g.On("Peers").Return(alivePeers.toMembers())
+	g.On("IdentityInfo").Return(identities)
+
+	t.Run("MultipleCombinations", func(t *testing.T) {
+		pb := principalBuilder{}
+		policy := pb.
+			newSet().addPrincipal(principal(Org0MSP)).addPrincipal(principal(Org1MSP)).
+			newSet().addPrincipal(principal(Org0MSP)).addPrincipal(principal(Org2MSP)).
+			newSet().addPrincipal(principal(Org0MSP)).addPrincipal(principal(Org3MSP)).
+			newSet().addPrincipal(principal(Org1MSP)).addPrincipal(principal(Org2MSP)).
+			newSet().addPrincipal(principal(Org1MSP)).addPrincipal(principal(Org3MSP)).
+			newSet().addPrincipal(principal(Org2MSP)).addPrincipal(principal(Org3MSP)).
+			buildPolicy()
+
+		g.On("ValidatorsOfChannel").Return(chanPeers.toMembers()).Once()
+		mf.On("Metadata").Return(&chaincode.Metadata{Name: cc, Version: "1.0"}).Once()
+		analyzer := NewEndorsementAnalyzer(g, pf, &principalEvaluatorMock{}, mf)
+		desc, err := analyzer.PeersForValidation(channel, policy)
+		require.NoError(t, err)
+		require.NotNil(t, desc)
+		require.Len(t, desc.Layouts, 6)
+		assert.Len(t, desc.Layouts[0].QuantitiesByGroup, 2)
+		assert.Len(t, desc.Layouts[1].QuantitiesByGroup, 2)
+		assert.Equal(t, map[string]struct{}{
+			peerIdentityString("p1"): {},
+			peerIdentityString("p2"): {},
+			peerIdentityString("p3"): {},
+			peerIdentityString("p0"): {},
+		}, extractPeers(desc))
+
+		for i, layout := range desc.Layouts {
+			for group, count := range layout.QuantitiesByGroup {
+				t.Logf("%d - [%s]=[%d]", i, group, count)
+				for _, peer := range desc.ValidatorsByGroups[group].Peers {
+					t.Logf("   - [%s]", identityFromBytes(peer.Identity).IdBytes)
+				}
+			}
+		}
+	})
+}
+
 func TestPop(t *testing.T) {
 	slice := []inquire.ComparablePrincipalSets{{}, {}}
 	assert.Len(t, slice, 2)
@@ -462,6 +598,15 @@ func peerIdentityString(id string) string {
 	}))
 }
 
+func identityFromBytes(b []byte) *msp.SerializedIdentity {
+	identity := &msp.SerializedIdentity{}
+	err := proto.Unmarshal(b, identity)
+	if err != nil {
+		panic(err.Error())
+	}
+	return identity
+}
+
 func newPeer(i int) *peerInfo {
 	p := fmt.Sprintf("p%d", i)
 	identity := utils.MarshalOrPanic(&msp.SerializedIdentity{
@@ -493,6 +638,14 @@ func (pi *peerInfo) withChaincode(name, version string) *peerInfo {
 	return pi
 }
 
+func (pi *peerInfo) withRoles(roles ...string) *peerInfo {
+	if pi.Properties == nil {
+		pi.Properties = &gossip.Properties{}
+	}
+	pi.Properties.Roles = append(pi.Properties.Roles, roles...)
+	return pi
+}
+
 type gossipMock struct {
 	mock.Mock
 }
@@ -502,6 +655,11 @@ func (g *gossipMock) IdentityInfo() api.PeerIdentitySet {
 }
 
 func (g *gossipMock) PeersOfChannel(_ common.ChainID) discovery.Members {
+	members := g.Called().Get(0)
+	return members.(discovery.Members)
+}
+
+func (g *gossipMock) ValidatorsOfChannel(chainID common.ChainID) discovery.Members {
 	members := g.Called().Get(0)
 	return members.(discovery.Members)
 }
