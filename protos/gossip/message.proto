@@ -382,4 +382,6 @@ message Chaincode {
 message ValidationResultsMessage {
     uint64 seq_num = 1;
     bytes txFlags  = 2;
+    bytes signature = 3;
+    bytes identity = 4;
 }
