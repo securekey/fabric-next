@@ -25,12 +25,10 @@ import (
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
 
 type commonStore struct {
-	ledgerid  string
-	btlPolicy pvtdatapolicy.BTLPolicy
-
+	ledgerid           string
+	btlPolicy          pvtdatapolicy.BTLPolicy
 	isEmpty            bool
 	lastCommittedBlock uint64
-	batchPending       bool
 	purgerLock         sync.Mutex
 }
 
@@ -58,13 +56,6 @@ type dataKey struct {
 	purge    bool
 }
 
-func (s *store) nextBlockNum() uint64 {
-	if s.isEmpty {
-		return 0
-	}
-	return s.lastCommittedBlock + 1
-}
-
 func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	s.btlPolicy = btlPolicy
 }
@@ -78,13 +69,12 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, data ledge
 /*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_duration")
 	defer stopWatch()*/
 
-	if s.batchPending {
-		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
-			 Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
+	if s.checkPendingPvt(blockNum) {
+		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call. Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
 	}
-	expectedBlockNum := s.nextBlockNum()
-	if expectedBlockNum != blockNum {
-		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d, recived block number=%d", expectedBlockNum, blockNum))
+
+	if s.lastCommittedBlock > blockNum {
+		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Last committed block number in pvt store=%d is greater than recived block number=%d. Cannot prepare an old block # for commit.", s.lastCommittedBlock, blockNum))
 	}
 
 	err := s.prepareDB(blockNum, pvtData)
@@ -92,13 +82,12 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, data ledge
 		return err
 	}
 
-	s.batchPending = true
 	logger.Debugf("Saved %d private data write sets for block [%d]", len(pvtData), blockNum)
 
 	return nil
 }
 
-func (s *store) Commit() error {
+func (s *store) Commit(blockNum uint64) error {
 	if !ledgerconfig.IsCommitter() {
 		panic("calling Commit on a peer that is not a committer")
 	}
@@ -248,9 +237,12 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 }
 
 func (s *store) HasPendingBatch() (bool, error) {
-	return s.batchPending, nil
+	return len(s.pendingPvtDocs) != 0, nil
 }
 
+// Warning
+// LastCommittedBlockHeight return non sequenced block height
+// if concurrentBlockWrites bigger than 1
 func (s *store) LastCommittedBlockHeight() (uint64, error) {
 	if s.isEmpty {
 		return 0, nil
@@ -263,14 +255,11 @@ func (s *store) IsEmpty() (bool, error) {
 }
 
 // Rollback implements the function in the interface `Store`
-func (s *store) Rollback() error {
-	if !s.batchPending {
+func (s *store) Rollback(blockNum uint64) error {
+	if !s.checkPendingPvt(blockNum) {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to rollback")
 	}
-
-	// reset in memory pending metadata
-	s.batchPending = false
-	s.pendingDocs = nil
+	s.popPendingPvt(blockNum)
 	return nil
 }
 
@@ -335,31 +324,7 @@ func (s *store) Shutdown() {
 }
 
 func (s *store) getLastCommittedBlock() (uint64, error) {
-	if ledgerconfig.IsCommitter() {
-		return s.lastCommittedBlock, nil
-	}
-	logger.Debugf("I am not a committer so looking up last committed block from meta data for [%s]", s.db.DBName)
-	return s.getLastCommittedBlockFromPvtStore()
-}
-
-func (s *store) getLastCommittedBlockFromPvtStore() (uint64, error) {
-	lastCommittedBlock, ok, err := lookupLastBlock(s.db)
-	if err != nil {
-		logger.Errorf("Error looking up last committed block for [%s]: %s", s.db.DBName, err)
-		return 0, err
-	}
-	if !ok {
-		logger.Debugf("data for [%s] is empty", s.db.DBName)
-		return 0, nil
-	}
-	// since this function is called for endorsers only, this error should be just a warning on the endorser side
-	if lastCommittedBlock > s.lastCommittedBlock {
-		logger.Debugf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
-		// no need to worry about this error
-		return 0, errors.Errorf("lastCommittedBlock in pvt store db [%d] is greater than the current value [%d], there are corrupt data in pvt store db", lastCommittedBlock, s.lastCommittedBlock)
-	}
-	logger.Debugf("Returning lastCommittedBlock %d for [%s]", lastCommittedBlock, s.db.DBName)
-	return lastCommittedBlock + 1, nil
+	return s.lastCommittedBlock, nil
 }
 // GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
 // most recent `maxBlock` blocks which miss at least a private data of a eligible collection.

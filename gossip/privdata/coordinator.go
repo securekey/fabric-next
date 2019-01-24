@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -33,6 +35,7 @@ import (
 	"github.com/spf13/viper"
 	//"github.com/uber-go/tally"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -142,6 +145,7 @@ type coordinator struct {
 	selfSignedData common.SignedData
 	Support
 	transientBlockRetention uint64
+	semaphore               *semaphore.Weighted
 }
 
 // NewCoordinator creates a new instance of coordinator
@@ -151,7 +155,18 @@ func NewCoordinator(support Support, selfSignedData common.SignedData) Coordinat
 		logger.Warning("Configuration key", transientBlockRetentionConfigKey, "isn't set, defaulting to", transientBlockRetentionDefault)
 		transientBlockRetention = transientBlockRetentionDefault
 	}
-	return &coordinator{Support: support, selfSignedData: selfSignedData, transientBlockRetention: transientBlockRetention}
+
+	nWorkers := viper.GetInt("peer.validatorPoolSize")
+	if nWorkers <= 0 {
+		nWorkers = runtime.NumCPU()
+	}
+
+	return &coordinator{
+		Support:                 support,
+		selfSignedData:          selfSignedData,
+		transientBlockRetention: transientBlockRetention,
+		semaphore:               semaphore.NewWeighted(int64(nWorkers)),
+	}
 }
 
 // StorePvtData used to persist private date into transient store
@@ -211,7 +226,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_duration").Start()
 	}*/
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
-		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
+		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo.missingKeys)
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
 		// If succeeded to fetch everything, no need to sleep before
 		// retry
@@ -359,26 +374,59 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 }
 
 func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte, sources map[rwSetKey][]*peer.Endorsement) {
-	// Check transient store
-	for txAndSeq, filter := range missing.FiltersByTxIDs() {
-		var endorsers []*peer.Endorsement
-		for key, value := range sources {
-			if key.txID == txAndSeq.txID && key.seqInBlock == txAndSeq.seqInBlock {
-				endorsers = value
-				break
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+
+	ctx := context.Background()
+	filters := missing.FiltersByTxIDs()
+	wg.Add(len(filters))
+
+	go func() {
+		for txAndSeq, filter := range filters {
+			if err := c.semaphore.Acquire(ctx, 1); err != nil {
+				// This should never happen with background context
+				panic(fmt.Sprintf("Unable to acquire semaphore: %s", err))
 			}
+
+			txs := txAndSeq
+			fltr := filter
+
+			go func() {
+				rwSets := c.fetchFromTransientStore(txs, fltr, getEndorsements(sources, txs))
+				if len(rwSets) > 0 {
+					mutex.Lock()
+					for key, value := range rwSets {
+						ownedRWsets[key] = value
+					}
+					mutex.Unlock()
+				}
+				c.semaphore.Release(1)
+				wg.Done()
+			}()
 		}
-		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets, endorsers)
-	}
+	}()
+	wg.Wait()
 }
 
-func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte, endorsers []*peer.Endorsement) {
+func getEndorsements(sources map[rwSetKey][]*peer.Endorsement, txs txAndSeqInBlock) []*peer.Endorsement {
+	for key, value := range sources {
+		if key.txID == txs.txID && key.seqInBlock == txs.seqInBlock {
+			return value
+		}
+	}
+	return nil
+}
+
+func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) map[rwSetKey][]byte {
 	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter, endorsers)
 	if err != nil {
 		logger.Warning("Failed obtaining iterator from transient store:", err)
-		return
+		return nil
 	}
 	defer iterator.Close()
+
+	ownedRWsets := make(map[rwSetKey][]byte)
+
 	for {
 		res, err := iterator.NextWithConfig()
 		if err != nil {
@@ -413,6 +461,7 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			} // iterating over all collections
 		} // iterating over all namespaces
 	} // iterating over the TxPvtRWSet results
+	return ownedRWsets
 }
 
 // computeOwnedRWsets identifies which block private data we already have
@@ -739,6 +788,8 @@ type transactionInspector struct {
 	missingKeys          rwSetKeysByTxIDs
 	sources              map[rwSetKey][]*peer.Endorsement
 	ownedRWsets          map[rwSetKey][]byte
+	mutex                sync.RWMutex
+	policyCache          *collpolicy.Cache
 }
 
 func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement) {
@@ -895,7 +946,7 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 				seqs2Namespaces.addCollection(seqInBlock, item.WriteSet.DataModel, ns.Namespace, col)
 			}
 		}
-	})
+	}).forEachTxn(blockAndPvtData.Block.Data.Data)
 
 	return blockAndPvtData.Block, seqs2Namespaces.asPrivateData(), nil
 }

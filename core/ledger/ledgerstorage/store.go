@@ -88,6 +88,7 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 		blockIndex := ldbblkindex.NewProvider(
 			ldbblkindex.NewConf(ledgerconfig.GetBlockStorePath()),
 			indexConfig)
+
 		blockCache := memblkcache.NewProvider(blockCacheSize)
 
 		return cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache), nil
@@ -195,12 +196,11 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 	}
 
 	if err := s.AddBlock(blockAndPvtdata.Block); err != nil {
-		s.pvtdataStore.Rollback()
+		s.pvtdataStore.Rollback(blockAndPvtdata.Block.Header.Number)
 		return err
 	}
-
 	if writtenToPvtStore {
-		return s.pvtdataStore.Commit()
+		return s.pvtdataStore.Commit(blockAndPvtdata.Block.Header.Number)
 	}
 	return nil
 }

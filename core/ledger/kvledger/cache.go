@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/hyperledger/fabric/common/metrics"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -38,6 +40,9 @@ type indexUpdate struct {
 
 func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
 
+	stopWatch := metrics.StopWatch("kvledger_cacheNonDurableBlock")
+	defer stopWatch()
+
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.PvtData
 	logger.Debugf("*** cacheNonDurableBlock %d channelID %s\n", block.Header.Number, l.ledgerID)
@@ -62,6 +67,9 @@ func (l *kvLedger) cacheNonDurableBlock(pvtdataAndBlock *ledger.BlockAndPvtData)
 }
 
 func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUpdate, error) {
+
+	stopWatch := metrics.StopWatch("kvledger_cacheBlock")
+	defer stopWatch()
 
 	block := pvtdataAndBlock.Block
 	pvtData := pvtdataAndBlock.PvtData
@@ -96,7 +104,7 @@ func (l *kvLedger) cacheBlock(pvtdataAndBlock *ledger.BlockAndPvtData) (*indexUp
 		if err != nil {
 			return nil, err
 		}
-		err = pvtCache.Commit()
+		err = pvtCache.Commit(block.Header.Number)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +196,7 @@ func (l *kvLedger) getKVFromBlock(block *common.Block, btlPolicy pvtdatapolicy.B
 								Value: hashedWrite.ValueHash, BlockNum: block.Header.Number, IndexInBlock: txIndex},
 								IsDeleted: hashedWrite.IsDelete, Namespace: nsRwSet.NameSpace, ChId: chdr.ChannelId}, Collection: collHashedRwSets.CollectionName,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(block.Header.Number, btl),
-								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl)})
+								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(block.Header.Number, btl), PolicyBTL: btl})
 					}
 				}
 			}
@@ -205,14 +213,17 @@ func (l *kvLedger) indexWriter() {
 			close(l.stoppedIndexCh)
 			return
 		case indexUpdate := <-l.indexCh:
+			stopWatch := metrics.StopWatch("kvledger_indexUpdate")
 			allUpdates, indexDeletes := l.kvCacheProvider.PrepareIndexUpdates(indexUpdate.TxOps, indexUpdate.PvtData, indexUpdate.PvtHashData)
 			l.txtmgmt.RLock()
 			err := l.kvCacheProvider.ApplyIndexUpdates(allUpdates, indexDeletes, l.ledgerID)
 			l.txtmgmt.RUnlock()
 			if err != nil {
 				logger.Errorf("Failed to apply index updates in db for ledger[%s] : %s", l.ledgerID, err)
+				stopWatch()
 				panic(fmt.Sprintf("%s", err))
 			}
+			stopWatch()
 		}
 	}
 }
@@ -277,7 +288,8 @@ func getPrivateDataKV(blockNumber uint64, chId string, pvtData map[uint64]*ledge
 							kvcache.ValidatedPvtData{ValidatedTxOp: kvcache.ValidatedTxOp{ValidatedTx: kvcache.ValidatedTx{Key: write.Key, Value: write.Value, BlockNum: blockNumber, IndexInBlock: int(txnum)},
 								IsDeleted: write.IsDelete, Namespace: ns, ChId: chId}, Collection: coll,
 								Level1ExpiringBlock: getFirstLevelCacheExpiryBlock(blockNumber, btl),
-								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(blockNumber, btl)})
+								Level2ExpiringBlock: getSecondLevelCacheExpiryBlock(blockNumber, btl),
+								PolicyBTL:           btl})
 					}
 				}
 			}

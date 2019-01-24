@@ -36,7 +36,8 @@ type cdbBlockStore struct {
 	blockStore        *couchdb.CouchDatabase
 	ledgerID          string
 	cpInfo            checkpointInfo
-	pendingBlock      cdbBlock
+	pendingBlock      map[uint64]*cdbBlock
+	pendingBlockMtx   sync.Mutex
 	cpInfoSig         chan struct{}
 	cpInfoMtx         sync.RWMutex
 	bcInfo            atomic.Value
@@ -48,6 +49,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, blockI
 	cdbBlockStore := &cdbBlockStore{
 		blockStore:        blockStore,
 		ledgerID:          ledgerID,
+		pendingBlock:      make(map[uint64]*cdbBlock),
 		cpInfoSig:         make(chan struct{}),
 		cpInfoMtx:         sync.RWMutex{},
 		blockIndexEnabled: blockIndexEnabled,
@@ -119,6 +121,25 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 	s.updateCheckpoint(newCPInfo)
 
 	return nil
+}
+
+func (s *cdbBlockStore) pushPendingDoc(blockNumber uint64, pb *cdbBlock) {
+	s.pendingBlockMtx.Lock()
+	defer s.pendingBlockMtx.Unlock()
+
+	s.pendingBlock[blockNumber] = pb
+}
+
+func (s *cdbBlockStore) popPendingBlock(blockNumber uint64) (*cdbBlock, error) {
+	s.pendingBlockMtx.Lock()
+	defer s.pendingBlockMtx.Unlock()
+
+	pb, ok := s.pendingBlock[blockNumber]
+	if !ok {
+		return nil, errors.Errorf("block was not prepared [%d]", blockNumber)
+	}
+	delete(s.pendingBlock, blockNumber)
+	return pb, nil
 }
 
 // GetBlockchainInfo returns the current info about blockchain

@@ -39,16 +39,19 @@ func newCachedPvtDataStore(pvtDataStore pvtdatastorage.Store, pvtDataCache pvtda
 	c := cachedPvtDataStore{
 		pvtDataStore:      pvtDataStore,
 		pvtDataCache:      pvtDataCache,
-		pvtDataStoreCh:    make(chan *pvtPrepareData, pvtDataStorageQueueLen),
+		pvtDataStoreCh:    make(chan *pvtPrepareData),
+		pvtDataCommitCh:   make(chan *pvtPrepareData),
+		pvtDataRollbackCh: make(chan *pvtPrepareData),
 		writerClosedCh:    make(chan struct{}),
-		commitReadyCh:     make(chan bool),
-		prepareReadyCh:    make(chan bool),
 		doneCh:            make(chan struct{}),
-		commitImmediately: false,
-		firstExecuteDone:  false,
+		pvtReadyCh:        make(chan bool),
+		sigCh:             make(chan struct{}),
 	}
 
-	go c.pvtDataWriter()
+	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
+	for x := 0; x < concurrentBlockWrites; x++ {
+		go c.pvtDataWriter()
+	}
 
 	return &c, nil
 }
@@ -193,12 +196,13 @@ func (c *cachedPvtDataStore) IsEmpty() (bool, error) {
 }
 
 // Rollback pvt data in cache and call background pvtDataWriter go routine to rollback data
-func (c *cachedPvtDataStore) Rollback() error {
-	err := c.pvtDataCache.Rollback()
+func (c *cachedPvtDataStore) Rollback(blockNum uint64) error {
+	err := c.pvtDataCache.Rollback(blockNum)
 	if err != nil {
 		return errors.WithMessage(err, "Rollback pvtdata in cache failed")
 	}
-	c.commitReadyCh <- false
+	<-c.pvtReadyCh
+	c.pvtDataRollbackCh <- &pvtPrepareData{blockNum: blockNum}
 	return nil
 }
 
@@ -207,4 +211,27 @@ func (c *cachedPvtDataStore) Shutdown() {
 	<-c.writerClosedCh
 	c.pvtDataCache.Shutdown()
 	c.pvtDataStore.Shutdown()
+}
+
+func (c *cachedPvtDataStore) waitForPvt(ctx context.Context, blockNum uint64) {
+	var lastBlockNumber uint64
+PvtLoop:
+	for {
+		lastBlockNumber, _ = c.pvtDataStore.LastCommittedBlockHeight()
+		// LastCommittedBlockHeight return LastCommittedBlockHeight+1
+		lastBlockNumber = lastBlockNumber - 1
+
+		if lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer pvt blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break PvtLoop
+		case <-c.sigCh:
+		}
+	}
+
+	logger.Debugf("finished waiting for pvt blocks [%d, %d]", lastBlockNumber, blockNum)
 }

@@ -8,7 +8,6 @@ package kvledger
 
 import (
 	"sync"
-	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
@@ -50,12 +49,11 @@ type kvLedger struct {
 	bcInfo                 *common.BlockchainInfo
 	btlPolicy              pvtdatapolicy.BTLPolicy
 
-	stateCommitDoneCh chan *ledger.BlockAndPvtData
-	commitCh          chan *ledger.BlockAndPvtData
-	indexCh           chan *indexUpdate
-	stoppedCommitCh   chan struct{}
-	stoppedIndexCh    chan struct{}
-	doneCh            chan struct{}
+	commitCh        chan *ledger.BlockAndPvtData
+	indexCh         chan *indexUpdate
+	stoppedCommitCh chan struct{}
+	stoppedIndexCh  chan struct{}
+	doneCh          chan struct{}
 }
 
 // NewKVLedger constructs new `KVLedger`
@@ -74,18 +72,17 @@ func newKVLedger(
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
 	// id store, blockstore, txmgr (state database), history database
 	l := &kvLedger{
-		ledgerID:          ledgerID,
-		blockStore:        blockStore,
-		historyDB:         historyDB,
-		versionedDB:       versionedDB,
-		kvCacheProvider:   versionedDB.GetKVCacheProvider(),
-		blockAPIsRWLock:   &sync.RWMutex{},
-		stateCommitDoneCh: make(chan *ledger.BlockAndPvtData),
-		commitCh:          make(chan *ledger.BlockAndPvtData),
-		indexCh:           make(chan *indexUpdate),
-		stoppedCommitCh:   make(chan struct{}),
-		stoppedIndexCh:    make(chan struct{}),
-		doneCh:            make(chan struct{}),
+		ledgerID:        ledgerID,
+		blockStore:      blockStore,
+		historyDB:       historyDB,
+		versionedDB:     versionedDB,
+		kvCacheProvider: versionedDB.GetKVCacheProvider(),
+		blockAPIsRWLock: &sync.RWMutex{},
+		commitCh:        make(chan *ledger.BlockAndPvtData),
+		indexCh:         make(chan *indexUpdate),
+		stoppedCommitCh: make(chan struct{}),
+		stoppedIndexCh:  make(chan struct{}),
+		doneCh:          make(chan struct{}),
 	}
 
 	// TODO Move the function `GetChaincodeEventListener` to ledger interface and
@@ -301,41 +298,31 @@ func (l *kvLedger) GetBlockByNumber(blockNumber uint64) (*common.Block, error) {
 }
 
 func (l *kvLedger) AddBlock(pvtdataAndBlock *ledger.BlockAndPvtData) error {
-	blockNo := pvtdataAndBlock.Block.Header.Number
-	block := pvtdataAndBlock.Block
 
-	logger.Debugf("[%s] Adding block [%d] to storage", l.ledgerID, blockNo)
-	startCommitBlockStorage := time.Now()
+	logger.Debugf("[%s] Adding block [%d] to storage", l.ledgerID, pvtdataAndBlock.Block.Header.Number)
 	err := l.blockStore.AddBlock(pvtdataAndBlock.Block)
 	if err != nil {
 		return err
 	}
-	elapsedCommitBlockStorage := time.Since(startCommitBlockStorage) / time.Millisecond // duration in ms
 
-	logger.Debugf("[%s] Adding block [%d] transactions to state cache", l.ledgerID, blockNo)
+	logger.Debugf("[%s] Adding block [%d] transactions to state cache", l.ledgerID, pvtdataAndBlock.Block.Header.Number)
 
 	l.blockAPIsRWLock.Lock()
-	startStateCacheStorage := time.Now()
 	indexUpdate, err := l.cacheBlock(pvtdataAndBlock)
 	if err != nil {
 		l.blockAPIsRWLock.Unlock()
 		return err
 	}
-	elapsedCacheBlock := time.Since(startStateCacheStorage) / time.Millisecond // total duration in ms
 	//update local block chain info
 	err = l.blockStore.CheckpointBlock(pvtdataAndBlock.Block)
 	if err != nil {
+		l.blockAPIsRWLock.Unlock()
 		return err
 	}
 
 	l.blockAPIsRWLock.Unlock()
 
 	l.indexCh <- indexUpdate
-
-	elapsedAddBlock := time.Since(startCommitBlockStorage) / time.Millisecond // total duration in ms
-
-	logger.Infof("[%s] Added block [%d] with %d transaction(s) in %dms (block_commit=%dms state_cache=%dms)",
-		l.ledgerID, block.Header.Number, len(block.Data.Data), elapsedAddBlock, elapsedCommitBlockStorage, elapsedCacheBlock)
 
 	return nil
 }
@@ -389,6 +376,18 @@ func (l *kvLedger) NewTxSimulator(txid string) (ledger.TxSimulator, error) {
 // Any synchronization should be performed at the implementation level if required
 func (l *kvLedger) NewQueryExecutor() (ledger.QueryExecutor, error) {
 	return l.txtmgmt.NewQueryExecutor(util.GenerateUUID())
+}
+
+// GetState return state from db
+func (l *kvLedger) GetState(namespace string, key string) ([]byte, error) {
+	vv, err := l.txtmgmt.GetDB().GetState(namespace, key)
+	if err != nil {
+		return nil, err
+	}
+	if vv != nil {
+		return vv.Value, nil
+	}
+	return nil, nil
 }
 
 // NewHistoryQueryExecutor gives handle to a history query executor.

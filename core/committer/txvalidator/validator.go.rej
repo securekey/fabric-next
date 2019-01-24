@@ -1,0 +1,119 @@
+--- core/committer/txvalidator/validator.go
++++ core/committer/txvalidator/validator.go
+@@ -10,7 +10,6 @@ import (
+ 	"fmt"
+ 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+ 	"sort"
+-	"sync"
+ 	"time"
+ 
+ 	"github.com/golang/protobuf/proto"
+@@ -18,10 +17,10 @@ import (
+ 	"github.com/hyperledger/fabric/common/configtx"
+ 	commonerrors "github.com/hyperledger/fabric/common/errors"
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/common/metrics"
+ 	"github.com/hyperledger/fabric/core/common/sysccprovider"
+ 	"github.com/hyperledger/fabric/core/common/validation"
+ 	"github.com/hyperledger/fabric/core/ledger"
+-	"github.com/hyperledger/fabric/core/ledger/util"
+ 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
+ 	"github.com/hyperledger/fabric/gossip/comm"
+ 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
+@@ -75,23 +74,24 @@ type Validator interface {
+ // and vscc execution, in order to increase
+ // testability of TxValidator
+ type vsccValidator interface {
+-	VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode)
++	VSCCValidateTx(seq int, payload *common.Payload, envBytes []byte) (error, peer.TxValidationCode)
+ }
+ 
+ type mvccValidator interface {
+-	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
++	ValidateMVCC(ctx context.Context, block *common.Block, txFlags ledgerUtil.TxValidationFlags, filter ledgerUtil.TxFilter) error
+ }
+ 
+ // implementation of Validator interface, keeps
+ // reference to the ledger to enable tx simulation
+ // and execution of vscc
+ type TxValidator struct {
+-	ChainID       string
+-	Support       Support
+-	Vscc          vsccValidator
+-	gossip        gossip2.Gossip
+-	mvccValidator mvccValidator
+-	roleUtil      *roleutil.RoleUtil
++	ChainID         string
++	Support         Support
++	gossip          gossip2.Gossip
++	mvccValidator   mvccValidator
++	roleUtil        *roleutil.RoleUtil
++	sccp            sysccprovider.SystemChaincodeProvider
++	pluginValidator *PluginValidator
+ }
+ 
+ var logger *logging.Logger // package-level logger
+@@ -604,23 +557,28 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
+ 		channel := chdr.ChannelId
+ 		logger.Debugf("Transaction is for channel %s", channel)
+ 
+-		if !v.chainExists(channel) {
+-			logger.Errorf("Dropping transaction for non-existent channel %s", channel)
+-			results <- &blockValidationResult{
+-				tIdx:           tIdx,
+-				validationCode: peer.TxValidationCode_TARGET_CHAIN_NOT_FOUND,
+-			}
+-			return
+-		}
++		// FIXME: Is this even required? We wouldn' be here if the channel didn't exist
++		// if !v.chainExists(channel) {
++		// 	logger.Errorf("Dropping transaction for non-existent channel %s", channel)
++		// 	results <- &blockValidationResult{
++		// 		tIdx:           tIdx,
++		// 		validationCode: peer.TxValidationCode_TARGET_CHAIN_NOT_FOUND,
++		// 	}
++		// 	return
++		// }
+ 
+ 		if common.HeaderType(chdr.Type) == common.HeaderType_ENDORSER_TRANSACTION {
+ 			// Check duplicate transactions
+ 			txID = chdr.TxId
+ 			// GetTransactionByID will return:
+-			_, err := v.Support.Ledger().GetTransactionByID(txID)
++			// TODO: remove metric
++			stopWatchDupGetTxn := metrics.StopWatch(fmt.Sprintf("validator_%s_duplicate_check", metrics.FilterMetricName(v.channelID)))
++			_, err := v.support.Ledger().GetTransactionByID(txID)
++			stopWatchDupGetTxn()
++
+ 			// 1) err == nil => there is already a tx in the ledger with the supplied id
+ 			if err == nil {
+-				logger.Info("Duplicate transaction found, ", txID, ", skipping")
++				logger.Debug("Duplicate transaction found, ", txID, ", skipping")
+ 				results <- &blockValidationResult{
+ 					tIdx:           tIdx,
+ 					validationCode: peer.TxValidationCode_DUPLICATE_TXID,
+@@ -849,7 +807,7 @@ func (v *TxValidator) getTxCCInstance(payload *common.Payload) (invokeCCIns, upg
+ 	return invokeIns, nil, nil
+ }
+ 
+-func (v *TxValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
++func (v *blockValidator) getUpgradeTxInstance(chainID string, cdsBytes []byte) (*sysccprovider.ChaincodeInstance, error) {
+ 	cds, err := utils.GetChaincodeDeploymentSpec(cdsBytes)
+ 	if err != nil {
+ 		return nil, err
+@@ -939,15 +897,6 @@ func (p validators) isCommitter(i int) bool {
+ 	return roles.HasRole(ledgerconfig.CommitterRole)
+ }
+ 
+-func getValidationWaitTime(numTransactions int) time.Duration {
+-	minWaitTime := ledgerconfig.GetValidationMinWaitTime()
+-	waitTime := time.Duration(numTransactions) * ledgerconfig.GetValidationWaitTimePerTx()
+-	if waitTime < minWaitTime {
+-		return minWaitTime
+-	}
+-	return waitTime
+-}
+-
+ // flagsToString used in debugging
+ func flagsToString(flags ledgerUtil.TxValidationFlags) string {
+ 	str := "["

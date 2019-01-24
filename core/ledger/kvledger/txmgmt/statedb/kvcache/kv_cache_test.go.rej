@@ -1,0 +1,11 @@
+--- core/ledger/kvledger/txmgmt/statedb/kvcache/kv_cache_test.go
++++ core/ledger/kvledger/txmgmt/statedb/kvcache/kv_cache_test.go
+@@ -8,6 +8,8 @@ package kvcache
+ 
+ import (
+ 	"fmt"
++	"math/rand"
++	"sync"
+ 	"testing"
+ 
+ 	"github.com/hyperledger/fabric/common/ledger/testutil"

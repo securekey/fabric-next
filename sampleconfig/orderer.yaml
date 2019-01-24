@@ -162,6 +162,9 @@ FileLedger:
     # Otherwise, this value is ignored.
     Prefix: hyperledger-fabric-ordererledger
 
+    # BlockCacheSize: size limit of block cache
+    BlockCacheSize: 5
+
 ################################################################################
 #
 #   SECTION: RAM Ledger

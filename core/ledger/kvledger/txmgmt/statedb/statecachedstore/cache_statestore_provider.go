@@ -40,4 +40,5 @@ func (provider *CachedStateProvider) GetDBHandle(dbName string) (statedb.Version
 // Close cleans up the Provider
 func (provider *CachedStateProvider) Close() {
 	provider.dbProvider.Close()
+	provider.stateKeyIndexProvider.Close()
 }

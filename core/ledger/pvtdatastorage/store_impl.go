@@ -215,7 +215,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvt
 }
 
 // Commit implements the function in the interface `Store`
-func (s *store) Commit() error {
+func (s *store) Commit(blockNum uint64) error {
 	if !s.batchPending {
 		return &ErrIllegalCall{"No pending batch to commit"}
 	}
