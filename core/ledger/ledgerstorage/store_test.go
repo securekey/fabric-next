@@ -98,6 +98,14 @@ func TestStore(t *testing.T) {
 	// any other transaction entry should be nil
 	assert.Nil(t, blockAndPvtdata.PvtData[2])
 
+	// block 4 and up should have no pvt data
+	for i := 4; i < 10; i++ {
+		blockAndPvtdata, err = store.GetPvtDataAndBlockByNum(uint64(i), nil)
+		assert.NoError(t, err)
+		assert.Equal(t, sampleData[i].Block, blockAndPvtdata.Block)
+		assert.Zero(t, len(blockAndPvtdata.PvtData))
+	}
+
 	// test missing data retrieval in the presence of invalid tx. Block 5 had
 	// missing data (for tx4 and tx5). However, tx5 was marked as invalid tx.
 	// Hence, only tx4's missing data should be returned
@@ -186,7 +194,8 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 		pvtdataAtCrash = append(pvtdataAtCrash, p)
 	}
 	// Only call Prepare on pvt data store and mimic a crash
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
+	err = store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
+	assert.NoError(t, err)
 	store.Shutdown()
 	provider.Close()
 	provider, err = NewProvider()
@@ -199,6 +208,10 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 	_, err = store.GetPvtDataByNum(blokNumAtCrash, nil)
 	_, ok := err.(*pvtdatastorage.ErrOutOfRange)
 	assert.True(t, ok)
+
+	lastCommittedBlock, err := store.pvtdataStore.LastCommittedBlockHeight()
+	assert.NoError(t, err)
+	assert.Equal(t, blokNumAtCrash, lastCommittedBlock)
 
 	//we should be able to write the last block again
 	assert.NoError(t, store.CommitWithPvtData(dataAtCrash))
@@ -217,6 +230,10 @@ func TestCrashAfterPvtdataStorePreparation(t *testing.T) {
 		assert.Equal(t, v.SeqInBlock, ov.SeqInBlock)
 		assert.True(t, proto.Equal(v.WriteSet, ov.WriteSet))
 	}
+
+	lastCommittedBlock, err = store.pvtdataStore.LastCommittedBlockHeight()
+	assert.NoError(t, err)
+	assert.Equal(t, blokNumAtCrash+1, lastCommittedBlock)
 }
 
 func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
@@ -245,8 +262,10 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 
 	// Mimic a crash just short of calling the final commit on pvtdata store
 	// After starting the store again, the block and the pvtdata should be available
-	store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
-	store.BlockStore.AddBlock(dataAtCrash.Block)
+	err = store.pvtdataStore.Prepare(blokNumAtCrash, pvtdataAtCrash, nil)
+	assert.NoError(t, err)
+	err = store.BlockStore.AddBlock(dataAtCrash.Block)
+	assert.NoError(t, err)
 	store.Shutdown()
 	provider.Close()
 	provider, err = NewProvider()
@@ -258,6 +277,10 @@ func TestCrashBeforePvtdataStoreCommit(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, dataAtCrash.MissingPvtData, blkAndPvtdata.MissingPvtData)
 	assert.True(t, proto.Equal(dataAtCrash.Block, blkAndPvtdata.Block))
+
+	bl, err := store.pvtdataStore.LastCommittedBlockHeight()
+	assert.NoError(t, err)
+	assert.Equal(t, blokNumAtCrash+1, bl)
 }
 
 func TestAddAfterPvtdataStoreError(t *testing.T) {

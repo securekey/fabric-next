@@ -1,0 +1,18 @@
+--- core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
++++ core/ledger/kvledger/txmgmt/statedb/statecouchdb/statecouchdb.go
+@@ -490,12 +490,14 @@ func (vdb *VersionedDB) ensureFullCommitAndRecordSavepoint(height *version.Heigh
+ 	if err != nil {
+ 		return err
+ 	}
++	stopWatch := metrics.StopWatch("statecouchdb_ensurefullcommitandrecordsavepoint_savedoc_duration")
+ 	rev, err := vdb.metadataDB.SaveDoc(savepointDocID, vdb.couchCheckpointRev, savepointCouchDoc)
+ 	if err != nil {
+ 		logger.Errorf("Failed to save the savepoint to DB %s\n", err.Error())
++		stopWatch()
+ 		return err
+ 	}
+-
++	stopWatch()
+ 	vdb.couchCheckpointRev = rev
+ 
+ 	// Note: Ensure full commit on metadataDB after storing the savepoint is not necessary

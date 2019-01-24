@@ -53,9 +53,9 @@ type Store interface {
 	// invoke to the `Commit`
 	Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error
 	// Commit commits the pvt data passed in the previous invoke to the `Prepare` function
-	Commit() error
+	Commit(blockNum uint64) error
 	// Rollback rolls back the pvt data passed in the previous invoke to the `Prepare` function
-	Rollback() error
+	Rollback(blockNum uint64) error
 	// ProcessCollsEligibilityEnabled notifies the store when the peer becomes eligible to recieve data for an
 	// existing collection. Parameter 'committingBlk' refers to the block number that contains the corresponding
 	// collection upgrade transaction and the parameter 'nsCollMap' contains the collections for which the peer

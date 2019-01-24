@@ -13,38 +13,53 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statekeyindex"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
+type cacheKey struct {
+	channelID string
+	namespace string
+}
+
+func newCacheKey(channelID, namesapce string) cacheKey {
+	return cacheKey{channelID: channelID, namespace: namesapce}
+}
+
 type KVCacheProvider struct {
-	kvCacheMap map[string]*KVCache
-	kvCacheMtx sync.Mutex
+	kvCacheMap map[cacheKey]*KVCache
+	kvCacheMtx sync.RWMutex
 }
 
 func NewKVCacheProvider() *KVCacheProvider {
-	return &KVCacheProvider{kvCacheMap: make(map[string]*KVCache), kvCacheMtx: sync.Mutex{}}
+	return &KVCacheProvider{kvCacheMap: make(map[cacheKey]*KVCache)}
 }
 
-func (p *KVCacheProvider) getKVCache(chId string, namespace string) (*KVCache, error) {
-	cacheName := chId
-	if len(namespace) > 0 {
-		cacheName = cacheName + "_" + namespace
-	}
-
-	kvCache, found := p.kvCacheMap[cacheName]
+func (p *KVCacheProvider) getKVCache(channelID, namespace string) (*KVCache, error) {
+	key := newCacheKey(channelID, namespace)
+	kvCache, found := p.kvCacheMap[key]
 	if !found {
+		cacheName := channelID
+		if len(namespace) > 0 {
+			cacheName = cacheName + "_" + namespace
+		}
 		kvCache = newKVCache(cacheName)
-		p.kvCacheMap[cacheName] = kvCache
+		p.kvCacheMap[key] = kvCache
 	}
-
 	return kvCache, nil
 }
 
-func (p *KVCacheProvider) GetKVCache(chId string, namespace string) (*KVCache, error) {
+func (p *KVCacheProvider) GetKVCache(channelID, namespace string) (*KVCache, error) {
+	p.kvCacheMtx.RLock()
+	kvCache, found := p.kvCacheMap[newCacheKey(channelID, namespace)]
+	p.kvCacheMtx.RUnlock()
+	if found {
+		return kvCache, nil
+	}
+
 	p.kvCacheMtx.Lock()
 	defer p.kvCacheMtx.Unlock()
-
-	return p.getKVCache(chId, namespace)
+	return p.getKVCache(channelID, namespace)
 }
 
 func (p *KVCacheProvider) purgeNonDurable(blockNumber uint64) {
@@ -96,13 +111,13 @@ func (p *KVCacheProvider) UpdateKVCache(blockNumber uint64, validatedTxOps []Val
 		}
 	}
 	//Sort non durable keys in background
-	go func() {
-		for k := range chIDAndNamespace {
-			s := strings.Split(k, "!")
-			kvCache, _ := p.getKVCache(s[0], s[1])
+	for k := range chIDAndNamespace {
+		s := strings.Split(k, "!")
+		go func(chID string, namespace string) {
+			kvCache, _ := p.GetKVCache(chID, namespace)
 			kvCache.sortNonDurableKeys()
-		}
-	}()
+		}(s[0], s[1])
+	}
 
 }
 
@@ -269,23 +284,7 @@ func (p *KVCacheProvider) GetRangeFromKVCache(chId, namespace, startKey, endKey 
 	defer p.kvCacheMtx.Unlock()
 
 	kvCache, _ := p.getKVCache(chId, namespace)
-	sortedKeys := util.GetSortedKeys(kvCache.keys)
-	var keyRange []string
-	foundStartKey := startKey == ""
-
-	for _, k := range sortedKeys {
-		if k == startKey {
-			foundStartKey = true
-		}
-		if k == endKey {
-			//exclude end key and end the range
-			break
-		}
-		if foundStartKey {
-			keyRange = append(keyRange, k)
-		}
-
-	}
+	keyRange := util.GetSortedKeysInRange(kvCache.keys, startKey, endKey)
 
 	return keyRange
 }

@@ -284,7 +284,7 @@ func TestDataMessageInvalidation(t *testing.T) {
 
 	data := []byte{1, 1, 1}
 	sMsg1 := signedGossipMessage("testChannel", GossipMessage_EMPTY, dataMessage(1, data))
-	sMsg1Clone := signedGossipMessage("testChannel", GossipMessage_EMPTY, dataMessage(1, data))
+	sMsg1Clone := signedGossipMessage("testChannel", GossipMessage_EMPTY, dataMessage(7, data))
 	sMsg3 := signedGossipMessage("testChannel", GossipMessage_EMPTY, dataMessage(2, data))
 	sMsg4 := signedGossipMessage("testChannel", GossipMessage_EMPTY, dataMessage(7, data))
 

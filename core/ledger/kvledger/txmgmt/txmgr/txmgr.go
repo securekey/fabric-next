@@ -18,6 +18,7 @@ package txmgr
 
 import (
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -28,6 +29,7 @@ import (
 // TxMgr - an interface that a transaction manager should implement
 type TxMgr interface {
 	NewQueryExecutor(txid string) (ledger.QueryExecutor, error)
+	GetDB() privacyenabledstate.DB
 	NewTxSimulator(txid string) (ledger.TxSimulator, error)
 	ValidateMVCC(ctx context.Context, block *common.Block, txFlags util.TxValidationFlags, filter util.TxFilter) error
 	ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*TxStatInfo, error)
@@ -35,18 +37,25 @@ type TxMgr interface {
 	GetLastSavepoint() (*version.Height, error)
 	ShouldRecover(lastAvailableBlock uint64) (bool, uint64, error)
 	CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvtData) error
-	Commit() error
-	Rollback()
+	Commit(blockNum uint64) error
+	Rollback(blockNum uint64)
 	Shutdown()
 }
 
-//LockBasedTxMgr - an extension of TxMgr interface which allows to lock/unlock txmgr rwlock
+//LockBasedTxMgr - an extension of TxMgr interface which allows to lock/unlock txmgr rwlock and also provides notification
+//on block commit
 type LockBasedTxMgr interface {
 	TxMgr
+	BlockCommitted() (*ledger.BlockAndPvtData, chan struct{})
 	RLock()
 	RUnlock()
 	Lock()
 	Unlock()
+}
+
+//BlockCommitted - an interface which will be used by lock based tx manager to notify block commit
+type BlockCommitted interface {
+	OnBlockCommit(blockAndPvtData *ledger.BlockAndPvtData)
 }
 
 // TxStatInfo encapsulates information about a transaction

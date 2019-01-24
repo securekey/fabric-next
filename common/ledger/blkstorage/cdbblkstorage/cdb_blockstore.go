@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
+	"gopkg.in/cheggaaa/pb.v1"
 )
 
 type cdbBlock struct {
@@ -36,7 +37,8 @@ type cdbBlockStore struct {
 	blockStore        *couchdb.CouchDatabase
 	ledgerID          string
 	cpInfo            checkpointInfo
-	pendingBlock      cdbBlock
+	pendingBlock      map[uint64]*cdbBlock
+	pendingBlockMtx   sync.Mutex
 	cpInfoSig         chan struct{}
 	cpInfoMtx         sync.RWMutex
 	bcInfo            atomic.Value
@@ -48,6 +50,7 @@ func newCDBBlockStore(blockStore *couchdb.CouchDatabase, ledgerID string, blockI
 	cdbBlockStore := &cdbBlockStore{
 		blockStore:        blockStore,
 		ledgerID:          ledgerID,
+		pendingBlock:      make(map[uint64]*cdbBlock),
 		cpInfoSig:         make(chan struct{}),
 		cpInfoMtx:         sync.RWMutex{},
 		blockIndexEnabled: blockIndexEnabled,
@@ -84,21 +87,32 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
 		return errors.WithMessage(err, "converting block to couchDB document failed")
 	}
 
-	s.pendingBlock.ID = blockNumberToKey(block.GetHeader().GetNumber())
-	s.pendingBlock.Doc = pendingDoc
+	blockNumber := block.GetHeader().GetNumber()
+	pb := cdbBlock{
+		ID: blockNumberToKey(blockNumber),
+		Doc: pendingDoc,
+	}
+
+	s.pushPendingDoc(blockNumber, &pb)
 
 	return nil
 }
 
 func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
-	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
+	blockNumber := block.GetHeader().GetNumber()
+	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, blockNumber)
 
 /*	stopWatch := metrics.StopWatch("blkstorage_couchdb_checkpointBlock_duration")
 	defer stopWatch()*/
 
 	if ledgerconfig.IsCommitter() {
+		pb, err := s.popPendingBlock(blockNumber)
+		if err != nil {
+			return err
+		}
+
 		//save the checkpoint information in the database
-		rev, err := s.blockStore.UpdateDoc(s.pendingBlock.ID, "", s.pendingBlock.Doc)
+		rev, err := s.blockStore.UpdateDoc(pb.ID, "", pb.Doc)
 		if err != nil {
 			return errors.WithMessage(err, "adding block to couchDB failed")
 		}
@@ -119,6 +133,25 @@ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
 	s.updateCheckpoint(newCPInfo)
 
 	return nil
+}
+
+func (s *cdbBlockStore) pushPendingDoc(blockNumber uint64, pb *cdbBlock) {
+	s.pendingBlockMtx.Lock()
+	defer s.pendingBlockMtx.Unlock()
+
+	s.pendingBlock[blockNumber] = pb
+}
+
+func (s *cdbBlockStore) popPendingBlock(blockNumber uint64) (*cdbBlock, error) {
+	s.pendingBlockMtx.Lock()
+	defer s.pendingBlockMtx.Unlock()
+
+	pb, ok := s.pendingBlock[blockNumber]
+	if !ok {
+		return nil, errors.Errorf("block was not prepared [%d]", blockNumber)
+	}
+	delete(s.pendingBlock, blockNumber)
+	return pb, nil
 }
 
 // GetBlockchainInfo returns the current info about blockchain

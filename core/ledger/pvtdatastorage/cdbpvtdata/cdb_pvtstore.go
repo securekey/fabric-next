@@ -14,82 +14,72 @@ import (
 
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 )
 
 type store struct {
-	db            *couchdb.CouchDatabase
-	purgeInterval uint64
-	pendingDocs   []*couchdb.CouchDoc
-
+	db             *couchdb.CouchDatabase
+	purgeInterval  uint64
+	pendingPvtDocs map[uint64][]*couchdb.CouchDoc
+	pendingPvtMtx  sync.Mutex
 	commonStore
 }
 
 func newStore(db *couchdb.CouchDatabase) (*store, error) {
 	s := store{
-		db:            db,
-		purgeInterval: ledgerconfig.GetPvtdataStorePurgeInterval(),
+		db:             db,
+		purgeInterval:  ledgerconfig.GetPvtdataStorePurgeInterval(),
+		pendingPvtDocs: make(map[uint64][]*couchdb.CouchDoc),
 	}
-
-	if ledgerconfig.IsCommitter() {
-		err := s.initState()
-		if err != nil {
-			return nil, err
-		}
-	}
+	s.isEmpty = true
 
 	return &s, nil
 }
 
-func (s *store) initState() error {
-	lastCommittedBlock, ok, err := lookupLastBlock(s.db)
-	if err != nil {
-		return err
-	}
-
-	s.isEmpty = !ok
-	if ok {
-		s.lastCommittedBlock = lastCommittedBlock
-	}
-	return nil
-}
-
 func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	if s.pendingDocs != nil {
-		return errors.New("previous commit is pending")
-	}
-
 	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
 	if err != nil {
 		return err
 	}
 
-	blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
-	if err != nil {
-		return err
+	if len(dataEntries) > 0 || len(expiryEntries) > 0 {
+		blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
+		if err != nil {
+			return err
+		}
+
+		if blockDoc != nil {
+			pendingDocs := make([]*couchdb.CouchDoc, 0)
+			pendingDocs = append(pendingDocs, blockDoc)
+			s.pushPendingDoc(blockNum, pendingDocs)
+		}
 	}
-	s.pendingDocs = append(s.pendingDocs, blockDoc)
 
 	return nil
 }
 
-func (s *store) commitDB(committingBlockNum uint64) error {
-	if s.pendingDocs == nil {
+func (s *store) commitDB(blockNum uint64) error {
+	if !s.checkPendingPvt(blockNum) {
 		return errors.New("no commit is pending")
 	}
-	_, err := s.db.CommitDocuments(s.pendingDocs)
+	pendingDocs, err := s.popPendingPvt(blockNum)
 	if err != nil {
-		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", committingBlockNum))
+		return err
 	}
-	s.pendingDocs = nil
+	_, err = s.db.CommitDocuments(pendingDocs)
+	if err != nil {
+		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", blockNum))
+	}
 
 	return nil
 }
 
 func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, error) {
-	pd, err := retrieveBlockPvtData(s.db, strconv.FormatUint(blockNum, blockNumberBase))
+	pd, err := retrieveBlockPvtData(s.db, blockNumberToKey(blockNum))
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +88,7 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
-	pds, err := retrieveBlockExpiryData(s.db, strconv.FormatUint(blockNum, blockNumberBase))
+	pds, err := retrieveBlockExpiryData(s.db, blockNumberToPurgeBlockKey(blockNum))
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +154,6 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 		}
 	}
 
-	var purgeBlockNumbers []string
-	for _, pvtBlockNum := range blockPvtData.PurgeBlocks {
-		if pvtBlockNum != blockNumberToKey(maxBlkNum) {
-			purgeBlockNumbers = append(purgeBlockNumbers, pvtBlockNum)
-		}
-	}
-	blockPvtData.PurgeBlocks = purgeBlockNumbers
-
 	var expiryBlockNumbers []string
 	for _, pvtBlockNum := range blockPvtData.ExpiryBlocks {
 		n, err := strconv.ParseUint(pvtBlockNum, blockNumberBase, 64)
@@ -184,9 +166,54 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 	}
 	blockPvtData.ExpiryBlocks = expiryBlockNumbers
 
+	purgeBlockNumber, err := getPurgeBlockNumber(expiryBlockNumbers, s.purgeInterval)
+	if err != nil {
+		return nil, err
+	}
+	blockPvtData.PurgeBlock = purgeBlockNumber
+
+	logger.Debugf("Setting next purge block[%s] for block[%d], max block[%d]", purgeBlockNumber, blockNumber, maxBlkNum)
+
+	if len(blockPvtData.Data) == 0 {
+		blockPvtData.Deleted = true
+	}
+
 	jsonBytes, err := json.Marshal(blockPvtData)
 	if err != nil {
 		return nil, err
 	}
 	return &couchdb.CouchDoc{JSONValue: jsonBytes}, nil
+}
+
+func (s *store) pushPendingDoc(blockNumber uint64, docs []*couchdb.CouchDoc) {
+	s.pendingPvtMtx.Lock()
+	defer s.pendingPvtMtx.Unlock()
+
+	s.pendingPvtDocs[blockNumber] = docs
+}
+
+func (s *store) popPendingPvt(blockNumber uint64) ([]*couchdb.CouchDoc, error) {
+	s.pendingPvtMtx.Lock()
+	defer s.pendingPvtMtx.Unlock()
+
+	docs, ok := s.pendingPvtDocs[blockNumber]
+	if !ok {
+		return nil, errors.Errorf("pvt was not prepared [%d]", blockNumber)
+	}
+	delete(s.pendingPvtDocs, blockNumber)
+	return docs, nil
+}
+
+func (s *store) checkPendingPvt(blockNumber uint64) bool {
+	s.pendingPvtMtx.Lock()
+	defer s.pendingPvtMtx.Unlock()
+
+	_, ok := s.pendingPvtDocs[blockNumber]
+	return ok
+}
+
+func (s *store) pendingPvtSize() int {
+	s.pendingPvtMtx.Lock()
+	defer s.pendingPvtMtx.Unlock()
+	return len(s.pendingPvtDocs)
 }
