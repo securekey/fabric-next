@@ -114,7 +114,7 @@ func OpenLedger(id string) (ledger.PeerLedger, error) {
 	}
 	l, ok := openedLedgers[id]
 	if ok {
-		return nil, ErrLedgerAlreadyOpened
+		return l, nil
 	}
 	l, err := ledgerProvider.Open(id)
 	if err != nil {

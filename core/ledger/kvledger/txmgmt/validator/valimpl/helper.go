@@ -115,18 +115,16 @@ func preprocessProtoBlock(txMgr txmgr.TxMgr,
 				chdr, err = utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
 			}
 		}
-		if txsFilter.IsInvalid(txIndex) {
-			// Skipping invalid transaction
-			if txsFilter.Flag(txIndex) != peer.TxValidationCode_NOT_VALIDATED {
-				logger.Warningf("Channel [%s]: Block [%d] Transaction index [%d] TxId [%s]"+
-					" marked as invalid by committer. Reason code [%s]",
-					chdr.GetChannelId(), block.Header.Number, txIndex, chdr.GetTxId(),
-					txsFilter.Flag(txIndex).String())
-			}
-			continue
-		}
+
 		if err != nil {
 			return nil, nil, err
+		}
+
+		txStatus := txsFilter.Flag(txIndex)
+		if txStatus != peer.TxValidationCode_VALID && txStatus != peer.TxValidationCode_NOT_VALIDATED {
+			// Skipping invalid transaction
+			logger.Infof("Skipping invalid transaction [%d] for block %d. Status: %s", txIndex, block.Header.Number, txStatus)
+			continue
 		}
 
 		var txRWSet *rwsetutil.TxRwSet

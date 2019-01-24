@@ -26,6 +26,7 @@ const confPeerFileSystemPath = "peer.fileSystemPath"
 const confLedgersData = "ledgersData"
 const confLedgerProvider = "ledgerProvider"
 const confStateleveldb = "stateLeveldb"
+const confStateKeyleveldb = "stateKeyLeveldb"
 const confHistoryLeveldb = "historyLeveldb"
 const confBookkeeper = "bookkeeper"
 const confConfigHistory = "configHistory"
@@ -48,8 +49,8 @@ const confHistoryStorage = "ledger.state.historyStorage"
 const confTransientStorage = "ledger.blockchain.transientStorage"
 const confConfigHistoryStorage = "ledger.blockchain.configHistoryStorage"
 const confRoles = "ledger.roles"
+const confConcurrentBlockWrites = "ledger.concurrentBlockWrites"
 const confValidationMinWaitTime = "ledger.blockchain.validation.minwaittime"
-const confValidationWaitTimePerTx = "ledger.blockchain.validation.waittimepertx"
 
 // TODO: couchDB config should be in a common section rather than being under state.
 const confCouchDBMaxIdleConns = "ledger.state.couchDBConfig.maxIdleConns"
@@ -58,7 +59,6 @@ const confCouchDBIdleConnTimeout = "ledger.state.couchDBConfig.idleConnTimeout"
 const confCouchDBKeepAliveTimeout = "ledger.state.couchDBConfig.keepAliveTimeout"
 const confCouchDBHTTPTraceEnabled = "ledger.state.couchDBConfig.httpTraceEnabled"
 const defaultValidationMinWaitTime = 50 * time.Millisecond
-const defaultValidationWaitTimePerTx = 5 * time.Millisecond
 
 var confCollElgProcMaxDbBatchSize = &conf{"ledger.pvtdataStore.collElgProcMaxDbBatchSize", 5000}
 var confCollElgProcDbBatchesInterval = &conf{"ledger.pvtdataStore.collElgProcDbBatchesInterval", 1000}
@@ -130,6 +130,11 @@ func GetLedgerProviderPath() string {
 // GetStateLevelDBPath returns the filesystem path that is used to maintain the state level db
 func GetStateLevelDBPath() string {
 	return filepath.Join(GetRootPath(), confStateleveldb)
+}
+
+// GetStateKeyLevelDBPath returns the filesystem path that is used to maintain the state key level db
+func GetStateKeyLevelDBPath() string {
+	return filepath.Join(GetRootPath(), confStateKeyleveldb)
 }
 
 // GetHistoryLevelDBPath returns the filesystem path that is used to maintain the history level db
@@ -325,7 +330,7 @@ func GetBlockStoreProvider() BlockStorageProvider {
 func GetBlockCacheSize() int {
 	blockCacheSize := viper.GetInt(confBlockCacheSize)
 	if !viper.IsSet(confBlockCacheSize) {
-		blockCacheSize = 300
+		blockCacheSize = 5
 	}
 	return blockCacheSize
 }
@@ -432,6 +437,12 @@ func HasRole(role Role) bool {
 	initOnce.Do(func() {
 		roles = getRoles()
 	})
+
+	if len(roles) == 0 {
+		// No roles were explicitly set, therefore the peer is assumed to have all roles.
+		return true
+	}
+
 	_, ok := roles[role]
 	return ok
 }
@@ -473,10 +484,7 @@ func getRoles() map[Role]struct{} {
 	strRoles := viper.GetString(confRoles)
 	if strRoles == "" {
 		// The peer has all roles by default
-		return map[Role]struct{}{
-			EndorserRole:  exists,
-			CommitterRole: exists,
-		}
+		return map[Role]struct{}{}
 	}
 	roles := make(map[Role]struct{})
 	for _, r := range strings.Split(strRoles, ",") {
@@ -490,17 +498,6 @@ func CouchDBHTTPTraceEnabled() bool {
 	return viper.GetBool(confCouchDBHTTPTraceEnabled)
 }
 
-// GetValidationWaitTimePerTx is used by the committer in distributed validation and is the time
-// per transaction to wait for validation responses from other validators.
-// For example, if there are 20 transactions to validate and ValidationWaitTimePerTx=100ms
-// then the committer will wait 20*50ms for responses from other validators.
-func GetValidationWaitTimePerTx() time.Duration {
-	if viper.IsSet(confValidationWaitTimePerTx) {
-		return viper.GetDuration(confValidationWaitTimePerTx)
-	}
-	return defaultValidationWaitTimePerTx
-}
-
 // GetValidationMinWaitTime is used by the committer in distributed validation and is the minimum
 // time to wait for Tx validation responses from other validators.
 func GetValidationMinWaitTime() time.Duration {
@@ -509,4 +506,13 @@ func GetValidationMinWaitTime() time.Duration {
 		return defaultValidationMinWaitTime
 	}
 	return timeout
+}
+
+// GetConcurrentBlockWrites is how many concurrent writes to db
+func GetConcurrentBlockWrites() int {
+	concurrentWrites := viper.GetInt(confConcurrentBlockWrites)
+	if !viper.IsSet(confConcurrentBlockWrites) {
+		return 1
+	}
+	return concurrentWrites
 }
