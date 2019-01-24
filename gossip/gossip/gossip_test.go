@@ -21,11 +21,14 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/bccsp/factory"
+	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/gossip/algo"
+	"github.com/hyperledger/fabric/gossip/metrics"
+	"github.com/hyperledger/fabric/gossip/metrics/mocks"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/assert"
@@ -222,7 +225,15 @@ func bootPeers(portPrefix int, ids ...int) []string {
 	return peers
 }
 
-func newGossipInstanceWithCustomMCS(portPrefix int, id int, maxMsgCount int, mcs api.MessageCryptoService, boot ...int) Gossip {
+func newGossipInstanceWithCustomMCS(portPrefix int, id int, maxMsgCount int,
+	mcs api.MessageCryptoService, boot ...int) Gossip {
+	return newGossipInstanceWithCustomMCSWithMetrics(metrics.NewGossipMetrics(&disabled.Provider{}),
+		portPrefix, id, maxMsgCount, mcs, boot...)
+}
+
+func newGossipInstanceWithCustomMCSWithMetrics(metrics *metrics.GossipMetrics,
+	portPrefix int, id int, maxMsgCount int,
+	mcs api.MessageCryptoService, boot ...int) Gossip {
 	port := id + portPrefix
 	conf := &Config{
 		BindPort:                   port,
@@ -244,13 +255,19 @@ func newGossipInstanceWithCustomMCS(portPrefix int, id int, maxMsgCount int, mcs
 	}
 	selfID := api.PeerIdentityType(conf.InternalEndpoint)
 	g := NewGossipServiceWithServer(conf, &orgCryptoService{}, mcs,
-		selfID, nil)
+		selfID, nil, metrics)
 
 	return g
 }
 
 func newGossipInstance(portPrefix int, id int, maxMsgCount int, boot ...int) Gossip {
 	return newGossipInstanceWithCustomMCS(portPrefix, id, maxMsgCount, &naiveCryptoService{}, boot...)
+}
+
+func newGossipInstanceWithMetrics(metrics *metrics.GossipMetrics,
+	portPrefix int, id int, maxMsgCount int, boot ...int) Gossip {
+	return newGossipInstanceWithCustomMCSWithMetrics(metrics,
+		portPrefix, id, maxMsgCount, &naiveCryptoService{}, boot...)
 }
 
 func newGossipInstanceWithOnlyPull(portPrefix int, id int, maxMsgCount int, boot ...int) Gossip {
@@ -277,7 +294,7 @@ func newGossipInstanceWithOnlyPull(portPrefix int, id int, maxMsgCount int, boot
 	cryptoService := &naiveCryptoService{}
 	selfID := api.PeerIdentityType(conf.InternalEndpoint)
 	g := NewGossipServiceWithServer(conf, &orgCryptoService{}, cryptoService,
-		selfID, nil)
+		selfID, nil, metrics.NewGossipMetrics(&disabled.Provider{}))
 	return g
 }
 
@@ -1629,4 +1646,84 @@ func checkPeersMembership(t *testing.T, peers []Gossip, n int) func() bool {
 		}
 		return true
 	}
+}
+
+func TestMembershipMetrics(t *testing.T) {
+	t.Parallel()
+	portPrefix := 7687
+
+	onlineWG := sync.WaitGroup{}
+	onlineWG.Add(1)
+	offlineWG := sync.WaitGroup{}
+	offlineWG.Add(1)
+
+	testMetricProvider := mocks.TestUtilConstructMetricProvider()
+
+	testMetricProvider.FakeOnlineGauge.SetStub = func(delta float64) {
+		onlineWG.Done()
+	}
+	testMetricProvider.FakeOfflineGauge.SetStub = func(delta float64) {
+		offlineWG.Done()
+	}
+
+	gmetrics := metrics.NewGossipMetrics(testMetricProvider.FakeProvider)
+
+	pI0 := newGossipInstanceWithCustomMCSWithMetrics(gmetrics, portPrefix, 0, 100,
+		&naiveCryptoService{}, 0, 1)
+	pI0.JoinChan(&joinChanMsg{}, common.ChainID("A"))
+	pI0.UpdateLedgerHeight(1, common.ChainID("A"))
+
+	pI1 := newGossipInstanceWithMetrics(metrics.NewGossipMetrics(&disabled.Provider{}), portPrefix, 1, 100, 0)
+	pI1.JoinChan(&joinChanMsg{}, common.ChainID("A"))
+	pI1.UpdateLedgerHeight(1, common.ChainID("A"))
+
+	waitForMembership := func(n int) func() bool {
+		return func() bool {
+			if len(pI0.PeersOfChannel(common.ChainID("A"))) != n || len(pI1.PeersOfChannel(common.ChainID("A"))) != n {
+				return false
+			}
+			return true
+		}
+	}
+	waitUntilOrFail(t, waitForMembership(1))
+	onlineWG.Wait()
+	pI1.Stop()
+	offlineWG.Wait()
+	waitUntilOrFail(t, waitForMembership(0))
+
+	assert.Equal(t,
+		[]string{"channel", "A"},
+		testMetricProvider.FakeOnlineGauge.WithArgsForCall(0),
+	)
+	assert.EqualValues(t,
+		1,
+		testMetricProvider.FakeOnlineGauge.SetArgsForCall(0),
+	)
+	assert.Equal(t,
+		[]string{"channel", "A"},
+		testMetricProvider.FakeTotalGauge.WithArgsForCall(0),
+	)
+	assert.EqualValues(t,
+		1,
+		testMetricProvider.FakeTotalGauge.SetArgsForCall(0),
+	)
+
+	assert.Equal(t,
+		[]string{"channel", "A"},
+		testMetricProvider.FakeOfflineGauge.WithArgsForCall(0),
+	)
+	assert.EqualValues(t,
+		1,
+		testMetricProvider.FakeOfflineGauge.SetArgsForCall(0),
+	)
+	assert.Equal(t,
+		[]string{"channel", "A"},
+		testMetricProvider.FakeTotalGauge.WithArgsForCall(1),
+	)
+	assert.EqualValues(t, 0,
+		testMetricProvider.FakeTotalGauge.SetArgsForCall(1),
+	)
+
+	pI0.Stop()
+
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric/common/configtx/test"
 	errors2 "github.com/hyperledger/fabric/common/errors"
 	"github.com/hyperledger/fabric/common/flogging/floggingtest"
+	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/committer"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
@@ -32,6 +33,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/gossip"
+	"github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/privdata"
 	"github.com/hyperledger/fabric/gossip/state/mocks"
 	gutil "github.com/hyperledger/fabric/gossip/util"
@@ -344,7 +346,7 @@ func newGossipConfig(portPrefix, id int, boot ...int) *gossip.Config {
 func newGossipInstance(config *gossip.Config, mcs api.MessageCryptoService) gossip.Gossip {
 	id := api.PeerIdentityType(config.InternalEndpoint)
 	return gossip.NewGossipServiceWithServer(config, &orgCryptoService{}, mcs,
-		id, nil)
+		id, nil, metrics.NewGossipMetrics(&disabled.Provider{}))
 }
 
 // Create new instance of KVLedger to be used for testing
@@ -359,19 +361,21 @@ func newCommitter() committer.Committer {
 	return committer.NewLedgerCommitter(ldgr)
 }
 
-func newPeerNodeWithGossip(config *gossip.Config, committer committer.Committer, acceptor peerIdentityAcceptor, g gossip.Gossip) *peerNode {
+func newPeerNodeWithGossip(config *gossip.Config, committer committer.Committer,
+	acceptor peerIdentityAcceptor, g gossip.Gossip) *peerNode {
 	return newPeerNodeWithGossipWithValidator(config, committer, acceptor, g, &validator.MockValidator{})
 }
 
 // Constructing pseudo peer node, simulating only gossip and state transfer part
-func newPeerNodeWithGossipWithValidator(config *gossip.Config, committer committer.Committer, acceptor peerIdentityAcceptor, g gossip.Gossip, v txvalidator.Validator) *peerNode {
+func newPeerNodeWithGossipWithValidatorWithMetrics(config *gossip.Config, committer committer.Committer,
+	acceptor peerIdentityAcceptor, g gossip.Gossip, v txvalidator.Validator,
+	gossipMetrics *metrics.GossipMetrics) *peerNode {
 	cs := &cryptoServiceMock{acceptor: acceptor}
 	// Gossip component based on configuration provided and communication module
 	if g == nil {
 		g = newGossipInstance(config, &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor})
 	}
 
-	logger.Debug("Joinning channel", util.GetTestChainID())
 	g.JoinChan(&joinChanMsg{}, common.ChainID(util.GetTestChainID()))
 
 	// Initialize pseudo peer simulator, which has only three
@@ -382,8 +386,8 @@ func newPeerNodeWithGossipWithValidator(config *gossip.Config, committer committ
 		Validator:      v,
 		TransientStore: &mockTransientStore{},
 		Committer:      committer,
-	}, pcomm.SignedData{})
-	sp := NewGossipStateProvider(util.GetTestChainID(), servicesAdapater, coord)
+	}, pcomm.SignedData{}, gossipMetrics.PrivdataMetrics)
+	sp := NewGossipStateProvider(util.GetTestChainID(), servicesAdapater, coord, gossipMetrics.StateMetrics)
 	if sp == nil {
 		return nil
 	}
@@ -395,6 +399,20 @@ func newPeerNodeWithGossipWithValidator(config *gossip.Config, committer committ
 		commit: committer,
 		cs:     cs,
 	}
+}
+
+// add metrics provider for metrics testing
+func newPeerNodeWithGossipWithMetrics(config *gossip.Config, committer committer.Committer,
+	acceptor peerIdentityAcceptor, g gossip.Gossip, gossipMetrics *metrics.GossipMetrics) *peerNode {
+	return newPeerNodeWithGossipWithValidatorWithMetrics(config, committer, acceptor, g,
+		&validator.MockValidator{}, gossipMetrics)
+}
+
+// Constructing pseudo peer node, simulating only gossip and state transfer part
+func newPeerNodeWithGossipWithValidator(config *gossip.Config, committer committer.Committer,
+	acceptor peerIdentityAcceptor, g gossip.Gossip, v txvalidator.Validator) *peerNode {
+	gossipMetrics := metrics.NewGossipMetrics(&disabled.Provider{})
+	return newPeerNodeWithGossipWithValidatorWithMetrics(config, committer, acceptor, g, v, gossipMetrics)
 }
 
 // Constructing pseudo peer node, simulating only gossip and state transfer part
@@ -705,8 +723,6 @@ func TestHaltChainProcessing(t *testing.T) {
 		}
 	}
 
-	oldLogger := logger
-	defer func() { logger = oldLogger }()
 	l, recorder := floggingtest.NewTestLogger(t)
 	logger = l
 
@@ -768,27 +784,32 @@ func TestGossipReception(t *testing.T) {
 	}
 	b, _ := pb.Marshal(rawblock)
 
-	createChan := func(signalChan chan struct{}) <-chan *proto.GossipMessage {
-		c := make(chan *proto.GossipMessage)
-		gMsg := &proto.GossipMessage{
-			Channel: []byte("AAA"),
-			Content: &proto.GossipMessage_DataMsg{
-				DataMsg: &proto.DataMessage{
-					Payload: &proto.Payload{
-						SeqNum: 1,
-						Data:   b,
+	newMsg := func(channel string) *proto.GossipMessage {
+		{
+			return &proto.GossipMessage{
+				Channel: []byte(channel),
+				Content: &proto.GossipMessage_DataMsg{
+					DataMsg: &proto.DataMessage{
+						Payload: &proto.Payload{
+							SeqNum: 1,
+							Data:   b,
+						},
 					},
 				},
-			},
+			}
 		}
+	}
+
+	createChan := func(signalChan chan struct{}) <-chan *proto.GossipMessage {
+		c := make(chan *proto.GossipMessage)
+
 		go func(c chan *proto.GossipMessage) {
 			// Wait for Accept() to be called
 			<-signalChan
 			// Simulate a message reception from the gossip component with an invalid channel
-			c <- gMsg
-			gMsg.Channel = []byte(util.GetTestChainID())
+			c <- newMsg("AAA")
 			// Simulate a message reception from the gossip component
-			c <- gMsg
+			c <- newMsg(util.GetTestChainID())
 		}(c)
 		return c
 	}
@@ -959,17 +980,17 @@ func TestAccessControl(t *testing.T) {
 	waitUntilTrueOrTimeout(t, func() bool {
 		for _, p := range peersSet {
 			if len(p.g.PeersOfChannel(common.ChainID(util.GetTestChainID()))) != bootstrapSetSize+standardPeerSetSize-1 {
-				logger.Debug("Peer discovery has not finished yet")
+				t.Log("Peer discovery has not finished yet")
 				return false
 			}
 		}
-		logger.Debug("All peer discovered each other!!!")
+		t.Log("All peer discovered each other!!!")
 		return true
 	}, 30*time.Second)
 
-	logger.Debug("Waiting for all blocks to arrive.")
+	t.Log("Waiting for all blocks to arrive.")
 	waitUntilTrueOrTimeout(t, func() bool {
-		logger.Debug("Trying to see all authorized peers get all blocks, and all non-authorized didn't")
+		t.Log("Trying to see all authorized peers get all blocks, and all non-authorized didn't")
 		for _, p := range peersSet {
 			height, err := p.commit.LedgerHeight()
 			id := fmt.Sprintf("localhost:%d", p.port)
@@ -983,7 +1004,7 @@ func TestAccessControl(t *testing.T) {
 				}
 			}
 		}
-		logger.Debug("All peers have same ledger height!!!")
+		t.Log("All peers have same ledger height!!!")
 		return true
 	}, 60*time.Second)
 }
@@ -1037,24 +1058,24 @@ func TestNewGossipStateProvider_SendingManyMessages(t *testing.T) {
 	waitUntilTrueOrTimeout(t, func() bool {
 		for _, p := range peersSet {
 			if len(p.g.PeersOfChannel(common.ChainID(util.GetTestChainID()))) != bootstrapSetSize+standartPeersSize-1 {
-				logger.Debug("Peer discovery has not finished yet")
+				t.Log("Peer discovery has not finished yet")
 				return false
 			}
 		}
-		logger.Debug("All peer discovered each other!!!")
+		t.Log("All peer discovered each other!!!")
 		return true
 	}, 30*time.Second)
 
-	logger.Debug("Waiting for all blocks to arrive.")
+	t.Log("Waiting for all blocks to arrive.")
 	waitUntilTrueOrTimeout(t, func() bool {
-		logger.Debug("Trying to see all peers get all blocks")
+		t.Log("Trying to see all peers get all blocks")
 		for _, p := range peersSet {
 			height, err := p.commit.LedgerHeight()
 			if height != uint64(msgCount+1) || err != nil {
 				return false
 			}
 		}
-		logger.Debug("All peers have same ledger height!!!")
+		t.Log("All peers have same ledger height!!!")
 		return true
 	}, 60*time.Second)
 }
@@ -1080,7 +1101,7 @@ func TestGossipStateProvider_TestStateMessages(t *testing.T) {
 
 	go func() {
 		msg := <-bootCh
-		logger.Info("Bootstrap node got message, ", msg)
+		t.Log("Bootstrap node got message, ", msg)
 		assert.True(t, msg.GetGossipMessage().GetStateRequest() != nil)
 		msg.Respond(&proto.GossipMessage{
 			Content: &proto.GossipMessage_StateResponse{StateResponse: &proto.RemoteStateResponse{Payloads: nil}},
@@ -1090,10 +1111,9 @@ func TestGossipStateProvider_TestStateMessages(t *testing.T) {
 
 	go func() {
 		msg := <-peerCh
-		logger.Info("Peer node got an answer, ", msg)
+		t.Log("Peer node got an answer, ", msg)
 		assert.True(t, msg.GetGossipMessage().GetStateResponse() != nil)
 		wg.Done()
-
 	}()
 
 	readyCh := make(chan struct{})
@@ -1102,20 +1122,21 @@ func TestGossipStateProvider_TestStateMessages(t *testing.T) {
 		readyCh <- struct{}{}
 	}()
 
-	time.Sleep(time.Duration(5) * time.Second)
-	logger.Info("Sending gossip message with remote state request")
-
 	chainID := common.ChainID(util.GetTestChainID())
+	waitUntilTrueOrTimeout(t, func() bool {
+		return len(peer.g.PeersOfChannel(chainID)) == 1
+	}, 30*time.Second)
 
+	t.Log("Sending gossip message with remote state request")
 	peer.g.Send(&proto.GossipMessage{
 		Content: &proto.GossipMessage_StateRequest{StateRequest: &proto.RemoteStateRequest{StartSeqNum: 0, EndSeqNum: 1}},
 	}, &comm.RemotePeer{Endpoint: peer.g.PeersOfChannel(chainID)[0].Endpoint, PKIID: peer.g.PeersOfChannel(chainID)[0].PKIid})
-	logger.Info("Waiting until peers exchange messages")
+	t.Log("Waiting until peers exchange messages")
 
 	select {
 	case <-readyCh:
 		{
-			logger.Info("Done!!!")
+			t.Log("Done!!!")
 
 		}
 	case <-time.After(time.Duration(10) * time.Second):
@@ -1194,21 +1215,21 @@ func TestNewGossipStateProvider_BatchingOfStateRequest(t *testing.T) {
 			// making sure messages indeed committed.
 			waitUntilTrueOrTimeout(t, func() bool {
 				if len(peer.g.PeersOfChannel(common.ChainID(util.GetTestChainID()))) != 1 {
-					logger.Debug("Peer discovery has not finished yet")
+					t.Log("Peer discovery has not finished yet")
 					return false
 				}
-				logger.Debug("All peer discovered each other!!!")
+				t.Log("All peer discovered each other!!!")
 				return true
 			}, 30*time.Second)
 
-			logger.Debug("Waiting for all blocks to arrive.")
+			t.Log("Waiting for all blocks to arrive.")
 			waitUntilTrueOrTimeout(t, func() bool {
-				logger.Debug("Trying to see all peers get all blocks")
+				t.Log("Trying to see all peers get all blocks")
 				height, err := peer.commit.LedgerHeight()
 				if height != uint64(msgCount+1) || err != nil {
 					return false
 				}
-				logger.Debug("All peers have same ledger height!!!")
+				t.Log("All peers have same ledger height!!!")
 				return true
 			}, 60*time.Second)
 		}
@@ -1386,7 +1407,8 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
 	coord1.On("Close")
 
 	servicesAdapater := &ServicesMediator{GossipAdapter: g, MCSAdapter: &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}}
-	st := NewGossipStateProvider(chainID, servicesAdapater, coord1)
+	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
+	st := NewGossipStateProvider(chainID, servicesAdapater, coord1, stateMetrics)
 	defer st.Stop()
 
 	// Mocked state request message
@@ -1617,12 +1639,14 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
 
 	cryptoService := &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}
 
+	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
+
 	mediator := &ServicesMediator{GossipAdapter: peers["peer1"], MCSAdapter: cryptoService}
-	peer1State := NewGossipStateProvider(chainID, mediator, peers["peer1"].coord)
+	peer1State := NewGossipStateProvider(chainID, mediator, peers["peer1"].coord, stateMetrics)
 	defer peer1State.Stop()
 
 	mediator = &ServicesMediator{GossipAdapter: peers["peer2"], MCSAdapter: cryptoService}
-	peer2State := NewGossipStateProvider(chainID, mediator, peers["peer2"].coord)
+	peer2State := NewGossipStateProvider(chainID, mediator, peers["peer2"].coord, stateMetrics)
 	defer peer2State.Stop()
 
 	// Make sure state was replicated
@@ -1643,12 +1667,12 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
 func waitUntilTrueOrTimeout(t *testing.T, predicate func() bool, timeout time.Duration) {
 	ch := make(chan struct{})
 	go func() {
-		logger.Debug("Started to spin off, until predicate will be satisfied.")
+		t.Log("Started to spin off, until predicate will be satisfied.")
 		for !predicate() {
 			time.Sleep(1 * time.Second)
 		}
 		ch <- struct{}{}
-		logger.Debug("Done.")
+		t.Log("Done.")
 	}()
 
 	select {
@@ -1658,7 +1682,7 @@ func waitUntilTrueOrTimeout(t *testing.T, predicate func() bool, timeout time.Du
 		t.Fatal("Timeout has expired")
 		break
 	}
-	logger.Debug("Stop waiting until timeout or true")
+	t.Log("Stop waiting until timeout or true")
 }
 
 func assertLogged(t *testing.T, r *floggingtest.Recorder, msg string) {

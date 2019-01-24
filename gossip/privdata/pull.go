@@ -20,6 +20,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/filter"
+	"github.com/hyperledger/fabric/gossip/metrics"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 	"github.com/hyperledger/fabric/gossip/util"
 	fcommon "github.com/hyperledger/fabric/protos/common"
@@ -67,6 +68,7 @@ type gossip interface {
 }
 
 type puller struct {
+	metrics       *metrics.PrivdataMetrics
 	pubSub        *util.PubSub
 	stopChan      chan struct{}
 	msgChan       <-chan proto.ReceivedMessage
@@ -79,8 +81,10 @@ type puller struct {
 }
 
 // NewPuller creates new private data puller
-func NewPuller(cs privdata.CollectionStore, g gossip, dataRetriever PrivateDataRetriever, factory CollectionAccessFactory, channel string) *puller {
+func NewPuller(metrics *metrics.PrivdataMetrics, cs privdata.CollectionStore, g gossip,
+	dataRetriever PrivateDataRetriever, factory CollectionAccessFactory, channel string) *puller {
 	p := &puller{
+		metrics:                 metrics,
 		pubSub:                  util.NewPubSub(),
 		stopChan:                make(chan struct{}),
 		channel:                 channel,
@@ -150,7 +154,9 @@ func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataE
 	block2dig := groupDigestsByBlockNum(msg.GetPrivateReq().Digests)
 
 	for blockNum, digests := range block2dig {
+		start := time.Now()
 		dig2rwSets, wasFetchedFromLedger, err := p.CollectionRWSet(digests, blockNum)
+		p.metrics.RetrieveDuration.With("channel", p.channel).Observe(time.Since(start).Seconds())
 		if err != nil {
 			logger.Warningf("could not obtain private collection rwset for block %d, because of %s, continue...", blockNum, err)
 			continue
@@ -176,6 +182,7 @@ func groupDigestsByBlockNum(digests []*proto.PvtDataDigest) map[uint64][]*proto.
 func (p *puller) handleResponse(message proto.ReceivedMessage) {
 	msg := message.GetGossipMessage().GetPrivateRes()
 	logger.Debug("Got", msg, "from", message.GetConnectionInfo().Endpoint)
+	receiveTime := time.Now()
 	for _, el := range msg.Elements {
 		if el.Digest == nil {
 			logger.Warning("Got nil digest from", message.GetConnectionInfo().Endpoint, "aborting")
@@ -186,7 +193,7 @@ func (p *puller) handleResponse(message proto.ReceivedMessage) {
 			logger.Warning("Failed hashing digest from", message.GetConnectionInfo().Endpoint, "aborting")
 			return
 		}
-		p.pubSub.Publish(hash, el)
+		p.pubSub.Publish(hash, reception{pvtDataElement: el, receiveTime: receiveTime})
 	}
 }
 
@@ -293,20 +300,23 @@ func (p *puller) fetchPrivateData(dig2Filter digestToFilterMapping) (*privdataco
 	return res, nil
 }
 
-func (p *puller) gatherResponses(subscriptions []util.Subscription) []*proto.PvtDataElement {
+func (p *puller) gatherResponses(subscriptions []subscription) []*proto.PvtDataElement {
 	var res []*proto.PvtDataElement
 	privateElements := make(chan *proto.PvtDataElement, len(subscriptions))
 	var wg sync.WaitGroup
 	wg.Add(len(subscriptions))
 	// Listen for all subscriptions, and add then into a single channel
 	for _, sub := range subscriptions {
-		go func(sub util.Subscription) {
+		go func(sub subscription) {
 			defer wg.Done()
-			el, err := sub.Listen()
+			item, err := sub.Listen()
 			if err != nil {
 				return
 			}
-			privateElements <- el.(*proto.PvtDataElement)
+			reception := item.(reception)
+			elapsed := reception.receiveTime.Sub(sub.sendTime)
+			p.metrics.PullDuration.With("channel", p.channel).Observe(elapsed.Seconds())
+			privateElements <- reception.pvtDataElement
 		}(sub)
 	}
 	// Wait for all subscriptions to either return, or time out
@@ -320,8 +330,8 @@ func (p *puller) gatherResponses(subscriptions []util.Subscription) []*proto.Pvt
 	return res
 }
 
-func (p *puller) scatterRequests(peersDigestMapping peer2Digests) []util.Subscription {
-	var subscriptions []util.Subscription
+func (p *puller) scatterRequests(peersDigestMapping peer2Digests) []subscription {
+	var subscriptions []subscription
 	for peer, digests := range peersDigestMapping {
 		msg := &proto.GossipMessage{
 			Tag:     proto.GossipMessage_CHAN_ONLY,
@@ -334,6 +344,7 @@ func (p *puller) scatterRequests(peersDigestMapping peer2Digests) []util.Subscri
 			},
 		}
 
+		sendTime := time.Now()
 		// Subscribe to all digests prior to sending them
 		for _, dig := range msg.GetPrivateReq().Digests {
 			hash, err := dig.Hash()
@@ -343,7 +354,7 @@ func (p *puller) scatterRequests(peersDigestMapping peer2Digests) []util.Subscri
 				continue
 			}
 			sub := p.pubSub.Subscribe(hash, responseWaitTime)
-			subscriptions = append(subscriptions, sub)
+			subscriptions = append(subscriptions, subscription{Subscription: sub, sendTime: sendTime})
 		}
 		logger.Debug("Sending", peer.endpoint, "request", msg.GetPrivateReq().Digests)
 		p.Send(msg, peer.AsRemotePeer())
@@ -712,4 +723,14 @@ func addWithOverflow(a uint64, b uint64) uint64 {
 		return math.MaxUint64
 	}
 	return res
+}
+
+type reception struct {
+	pvtDataElement *proto.PvtDataElement
+	receiveTime    time.Time
+}
+
+type subscription struct {
+	sendTime time.Time
+	util.Subscription
 }

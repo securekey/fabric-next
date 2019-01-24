@@ -52,6 +52,7 @@ type Logging struct {
 	encoderConfig  zapcore.EncoderConfig
 	multiFormatter *fabenc.MultiFormatter
 	writer         zapcore.WriteSyncer
+	observer       Observer
 }
 
 // New creates a new logging system and initializes it with the provided
@@ -156,6 +157,14 @@ func (s *Logging) SetWriter(w io.Writer) {
 	s.mutex.Unlock()
 }
 
+// SetObserver is used to provide a log observer that will be called as log
+// levels are checked or written.. Only a single observer is supported.
+func (s *Logging) SetObserver(observer Observer) {
+	s.mutex.Lock()
+	s.observer = observer
+	s.mutex.Unlock()
+}
+
 // Write satisfies the io.Write contract. It delegates to the writer argument
 // of SetWriter or the Writer field of Config. The Core uses this when encoding
 // log records.
@@ -208,10 +217,31 @@ func (s *Logging) ZapLogger(name string) *zap.Logger {
 		},
 		Selector: s,
 		Output:   s,
+		Observer: s,
 	}
 	s.mutex.RUnlock()
 
 	return NewZapLogger(core).Named(name)
+}
+
+func (s *Logging) Check(e zapcore.Entry, ce *zapcore.CheckedEntry) {
+	s.mutex.RLock()
+	observer := s.observer
+	s.mutex.RUnlock()
+
+	if observer != nil {
+		observer.Check(e, ce)
+	}
+}
+
+func (s *Logging) WriteEntry(e zapcore.Entry, fields []zapcore.Field) {
+	s.mutex.RLock()
+	observer := s.observer
+	s.mutex.RUnlock()
+
+	if observer != nil {
+		observer.WriteEntry(e, fields)
+	}
 }
 
 // Logger instantiates a new FabricLogger with the specified name. The name is

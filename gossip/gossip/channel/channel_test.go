@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/gossip/algo"
+	"github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/assert"
@@ -253,6 +254,10 @@ func (ga *gossipAdapterMock) GetIdentityByPKIID(pkiID common.PKIidType) api.Peer
 		return ga.Called(pkiID).Get(0).(api.PeerIdentityType)
 	}
 	return api.PeerIdentityType(pkiID)
+}
+
+func (ga *gossipAdapterMock) ReportMetrics(eventName string, count int, channel string) {
+
 }
 
 func (ga *gossipAdapterMock) wasMocked(methodName string) bool {
@@ -2013,8 +2018,8 @@ func TestChangesInPeers(t *testing.T) {
 			name:       "newPeerWasAdded",
 			oldMembers: map[string]struct{}{"pkiID1": {}},
 			newMembers: map[string]struct{}{"pkiID1": {}, "pkiID3": {}},
-			expected: []string{"Membership view has changed. peers went online: [[pkiID3]], current view: [[pkiID1] [pkiID3]]",
-				"Membership view has changed. peers went online: [[pkiID3]], current view: [[pkiID3] [pkiID1]]"},
+			expected: []string{metrics.OnlineOpts.Name + ", 1, 0, 2, Membership view has changed. peers went online: [[pkiID3]], current view: [[pkiID1] [pkiID3]]",
+				metrics.OnlineOpts.Name + ", 1, 0, 2, Membership view has changed. peers went online: [[pkiID3]], current view: [[pkiID3] [pkiID1]]"},
 			entryInChannel:           func(chStr chan string) {},
 			expectedReportInvocation: true,
 		},
@@ -2023,17 +2028,16 @@ func TestChangesInPeers(t *testing.T) {
 			name:       "newPeerAddedOldPeerDeleted",
 			oldMembers: map[string]struct{}{"pkiID1": {}, "pkiID2": {}},
 			newMembers: map[string]struct{}{"pkiID1": {}, "pkiID3": {}},
-			expected: []string{"Membership view has changed. peers went offline: [[pkiID2]], peers went online: [[pkiID3]], current view: [[pkiID1] [pkiID3]]",
-				"Membership view has changed. peers went offline: [[pkiID2]], peers went online: [[pkiID3]], current view: [[pkiID3] [pkiID1]]"},
+			expected: []string{metrics.TotalOpts.Name + ", 1, 1, 2, Membership view has changed. peers went offline: [[pkiID2]], peers went online: [[pkiID3]], current view: [[pkiID1] [pkiID3]]",
+				metrics.TotalOpts.Name + ", 1, 1, 2, Membership view has changed. peers went offline: [[pkiID2]], peers went online: [[pkiID3]], current view: [[pkiID3] [pkiID1]]"},
 			entryInChannel:           func(chStr chan string) {},
 			expectedReportInvocation: true,
 		},
 		{
-			name:       "newPeersAddedOldPeerStayed",
-			oldMembers: map[string]struct{}{"pkiID1": {}},
-			newMembers: map[string]struct{}{"pkiID2": {}},
-			expected: []string{"Membership view has changed. peers went offline: [[pkiID1]], peers went online: [[pkiID2]], current view: [[pkiID2]]",
-				"Membership view has changed. peers went offline: [[pkiID1]], peers went online: [[pkiID2]], current view: [[pkiID2]]"},
+			name:                     "newPeersAddedOldPeerStayed",
+			oldMembers:               map[string]struct{}{"pkiID1": {}},
+			newMembers:               map[string]struct{}{"pkiID2": {}},
+			expected:                 []string{metrics.TotalOpts.Name + ", 1, 1, 1, Membership view has changed. peers went offline: [[pkiID1]], peers went online: [[pkiID2]], current view: [[pkiID2]]"},
 			entryInChannel:           func(chStr chan string) {},
 			expectedReportInvocation: true,
 		},
@@ -2041,7 +2045,7 @@ func TestChangesInPeers(t *testing.T) {
 			name:                     "newPeersAddedNoOldPeers",
 			oldMembers:               map[string]struct{}{},
 			newMembers:               map[string]struct{}{"pkiID1": {}},
-			expected:                 []string{"Membership view has changed. peers went online: [[pkiID1]], current view: [[pkiID1]]"},
+			expected:                 []string{metrics.OnlineOpts.Name + ", 1, 0, 1, Membership view has changed. peers went online: [[pkiID1]], current view: [[pkiID1]]"},
 			entryInChannel:           func(chStr chan string) {},
 			expectedReportInvocation: true,
 		},
@@ -2049,7 +2053,7 @@ func TestChangesInPeers(t *testing.T) {
 			name:                     "PeerWasDeletedNoNewPeers",
 			oldMembers:               map[string]struct{}{"pkiID1": {}},
 			newMembers:               map[string]struct{}{},
-			expected:                 []string{"Membership view has changed. peers went offline: [[pkiID1]], current view: []"},
+			expected:                 []string{metrics.OfflineOpts.Name + ", 0, 1, 0, Membership view has changed. peers went offline: [[pkiID1]], current view: []"},
 			entryInChannel:           func(chStr chan string) {},
 			expectedReportInvocation: true,
 		},
@@ -2057,8 +2061,8 @@ func TestChangesInPeers(t *testing.T) {
 			name:       "onePeerWasDeletedRestStayed",
 			oldMembers: map[string]struct{}{"pkiID01": {}, "pkiID02": {}, "pkiID03": {}},
 			newMembers: map[string]struct{}{"pkiID01": {}, "pkiID02": {}},
-			expected: []string{"Membership view has changed. peers went offline: [[pkiID03]], current view: [[pkiID01] [pkiID02]]",
-				"Membership view has changed. peers went offline: [[pkiID03]], current view: [[pkiID02] [pkiID01]]"},
+			expected: []string{metrics.OfflineOpts.Name + ", 0, 1, 2, Membership view has changed. peers went offline: [[pkiID03]], current view: [[pkiID01] [pkiID02]]",
+				metrics.OfflineOpts.Name + ", 0, 1, 2, Membership view has changed. peers went offline: [[pkiID03]], current view: [[pkiID02] [pkiID01]]"},
 			entryInChannel:           func(chStr chan string) {},
 			expectedReportInvocation: true,
 		},
@@ -2069,9 +2073,9 @@ func TestChangesInPeers(t *testing.T) {
 	defer func() {
 		invokedReport = false
 	}()
-	funcLogger := func(a ...interface{}) {
+	funcLogger := func(s string, n1 int, n2 int, n3 int, a ...interface{}) {
 		invokedReport = true
-		chForString <- fmt.Sprint(a...)
+		chForString <- fmt.Sprintf("%s, %d, %d, %d, %s", s, n1, n2, n3, fmt.Sprint(a...))
 	}
 
 	for _, test := range cases {

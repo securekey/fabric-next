@@ -185,8 +185,6 @@ var chains = struct {
 	list map[string]*chain
 }{list: make(map[string]*chain)}
 
-var metricsProviderInstance metrics.Provider
-
 var chainInitializer func(string)
 
 var pluginMapper txvalidator.PluginMapper
@@ -250,7 +248,6 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 
 		InitChain(cid)
 	}
-	metricsProviderInstance = metricsProvider
 }
 
 // InitChain takes care to initialize chain after peer joined, for example deploys system CCs
@@ -452,11 +449,6 @@ func GetLedger(cid string) ledger.PeerLedger {
 		return c.cs.ledger
 	}
 	return nil
-}
-
-// GetMetricsProvider returns the metrics provider
-func GetMetricsProvider() metrics.Provider {
-	return metricsProviderInstance
 }
 
 // GetStableChannelConfig returns the stable channel configuration of the chain with channel ID.

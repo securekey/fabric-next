@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/filter"
 	"github.com/hyperledger/fabric/gossip/gossip/msgstore"
 	"github.com/hyperledger/fabric/gossip/gossip/pull"
+	"github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/pkg/errors"
@@ -126,6 +127,9 @@ type Adapter interface {
 	// GetIdentityByPKIID returns an identity of a peer with a certain
 	// pkiID, or nil if not found
 	GetIdentityByPKIID(pkiID common.PKIidType) api.PeerIdentityType
+
+	// ReportMetrics sends a report to the metrics server
+	ReportMetrics(eventName string, count int, channel string)
 }
 
 type gossipChannel struct {
@@ -279,7 +283,18 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
 	return gc
 }
 
-func (gc *gossipChannel) reportMembershipChanges(input ...interface{}) {
+func (gc *gossipChannel) reportMembershipChanges(eventName string, online int, offline int, total int,
+	input ...interface{}) {
+	switch eventName {
+	case metrics.OnlineOpts.Name:
+		gc.ReportMetrics(eventName, online, string(gc.chainID))
+	case metrics.OfflineOpts.Name:
+		gc.ReportMetrics(eventName, offline, string(gc.chainID))
+	case metrics.TotalOpts.Name:
+		gc.ReportMetrics(metrics.OnlineOpts.Name, online, string(gc.chainID))
+		gc.ReportMetrics(metrics.OfflineOpts.Name, offline, string(gc.chainID))
+	}
+	gc.ReportMetrics(metrics.TotalOpts.Name, total, string(gc.chainID))
 	gc.logger.Info(input...)
 }
 
@@ -980,7 +995,7 @@ func GenerateMAC(pkiID common.PKIidType, channelID common.ChainID) []byte {
 //membershipTracker is a struct for tracking changes in peers of the channel
 type membershipTracker struct {
 	getPeersToTrack func() []discovery.NetworkMember
-	report          func(...interface{})
+	report          func(eventName string, online int, offline int, total int, input ...interface{})
 	stopChan        chan struct{}
 	tickerChannel   <-chan time.Time
 }
@@ -1019,11 +1034,15 @@ func (mt *membershipTracker) checkIfPeersChanged(prevPeers discovery.Members, cu
 
 	if !reflect.DeepEqual(wereInPrev, newInCurr) {
 		if len(wereInPrev) == 0 {
-			mt.report("Membership view has changed. peers went online: ", newInCurr, ", current view: ", currView)
+			mt.report(metrics.OnlineOpts.Name, len(newInCurr), 0, len(currView),
+				"Membership view has changed. peers went online: ", newInCurr, ", current view: ", currView)
 		} else if len(newInCurr) == 0 {
-			mt.report("Membership view has changed. peers went offline: ", wereInPrev, ", current view: ", currView)
+			mt.report(metrics.OfflineOpts.Name, 0, len(wereInPrev), len(currView),
+				"Membership view has changed. peers went offline: ", wereInPrev, ", current view: ", currView)
 		} else {
-			mt.report("Membership view has changed. peers went offline: ", wereInPrev, ", peers went online: ", newInCurr, ", current view: ", currView)
+			mt.report(metrics.TotalOpts.Name, len(newInCurr), len(wereInPrev), len(currView),
+				"Membership view has changed. peers went offline: ", wereInPrev,
+				", peers went online: ", newInCurr, ", current view: ", currView)
 		}
 	}
 }

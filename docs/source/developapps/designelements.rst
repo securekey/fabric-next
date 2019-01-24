@@ -10,8 +10,10 @@ solutions.
    :maxdepth: 1
 
    namespace.md
+   chaincodenamespace.md
    transactioncontext.md
    transactionhandler.md
+   endorsementpolicies.md
    connectionprofile.md
    connectionoptions.md
    wallet.md
