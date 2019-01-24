@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -19,7 +21,9 @@ import (
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/core/transientstore"
+	"github.com/hyperledger/fabric/gossip/privdata/collpolicy"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -33,6 +37,7 @@ import (
 	"github.com/spf13/viper"
 	//"github.com/uber-go/tally"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -142,6 +147,7 @@ type coordinator struct {
 	selfSignedData common.SignedData
 	Support
 	transientBlockRetention uint64
+	semaphore               *semaphore.Weighted
 }
 
 // NewCoordinator creates a new instance of coordinator
@@ -151,7 +157,18 @@ func NewCoordinator(support Support, selfSignedData common.SignedData) Coordinat
 		logger.Warning("Configuration key", transientBlockRetentionConfigKey, "isn't set, defaulting to", transientBlockRetentionDefault)
 		transientBlockRetention = transientBlockRetentionDefault
 	}
-	return &coordinator{Support: support, selfSignedData: selfSignedData, transientBlockRetention: transientBlockRetention}
+
+	nWorkers := viper.GetInt("peer.validatorPoolSize")
+	if nWorkers <= 0 {
+		nWorkers = runtime.NumCPU()
+	}
+
+	return &coordinator{
+		Support:                 support,
+		selfSignedData:          selfSignedData,
+		transientBlockRetention: transientBlockRetention,
+		semaphore:               semaphore.NewWeighted(int64(nWorkers)),
+	}
 }
 
 // StorePvtData used to persist private date into transient store
@@ -166,32 +183,73 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	if block.Header == nil {
 		return nil, nil, errors.New("Block header is nil")
 	}
+
+	//stopWatch1 := metrics.StopWatch(fmt.Sprintf("validator_%s_phase1_duration", metrics.FilterMetricName(c.ChainID)))
+
 	// FIXME: Change to Debug
-	logger.Infof("[%s] Starting first phase validation of %d transactions in block %d against committed data...", c.ChainID, len(block.Data.Data), block.Header.Number)
-	begin := time.Now()
-	err := c.Validator.Validate(block, resultsChan)
+	logger.Infof("[%s] Validating block and private data for %d transactions in block %d ...", c.ChainID, len(block.Data.Data), block.Header.Number)
+
+	// Initialize the flags all to TxValidationCode_NOT_VALIDATED
+	utils.InitBlockMetadata(block)
+	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = ledgerUtil.NewTxValidationFlags(len(block.Data.Data))
+
+	blockAndPvtData, privateInfo, err := c.validateBlockAndPvtData(block, privateDataSets)
 	if err != nil {
-		logger.Errorf("Validation failed: %+v", err)
+		logger.Errorf("[%s] Got error validating block and private data in block %d: %s", c.ChainID, block.Header.Number, err)
 		return nil, nil, err
 	}
+	//stopWatch1()
+
 	// FIXME: Change to Debug
-	logger.Infof("[%s] ... finished first phase validation of %d transactions in block %d against committed data in %s. Starting second phase...", c.ChainID, len(block.Data.Data), block.Header.Number, time.Since(begin))
-	begin2 := time.Now()
+	logger.Infof("[%s] ... finished validating block and private data for %d transactions in block %d. Starting second phase validation ...", c.ChainID, len(block.Data.Data), block.Header.Number)
+
+	//stopWatch2 := metrics.StopWatch(fmt.Sprintf("validator_%s_phase2_duration", metrics.FilterMetricName(c.ChainID)))
+
+	// Prepare the block for second phase validation by setting all Valid transactions
+	// to NotValidated (since only the transactions that are not validated will be validated
+	// in the second phase)
+	blockFltr := ledgerUtil.TxValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
+	for tIdx := range block.Data.Data {
+		if blockFltr.Flag(tIdx) == peer.TxValidationCode_VALID {
+			blockFltr.SetFlag(tIdx, peer.TxValidationCode_NOT_VALIDATED)
+		} else {
+			// FIXME: Change to Debug
+			logger.Infof("[%s] Not setting flag to 'NotValidated' for TxIdx[%d] in block %d since it has already been set to %s", c.ChainID, tIdx, block.Header.Number, blockFltr.Flag(tIdx))
+		}
+	}
+
+	err = c.Validator.Validate(block, resultsChan)
+	if err != nil {
+		logger.Errorf("[%s] Got error in second phase validation of block %d: %s", c.ChainID, block.Header.Number, err)
+		return nil, nil, err
+	}
+	//stopWatch2()
+
+	// FIXME: Change to Debug
+	logger.Infof("[%s] ... finished second phase validation of %d transactions in block %d.", c.ChainID, len(block.Data.Data), block.Header.Number)
+
+	return blockAndPvtData, privateInfo.txns, nil
+}
+
+func (c *coordinator) validateBlockAndPvtData(block *common.Block, privateDataSets util.PvtDataCollections) (*ledger.BlockAndPvtData, *privateDataInfo, error) {
 	blockAndPvtData := &ledger.BlockAndPvtData{
 		Block:        block,
 		PvtData: make(map[uint64]*ledger.TxPvtData),
 		MissingPvtData: make(ledger.TxMissingPvtDataMap),
 	}
+
 	ownedRWsets, err := computeOwnedRWsets(block, privateDataSets)
 	if err != nil {
 		logger.Warning("Failed computing owned RWSets", err)
 		return nil, nil, err
 	}
+
 	privateInfo, err := c.listMissingPrivateData(block, ownedRWsets)
 	if err != nil {
 		logger.Warning(err)
 		return nil, nil, err
 	}
+
 	retryThresh := viper.GetDuration("peer.gossip.pvtData.pullRetryThreshold")
 	var bFetchFromPeers bool // defaults to false
 	if len(privateInfo.missingKeys) == 0 {
@@ -203,7 +261,6 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	}
 	startPull := time.Now()
 	limit := startPull.Add(retryThresh)
-	//TODO: Metrics to be done
 
 	/*var waitingForMissingKeysStopWatch tally.Stopwatch
 	if metrics.IsDebug() {
@@ -211,7 +268,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		waitingForMissingKeysStopWatch = metrics.RootScope.Timer("privdata_gossipWaitingForMissingKeys_duration").Start()
 	}*/
 	for len(privateInfo.missingKeys) > 0 && time.Now().Before(limit) {
-		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo)
+		logger.Warningf("Missing private data. Will attempt to fetch from peers: %+v", privateInfo.missingKeys)
 		c.fetchFromPeers(block.Header.Number, ownedRWsets, privateInfo)
 		// If succeeded to fetch everything, no need to sleep before
 		// retry
@@ -221,6 +278,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 		time.Sleep(pullRetrySleepInterval)
 	}
 	elapsedPull := int64(time.Since(startPull) / time.Millisecond) // duration in ms
+
 	/*if metrics.IsDebug() {
 		waitingForMissingKeysStopWatch.Stop()
 	}*/
@@ -233,6 +291,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 				c.ChainID, block.Header.Number, privateInfo.missingKeys)
 		}
 	}
+
 	// populate the private RWSets passed to the ledger
 	for seqInBlock, nsRWS := range ownedRWsets.bySeqsInBlock() {
 		rwsets := nsRWS.toRWSet()
@@ -242,6 +301,7 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 			WriteSet:   rwsets,
 		}
 	}
+
 	// populate missing RWSets to be passed to the ledger
 	for missingRWS := range privateInfo.missingKeys {
 		blockAndPvtData.MissingPvtData.Add(missingRWS.seqInBlock, missingRWS.namespace, missingRWS.collection, true)
@@ -251,11 +311,10 @@ func (c *coordinator) ValidateBlock(block *common.Block, privateDataSets util.Pv
 	if err != nil {
 		return nil, nil, err
 	}
-	// FIXME: Change to Debug
-	logger.Infof("[%s] ... finished second phase validation of %d transactions in block %d in %s", c.ChainID, len(block.Data.Data), blockAndPvtData.Block.Header.Number, time.Since(begin2))
-	logger.Infof("[%s] Finished validating %d transactions in block %d in %s", c.ChainID, len(block.Data.Data), blockAndPvtData.Block.Header.Number, time.Since(begin))
-	return blockAndPvtData, privateInfo.txns, nil
+
+	return blockAndPvtData, privateInfo, nil
 }
+
 func (c *coordinator) ValidatePartialBlock(ctx context.Context, block *common.Block) {
 	// This can be done in the background
 	go c.Validator.ValidatePartial(ctx, block)
@@ -359,26 +418,59 @@ func (c *coordinator) fetchFromPeers(blockSeq uint64, ownedRWsets map[rwSetKey][
 }
 
 func (c *coordinator) fetchMissingFromTransientStore(missing rwSetKeysByTxIDs, ownedRWsets map[rwSetKey][]byte, sources map[rwSetKey][]*peer.Endorsement) {
-	// Check transient store
-	for txAndSeq, filter := range missing.FiltersByTxIDs() {
-		var endorsers []*peer.Endorsement
-		for key, value := range sources {
-			if key.txID == txAndSeq.txID && key.seqInBlock == txAndSeq.seqInBlock {
-				endorsers = value
-				break
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+
+	ctx := context.Background()
+	filters := missing.FiltersByTxIDs()
+	wg.Add(len(filters))
+
+	go func() {
+		for txAndSeq, filter := range filters {
+			if err := c.semaphore.Acquire(ctx, 1); err != nil {
+				// This should never happen with background context
+				panic(fmt.Sprintf("Unable to acquire semaphore: %s", err))
 			}
+
+			txs := txAndSeq
+			fltr := filter
+
+			go func() {
+				rwSets := c.fetchFromTransientStore(txs, fltr, getEndorsements(sources, txs))
+				if len(rwSets) > 0 {
+					mutex.Lock()
+					for key, value := range rwSets {
+						ownedRWsets[key] = value
+					}
+					mutex.Unlock()
+				}
+				c.semaphore.Release(1)
+				wg.Done()
+			}()
 		}
-		c.fetchFromTransientStore(txAndSeq, filter, ownedRWsets, endorsers)
-	}
+	}()
+	wg.Wait()
 }
 
-func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, ownedRWsets map[rwSetKey][]byte, endorsers []*peer.Endorsement) {
+func getEndorsements(sources map[rwSetKey][]*peer.Endorsement, txs txAndSeqInBlock) []*peer.Endorsement {
+	for key, value := range sources {
+		if key.txID == txs.txID && key.seqInBlock == txs.seqInBlock {
+			return value
+		}
+	}
+	return nil
+}
+
+func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter ledger.PvtNsCollFilter, endorsers []*peer.Endorsement) map[rwSetKey][]byte {
 	iterator, err := c.TransientStore.GetTxPvtRWSetByTxid(txAndSeq.txID, filter, endorsers)
 	if err != nil {
 		logger.Warning("Failed obtaining iterator from transient store:", err)
-		return
+		return nil
 	}
 	defer iterator.Close()
+
+	ownedRWsets := make(map[rwSetKey][]byte)
+
 	for {
 		res, err := iterator.NextWithConfig()
 		if err != nil {
@@ -413,6 +505,7 @@ func (c *coordinator) fetchFromTransientStore(txAndSeq txAndSeqInBlock, filter l
 			} // iterating over all collections
 		} // iterating over all namespaces
 	} // iterating over the TxPvtRWSet results
+	return ownedRWsets
 }
 
 // computeOwnedRWsets identifies which block private data we already have
@@ -589,72 +682,131 @@ func (k *rwSetKey) toTxPvtReadWriteSet(rws []byte) *rwset.TxPvtReadWriteSet {
 }
 
 type txns []string
-type blockData [][]byte
+
+type txnIterator struct {
+	consumer  blockConsumer
+	evaluate  func(data [][]byte) txns
+	semaphore *semaphore.Weighted
+}
+
+func newTxnIterator(consumer blockConsumer) *txnIterator {
+	o := &txnIterator{consumer: consumer}
+	o.evaluate = o.doSync
+	return o
+}
+
+func newAsyncTxnIterator(consumer blockConsumer, semaphore *semaphore.Weighted) *txnIterator {
+	o := &txnIterator{consumer: consumer, semaphore: semaphore}
+	o.evaluate = o.doAsync
+	return o
+}
+
 type blockConsumer func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement)
-func (data blockData) forEachTxn(txsFilter txValidationFlags, consumer blockConsumer) txns {
-	var txList []string
+
+func (o *txnIterator) forEachTxn(data [][]byte) txns {
+	return o.evaluate(data)
+}
+
+func (o *txnIterator) doSync(data [][]byte) txns {
+	var txIDs txns
 	for seqInBlock, envBytes := range data {
-		env, err := utils.GetEnvelopeFromBlock(envBytes)
-		if err != nil {
-			logger.Warning("Invalid envelope:", err)
-			continue
+		txID := o.evaluateTxn(uint64(seqInBlock), envBytes)
+		if txID != "" {
+			txIDs = append(txIDs, txID)
 		}
-
-		payload, err := utils.GetPayload(env)
-		if err != nil {
-			logger.Warning("Invalid payload:", err)
-			continue
-		}
-
-		chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
-		if err != nil {
-			logger.Warning("Invalid channel header:", err)
-			continue
-		}
-
-		if chdr.Type != int32(common.HeaderType_ENDORSER_TRANSACTION) {
-			continue
-		}
-
-		txList = append(txList, chdr.TxId)
-
-		if txsFilter[seqInBlock] != uint8(peer.TxValidationCode_VALID) {
-			logger.Debug("Skipping Tx", seqInBlock, "because it's invalid. Status is", txsFilter[seqInBlock])
-			continue
-		}
-
-		respPayload, err := utils.GetActionFromEnvelope(envBytes)
-		if err != nil {
-			logger.Warning("Failed obtaining action from envelope", err)
-			continue
-		}
-
-		tx, err := utils.GetTransaction(payload.Data)
-		if err != nil {
-			logger.Warning("Invalid transaction in payload data for tx ", chdr.TxId, ":", err)
-			continue
-		}
-
-		ccActionPayload, err := utils.GetChaincodeActionPayload(tx.Actions[0].Payload)
-		if err != nil {
-			logger.Warning("Invalid chaincode action in payload for tx", chdr.TxId, ":", err)
-			continue
-		}
-
-		if ccActionPayload.Action == nil {
-			logger.Warning("Action in ChaincodeActionPayload for", chdr.TxId, "is nil")
-			continue
-		}
-
-		txRWSet := &rwsetutil.TxRwSet{}
-		if err = txRWSet.FromProtoBytes(respPayload.Results); err != nil {
-			logger.Warning("Failed obtaining TxRwSet from ChaincodeAction's results", err)
-			continue
-		}
-		consumer(uint64(seqInBlock), chdr, txRWSet, ccActionPayload.Action.Endorsements)
-
 	}
-	return txList
+	return txIDs
+}
+
+func (o *txnIterator) doAsync(data [][]byte) txns {
+	var txIDs txns
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+
+	wg.Add(len(data))
+	ctx := context.Background()
+
+	go func() {
+		for seqInBlock, envBytes := range data {
+			if err := o.semaphore.Acquire(ctx, 1); err != nil {
+				// This should never happen with background context
+				panic(fmt.Sprintf("Unable to acquire semaphore: %s", err))
+			}
+
+			seq := seqInBlock
+			bytes := envBytes
+
+			go func() {
+				txID := o.evaluateTxn(uint64(seq), bytes)
+				if txID != "" {
+					mutex.Lock()
+					txIDs = append(txIDs, txID)
+					mutex.Unlock()
+				}
+				o.semaphore.Release(1)
+				wg.Done()
+			}()
+		}
+	}()
+	wg.Wait()
+
+	return txIDs
+}
+
+func (o *txnIterator) evaluateTxn(seqInBlock uint64, envBytes []byte) string {
+	env, err := utils.GetEnvelopeFromBlock(envBytes)
+	if err != nil {
+		logger.Warning("Invalid envelope:", err)
+		return ""
+	}
+
+	payload, err := utils.GetPayload(env)
+	if err != nil {
+		logger.Warning("Invalid payload:", err)
+		return ""
+	}
+
+	chdr, err := utils.UnmarshalChannelHeader(payload.Header.ChannelHeader)
+	if err != nil {
+		logger.Warning("Invalid channel header:", err)
+		return ""
+	}
+
+	if chdr.Type != int32(common.HeaderType_ENDORSER_TRANSACTION) {
+		return ""
+	}
+
+	respPayload, err := utils.GetActionFromEnvelope(envBytes)
+	if err != nil {
+		logger.Warning("Failed obtaining action from envelope", err)
+		return chdr.TxId
+	}
+
+	tx, err := utils.GetTransaction(payload.Data)
+	if err != nil {
+		logger.Warning("Invalid transaction in payload data for tx ", chdr.TxId, ":", err)
+		return chdr.TxId
+	}
+
+	ccActionPayload, err := utils.GetChaincodeActionPayload(tx.Actions[0].Payload)
+	if err != nil {
+		logger.Warning("Invalid chaincode action in payload for tx", chdr.TxId, ":", err)
+		return chdr.TxId
+	}
+
+	if ccActionPayload.Action == nil {
+		logger.Warning("Action in ChaincodeActionPayload for", chdr.TxId, "is nil")
+		return chdr.TxId
+	}
+
+	txRWSet := &rwsetutil.TxRwSet{}
+	if err = txRWSet.FromProtoBytes(respPayload.Results); err != nil {
+		logger.Warning("Failed obtaining TxRwSet from ChaincodeAction's results", err)
+		return chdr.TxId
+	}
+
+	o.consumer(uint64(seqInBlock), chdr, txRWSet, ccActionPayload.Action.Endorsements)
+	return chdr.TxId
 }
 
 func endorsersFromOrgs(ns string, col string, endorsers []*peer.Endorsement, orgs []string) []*peer.Endorsement {
@@ -687,27 +839,26 @@ func (c *coordinator) listMissingPrivateData(block *common.Block, ownedRWsets ma
 	if block.Metadata == nil || len(block.Metadata.Metadata) <= int(common.BlockMetadataIndex_TRANSACTIONS_FILTER) {
 		return nil, errors.New("Block.Metadata is nil or Block.Metadata lacks a Tx filter bitmap")
 	}
-	txsFilter := txValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	if len(txsFilter) != len(block.Data.Data) {
-		return nil, errors.Errorf("Block data size(%d) is different from Tx filter size(%d)", len(block.Data.Data), len(txsFilter))
-	}
 
 	sources := make(map[rwSetKey][]*peer.Endorsement)
 	privateRWsetsInBlock := make(map[rwSetKey]struct{})
 	missing := make(rwSetKeysByTxIDs)
-	data := blockData(block.Data.Data)
+
 	bi := &transactionInspector{
 		sources:              sources,
 		missingKeys:          missing,
 		ownedRWsets:          ownedRWsets,
 		privateRWsetsInBlock: privateRWsetsInBlock,
 		coordinator:          c,
+		policyCache:          collpolicy.NewCache(c.ChainID, c.accessPolicyForCollection),
 	}
-	txList := data.forEachTxn(txsFilter, bi.inspectTransaction)
+
+	txList := newAsyncTxnIterator(bi.inspectTransaction, c.semaphore).forEachTxn(block.Data.Data)
+
 	privateInfo := &privateDataInfo{
-		sources:                 sources,
-		missingKeysByTxIDs:      missing,
-		txns:                    txList,
+		sources:            sources,
+		missingKeysByTxIDs: missing,
+		txns:               txList,
 	}
 
 	logger.Debug("Retrieving private write sets for", len(privateInfo.missingKeysByTxIDs), "transactions from transient store")
@@ -739,6 +890,8 @@ type transactionInspector struct {
 	missingKeys          rwSetKeysByTxIDs
 	sources              map[rwSetKey][]*peer.Endorsement
 	ownedRWsets          map[rwSetKey][]byte
+	mutex                sync.RWMutex
+	policyCache          *collpolicy.Cache
 }
 
 func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, endorsers []*peer.Endorsement) {
@@ -747,9 +900,7 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 			if !containsWrites(chdr.TxId, ns.NameSpace, hashedCollection) {
 				continue
 			}
-
-			policy := bi.accessPolicyForCollection(chdr, ns.NameSpace, hashedCollection.CollectionName)
-
+			policy := bi.policyCache.Get(ns.NameSpace, hashedCollection.CollectionName)
 			if policy == nil {
 				logger.Errorf("Failed to retrieve collection config for channel [%s], chaincode [%s], collection name [%s] for txID [%s]. Skipping.",
 					chdr.ChannelId, ns.NameSpace, hashedCollection.CollectionName, chdr.TxId)
@@ -768,29 +919,39 @@ func (bi *transactionInspector) inspectTransaction(seqInBlock uint64, chdr *comm
 				namespace:  ns.NameSpace,
 				collection: hashedCollection.CollectionName,
 			}
-			bi.privateRWsetsInBlock[key] = struct{}{}
 			if _, exists := bi.ownedRWsets[key]; !exists {
-				txAndSeq := txAndSeqInBlock{
-					txID:       chdr.TxId,
-					seqInBlock: seqInBlock,
-				}
-				bi.missingKeys[txAndSeq] = append(bi.missingKeys[txAndSeq], key)
-				bi.sources[key] = endorsersFromOrgs(ns.NameSpace, hashedCollection.CollectionName, endorsers, policy.MemberOrgs())
+				bi.addKey(key, true, endorsersFromOrgs(ns.NameSpace, hashedCollection.CollectionName, endorsers, policy.MemberOrgs()))
+			} else {
+				bi.addKey(key, false, nil)
 			}
 		} // for all hashed RW sets
 	} // for all RW sets
 }
 
+func (bi *transactionInspector) addKey(key rwSetKey, missing bool, missingKeySource []*peer.Endorsement) {
+	bi.mutex.Lock()
+	defer bi.mutex.Unlock()
+
+	bi.privateRWsetsInBlock[key] = struct{}{}
+	if missing {
+		bi.sources[key] = missingKeySource
+		txAndSeq := txAndSeqInBlock{
+			txID:       key.txID,
+			seqInBlock: key.seqInBlock,
+		}
+		bi.missingKeys[txAndSeq] = append(bi.missingKeys[txAndSeq], key)
+	}
+}
+
 // accessPolicyForCollection retrieves a CollectionAccessPolicy for a given namespace, collection name
 // that corresponds to a given ChannelHeader
-func (c *coordinator) accessPolicyForCollection(chdr *common.ChannelHeader, namespace string, col string) privdata.CollectionAccessPolicy {	cp := common.CollectionCriteria{
-		Channel:    chdr.ChannelId,
+func (c *coordinator) accessPolicyForCollection(channelID, namespace, col string) privdata.CollectionAccessPolicy {
+	cp := common.CollectionCriteria{
+		Channel:    channelID,
 		Namespace:  namespace,
 		Collection: col,
-		TxId:       chdr.TxId,
 	}
 	sp, err := c.CollectionStore.RetrieveCollectionAccessPolicy(cp)
-
 	if err != nil {
 		logger.Warning("Failed obtaining policy for", cp, ":", err, "skipping collection")
 		return nil
@@ -863,8 +1024,7 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 	}
 
 	seqs2Namespaces := aggregatedCollections(make(map[seqAndDataModel]map[string][]*rwset.CollectionPvtReadWriteSet))
-	data := blockData(blockAndPvtData.Block.Data.Data)
-	data.forEachTxn(make(txValidationFlags, len(data)), func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
+	newTxnIterator(func(seqInBlock uint64, chdr *common.ChannelHeader, txRWSet *rwsetutil.TxRwSet, _ []*peer.Endorsement) {
 		item, exists := blockAndPvtData.PvtData[seqInBlock]
 		if !exists {
 			return
@@ -895,7 +1055,7 @@ func (c *coordinator) GetPvtDataAndBlockByNum(seqNum uint64, peerAuthInfo common
 				seqs2Namespaces.addCollection(seqInBlock, item.WriteSet.DataModel, ns.Namespace, col)
 			}
 		}
-	})
+	}).forEachTxn(blockAndPvtData.Block.Data.Data)
 
 	return blockAndPvtData.Block, seqs2Namespaces.asPrivateData(), nil
 }

@@ -12,9 +12,9 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 )
 
 // VersionedValue encloses value and corresponding version
@@ -51,6 +51,7 @@ type ValidatedPvtData struct {
 	Collection          string
 	Level1ExpiringBlock uint64
 	Level2ExpiringBlock uint64
+	PolicyBTL           uint64
 }
 
 type KVCache struct {
@@ -201,7 +202,6 @@ func (c *KVCache) addNonDurable(validatedTx *ValidatedPvtData) {
 			(found && exitingKeyVal.BlockNum == validatedTx.BlockNum && exitingKeyVal.IndexInBlock < validatedTx.IndexInBlock) || !found {
 			logger.Debugf("Adding key[%s] to expiring private data; level1[%d] level2[%d]", validatedTx.Key, validatedTx.Level1ExpiringBlock, validatedTx.Level2ExpiringBlock)
 			c.nonDurablePvtCache[validatedTx.Key] = validatedTx
-			c.pinnedTx[validatedTx.Key] = &validatedTx.ValidatedTx
 			c.keys[validatedTx.Key] = defVal
 			c.addKeyToExpiryMap(validatedTx.Level1ExpiringBlock, validatedTx.Key)
 			if len(c.nonDurablePvtCache) > ledgerconfig.GetKVCacheNonDurableSize() {

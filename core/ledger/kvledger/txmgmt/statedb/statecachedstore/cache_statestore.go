@@ -131,6 +131,9 @@ func (c *cachedStateStore) GetStateMultipleKeys(namespace string, keys []string)
 // endKey is exclusive
 func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey string, endKey string) (statedb.ResultsIterator, error) {
 
+	/*stopWatch := metrics.StopWatch("cachedStateStore_getStateRangeScanIterator")
+	defer stopWatch()*/
+
 	//get key range from cache
 	keyRange := c.vdb.GetKVCacheProvider().GetRangeFromKVCache(c.ledgerID, namespace, startKey, endKey)
 
