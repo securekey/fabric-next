@@ -233,3 +233,30 @@ func TestBadStringsNoPanic(t *testing.T) {
 	_, err = FromString("OR('A.member', Bmember)")
 	assert.Error(t, err)
 }
+
+func TestMax(t *testing.T) {
+	p0, err := FromString("Max(4, And('A.member', 'B.member'))")
+	assert.NoError(t, err)
+	p1, err := FromString("Max(4, OutOf(2,'A.member', 'B.member'))")
+	assert.NoError(t, err)
+
+	principals := make([]*msp.MSPPrincipal, 0)
+
+	principals = append(principals, &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: "A"})})
+
+	principals = append(principals, &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               utils.MarshalOrPanic(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: "B"})})
+
+	p2 := &common.SignaturePolicyEnvelope{
+		Version:             0,
+		Rule:                NOutOf(2, []*common.SignaturePolicy{SignedBy(0), SignedBy(1)}),
+		Identities:          principals,
+		MaxValidationGroups: 4,
+	}
+
+	assert.Equal(t, p0, p2)
+	assert.Equal(t, p1, p2)
+}
