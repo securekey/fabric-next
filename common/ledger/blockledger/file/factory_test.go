@@ -72,19 +72,19 @@ func TestMultiReinitialization(t *testing.T) {
 	dir, err := ioutil.TempDir("", "hyperledger_fabric")
 	assert.NoError(t, err, "Error creating temp dir: %s", err)
 
-	flf := New(dir)
+	flf := New(dir,1)
 	_, err = flf.GetOrCreate(genesisconfig.TestChainID)
 	assert.NoError(t, err, "Error GetOrCreate chain")
 	assert.Equal(t, 1, len(flf.ChainIDs()), "Expected 1 chain")
 	flf.Close()
 
-	flf = New(dir)
+	flf = New(dir, 1)
 	_, err = flf.GetOrCreate("foo")
 	assert.NoError(t, err, "Error creating chain")
 	assert.Equal(t, 2, len(flf.ChainIDs()), "Expected chain to be recovered")
 	flf.Close()
 
-	flf = New(dir)
+	flf = New(dir, 1)
 	_, err = flf.GetOrCreate("bar")
 	assert.NoError(t, err, "Error creating chain")
 	assert.Equal(t, 3, len(flf.ChainIDs()), "Expected chain to be recovered")

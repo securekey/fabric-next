@@ -1,0 +1,26 @@
+--- core/ledger/ledgerstorage/store.go
++++ core/ledger/ledgerstorage/store.go
+@@ -329,18 +329,20 @@ func (s *Store) syncPvtdataStoreWithBlockStore() error {
+ 	}
+ 
+ 	if bcInfo.Height == pvtdataStoreHt {
+-		return s.pvtdataStore.Rollback()
++		return s.pvtdataStore.Rollback(bcInfo.Height)
+ 	}
+ 
+ 	if bcInfo.Height == pvtdataStoreHt+1 {
+-		return s.pvtdataStore.Commit()
++		return s.pvtdataStore.Commit(bcInfo.Height)
+ 	}
+ 
+ 	return fmt.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)
+ }
+ 
++// initCouchDB will call initPvtdataStoreFromExistingBlockchainCouchDB only for committers (to clean up pvt store docs
++// with blocks above block store's height)
+ func (s *Store) initCouchDB() error {
+-	if !ledgerconfig.IsCommitter() {
++	if ledgerconfig.IsCommitter() {
+ 		return s.initPvtdataStoreFromExistingBlockchainCouchDB()
+ 	}
+ 
