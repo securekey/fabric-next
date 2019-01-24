@@ -41,6 +41,7 @@ message SignaturePolicyEnvelope {
     int32 version = 1;
     SignaturePolicy rule = 2;
     repeated MSPPrincipal identities = 3;
+    int32 maxValidationGroups = 4;
 }
 
 // SignaturePolicy is a recursive message structure which defines a featherweight DSL for describing

@@ -92,9 +92,10 @@ func (m *Policy) GetValue() []byte {
 
 // SignaturePolicyEnvelope wraps a SignaturePolicy and includes a version for future enhancements
 type SignaturePolicyEnvelope struct {
-	Version    int32                   `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
-	Rule       *SignaturePolicy        `protobuf:"bytes,2,opt,name=rule" json:"rule,omitempty"`
-	Identities []*common1.MSPPrincipal `protobuf:"bytes,3,rep,name=identities" json:"identities,omitempty"`
+	Version             int32                   `protobuf:"varint,1,opt,name=version" json:"version,omitempty"`
+	Rule                *SignaturePolicy        `protobuf:"bytes,2,opt,name=rule" json:"rule,omitempty"`
+	Identities          []*common1.MSPPrincipal `protobuf:"bytes,3,rep,name=identities" json:"identities,omitempty"`
+	MaxValidationGroups int32                   `protobuf:"varint,4,opt,name=maxValidationGroups" json:"maxValidationGroups,omitempty"`
 }
 
 func (m *SignaturePolicyEnvelope) Reset()                    { *m = SignaturePolicyEnvelope{} }
@@ -121,6 +122,13 @@ func (m *SignaturePolicyEnvelope) GetIdentities() []*common1.MSPPrincipal {
 		return m.Identities
 	}
 	return nil
+}
+
+func (m *SignaturePolicyEnvelope) GetMaxValidationGroups() int32 {
+	if m != nil {
+		return m.MaxValidationGroups
+	}
+	return 0
 }
 
 // SignaturePolicy is a recursive message structure which defines a featherweight DSL for describing
