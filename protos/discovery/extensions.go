@@ -66,3 +66,8 @@ func (m *Response) EndorsersAt(i int) (*ChaincodeQueryResult, *Error) {
 	r := m.Results[i]
 	return r.GetCcQueryRes(), r.GetError()
 }
+
+type ValidationDescriptor struct {
+	ValidatorsByGroups map[string]*Peers
+	Layouts            []*Layout
+}
