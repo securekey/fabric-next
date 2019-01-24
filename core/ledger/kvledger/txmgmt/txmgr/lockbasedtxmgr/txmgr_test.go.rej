@@ -1,0 +1,29 @@
+--- core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/txmgr_test.go
++++ core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/txmgr_test.go
+@@ -834,7 +834,7 @@ func TestTxSimulatorMissingPvtdataExpiry(t *testing.T) {
+ 	blkAndPvtdata := prepareNextBlockForTest(t, txMgr, bg, "txid-1",
+ 		map[string]string{"pubkey1": "pub-value1"}, map[string]string{"pvtkey1": "pvt-value1"})
+ 	testutil.AssertNoError(t, txMgr.ValidateAndPrepare(blkAndPvtdata, true), "")
+-	testutil.AssertNoError(t, txMgr.Commit(), "")
++	testutil.AssertNoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number), "")
+ 
+ 	simulator, _ := txMgr.NewTxSimulator("tx-tmp")
+ 	pvtval, err := simulator.GetPrivateData("ns", "coll", "pvtkey1")
+@@ -845,7 +845,7 @@ func TestTxSimulatorMissingPvtdataExpiry(t *testing.T) {
+ 	blkAndPvtdata = prepareNextBlockForTest(t, txMgr, bg, "txid-2",
+ 		map[string]string{"pubkey1": "pub-value2"}, map[string]string{"pvtkey2": "pvt-value2"})
+ 	testutil.AssertNoError(t, txMgr.ValidateAndPrepare(blkAndPvtdata, true), "")
+-	testutil.AssertNoError(t, txMgr.Commit(), "")
++	testutil.AssertNoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number), "")
+ 
+ 	simulator, _ = txMgr.NewTxSimulator("tx-tmp")
+ 	pvtval, _ = simulator.GetPrivateData("ns", "coll", "pvtkey1")
+@@ -855,7 +855,7 @@ func TestTxSimulatorMissingPvtdataExpiry(t *testing.T) {
+ 	blkAndPvtdata = prepareNextBlockForTest(t, txMgr, bg, "txid-2",
+ 		map[string]string{"pubkey1": "pub-value3"}, map[string]string{"pvtkey3": "pvt-value3"})
+ 	testutil.AssertNoError(t, txMgr.ValidateAndPrepare(blkAndPvtdata, true), "")
+-	testutil.AssertNoError(t, txMgr.Commit(), "")
++	testutil.AssertNoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number), "")
+ 
+ 	simulator, _ = txMgr.NewTxSimulator("tx-tmp")
+ 	pvtval, _ = simulator.GetPrivateData("ns", "coll", "pvtkey1")

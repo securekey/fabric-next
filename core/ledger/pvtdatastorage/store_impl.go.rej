@@ -1,0 +1,11 @@
+--- core/ledger/pvtdatastorage/store_impl.go
++++ core/ledger/pvtdatastorage/store_impl.go
+@@ -168,7 +168,7 @@ func (s *store) Commit() error {
+ // Rollback implements the function in the interface `Store`
+ // Not deleting the existing data entries and expiry entries for now
+ // Because the next try would have exact same entries and will overwrite those
+-func (s *store) Rollback() error {
++func (s *store) Rollback(blockNum uint64) error {
+ 	if !s.batchPending {
+ 		return &ErrIllegalCall{"No pending batch to rollback"}
+ 	}

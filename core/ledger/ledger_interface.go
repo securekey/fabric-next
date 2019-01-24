@@ -73,6 +73,8 @@ type PeerLedger interface {
 	// A client can obtain more than one 'QueryExecutor's for parallel execution.
 	// Any synchronization should be performed at the implementation level if required
 	NewQueryExecutor() (QueryExecutor, error)
+	// GetState return state from db
+	GetState(namespace string, key string) ([]byte, error)
 	// NewHistoryQueryExecutor gives handle to a history query executor.
 	// A client can obtain more than one 'HistoryQueryExecutor's for parallel execution.
 	// Any synchronization should be performed at the implementation level if required

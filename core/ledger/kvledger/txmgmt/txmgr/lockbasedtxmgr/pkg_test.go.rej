@@ -1,0 +1,11 @@
+--- core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/pkg_test.go
++++ core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/pkg_test.go
+@@ -127,7 +127,7 @@ func (h *txMgrTestHelper) validateAndCommitRWSet(txRWSet *rwset.TxReadWriteSet)
+ 		}
+ 	}
+ 	testutil.AssertEquals(h.t, invalidTxNum, 0)
+-	err = h.txMgr.Commit()
++	err = h.txMgr.Commit(block.Header.Number)
+ 	testutil.AssertNoError(h.t, err, "")
+ }
+ 

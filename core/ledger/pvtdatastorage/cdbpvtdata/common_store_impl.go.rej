@@ -1,0 +1,70 @@
+--- core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
++++ core/ledger/pvtdatastorage/cdbpvtdata/common_store_impl.go
+@@ -95,56 +84,34 @@ func (s *store) Commit() error {
+ 	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_duration")
+ 	defer stopWatch()
+ 
+-	if !s.batchPending {
+-		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
++	if !s.checkPendingPvt(blockNum) {
++		logger.Debugf("There are no committed private data for block [%d] - setting lastCommittedBlock, isEmpty=false and calling performPurgeIfScheduled", blockNum)
++		s.lastCommittedBlock = blockNum
++		s.isEmpty = false
++		s.performPurgeIfScheduled(blockNum)
++		return nil
+ 	}
+-	committingBlockNum := s.nextBlockNum()
+-	logger.Debugf("Committing private data for block [%d]", committingBlockNum)
+ 
+-	err := s.commitDB(committingBlockNum)
++	err := s.commitDB(blockNum)
+ 	if err != nil {
+ 		return err
+ 	}
+ 
+-	s.batchPending = false
+ 	s.isEmpty = false
+-	s.lastCommittedBlock = committingBlockNum
+-	logger.Debugf("Committed private data for block [%d]", committingBlockNum)
+-	s.performPurgeIfScheduled(committingBlockNum)
++	s.lastCommittedBlock = blockNum
++	logger.Debugf("Committed private data for block [%d]", blockNum)
++	s.performPurgeIfScheduled(blockNum)
+ 	return nil
+ }
+ 
+ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
+ 	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_initLastCommittedBlock_duration")
+ 	defer stopWatch()
+-	if !(s.isEmpty && !s.batchPending) {
++	if !s.isEmpty || len(s.pendingPvtDocs) != 0 {
+ 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
+ 	}
+-
+ 	s.isEmpty = false
+ 	s.lastCommittedBlock = blockNum
+-
+-	pvtstoreLastCommittedBlock, notEmpty, err := lookupLastBlock(s.db)
+-	if err != nil {
+-		return err
+-	}
+-	//TODO add logic to support non-contiguous pvt blocks removal
+-	if notEmpty && pvtstoreLastCommittedBlock > blockNum {
+-		// delete all documents above blockNum
+-		for i := blockNum + 1; i <= pvtstoreLastCommittedBlock+numMetaDocs+1; i++ {
+-			doc, rev, e := s.db.ReadDoc(blockNumberToKey(i))
+-			if e != nil {
+-				return e
+-			}
+-			if doc != nil {
+-				e = s.db.DeleteDoc(blockNumberToKey(i), rev)
+-				if e != nil {
+-					return e
+-				}
+-			}
+-		}
+-	}
+-
+ 	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
+ 	return nil
+ }

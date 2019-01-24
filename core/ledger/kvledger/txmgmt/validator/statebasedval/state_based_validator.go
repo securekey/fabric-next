@@ -217,6 +217,8 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 				}
 			}
 			v.db.GetWSetCacheLock().Unlock()
+			stopWatch()
+
 		}
 	}
 
@@ -273,7 +275,7 @@ func (v *Validator) ValidateMVCC(ctx context.Context,block *internal.Block, txsF
 					logger.Debugf("MVCC validation of block [%d] at TxIdx [%d] and TxId [%s] marked as valid by state validator. Reason code [%s]",
 						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 				} else {
-					logger.Warningf("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
+					logger.Infof("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
 						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 				}
 				tx.ValidationCode = validationCode
