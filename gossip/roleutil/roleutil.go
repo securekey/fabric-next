@@ -26,8 +26,8 @@ type RoleUtil struct {
 	gossip    gossipAdapter
 }
 
-// NewRoleUtil returns a new RoleUtil
-func NewRoleUtil(channelID string, gossip gossipAdapter) *RoleUtil {
+// New returns a new RoleUtil
+func New(channelID string, gossip gossipAdapter) *RoleUtil {
 	return &RoleUtil{
 		channelID: channelID,
 		gossip:    gossip,
@@ -38,8 +38,27 @@ func NewRoleUtil(channelID string, gossip gossipAdapter) *RoleUtil {
 // Member wraps a NetworkMember and provides additional info
 type Member struct {
 	discovery.NetworkMember
-	MSPID string
-	Local bool // Inicates whether this member is the local peer
+	ChannelID string
+	MSPID     string
+	Local     bool // Indicates whether this member is the local peer
+}
+
+func (m *Member) String() string {
+	return m.Endpoint
+}
+
+// Roles returns the roles of the peer
+func (m *Member) Roles() gossip.Roles {
+	if m.Properties == nil {
+		logger.Debugf("[%s] Peer [%s] does not have any properties", m.ChannelID, m.Endpoint)
+		return nil
+	}
+	return gossip.Roles(m.Properties.Roles)
+}
+
+// HasRole returns true if the member has the given role
+func (m *Member) HasRole(role ledgerconfig.Role) bool {
+	return m.Roles().HasRole(role)
 }
 
 type filter func(m *Member) bool
@@ -50,15 +69,19 @@ type gossipAdapter interface {
 	IdentityInfo() api.PeerIdentitySet
 }
 
+// Self returns the local peer
+func (r *RoleUtil) Self() *Member {
+	return r.self
+}
+
 // Validators returns all peers in the local org that are validators, including the committer
 func (r *RoleUtil) Validators(includeLocalPeer bool) []*Member {
-	return r.getMembers(func(m *Member) bool {
+	return r.GetMembers(func(m *Member) bool {
 		if m.Local && !includeLocalPeer {
 			logger.Debugf("[%s] Not adding local peer", r.channelID)
 			return false
 		}
-		roles := r.getRoles(m)
-		if !roles.HasRole(ledgerconfig.ValidatorRole) {
+		if !m.HasRole(ledgerconfig.ValidatorRole) {
 			logger.Debugf("[%s] Not adding peer [%s] as a validator since it does not have the validator role", r.channelID, m.Endpoint)
 			return false
 		}
@@ -70,14 +93,14 @@ func (r *RoleUtil) Validators(includeLocalPeer bool) []*Member {
 	})
 }
 
-// Committer returns the committing peer for the local org
-func (r *RoleUtil) Committer(includeLocalPeer bool) (*Member, error) {
-	members := r.getMembers(func(m *Member) bool {
+// LocalOrgCommitter returns the committing peer for the local org
+func (r *RoleUtil) LocalOrgCommitter(includeLocalPeer bool) (*Member, error) {
+	members := r.GetMembers(func(m *Member) bool {
 		if m.Local && !includeLocalPeer {
 			logger.Debugf("[%s] Not adding local peer", r.channelID)
 			return false
 		}
-		if !r.getRoles(m).HasRole(ledgerconfig.CommitterRole) {
+		if !m.HasRole(ledgerconfig.CommitterRole) {
 			logger.Debugf("[%s] Not adding peer [%s] as a committer since it does not have the committer role", r.channelID, m.Endpoint)
 			return false
 		}
@@ -93,7 +116,23 @@ func (r *RoleUtil) Committer(includeLocalPeer bool) (*Member, error) {
 	return members[0], nil
 }
 
-func (r *RoleUtil) getMembers(accept filter) []*Member {
+// Committers returns the committing peers on the channel
+func (r *RoleUtil) Committers(includeLocalPeer bool) ([]*Member, error) {
+	members := r.GetMembers(func(m *Member) bool {
+		if m.Local && !includeLocalPeer {
+			logger.Debugf("[%s] Not adding local peer", r.channelID)
+			return false
+		}
+		if !m.HasRole(ledgerconfig.CommitterRole) {
+			logger.Debugf("[%s] Not adding peer [%s] as a committer since it does not have the committer role", r.channelID, m.Endpoint)
+			return false
+		}
+		return true
+	})
+	return members, nil
+}
+
+func (r *RoleUtil) GetMembers(accept filter) []*Member {
 	identityInfo := r.gossip.IdentityInfo()
 	mapByID := identityInfo.ByID()
 
@@ -122,12 +161,15 @@ func (r *RoleUtil) getMembers(accept filter) []*Member {
 	return peers
 }
 
-func (r *RoleUtil) getRoles(m *Member) gossip.Roles {
-	if m.Properties == nil {
-		logger.Debugf("[%s] Peer [%s] does not have any properties", r.channelID, m.Endpoint)
-		return nil
+func (r *RoleUtil) GetMSPID(pkiID common.PKIidType) (string, bool) {
+	identityInfo := r.gossip.IdentityInfo()
+	mapByID := identityInfo.ByID()
+
+	identity, ok := mapByID[string(pkiID)]
+	if !ok {
+		return "", false
 	}
-	return gossip.Roles(m.Properties.Roles)
+	return string(identity.Organization), true
 }
 
 func getSelf(channelID string, gossip gossipAdapter) *Member {

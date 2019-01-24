@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
-
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
 )
@@ -458,6 +457,10 @@ func Roles() []Role {
 
 // RolesAsString returns the roles for the peer
 func RolesAsString() []string {
+	initOnce.Do(func() {
+		roles = getRoles()
+	})
+
 	var ret []string
 	for role := range roles {
 		ret = append(ret, string(role))
