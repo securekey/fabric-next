@@ -1,0 +1,25 @@
+--- core/ledger/ledgerconfig/ledger_config.go
++++ core/ledger/ledgerconfig/ledger_config.go
+@@ -12,10 +12,14 @@ import (
+ 	"sync"
+ 	"time"
+ 
++	"github.com/hyperledger/fabric/common/flogging"
++
+ 	"github.com/hyperledger/fabric/core/config"
+ 	"github.com/spf13/viper"
+ )
+ 
++var logger = flogging.MustGetLogger("ledgerstorage")
++
+ //IsCouchDBEnabled exposes the useCouchDB variable
+ func IsCouchDBEnabled() bool {
+ 	stateDatabase := viper.GetString("ledger.state.stateDatabase")
+@@ -204,7 +213,6 @@ func GetPvtdataSkipPurgeForCollections() []string {
+ 	return strings.Split(skipPurgeForCollections, ",")
+ }
+ 
+-
+ // GetCouchDBMaxIdleConns returns the number of idle connections to hold in the connection pool for couchDB.
+ func GetCouchDBMaxIdleConns() int {
+ 	// TODO: this probably be the default golang version (100)

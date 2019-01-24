@@ -1256,7 +1256,7 @@ func TestRemoveStaleAndCommitPvtDataOfOldBlocksWithExpiry(t *testing.T) {
 	_, err := txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
 	// committing block 1
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	// pvt data should not exist
 	assert.False(t, testPvtKeyExist(t, txMgr, "ns", "coll", "pvtkey1"))
@@ -1282,7 +1282,7 @@ func TestRemoveStaleAndCommitPvtDataOfOldBlocksWithExpiry(t *testing.T) {
 	_, err = txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
 	// committing block 2
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	// pvt data should not exist
 	assert.False(t, testPvtKeyExist(t, txMgr, "ns", "coll", "pvtkey2"))
@@ -1292,7 +1292,7 @@ func TestRemoveStaleAndCommitPvtDataOfOldBlocksWithExpiry(t *testing.T) {
 	_, err = txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
 	// committing block 3
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	// prepareForExpiringKey must have selected the pvtkey2 as it would
 	// get expired during next block commit
@@ -1317,7 +1317,7 @@ func TestRemoveStaleAndCommitPvtDataOfOldBlocksWithExpiry(t *testing.T) {
 	_, err = txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
 	// committing block 4 and should purge pvtkey2
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	assert.True(t, testPvtValueEqual(t, txMgr, "ns", "coll", "pvtkey2", nil))
 }
@@ -1410,7 +1410,7 @@ func TestTxSimulatorMissingPvtdataExpiry(t *testing.T) {
 		map[string]string{"pubkey1": "pub-value1"}, map[string]string{"pvtkey1": "pvt-value1"}, false)
 	_, err := txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	assert.True(t, testPvtValueEqual(t, txMgr, "ns", "coll", "pvtkey1", []byte("pvt-value1")))
 
@@ -1419,7 +1419,7 @@ func TestTxSimulatorMissingPvtdataExpiry(t *testing.T) {
 		map[string]string{"pubkey1": "pub-value2"}, map[string]string{"pvtkey2": "pvt-value2"}, false)
 	_, err = txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	assert.True(t, testPvtValueEqual(t, txMgr, "ns", "coll", "pvtkey1", []byte("pvt-value1")))
 
@@ -1427,7 +1427,7 @@ func TestTxSimulatorMissingPvtdataExpiry(t *testing.T) {
 		map[string]string{"pubkey1": "pub-value3"}, map[string]string{"pvtkey3": "pvt-value3"}, false)
 	_, err = txMgr.ValidateAndPrepare(blkAndPvtdata, true)
 	assert.NoError(t, err)
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata.Block.Header.Number))
 
 	assert.True(t, testPvtValueEqual(t, txMgr, "ns", "coll", "pvtkey1", nil))
 }
@@ -1522,7 +1522,7 @@ func testTxWithPvtdataMetadata(t *testing.T, env testEnv, ns, coll string) {
 	blkAndPvtdata1 := prepareNextBlockForTestFromSimulator(t, bg, s1)
 	_, err := txMgr.ValidateAndPrepare(blkAndPvtdata1, true)
 	assert.NoError(t, err)
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata1.Block.Header.Number))
 
 	// Run query - key1 and key2 should return both value and metadata. Key3 should still be non-exsting in db
 	qe, _ := txMgr.NewQueryExecutor("test_tx2")
@@ -1541,7 +1541,7 @@ func testTxWithPvtdataMetadata(t *testing.T, env testEnv, ns, coll string) {
 	blkAndPvtdata2 := prepareNextBlockForTestFromSimulator(t, bg, s2)
 	_, err = txMgr.ValidateAndPrepare(blkAndPvtdata2, true)
 	assert.NoError(t, err)
-	assert.NoError(t, txMgr.Commit())
+	assert.NoError(t, txMgr.Commit(blkAndPvtdata2.Block.Header.Number))
 
 	// Run query - key1 should return updated metadata. Key2 should return 'nil' metadata
 	qe, _ = txMgr.NewQueryExecutor("test_tx4")

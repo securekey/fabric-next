@@ -19,6 +19,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validator/valimpl"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/protos/common"
@@ -28,6 +29,7 @@ import (
 	//"github.com/uber-go/tally"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 	"golang.org/x/net/context"
+	"fmt"
 )
 
 var logger = flogging.MustGetLogger("lockbasedtxmgr")
@@ -43,25 +45,27 @@ type LockBasedTxMgr struct {
 	ccInfoProvider        ledger.DeployedChaincodeInfoProvider
 	commitRWLock          sync.RWMutex
 	oldBlockCommit        sync.Mutex
-	current               *update
+	pendingUpdate    map[uint64]*update
+	pendingUpdateMtx sync.RWMutex
 
 	//StopWatch        tally.Stopwatch
 	StopWatchAccess string
 	//StopWatch1       tally.Stopwatch
 	StopWatch1Access string
 	btlPolicy        pvtdatapolicy.BTLPolicy
+	committedBlock   *ledger.BlockAndPvtData
 
-	commitCh   chan *update
-	commitDone chan *ledger.BlockAndPvtData
-	shutdownCh chan struct{}
-	doneCh     chan struct{}
+	commitCh              chan *update
+	commitDone            chan struct{}
+	shutdownCh            chan struct{}
+	doneCh                chan struct{}
+	lastCommittedBlockNum uint64
 }
 
 type update struct {
 	blockAndPvtData *ledger.BlockAndPvtData
 	batch           *privacyenabledstate.UpdateBatch
 	listeners       []ledger.StateListener
-	commitDoneCh    chan struct{}
 }
 
 func (c *update) blockNum() uint64 {
@@ -74,8 +78,8 @@ func (c *update) maxTxNumber() uint64 {
 
 // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
 func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
-	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider,
-	commitDone chan *ledger.BlockAndPvtData) (*LockBasedTxMgr, error) {
+	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider,
+		ccInfoProvider ledger.DeployedChaincodeInfoProvider) (*LockBasedTxMgr, error) {
 	db.Open()
 	txmgr := &LockBasedTxMgr{
 		ledgerid:       ledgerid,
@@ -83,10 +87,12 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 		stateListeners: stateListeners,
 		ccInfoProvider: ccInfoProvider,
 		commitCh:       make(chan *update),
-		commitDone:     commitDone,
+		commitDone:     make(chan struct{}),
 		shutdownCh:     make(chan struct{}),
 		doneCh:         make(chan struct{}),
 		btlPolicy:      btlPolicy,
+		pendingUpdate:         make(map[uint64]*update),
+		lastCommittedBlockNum: 0,
 	}
 	pvtstatePurgeMgr, err := pvtstatepurgemgmt.InstantiatePurgeMgr(ledgerid, db, btlPolicy, bookkeepingProvider)
 	if err != nil {
@@ -95,7 +101,11 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 	txmgr.pvtdataPurgeMgr = &pvtdataPurgeMgr{pvtstatePurgeMgr, false}
 	txmgr.validator = valimpl.NewStatebasedValidator(ledgerid, txmgr, db)
 
-	go txmgr.committer()
+	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
+	for x := 0; x < concurrentBlockWrites; x++ {
+		go txmgr.committer()
+	}
+
 	return txmgr, nil
 }
 
@@ -103,6 +113,11 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
 // returns 0 if NO savepoint is found
 func (txmgr *LockBasedTxMgr) GetLastSavepoint() (*version.Height, error) {
 	return txmgr.db.GetLatestSavePoint()
+}
+
+// GetDB returns the db instance
+func (txmgr *LockBasedTxMgr) GetDB() privacyenabledstate.DB {
+	return txmgr.db
 }
 
 // NewQueryExecutor implements method in interface `txmgmt.TxMgr`
@@ -142,8 +157,14 @@ func (txmgr *LockBasedTxMgr) ValidateMVCC(ctx context.Context, block *common.Blo
 
 // ValidateAndPrepare implements method in interface `txmgmt.TxMgr`
 func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) ([]*txmgr.TxStatInfo, error) {
-	if !txmgr.waitForPreviousToFinish() {
-		return nil, errors.New("shutdown has been requested")
+	if blockAndPvtdata.Block.Header.Number > uint64(ledgerconfig.GetConcurrentBlockWrites()) {
+		waitForPvt := blockAndPvtdata.Block.Header.Number - uint64(ledgerconfig.GetConcurrentBlockWrites())
+		// Wait for underlying storage to complete commit on previous block.
+		logger.Debugf("waiting for previous block to checkpoint [%d]", waitForPvt)
+		//stopWatchWaitBlock := metrics.StopWatch("validateandprepare_wait_block_duration")
+		txmgr.waitForBlock(context.Background(), waitForPvt)
+		//stopWatchWaitBlock()
+		logger.Debugf("ready to store incoming block [%d]", blockAndPvtdata.Block.Header.Number)
 	}
 
 	// Among ValidateAndPrepare(), PrepareExpiringKeys(), and
@@ -166,30 +187,16 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
 	logger.Debugf("Validating new block %d with num trans = [%d]", blockAndPvtdata.Block.Header.Number, len(blockAndPvtdata.Block.Data.Data))
 	batch, txstatsInfo, err := txmgr.validator.ValidateAndPrepareBatch(blockAndPvtdata, doMVCCValidation)
 	if err != nil {
-		txmgr.reset()
 		return nil, err
 	}
-	current := update{blockAndPvtData: blockAndPvtdata, batch: batch, commitDoneCh: make(chan struct{})}
-	if err := txmgr.invokeNamespaceListeners(); err != nil {
+	current := update{blockAndPvtData: blockAndPvtdata, batch: batch}
+	if err := txmgr.invokeNamespaceListeners(&current); err != nil {
 		return nil, err
 	}
-	txmgr.current = &current
+
+	txmgr.pushPendingUpdate(blockAndPvtdata.Block.Header.Number, &current)
 
 	return txstatsInfo, nil
-}
-
-func (txmgr *LockBasedTxMgr) waitForPreviousToFinish() bool {
-	if txmgr.current == nil {
-		return true
-	}
-
-	select {
-	case <-txmgr.current.commitDoneCh:
-	case <-txmgr.doneCh:
-		return false // the committer goroutine is shutting down - no new commits should be done.
-	}
-
-	return true
 }
 
 // RemoveStaleAndCommitPvtDataOfOldBlocks implements method in interface `txmgmt.TxMgr`
@@ -454,20 +461,20 @@ func (uniquePvtData uniquePvtDataMap) transformToUpdateBatch() *privacyenabledst
 	return batch
 }
 
-func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
+func (txmgr *LockBasedTxMgr) invokeNamespaceListeners(c *update) error {
 	for _, listener := range txmgr.stateListeners {
-		stateUpdatesForListener := extractStateUpdates(txmgr.current.batch, listener.InterestedInNamespaces())
+		stateUpdatesForListener := extractStateUpdates(c.batch, listener.InterestedInNamespaces())
 		if len(stateUpdatesForListener) == 0 {
 			continue
 		}
-		txmgr.current.listeners = append(txmgr.current.listeners, listener)
+		c.listeners = append(c.listeners, listener)
 
 		committedStateQueryExecuter := &queryutil.QECombiner{
 			QueryExecuters: []queryutil.QueryExecuter{txmgr.db}}
 
 		postCommitQueryExecuter := &queryutil.QECombiner{
 			QueryExecuters: []queryutil.QueryExecuter{
-				&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: txmgr.current.batch.PubUpdates.UpdateBatch},
+				&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: c.batch.PubUpdates.UpdateBatch},
 				txmgr.db,
 			},
 		}
@@ -475,7 +482,7 @@ func (txmgr *LockBasedTxMgr) invokeNamespaceListeners() error {
 		trigger := &ledger.StateUpdateTrigger{
 			LedgerID:                    txmgr.ledgerid,
 			StateUpdates:                stateUpdatesForListener,
-			CommittingBlockNum:          txmgr.current.blockNum(),
+			CommittingBlockNum:          c.blockNum(),
 			CommittedStateQueryExecutor: committedStateQueryExecuter,
 			PostCommitQueryExecutor:     postCommitQueryExecuter,
 		}
@@ -499,21 +506,30 @@ func (txmgr *LockBasedTxMgr) Shutdown() {
 }
 
 // Commit implements method in interface `txmgmt.TxMgr`
-func (txmgr *LockBasedTxMgr) Commit() error {
-	if txmgr.current == nil {
-		panic("validateAndPrepare() method should have been called before calling commit()")
+func (txmgr *LockBasedTxMgr) Commit(blockNum uint64) error {
+	if !txmgr.checkPendingUpdate(blockNum) {
+		panic(fmt.Sprintf("validateAndPrepare() for block %d method should have been called before calling commit()", blockNum))
 	}
 
-	txmgr.commitCh <- txmgr.current
+	pendingUpdate, err := txmgr.popPendingUpdate(blockNum)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	txmgr.commitCh <- pendingUpdate
 	return nil
 }
 
 // Rollback implements method in interface `txmgmt.TxMgr`
-func (txmgr *LockBasedTxMgr) Rollback() {
-	if txmgr.current == nil {
-		panic("validateAndPrepare() method should have been called before calling rollback()")
+func (txmgr *LockBasedTxMgr) Rollback(blockNum uint64) {
+	if !txmgr.checkPendingUpdate(blockNum) {
+		panic(fmt.Sprintf("validateAndPrepare() for block %d method should have been called before calling rollback()", blockNum))
 	}
-	txmgr.reset()
+
+	_, err := txmgr.popPendingUpdate(blockNum)
+	if err != nil {
+		panic(err.Error())
+	}
 }
 
 // clearCache empty the cache maintained by the statedb implementation
@@ -550,7 +566,7 @@ func (txmgr *LockBasedTxMgr) CommitLostBlock(blockAndPvtdata *ledger.BlockAndPvt
 		logger.Debugf("Recommitting block [%d] to state database", block.Header.Number)
 	}
 
-	return txmgr.Commit()
+	return txmgr.Commit(blockAndPvtdata.Block.Header.Number)
 }
 
 //committer commits update batch from incoming commitCh items
@@ -647,19 +663,32 @@ func (txmgr *LockBasedTxMgr) committer() {
 			logger.Debugf("Cleared version cache and launched the background routine for preparing keys to purge with the next block")
 			//clearWatch.Stop()
 
+			txmgr.lastCommittedBlockNum = current.blockAndPvtData.Block.Header.Number
+			close(txmgr.commitDone)
+			txmgr.commitDone = make(chan struct{})
+			txmgr.committedBlock = current.blockAndPvtData
+
 			txmgr.commitRWLock.Unlock()
-			close(current.commitDoneCh)
 
 			txmgr.oldBlockCommit.Unlock()
 
-			//notify kv ledger that commit is done for given block and private data
-			txmgr.commitDone <- current.blockAndPvtData
 
 			/*if metrics.IsDebug() {
 				commitWatch.Stop()
 			}*/
 		}
 	}
+}
+
+//BlockCommitted returns recent block committed and chan to notify next block commit
+func (txmgr *LockBasedTxMgr) BlockCommitted() (*ledger.BlockAndPvtData, chan struct{}) {
+
+	txmgr.commitRWLock.RLock()
+	blockCommitted := txmgr.committedBlock
+	commitDone := txmgr.commitDone
+	txmgr.commitRWLock.RUnlock()
+
+	return blockCommitted, commitDone
 }
 
 func extractStateUpdates(batch *privacyenabledstate.UpdateBatch, namespaces []string) ledger.StateUpdates {
@@ -702,8 +731,51 @@ func (txmgr *LockBasedTxMgr) Unlock() {
 	txmgr.commitRWLock.Unlock()
 }
 
-func (txmgr *LockBasedTxMgr) reset() {
-	txmgr.current = nil
+func (txmgr *LockBasedTxMgr) pushPendingUpdate(blockNumber uint64, update *update) {
+	txmgr.pendingUpdateMtx.Lock()
+	defer txmgr.pendingUpdateMtx.Unlock()
+
+	txmgr.pendingUpdate[blockNumber] = update
+}
+
+func (txmgr *LockBasedTxMgr) checkPendingUpdate(blockNumber uint64) bool {
+	txmgr.pendingUpdateMtx.RLock()
+	defer txmgr.pendingUpdateMtx.RUnlock()
+
+	_, ok := txmgr.pendingUpdate[blockNumber]
+	return ok
+}
+
+func (txmgr *LockBasedTxMgr) popPendingUpdate(blockNumber uint64) (*update, error) {
+	txmgr.pendingUpdateMtx.Lock()
+	defer txmgr.pendingUpdateMtx.Unlock()
+
+	update, ok := txmgr.pendingUpdate[blockNumber]
+	if !ok {
+		return nil, errors.Errorf("pvt was not prepared [%d]", blockNumber)
+	}
+	delete(txmgr.pendingUpdate, blockNumber)
+	return update, nil
+}
+
+func (txmgr *LockBasedTxMgr) waitForBlock(ctx context.Context, blockNum uint64) {
+	var lastBlockNumber uint64
+BlockLoop:
+	for {
+		lastBlockNumber = txmgr.lastCommittedBlockNum
+		if lastBlockNumber == 0 || lastBlockNumber >= blockNum {
+			break
+		}
+
+		logger.Debugf("waiting for newer pvt blocks [%d, %d]", lastBlockNumber, blockNum)
+		select {
+		case <-ctx.Done():
+			break BlockLoop
+		case <-txmgr.commitDone:
+		}
+	}
+
+	logger.Debugf("finished waiting for pvt blocks [%d, %d]", lastBlockNumber, blockNum)
 }
 
 // pvtdataPurgeMgr wraps the actual purge manager and an additional flag 'usedOnce'

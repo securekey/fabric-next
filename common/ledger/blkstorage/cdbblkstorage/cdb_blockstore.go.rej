@@ -1,0 +1,39 @@
+--- common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
++++ common/ledger/blkstorage/cdbblkstorage/cdb_blockstore.go
+@@ -87,21 +89,32 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
+ 		return errors.WithMessage(err, "converting block to couchDB document failed")
+ 	}
+ 
+-	s.pendingBlock.ID = blockNumberToKey(block.GetHeader().GetNumber())
+-	s.pendingBlock.Doc = pendingDoc
++	blockNumber := block.GetHeader().GetNumber()
++	pb := cdbBlock{
++		ID: blockNumberToKey(blockNumber),
++		Doc: pendingDoc,
++	}
++
++	s.pushPendingDoc(blockNumber, &pb)
+ 
+ 	return nil
+ }
+ 
+ func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
+-	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, block.Header.Number)
++	blockNumber := block.GetHeader().GetNumber()
++	logger.Debugf("[%s] Updating checkpoint for block [%d]", s.ledgerID, blockNumber)
+ 
+ 	stopWatch := metrics.StopWatch("blkstorage_couchdb_checkpointBlock_duration")
+ 	defer stopWatch()
+ 
+ 	if ledgerconfig.IsCommitter() {
++		pb, err := s.popPendingBlock(blockNumber)
++		if err != nil {
++			return err
++		}
++
+ 		//save the checkpoint information in the database
+-		rev, err := s.blockStore.UpdateDoc(s.pendingBlock.ID, "", s.pendingBlock.Doc)
++		rev, err := s.blockStore.UpdateDoc(pb.ID, "", pb.Doc)
+ 		if err != nil {
+ 			return errors.WithMessage(err, "adding block to couchDB failed")
+ 		}

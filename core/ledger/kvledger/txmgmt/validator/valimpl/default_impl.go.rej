@@ -1,0 +1,12 @@
+--- core/ledger/kvledger/txmgmt/validator/valimpl/default_impl.go
++++ core/ledger/kvledger/txmgmt/validator/valimpl/default_impl.go
+@@ -66,8 +66,7 @@ func (impl *DefaultImpl) ValidateMVCC(ctx context.Context, block *common.Block,
+ }
+ 
+ // ValidateAndPrepareBatch implements the function in interface validator.Validator
+-func (impl *DefaultImpl) ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAndPvtData,
+-	doMVCCValidation bool) (*privacyenabledstate.UpdateBatch, error) {
++func (impl *DefaultImpl) ValidateAndPrepareBatch(blockAndPvtdata *ledger.BlockAndPvtData, doMVCCValidation bool) (*privacyenabledstate.UpdateBatch, error) {
+ 	block := blockAndPvtdata.Block
+ 	logger.Debugf("ValidateAndPrepareBatch() for block number = [%d]", block.Header.Number)
+ 	var internalBlock *valinternal.Block

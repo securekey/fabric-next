@@ -352,8 +352,8 @@ func (s *GossipStateProviderImpl) validationResultsMessage(msg proto.ReceivedMes
 func (s *GossipStateProviderImpl) validationRequestMessage(msg proto.ReceivedMessage) {
 	logger.Debugf("[ENTER] -> validationRequestMessage")
 	defer logger.Debug("[EXIT] ->  validationRequestMessage")
-	if !ledgerconfig.IsValidator() {
-		logger.Warningf("Non-validator should not be receiving validation request messages")
+	if ledgerconfig.IsCommitter() || !ledgerconfig.IsValidator() {
+		logger.Warningf("Committer and non-validator should not be receiving validation request messages")
 		return
 	}
 	validationRequest := msg.GetGossipMessage().GetValidationReqMsg()
@@ -543,7 +543,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 					payload.SeqNum, rawBlock.Header, rawBlock.Data)
 				continue
 			}
-			if ledgerconfig.IsValidator() {
+			if ledgerconfig.IsValidator() && !ledgerconfig.IsCommitter() {
 				// Cancel any outstanding validation for the current block being committed
 				s.ctxProvider.Cancel(rawBlock.Header.Number)
 			}
@@ -564,7 +564,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
 				}
 				logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
 			}
-			if ledgerconfig.IsValidator() {
+			if ledgerconfig.IsValidator() && !ledgerconfig.IsCommitter() {
 				unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
 				if unvalidatedBlock != nil {
 					logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
@@ -669,7 +669,7 @@ func (s *GossipStateProviderImpl) antiEntropy() {
 			s.stopCh <- struct{}{}
 			return
 		case <-time.After(defAntiEntropyInterval):
-			ourHeight, err := s.ledgerHeight()
+			ourHeight, err := s.ledger.LedgerHeight()
 			if err != nil {
 				// Unable to read from ledger continue to the next round
 				logger.Errorf("Cannot obtain ledger height, due to %+v", errors.WithStack(err))
@@ -864,7 +864,7 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
 		return errors.New("Given payload is nil")
 	}
 	logger.Debugf("[%s] adding payload to local buffer [%d]", s.chainID, payload.SeqNum)
-	height, err := s.ledgerHeight()
+	height, err := s.ledger.LedgerHeight()
 	if err != nil {
 		return errors.Wrap(err, "Failed obtaining ledger height")
 	}

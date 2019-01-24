@@ -668,11 +668,14 @@ func (vdb *VersionedDB) ensureFullCommitAndRecordSavepoint(height *version.Heigh
 	if err != nil {
 		return err
 	}
+	//stopWatch := metrics.StopWatch("statecouchdb_ensurefullcommitandrecordsavepoint_savedoc_duration")
 	_, err = vdb.metadataDB.SaveDoc(savepointDocID, "", savepointCouchDoc)
 	if err != nil {
 		logger.Errorf("Failed to save the savepoint to DB %s", err.Error())
+		//stopWatch()
 		return err
 	}
+	//stopWatch()
 	// Note: Ensure full commit on metadataDB after storing the savepoint is not necessary
 	// as CouchDB syncs states to disk periodically (every 1 second). If peer fails before
 	// syncing the savepoint to disk, ledger recovery process kicks in to ensure consistency

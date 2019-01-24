@@ -1,0 +1,33 @@
+--- core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go
++++ core/ledger/kvledger/txmgmt/validator/statebasedval/state_based_validator.go
+@@ -127,12 +127,10 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *valinternal.Block, shou
+ // preLoadCommittedVersionOfWSet loads committed version of all keys in each
+ // transaction's write set into a cache.
+ func (v *Validator) preLoadCommittedVersionOfWSet() {
+-	stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
+-	defer stopWatch()
+-
+ 	for {
+ 		select {
+ 		case data := <-v.preLoadCommittedVersionOfWSetCh:
++			stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
+ 			v.db.GetWSetCacheLock().Lock()
+ 			// Collect both public and hashed keys in read sets of all transactions in a given block
+ 			var pubKeys []*statedb.CompositeKey
+@@ -323,15 +323,12 @@ func (v *Validator) ValidateAndPrepareBatch(block *valinternal.Block, doMVCCVali
+ 	// API calls from peer to CouchDB instance.
+ 	if v.db.IsBulkOptimizable() {
+ 		// preload the block data and private data
++		logger.Infof("Pre-loading committed versions of write-set for block %d", block.Num)
+ 		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: block, pvtdata: pvtdata}
+ 	}
+ 
+ 	updates := valinternal.NewPubAndHashUpdates()
+ 	for _, tx := range block.Txs {
+-		if tx.ValidationCode != peer.TxValidationCode_VALID {
+-			continue
+-		}
+-
+ 		var validationCode peer.TxValidationCode
+ 		var err error
+ 		if validationCode, err = v.validateEndorserTX(tx.RWSet, doMVCCValidation, updates); err != nil {

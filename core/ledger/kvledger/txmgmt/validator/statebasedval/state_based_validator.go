@@ -124,12 +124,10 @@ func (v *Validator) preLoadCommittedVersionOfRSet(block *internal.Block, shouldL
 // preLoadCommittedVersionOfWSet loads committed version of all keys in each
 // transaction's write set into a cache.
 func (v *Validator) preLoadCommittedVersionOfWSet() {
-	/*stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
-	defer stopWatch()*/
-
 	for {
 		select {
 		case data := <-v.preLoadCommittedVersionOfWSetCh:
+			//stopWatch := metrics.StopWatch("validator_preload_committed_version_wset_duration")
 			v.db.GetWSetCacheLock().Lock()
 			// Collect both public and hashed keys in read sets of all transactions in a given block
 			var pubKeys []*statedb.CompositeKey
@@ -217,6 +215,8 @@ func (v *Validator) preLoadCommittedVersionOfWSet() {
 				}
 			}
 			v.db.GetWSetCacheLock().Unlock()
+			//stopWatch()
+
 		}
 	}
 
@@ -273,7 +273,7 @@ func (v *Validator) ValidateMVCC(ctx context.Context,block *internal.Block, txsF
 					logger.Debugf("MVCC validation of block [%d] at TxIdx [%d] and TxId [%s] marked as valid by state validator. Reason code [%s]",
 						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 				} else {
-					logger.Warningf("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
+					logger.Infof("MVCC validation of block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
 						block.Num, tx.IndexInBlock, tx.ID, validationCode.String())
 				}
 				tx.ValidationCode = validationCode
@@ -302,15 +302,13 @@ func (v *Validator) ValidateAndPrepareBatch(block *internal.Block, doMVCCValidat
 	// only CouchDB implements BulkOptimizable to reduce the number of REST
 	// API calls from peer to CouchDB instance.
 	if v.db.IsBulkOptimizable() {
+		logger.Infof("Pre-loading committed versions of write-set for block %d", block.Num)
 		// Just preload the private data since the block has already been preloaded during MVCC validation
 		v.preLoadCommittedVersionOfWSetCh <- &blockAndPvtData{block: &internal.Block{Num: block.Num}, pvtdata: pvtdata}
 	}
 
 	updates := internal.NewPubAndHashUpdates()
 	for _, tx := range block.Txs {
-		if tx.ValidationCode != peer.TxValidationCode_VALID {
-			continue
-		}
 		var validationCode peer.TxValidationCode
 		var err error
 		if validationCode, err = v.validateEndorserTX(tx.RWSet, doMVCCValidation, updates); err != nil {

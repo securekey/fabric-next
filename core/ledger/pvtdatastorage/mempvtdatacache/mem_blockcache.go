@@ -102,7 +102,7 @@ func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData,miss
 	return nil
 }
 
-func (c *pvtDataCache) Commit() error {
+func (c *pvtDataCache) Commit(blockNum uint64) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -227,7 +227,7 @@ func (c *pvtDataCache) IsEmpty() (bool, error) {
 }
 
 // Rollback implements the function in the interface `Store`
-func (c *pvtDataCache) Rollback() error {
+func (c *pvtDataCache) Rollback(blockNum uint64) error {
 	if !c.batchPending {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to rollback")
 	}

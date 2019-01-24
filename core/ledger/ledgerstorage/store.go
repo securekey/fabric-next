@@ -88,6 +88,7 @@ func createBlockStoreProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.B
 		blockIndex := ldbblkindex.NewProvider(
 			ldbblkindex.NewConf(ledgerconfig.GetBlockStorePath()),
 			indexConfig)
+
 		blockCache := memblkcache.NewProvider(blockCacheSize)
 
 		return cachedblkstore.NewProvider(blockStorage, blockIndex, blockCache), nil
@@ -195,12 +196,11 @@ func (s *Store) CommitWithPvtData(blockAndPvtdata *ledger.BlockAndPvtData) error
 	}
 
 	if err := s.AddBlock(blockAndPvtdata.Block); err != nil {
-		s.pvtdataStore.Rollback()
+		s.pvtdataStore.Rollback(blockAndPvtdata.Block.Header.Number)
 		return err
 	}
-
 	if writtenToPvtStore {
-		return s.pvtdataStore.Commit()
+		return s.pvtdataStore.Commit(blockAndPvtdata.Block.Header.Number)
 	}
 	return nil
 }
@@ -394,18 +394,20 @@ func (s *Store) syncPvtdataStoreWithBlockStore() error {
 	}
 
 	if bcInfo.Height == pvtdataStoreHt {
-		return s.pvtdataStore.Rollback()
+		return s.pvtdataStore.Rollback(bcInfo.Height)
 	}
 
 	if bcInfo.Height == pvtdataStoreHt+1 {
-		return s.pvtdataStore.Commit()
+		return s.pvtdataStore.Commit(bcInfo.Height)
 	}
 
 	return errors.Errorf("This is not expected. blockStoreHeight=%d, pvtdataStoreHeight=%d", bcInfo.Height, pvtdataStoreHt)
 }
 
+// initCouchDB will call initPvtdataStoreFromExistingBlockchainCouchDB only for committers (to clean up pvt store docs
+// with blocks above block store's height)
 func (s *Store) initCouchDB() error {
-	if !ledgerconfig.IsCommitter() {
+	if ledgerconfig.IsCommitter() {
 		return s.initPvtdataStoreFromExistingBlockchainCouchDB()
 	}
 
