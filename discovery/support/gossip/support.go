@@ -32,17 +32,23 @@ func (s *DiscoverySupport) ChannelExists(channel string) bool {
 // PeersOfChannel returns the NetworkMembers considered alive
 // and also subscribed to the channel given
 func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Members {
-	msg := s.SelfChannelInfo(chain)
-	if msg == nil {
-		return nil
-	}
-	stateInf := msg.GetStateInfo()
-	selfMember := discovery.NetworkMember{
-		Properties: stateInf.Properties,
-		PKIid:      stateInf.PkiId,
-		Envelope:   msg.Envelope,
-	}
-	return endorsersOnly(append(s.Gossip.PeersOfChannel(chain), selfMember))
+	return s.peersOfChannel(chain).Filter(func(member discovery.NetworkMember) bool {
+		if member.Properties == nil {
+			return false
+		}
+		return gossip2.Roles(member.Properties.Roles).HasRole(ledgerconfig.EndorserRole)
+	})
+}
+
+// ValidatorsOfChannel returns the NetworkMembers considered alive,
+// subscribed to the channel given, and have the validator role
+func (s *DiscoverySupport) ValidatorsOfChannel(chain common.ChainID) discovery.Members {
+	return s.peersOfChannel(chain).Filter(func(member discovery.NetworkMember) bool {
+		if member.Properties == nil {
+			return false
+		}
+		return gossip2.Roles(member.Properties.Roles).HasRole(ledgerconfig.ValidatorRole)
+	})
 }
 
 // Peers returns the NetworkMembers considered alive
@@ -53,16 +59,17 @@ func (s *DiscoverySupport) Peers() discovery.Members {
 	return discovery.Members(peers).Filter(discovery.HasExternalEndpoint)
 }
 
-// endorsersOnly filters out any peer that is NOT an endorser
-func endorsersOnly(members discovery.Members) discovery.Members {
-	var ret discovery.Members
-	for _, member := range members {
-		if member.Properties != nil {
-			roles := gossip2.Roles(member.Properties.Roles)
-			if roles.HasRole(ledgerconfig.EndorserRole) {
-				ret = append(ret, member)
-			}
-		}
+func (s *DiscoverySupport) peersOfChannel(chain common.ChainID) discovery.Members {
+	msg := s.SelfChannelInfo(chain)
+	if msg == nil {
+		return nil
 	}
-	return ret
+	stateInf := msg.GetStateInfo()
+	selfMember := discovery.NetworkMember{
+		Properties: stateInf.Properties,
+		PKIid:      stateInf.PkiId,
+		Envelope:   msg.Envelope,
+	}
+
+	return append(s.Gossip.PeersOfChannel(chain), selfMember)
 }
