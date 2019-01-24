@@ -9,7 +9,6 @@ package txvalidator
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-	"sort"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -24,8 +23,8 @@ import (
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/hyperledger/fabric/gossip/comm"
 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
-	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
 	"github.com/hyperledger/fabric/gossip/roleutil"
+	"github.com/hyperledger/fabric/gossip/validationpolicy"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protos/common"
 	gossipproto "github.com/hyperledger/fabric/protos/gossip"
@@ -66,7 +65,7 @@ type Support interface {
 // and return the bit array mask indicating invalid transactions which
 // didn't pass validation.
 type Validator interface {
-	Validate(block *common.Block, resultsChan chan *ValidationResults) error
+	Validate(block *common.Block, resultsChan chan *validationpolicy.ValidationResults) error
 	ValidatePartial(ctx context.Context, block *common.Block)
 }
 
@@ -85,13 +84,14 @@ type mvccValidator interface {
 // reference to the ledger to enable tx simulation
 // and execution of vscc
 type TxValidator struct {
-	ChainID         string
-	Support         Support
-	gossip          gossip2.Gossip
-	mvccValidator   mvccValidator
-	roleUtil        *roleutil.RoleUtil
-	sccp            sysccprovider.SystemChaincodeProvider
-	pluginValidator *PluginValidator
+	ChainID          string
+	Support          Support
+	gossip           gossip2.Gossip
+	mvccValidator    mvccValidator
+	validationPolicy *validationpolicy.Policy
+	roleUtil         *roleutil.RoleUtil
+	sccp             sysccprovider.SystemChaincodeProvider
+	pluginValidator  *PluginValidator
 }
 
 var logger *logging.Logger // package-level logger
@@ -118,30 +118,27 @@ func NewTxValidator(chainID string, support Support, sccp sysccprovider.SystemCh
 	// Encapsulates interface implementation
 	pluginValidator := NewPluginValidator(pm, support.Ledger(), &dynamicDeserializer{support: support}, &dynamicCapabilities{support: support})
 
-	return &TxValidator{
+	txValidator := &TxValidator{
 		ChainID:         chainID,
 		Support:         support,
 		gossip:          gossip,
 		mvccValidator:   mvccValidator,
-		roleUtil:        roleutil.NewRoleUtil(chainID, gossip),
+		roleUtil:        roleutil.New(chainID, gossip),
 		sccp:            sccp,
 		pluginValidator: pluginValidator,
 	}
+	txValidator.validationPolicy = validationpolicy.New(chainID, gossip, txValidator.getValidationPolicy)
+	return txValidator
+}
+
+func (v *TxValidator) getValidationPolicy(channelID string) ([]byte, error) {
+	// FIXME: implement this function. Currently this will always use the default 'org' policy
+	return nil, nil
 }
 
 func (v *TxValidator) chainExists(chain string) bool {
 	// TODO: implement this function!
 	return true
-}
-
-// ValidationResults contains the validation flags for the given block number.
-type ValidationResults struct {
-	BlockNumber uint64
-	TxFlags     ledgerUtil.TxValidationFlags
-	Err         error
-	// Endpoint is the endpoint of the peer that provided the results.
-	// Empty means local peer.
-	Endpoint string
 }
 
 // Validate performs the validation of a block. The validation
@@ -166,7 +163,7 @@ type ValidationResults struct {
 //    is violated, this code must be changed.
 //
 // NOTE: This function should only be called by committers and not validators.
-func (v *TxValidator) Validate(block *common.Block, resultsChan chan *ValidationResults) error {
+func (v *TxValidator) Validate(block *common.Block, resultsChan chan *validationpolicy.ValidationResults) error {
 	startValidation := time.Now() // timer to log Validate block duration
 	logger.Debugf("[%s] START Block Validation for block [%d]", v.ChainID, block.Header.Number)
 
@@ -182,7 +179,7 @@ func (v *TxValidator) Validate(block *common.Block, resultsChan chan *Validation
 	if ledgerconfig.IsValidator() {
 		// FIXME: Change to Debug
 		logger.Infof("[%s] This committer is also a validator. Starting validation of transactions in block %d", v.ChainID, block.Header.Number)
-		txFlags, _, err := v.validate(context.Background(), block, v.getTxFilter())
+		txFlags, _, err := v.validate(context.Background(), block, v.validationPolicy.GetTxFilter(block))
 		if err != nil {
 			logger.Infof("[%s] Got error validating transactions in block %d: %s", v.ChainID, block.Header.Number, err)
 			return err
@@ -262,7 +259,7 @@ func (v *TxValidator) ValidatePartial(ctx context.Context, block *common.Block) 
 	utils.InitBlockMetadata(block)
 	block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = ledgerUtil.NewTxValidationFlags(len(block.Data.Data))
 
-	txFlags, numValidated, err := v.validate(ctx, block, v.getTxFilter())
+	txFlags, numValidated, err := v.validate(ctx, block, v.validationPolicy.GetTxFilter(block))
 	if err != nil {
 		// Error while validating. Don't send the result over Gossip - in this case the committer will
 		// revalidate the unvalidated transactions.
@@ -292,7 +289,7 @@ func (v *TxValidator) ValidatePartial(ctx context.Context, block *common.Block) 
 	})
 }
 
-func (v *TxValidator) validateRemaining(ctx context.Context, block *common.Block, notValidated map[int]struct{}, resultsChan chan *ValidationResults) {
+func (v *TxValidator) validateRemaining(ctx context.Context, block *common.Block, notValidated map[int]struct{}, resultsChan chan *validationpolicy.ValidationResults) {
 	// FIXME: Change to Debug
 	logger.Infof("[%s] Starting validation of %d transactions in block %d that were not validated ...", v.ChainID, len(notValidated), block.Header.Number)
 
@@ -306,14 +303,18 @@ func (v *TxValidator) validateRemaining(ctx context.Context, block *common.Block
 	// FIXME: Change to Debug
 	logger.Infof("[%s] ... finished validating %d transactions in block %d that were not validated. Err: %v", v.ChainID, numValidated, block.Header.Number, err)
 
-	resultsChan <- &ValidationResults{
+	self := v.roleUtil.Self()
+
+	resultsChan <- &validationpolicy.ValidationResults{
 		BlockNumber: block.Header.Number,
 		TxFlags:     txFlags,
 		Err:         err,
+		Endpoint:    self.Endpoint,
+		MSPID:       self.MSPID,
 	}
 }
 
-func (v *TxValidator) waitForValidationResults(cancel context.CancelFunc, blockNumber uint64, flags *txFlags, resultsChan chan *ValidationResults, timeout time.Duration) error {
+func (v *TxValidator) waitForValidationResults(cancel context.CancelFunc, blockNumber uint64, flags *txFlags, resultsChan chan *validationpolicy.ValidationResults, timeout time.Duration) error {
 	logger.Debugf("[%s] Waiting up to %s for validation responses for block %d ...", v.ChainID, timeout, blockNumber)
 
 	start := time.Now()
@@ -324,6 +325,13 @@ func (v *TxValidator) waitForValidationResults(cancel context.CancelFunc, blockN
 		case result := <-resultsChan:
 			// FIXME: Change to Debug
 			logger.Infof("[%s] Got results from [%s] for block %d after %s", v.ChainID, result.Endpoint, result.BlockNumber, time.Since(start))
+
+			// FIXME: Need to gather multiple results and then validate
+			err := v.validationPolicy.Validate([]*validationpolicy.ValidationResults{result})
+			if err != nil {
+				logger.Infof("[%s] Validation policy not satisfied for results from [%s] peer for block %d: %s", v.ChainID, result.Endpoint, result.BlockNumber, err)
+				continue
+			}
 
 			done, err := v.handleResults(blockNumber, flags, result)
 			if err != nil {
@@ -347,7 +355,7 @@ func (v *TxValidator) waitForValidationResults(cancel context.CancelFunc, blockN
 	}
 }
 
-func (v *TxValidator) handleResults(blockNumber uint64, flags *txFlags, result *ValidationResults) (done bool, err error) {
+func (v *TxValidator) handleResults(blockNumber uint64, flags *txFlags, result *validationpolicy.ValidationResults) (done bool, err error) {
 	if result.BlockNumber < blockNumber {
 		logger.Debugf("[%s] Discarding validation results from [%s] peer for block %d since we're waiting on block %d", v.ChainID, result.Endpoint, result.BlockNumber, blockNumber)
 		return false, nil
@@ -524,24 +532,6 @@ func (v *TxValidator) createValidationResponseGossipMsg(block *common.Block, txF
 			},
 		},
 	}, nil
-}
-
-func (v *TxValidator) getTxFilter() ledgerUtil.TxFilter {
-	sortedValidators := validators(v.roleUtil.Validators(true))
-	sort.Sort(sortedValidators)
-
-	if logger.IsEnabledFor(logging.DEBUG) {
-		logger.Debugf("[%s] All validators:", v.ChainID)
-		for _, m := range sortedValidators {
-			logger.Debugf("- [%s], MSPID [%s], - Roles: %s", m.Endpoint, m.MSPID, m.Properties.Roles)
-		}
-	}
-
-	return func(txIdx int) bool {
-		validatorForTx := sortedValidators[txIdx%len(sortedValidators)]
-		logger.Debugf("[%s] Validator for TxIdx [%d] is [%s]", v.ChainID, txIdx, validatorForTx.Endpoint)
-		return validatorForTx.Local
-	}
 }
 
 type blockValidator struct {
@@ -913,35 +903,6 @@ func (ds *dynamicCapabilities) V1_1Validation() bool {
 
 func (ds *dynamicCapabilities) V1_2Validation() bool {
 	return ds.support.Capabilities().V1_2Validation()
-}
-
-type validators []*roleutil.Member
-
-func (p validators) Len() int {
-	return len(p)
-}
-
-func (p validators) Less(i, j int) bool {
-	// Committers should always come first
-	if p.isCommitter(i) {
-		return true
-	}
-	if p.isCommitter(j) {
-		return false
-	}
-	return p[i].Endpoint < p[j].Endpoint
-}
-
-func (p validators) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
-func (p validators) isCommitter(i int) bool {
-	if p[i].Properties == nil {
-		return false
-	}
-	roles := gossipimpl.Roles(p[i].Properties.Roles)
-	return roles.HasRole(ledgerconfig.CommitterRole)
 }
 
 // flagsToString used in debugging

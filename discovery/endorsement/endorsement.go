@@ -8,6 +8,7 @@ package endorsement
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
 	"github.com/hyperledger/fabric/common/chaincode"
 	"github.com/hyperledger/fabric/common/flogging"
@@ -17,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/common"
 	. "github.com/hyperledger/fabric/gossip/discovery"
+	"github.com/hyperledger/fabric/gossip/gossip"
 	"github.com/hyperledger/fabric/protos/discovery"
 	"github.com/hyperledger/fabric/protos/msp"
 	"github.com/pkg/errors"
@@ -54,6 +56,8 @@ type gossipSupport interface {
 	// PeersOfChannel returns the NetworkMembers considered alive
 	// and also subscribed to the channel given
 	PeersOfChannel(common.ChainID) Members
+
+	ValidatorsOfChannel(chain common.ChainID) Members
 
 	// Peers returns the NetworkMembers considered alive
 	Peers() Members
@@ -111,8 +115,7 @@ func (ea *endorsementAnalyzer) PeersForEndorsement(chainID common.ChainID, inter
 		return nil, errors.WithStack(err)
 	}
 
-	return ea.computeEndorsementResponse(&context{
-		chaincode:           interest.Chaincodes[0].Name,
+	return ea.computeEndorsementResponse(interest.Chaincodes[0].Name, &context{
 		channel:             string(chainID),
 		principalsSets:      principalsSets,
 		channelMembersById:  channelMembersById,
@@ -121,8 +124,58 @@ func (ea *endorsementAnalyzer) PeersForEndorsement(chainID common.ChainID, inter
 	})
 }
 
+// PeersForValidation ...
+// FIXME: policy should not be passed in - it should be retrieved
+func (ea *endorsementAnalyzer) PeersForValidation(chainID common.ChainID, policy policies.InquireablePolicy) (*discovery.ValidationDescriptor, error) {
+	identities := ea.IdentityInfo()
+	identitiesByID := identities.ByID()
+	// Filter out peers that don't have the validator role
+	chanMembership := ea.ValidatorsOfChannel(chainID)
+	logger.Infof("[%s] Peers of channel: %+v", chainID, membersAsString(chanMembership))
+	chanMembership = chanMembership.Filter(peersWithValidatorRole())
+	logger.Infof("[%s] Peers of channel with validator role: %+v", chainID, membersAsString(chanMembership))
+	channelMembersByID := chanMembership.ByID()
+	// Choose only the alive messages of those that have joined the channel
+	aliveMembership := ea.Peers().Intersect(chanMembership)
+	membersByID := aliveMembership.ByID()
+	// Compute a mapping between the PKI-IDs of members to their identities
+
+	identitiesOfMembers := computeIdentitiesOfMembers(identities, membersByID)
+
+	// TODO: Should rename excludeIfCCNotInstalled
+	filter := ea.excludeIfCCNotInstalled(membersByID, identitiesByID)
+	principalsSets, err := ea.computeValidatorPrincipalSets(chainID, policy, filter)
+	if err != nil {
+		logger.Warningf("Principal set computation failed: %v", err)
+		return nil, errors.WithStack(err)
+	}
+
+	return ea.computeValidationResponse(&context{
+		channel:             string(chainID),
+		principalsSets:      principalsSets,
+		channelMembersById:  channelMembersByID,
+		aliveMembership:     aliveMembership,
+		identitiesOfMembers: identitiesOfMembers,
+	})
+}
+
+func membersAsString(members Members) string {
+	str := "("
+	for i, m := range members {
+		endpoint := m.Endpoint
+		if endpoint == "" {
+			endpoint = "self"
+		}
+		str += endpoint
+		if i+1 < len(members) {
+			str += ", "
+		}
+	}
+	str += ")"
+	return str
+}
+
 type context struct {
-	chaincode           string
 	channel             string
 	aliveMembership     Members
 	principalsSets      []policies.PrincipalSet
@@ -130,7 +183,7 @@ type context struct {
 	identitiesOfMembers memberIdentities
 }
 
-func (ea *endorsementAnalyzer) computeEndorsementResponse(ctx *context) (*discovery.EndorsementDescriptor, error) {
+func (ea *endorsementAnalyzer) computeEndorsementResponse(chaincode string, ctx *context) (*discovery.EndorsementDescriptor, error) {
 	// mapPrincipalsToGroups returns a mapping from principals to their corresponding groups.
 	// groups are just human readable representations that mask the principals behind them
 	principalGroups := mapPrincipalsToGroups(ctx.principalsSets)
@@ -155,9 +208,39 @@ func (ea *endorsementAnalyzer) computeEndorsementResponse(ctx *context) (*discov
 	}
 
 	return &discovery.EndorsementDescriptor{
-		Chaincode:         ctx.chaincode,
+		Chaincode:         chaincode,
 		Layouts:           layouts,
 		EndorsersByGroups: endorsersByGroup(criteria),
+	}, nil
+}
+
+func (ea *endorsementAnalyzer) computeValidationResponse(ctx *context) (*discovery.ValidationDescriptor, error) {
+	// mapPrincipalsToGroups returns a mapping from principals to their corresponding groups.
+	// groups are just human readable representations that mask the principals behind them
+	principalGroups := mapPrincipalsToGroups(ctx.principalsSets)
+	// principalsToPeersGraph computes a bipartite graph (V1 U V2 , E)
+	// such that V1 is the peers, V2 are the principals,
+	// and each e=(peer,principal) is in E if the peer satisfies the principal
+	satGraph := principalsToPeersGraph(principalAndPeerData{
+		members: ctx.aliveMembership,
+		pGrps:   principalGroups,
+	}, ea.satisfiesPrincipal(ctx.channel, ctx.identitiesOfMembers))
+
+	layouts := computeLayouts(ctx.principalsSets, principalGroups, satGraph)
+	if len(layouts) == 0 {
+		return nil, errors.New("cannot satisfy any principal combination")
+	}
+
+	criteria := &peerMembershipCriteria{
+		possibleLayouts: layouts,
+		satGraph:        satGraph,
+		chanMemberById:  ctx.channelMembersById,
+		idOfMembers:     ctx.identitiesOfMembers,
+	}
+
+	return &discovery.ValidationDescriptor{
+		Layouts:            layouts,
+		ValidatorsByGroups: endorsersByGroup(criteria),
 	}, nil
 }
 
@@ -170,9 +253,11 @@ func (ea *endorsementAnalyzer) excludeIfCCNotInstalled(membersById map[string]Ne
 	excludeMSPsWithoutChaincodeInstalled := func(principal *msp.MSPPrincipal) bool {
 		mspID := ea.MSPOfPrincipal(principal)
 		_, exists := mspIDsOfChannelPeers[mspID]
+		logger.Infof("excludeIfCCNotInstalled - MSPID [%s], mspIDsOfChannelPeers: %+v: %t", mspID, mspIDsOfChannelPeers, exists)
 		return mspID != "" && exists
 	}
 	return func(principalsSet policies.PrincipalSet) bool {
+		logger.Infof("excludeIfCCNotInstalled - Evaluating filter...")
 		return principalsSet.ContainingOnly(excludeMSPsWithoutChaincodeInstalled)
 	}
 }
@@ -215,6 +300,26 @@ func (ea *endorsementAnalyzer) computePrincipalSets(chainID common.ChainID, inte
 	}
 
 	return cps.ToPrincipalSets(), nil
+}
+
+func (ea *endorsementAnalyzer) computeValidatorPrincipalSets(chainID common.ChainID, policy policies.InquireablePolicy, filter principalFilter) (policies.PrincipalSets, error) {
+	var cmpsets inquire.ComparablePrincipalSets
+	for _, ps := range policy.SatisfiedBy() {
+		if !filter(ps) {
+			logger.Info(ps, "filtered out due to chaincodes not being installed on the corresponding organizations")
+			continue
+		}
+		cps := inquire.NewComparablePrincipalSet(ps)
+		if cps == nil {
+			return nil, errors.New("failed creating a comparable principal set")
+		}
+		cmpsets = append(cmpsets, cps)
+	}
+	if len(cmpsets) == 0 {
+		return nil, errors.New("insufficient organizations available to satisfy endorsement policy")
+	}
+
+	return cmpsets.ToPrincipalSets(), nil
 }
 
 type metadataAndFilterContext struct {
@@ -546,6 +651,17 @@ func peersWithChaincode(metadata ...*chaincode.Metadata) func(member NetworkMemb
 			}
 		}
 		return true
+	}
+}
+
+func peersWithValidatorRole() func(member NetworkMember) bool {
+	return func(member NetworkMember) bool {
+		if member.Properties == nil {
+			logger.Infof("peersWithValidatorRole - Member [%s] has no properties", member.Endpoint)
+			return false
+		}
+		logger.Infof("peersWithValidatorRole - Member [%s] has the following roles: %s", member.Endpoint, member.Properties.Roles)
+		return gossip.Roles(member.Properties.Roles).HasRole(ledgerconfig.ValidatorRole)
 	}
 }
 

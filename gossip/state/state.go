@@ -17,7 +17,6 @@ import (
 	vsccErrors "github.com/hyperledger/fabric/common/errors"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util/retry"
-	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	ledgerUtil "github.com/hyperledger/fabric/core/ledger/util"
@@ -25,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/comm"
 	common2 "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/state/validationctx"
+	"github.com/hyperledger/fabric/gossip/validationpolicy"
 
 	gossipimpl "github.com/hyperledger/fabric/gossip/gossip"
 	privdata2 "github.com/hyperledger/fabric/gossip/privdata"
@@ -124,7 +124,7 @@ type ledgerResources interface {
 	PublishBlock(*ledger.BlockAndPvtData, []string) error
 
 	// ValidateBlock validate block
-	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *txvalidator.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
+	ValidateBlock(block *common.Block, privateDataSets util.PvtDataCollections, validationResponseChan chan *validationpolicy.ValidationResults) (*ledger.BlockAndPvtData, []string, error)
 
 	ValidatePartialBlock(ctx context.Context, block *common.Block)
 
@@ -177,7 +177,7 @@ type GossipStateProviderImpl struct {
 
 	stopCh chan struct{}
 
-	validationResponseChan chan *txvalidator.ValidationResults
+	validationResponseChan chan *validationpolicy.ValidationResults
 
 	pendingValidations *blockCache
 
@@ -258,7 +258,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 		// Channel to read direct messages from other peers
 		commChan: commChan,
 
-		validationResponseChan: make(chan *txvalidator.ValidationResults, 10),
+		validationResponseChan: make(chan *validationpolicy.ValidationResults, 10),
 
 		pendingValidations: newBlockCache(),
 
@@ -284,7 +284,7 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		ctxProvider: validationctx.NewProvider(),
 
-		roleUtil: roleutil.NewRoleUtil(chainID, services),
+		roleUtil: roleutil.New(chainID, services),
 	}
 
 	logger.Infof("Updating metadata information, "+
@@ -440,10 +440,17 @@ func (s *GossipStateProviderImpl) validationResultsMessage(msg proto.ReceivedMes
 	}
 
 	logger.Debugf("[%s] Validation Results message for block [%d] received - sending to response channel", s.chainID, validationResultsMsg.SeqNum)
-	s.validationResponseChan <- &txvalidator.ValidationResults{
+	mspID, ok := s.roleUtil.GetMSPID(msg.GetConnectionInfo().ID)
+	if !ok {
+		logger.Errorf("Unable to get MSP ID from PKI ID")
+		return
+	}
+
+	s.validationResponseChan <- &validationpolicy.ValidationResults{
 		BlockNumber: validationResultsMsg.SeqNum,
 		TxFlags:     validationResultsMsg.TxFlags,
 		Endpoint:    msg.GetConnectionInfo().Endpoint,
+		MSPID:       mspID,
 	}
 }
 
@@ -743,7 +750,7 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
 			logger.Infof("[%s] Received validation request for block %d", s.chainID, block.Header.Number)
 
 			currentHeight, err := s.ledger.LedgerHeight()
-			if err!= nil {
+			if err != nil {
 				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
 			}
 			if block.Header.Number == currentHeight {
@@ -1254,7 +1261,7 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
 		return err
 	}
 
-	currentHeight ,err := s.ledger.LedgerHeight()
+	currentHeight, err := s.ledger.LedgerHeight()
 	if err != nil {
 		logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
 	}
