@@ -56,16 +56,14 @@ func newBlockCache(blockCacheSize int) *blockCache {
 }
 
 func (c *blockCache) AddBlock(block *common.Block) error {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
 	blockHashHex := hex.EncodeToString(block.GetHeader().Hash())
 	blockNumber := block.GetHeader().GetNumber()
 
-	c.hashToNumber[blockHashHex] = blockNumber
-	c.numberToHash[blockNumber] = blockHashHex
-
 	blockTxns, err := createTxnLocsFromBlock(block)
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
 	if err != nil {
 		logger.Warningf("extracting transaction IDs from block failed [%s]", err)
 	} else {
@@ -77,7 +75,10 @@ func (c *blockCache) AddBlock(block *common.Block) error {
 		c.numberToTxnIDs[blockNumber] = txnIDs
 	}
 
-	c.pinnedBlocks[block.GetHeader().Number] = block
+	c.hashToNumber[blockHashHex] = blockNumber
+	c.numberToHash[blockNumber] = blockHashHex
+	c.pinnedBlocks[blockNumber] = block
+
 	return nil
 }
 

@@ -63,7 +63,7 @@ func (env *fileLedgerTestFactory) Persistent() bool {
 }
 
 func (env *fileLedgerTestFactory) New() (Factory, ReadWriter) {
-	flf := fileledger.New(env.location)
+	flf := fileledger.New(env.location, 1)
 	fl, err := flf.GetOrCreate(genesisconfig.TestChainID)
 	if err != nil {
 		panic(err)

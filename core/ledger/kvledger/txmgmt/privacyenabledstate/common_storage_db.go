@@ -66,6 +66,7 @@ func (p *CommonStorageDBProvider) GetDBHandle(id string) (DB, error) {
 // Close implements function from interface DBProvider
 func (p *CommonStorageDBProvider) Close() {
 	p.VersionedDBProvider.Close()
+	p.stateKeyIndexProvider.Close()
 }
 
 // CommonStorageDB implements interface DB. This implementation uses a single database to maintain

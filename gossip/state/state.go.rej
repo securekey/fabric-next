@@ -1,0 +1,97 @@
+--- gossip/state/state.go
++++ gossip/state/state.go
+@@ -451,8 +451,8 @@ func (s *GossipStateProviderImpl) validationRequestMessage(msg proto.ReceivedMes
+ 	logger.Debugf("[ENTER] -> validationRequestMessage")
+ 	defer logger.Debug("[EXIT] ->  validationRequestMessage")
+ 
+-	if !ledgerconfig.IsValidator() {
+-		logger.Warningf("Non-validator should not be receiving validation request messages")
++	if ledgerconfig.IsCommitter() || !ledgerconfig.IsValidator() {
++		logger.Warningf("Committer and non-validator should not be receiving validation request messages")
+ 		return
+ 	}
+ 
+@@ -671,7 +671,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
+ 				continue
+ 			}
+ 
+-			if ledgerconfig.IsValidator() {
++			if ledgerconfig.IsValidator() && !ledgerconfig.IsCommitter() {
+ 				// Cancel any outstanding validation for the current block being committed
+ 				s.ctxProvider.Cancel(rawBlock.Header.Number)
+ 			}
+@@ -695,7 +695,7 @@ func (s *GossipStateProviderImpl) deliverPayloads() {
+ 				logger.Panicf("Cannot commit block to the ledger due to %+v", errors.WithStack(err))
+ 			}
+ 
+-			if ledgerconfig.IsValidator() {
++			if ledgerconfig.IsValidator() && !ledgerconfig.IsCommitter() {
+ 				unvalidatedBlock := s.pendingValidations.Remove(rawBlock.Header.Number + 1)
+ 				if unvalidatedBlock != nil {
+ 					logger.Debugf("[%s] Validating pending block [%d] with %d transaction(s)", s.chainID, payload.SeqNum, len(unvalidatedBlock.Data.Data))
+@@ -742,7 +742,10 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
+ 			// FIXME: Change to Debug
+ 			logger.Infof("[%s] Received validation request for block %d", s.chainID, block.Header.Number)
+ 
+-			currentHeight := s.blockPublisher.LedgerHeight()
++			currentHeight, err := s.ledger.LedgerHeight()
++			if err!= nil {
++				logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
++			}
+ 			if block.Header.Number == currentHeight {
+ 				logger.Infof("[%s] Validating block [%d] with %d transaction(s)", s.chainID, block.Header.Number, len(block.Data.Data))
+ 				s.ledger.ValidatePartialBlock(s.ctxProvider.Create(block.Header.Number), block)
+@@ -759,23 +762,6 @@ func (s *GossipStateProviderImpl) processValidationRequests() {
+ 	}
+ }
+ 
+-func (s *GossipStateProviderImpl) ledgerHeight() (uint64, error) {
+-	if !ledgerconfig.IsCommitter() {
+-		ourHeight := s.blockPublisher.LedgerHeight()
+-		logger.Debugf("Got our height from block publisher for channel [%s]: %d", s.chainID, ourHeight)
+-		return ourHeight, nil
+-	}
+-
+-	ourHeight, err := s.ledger.LedgerHeight()
+-	if err != nil {
+-		logger.Errorf("Error getting height from ledger for channel [%s]: %s", s.chainID, err)
+-		return 0, err
+-	}
+-
+-	logger.Debugf("Got our height from ledger for channel [%s]: %d", s.chainID, ourHeight)
+-	return ourHeight, nil
+-}
+-
+ func (s *GossipStateProviderImpl) antiEntropy() {
+ 	defer s.done.Done()
+ 	defer logger.Debug("State Provider stopped, stopping anti entropy procedure.")
+@@ -1055,8 +1041,16 @@ func (s *GossipStateProviderImpl) addPayload(payload *proto.Payload, blockingMod
+ 	if s.payloads.Push(payload) {
+ 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_push_block_number", metrics.FilterMetricName(s.chainID))).Update(float64(payload.SeqNum))
+ 		metrics.RootScope.Gauge(fmt.Sprintf("payloadbuffer_%s_length", metrics.FilterMetricName(s.chainID))).Update(float64(s.payloads.Size()))
++
++		block, _ := createBlockFromPayload(payload)
++		txnCount := 0
++		if block != nil {
++			txnCount = len(block.Data.Data)
++		}
++		metrics.RootScope.Gauge(fmt.Sprintf("block_%s_size_txns", metrics.FilterMetricName(s.chainID))).Update(float64(txnCount))
++
+ 		// TODO - make the following Debug if it turns out to be not useful.
+-		logger.Infof("[%s] payload added to buffer [%d]", s.chainID, payload.SeqNum)
++		logger.Infof("[%s] payload added to buffer [%d] txn [%d]", s.chainID, payload.SeqNum, txnCount)
+ 	}
+ 
+ 	return nil
+@@ -1260,7 +1254,10 @@ func (s *GossipStateProviderImpl) publishBlock(block *common.Block, pvtData util
+ 		return err
+ 	}
+ 
+-	currentHeight := s.blockPublisher.LedgerHeight()
++	currentHeight ,err := s.ledger.LedgerHeight()
++	if err != nil {
++		logger.Errorf("Error getting height from DB for channel [%s]: %s", s.chainID, errors.WithStack(err))
++	}
+ 	if block.Header.Number < currentHeight-1 {
+ 		return errors.Errorf("received block %d but ledger height is already at %d", block.Header.Number, currentHeight)
+ 	}
