@@ -34,6 +34,7 @@ const (
 	GateAnd   = "And"
 	GateOr    = "Or"
 	GateOutOf = "OutOf"
+	GateMax   = "Max"
 )
 
 // Role values for principals
@@ -89,6 +90,42 @@ func outof(args ...interface{}) (interface{}, error) {
 	return toret + ")", nil
 }
 
+// a stub function - it returns the same string as it's passed.
+// This will be evaluated by second/third passes to convert to a proto policy
+func max(args ...interface{}) (interface{}, error) {
+	toret := "max("
+	if len(args) != 2 {
+		return nil, fmt.Errorf("Expected two arguments to MAX. Given %d", len(args))
+	}
+
+	arg0 := args[0]
+	// govaluate treats all numbers as float64 only. But and/or may pass int/string. Allowing int/string for flexibility of caller
+	if n, ok := arg0.(float64); ok {
+		toret += strconv.Itoa(int(n))
+	} else if n, ok := arg0.(int); ok {
+		toret += strconv.Itoa(n)
+	} else if n, ok := arg0.(string); ok {
+		toret += n
+	} else {
+		return nil, fmt.Errorf("Unexpected type %s", reflect.TypeOf(arg0))
+	}
+
+	arg := args[1]
+	toret += ", "
+	switch t := arg.(type) {
+	case string:
+		if regex.MatchString(t) {
+			toret += "'" + t + "'"
+		} else {
+			toret += t
+		}
+	default:
+		return nil, fmt.Errorf("Unexpected type %s", reflect.TypeOf(arg))
+	}
+
+	return toret + ")", nil
+}
+
 func and(args ...interface{}) (interface{}, error) {
 	args = append([]interface{}{len(args)}, args...)
 	return outof(args...)
@@ -101,6 +138,28 @@ func or(args ...interface{}) (interface{}, error) {
 
 func firstPass(args ...interface{}) (interface{}, error) {
 	toret := "outof(ID"
+	for _, arg := range args {
+		toret += ", "
+		switch t := arg.(type) {
+		case string:
+			if regex.MatchString(t) {
+				toret += "'" + t + "'"
+			} else {
+				toret += t
+			}
+		case float32:
+		case float64:
+			toret += strconv.Itoa(int(t))
+		default:
+			return nil, fmt.Errorf("Unexpected type %s", reflect.TypeOf(arg))
+		}
+	}
+
+	return toret + ")", nil
+}
+
+func firstPassMax(args ...interface{}) (interface{}, error) {
+	toret := "max(ID"
 	for _, arg := range args {
 		toret += ", "
 		switch t := arg.(type) {
@@ -214,9 +273,40 @@ func secondPass(args ...interface{}) (interface{}, error) {
 	return NOutOf(int32(t), policies), nil
 }
 
+func secondPassMax(args ...interface{}) (interface{}, error) {
+	if len(args) < 3 {
+		return nil, fmt.Errorf("At least 3 arguments expected, got %d", len(args))
+	}
+
+	/* get the first argument, we expect it to be the context */
+	var ctx *context
+	switch v := args[0].(type) {
+	case *context:
+		ctx = v
+	default:
+		return nil, fmt.Errorf("Unrecognized type, expected the context, got %s", reflect.TypeOf(args[0]))
+	}
+
+	switch arg := args[1].(type) {
+	case float64:
+		ctx.maxValidationGroups = int32(arg)
+	default:
+		return nil, fmt.Errorf("Unrecognized type, expected a number, got %s", reflect.TypeOf(args[1]))
+	}
+
+	principal := args[2]
+	switch policy := principal.(type) {
+	case *common.SignaturePolicy:
+		return policy, nil
+	default:
+		return nil, fmt.Errorf("Unrecognized type, expected a principal or a policy, got %s", reflect.TypeOf(principal))
+	}
+}
+
 type context struct {
-	IDNum      int
-	principals []*msp.MSPPrincipal
+	IDNum               int
+	principals          []*msp.MSPPrincipal
+	maxValidationGroups int32
 }
 
 func newContext() *context {
@@ -245,15 +335,18 @@ func FromString(policy string) (*common.SignaturePolicyEnvelope, error) {
 	// first we translate the and/or business into outof gates
 	intermediate, err := govaluate.NewEvaluableExpressionWithFunctions(
 		policy, map[string]govaluate.ExpressionFunction{
-			GateAnd:                  and,
-			strings.ToLower(GateAnd): and,
-			strings.ToUpper(GateAnd): and,
+			GateAnd:                    and,
+			strings.ToLower(GateAnd):   and,
+			strings.ToUpper(GateAnd):   and,
 			GateOr:                     or,
 			strings.ToLower(GateOr):    or,
 			strings.ToUpper(GateOr):    or,
 			GateOutOf:                  outof,
 			strings.ToLower(GateOutOf): outof,
 			strings.ToUpper(GateOutOf): outof,
+			GateMax:                    max,
+			strings.ToLower(GateMax):   max,
+			strings.ToUpper(GateMax):   max,
 		},
 	)
 	if err != nil {
@@ -279,7 +372,7 @@ func FromString(policy string) (*common.SignaturePolicyEnvelope, error) {
 	// to user-implemented functions other than via arguments.
 	// We need this argument because we need a global place where
 	// we put the identities that the policy requires
-	exp, err := govaluate.NewEvaluableExpressionWithFunctions(intermediateRes.(string), map[string]govaluate.ExpressionFunction{"outof": firstPass})
+	exp, err := govaluate.NewEvaluableExpressionWithFunctions(intermediateRes.(string), map[string]govaluate.ExpressionFunction{"outof": firstPass, "max": firstPassMax})
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +394,7 @@ func FromString(policy string) (*common.SignaturePolicyEnvelope, error) {
 	parameters := make(map[string]interface{}, 1)
 	parameters["ID"] = ctx
 
-	exp, err = govaluate.NewEvaluableExpressionWithFunctions(res.(string), map[string]govaluate.ExpressionFunction{"outof": secondPass})
+	exp, err = govaluate.NewEvaluableExpressionWithFunctions(res.(string), map[string]govaluate.ExpressionFunction{"outof": secondPass, "max": secondPassMax})
 	if err != nil {
 		return nil, err
 	}
@@ -320,9 +413,10 @@ func FromString(policy string) (*common.SignaturePolicyEnvelope, error) {
 	}
 
 	p := &common.SignaturePolicyEnvelope{
-		Identities: ctx.principals,
-		Version:    0,
-		Rule:       res.(*common.SignaturePolicy),
+		Identities:          ctx.principals,
+		Version:             0,
+		Rule:                res.(*common.SignaturePolicy),
+		MaxValidationGroups: ctx.maxValidationGroups,
 	}
 
 	return p, nil

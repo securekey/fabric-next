@@ -41,6 +41,7 @@ message SignaturePolicyEnvelope {
     int32 version = 1;
     SignaturePolicy rule = 2;
     repeated MSPPrincipal identities = 3;
+    int32 maxValidationGroups = 4;
 }
 
 // SignaturePolicy is a recursive message structure which defines a featherweight DSL for describing
@@ -48,7 +49,7 @@ message SignaturePolicyEnvelope {
 // to express AND as well as OR, as well as of course N out of the following M policies
 // SignedBy implies that the signature is from a valid certificate which is signed by the trusted
 // authority specified in the bytes.  This will be the certificate itself for a self-signed certificate
-// and will be the CA for more traditional certificates
+// and will be the CA for more traditional certificates.
 message SignaturePolicy {
     message NOutOf {
         int32 n = 1;

@@ -100,10 +100,14 @@ func (f *txFlags) value() util.TxValidationFlags {
 
 // allValidatedNoLock returns true if none of the flags is set to NOT_VALIDATED
 func (f *txFlags) allValidatedNoLock() bool {
-	for _, txStatus := range f.flags {
+	for i, txStatus := range f.flags {
 		if peer.TxValidationCode(txStatus) == peer.TxValidationCode_NOT_VALIDATED {
+			// FIXME: Change to Debug
+			logger.Infof("Still waiting for validation results for block %d, TxIdx [%d]", f.blockNumber, i)
 			return false
 		}
 	}
+	// FIXME: Change to Debug
+	logger.Infof("Block %d is all validated", f.blockNumber)
 	return true
 }
