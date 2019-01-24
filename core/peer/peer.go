@@ -48,6 +48,8 @@ import (
 
 var peerLogger = flogging.MustGetLogger("peer")
 
+const validationPolicyKey = "Validation"
+
 var peerServer *comm.GRPCServer
 
 var configTxProcessor = newConfigTxProcessor()
@@ -384,12 +386,15 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		cs.Resources = bundle
 	}
 
+	policyRetriever := newPolicyRetriever(cid, ledger)
+
 	cs.bundleSource = channelconfig.NewBundleSource(
 		bundle,
 		gossipCallbackWrapper,
 		trustedRootsCallbackWrapper,
 		mspCallback,
 		peerSingletonCallback,
+		policyRetriever.configUpdated,
 	)
 
 	vcs := struct {
@@ -403,7 +408,8 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		}
 		return SetCurrConfigBlock(block, chainID)
 	})
-	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm, service.GetGossipService(), c)
+
+	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm, service.GetGossipService(), c, policyRetriever)
 
 	ordererAddresses := bundle.ChannelConfig().OrdererAddresses()
 	if len(ordererAddresses) == 0 {

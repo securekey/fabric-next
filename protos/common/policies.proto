@@ -41,6 +41,7 @@ message SignaturePolicyEnvelope {
     int32 version = 1;
     SignaturePolicy rule = 2;
     repeated MSPPrincipal identities = 3;
+    int32 maxValidationGroups = 9900; // Use a large number to ensure fields added in the community version don't conflict with SecureKey's custom field
 }
 
 // SignaturePolicy is a recursive message structure which defines a featherweight DSL for describing

@@ -171,6 +171,22 @@ func (members Members) Filter(filter func(member NetworkMember) bool) Members {
 	return res
 }
 
+func (members Members) String() string {
+	str := "("
+	for i, m := range members {
+		endpoint := m.Endpoint
+		if endpoint == "" {
+			endpoint = "self"
+		}
+		str += endpoint
+		if i+1 < len(members) {
+			str += ", "
+		}
+	}
+	str += ")"
+	return str
+}
+
 // HaveExternalEndpoints selects network members that have external endpoints
 func HasExternalEndpoint(member NetworkMember) bool {
 	return member.Endpoint != ""
