@@ -35,6 +35,7 @@ import (
 	"github.com/hyperledger/fabric/core/chaincode/accesscontrol"
 	"github.com/hyperledger/fabric/core/comm"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
+	"github.com/hyperledger/fabric/core/committer/txvalidator/validationpolicy"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/container"
 	"github.com/hyperledger/fabric/core/container/dockercontroller"
@@ -451,6 +452,7 @@ func registerDiscoveryService(peerServer *comm.GRPCServer, polMgr policies.Chann
 	gSup := gossip.NewDiscoverySupport(service.GetGossipService())
 	ccSup := ccsupport.NewDiscoverySupport(lc)
 	ea := endorsement.NewEndorsementAnalyzer(gSup, ccSup, acl, lc)
+	validationpolicy.RegisterValidatorDiscovery(ea)
 	confSup := config.NewDiscoverySupport(config.CurrentConfigBlockGetterFunc(peer.GetCurrConfigBlock))
 	support := discsupport.NewDiscoverySupport(acl, gSup, ea, confSup, acl)
 	svc := discovery.NewService(discovery.Config{

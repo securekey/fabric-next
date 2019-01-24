@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric/common/cauthdsl"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	cc "github.com/hyperledger/fabric/common/config"
 	"github.com/hyperledger/fabric/common/configtx"
@@ -47,6 +49,8 @@ import (
 )
 
 var peerLogger = flogging.MustGetLogger("peer")
+
+const validationPolicyKey = "Validation"
 
 var peerServer *comm.GRPCServer
 
@@ -403,7 +407,13 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		}
 		return SetCurrConfigBlock(block, chainID)
 	})
-	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm, service.GetGossipService(), c)
+
+	validator := txvalidator.NewTxValidator(
+		cid, vcs, sccp, pm, service.GetGossipService(), c,
+		func() ([]byte, []byte, error) {
+			return getValidationPolicies(cid, ledger)
+		},
+	)
 
 	ordererAddresses := bundle.ChannelConfig().OrdererAddresses()
 	if len(ordererAddresses) == 0 {
@@ -438,6 +448,52 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 	}
 
 	return nil
+}
+
+func getValidationPolicies(channelID string, ledger ledger.PeerLedger) (policyBytes, orgPolicyBytes []byte, err error) {
+	mspID, err := mspmgmt.GetLocalMSP().GetIdentifier()
+	if err != nil {
+		return nil, nil, errors.New("error retrieving local MSP ID")
+	}
+
+	// 'org' policy
+	sigPol, err := cauthdsl.FromString(fmt.Sprintf("MAX(0,AND('%s.member'))", mspID))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	orgPolicyBytes, err = proto.Marshal(sigPol)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	conf, err := retrievePersistedChannelConfig(ledger)
+	if err != nil {
+		return nil, nil, errors.New("error retrieving persisted channel config")
+	}
+
+	policyBytes, ok := getValidationPolicyBytes(channelID, conf)
+	if !ok {
+		// FIXME: Change to Debug
+		logger.Infof("[%s] No validation policy specified. Using single-org policy.", channelID)
+		policyBytes = orgPolicyBytes
+	}
+
+	return policyBytes, orgPolicyBytes, nil
+}
+
+func getValidationPolicyBytes(channelID string, conf *common.Config) ([]byte, bool) {
+	appGroup, ok := conf.GetChannelGroup().GetGroups()[channelconfig.ApplicationGroupKey]
+	if !ok {
+		return nil, false
+	}
+
+	policy, ok := appGroup.GetPolicies()[validationPolicyKey]
+	if !ok {
+		return nil, false
+	}
+
+	return policy.GetPolicy().GetValue(), true
 }
 
 // CreateChainFromBlock creates a new chain from config block
