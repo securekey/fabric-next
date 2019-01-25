@@ -303,5 +303,4 @@ func (s *store) Shutdown() {
 
 func (s *store) getLastCommittedBlock() (uint64, error) {
 	return s.lastCommittedBlock, nil
-
 }

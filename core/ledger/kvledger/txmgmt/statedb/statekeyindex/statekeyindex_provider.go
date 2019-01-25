@@ -76,13 +76,3 @@ func (p *LevelStateKeyIndexProvider) Close() {
 	instance = nil
 	lock.Unlock()
 }
-
-// IndexReady implementations provide a channel through which they can be notified to resume work
-// after updates have been applied to it.
-// Eg.: the statecouchdb package uses the statekeyindex to store the new revisions of the CouchDB documents
-// it is saving or updating, but it requires the key's metadata to have been already inserted by the kvLedger
-// in a previous phase.
-type IndexReady interface {
-	// Channel through which notifications can be sent.
-	IndexReadyChan() chan struct{}
-}
