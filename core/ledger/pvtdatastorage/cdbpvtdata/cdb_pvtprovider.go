@@ -8,6 +8,7 @@ package cdbpvtdata
 
 import (
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -33,8 +34,9 @@ func NewProvider() (*Provider, error) {
 }
 
 func newProviderWithDBDef(couchDBDef *couchdb.CouchDBDef) (*Provider, error) {
+	//TODO add metrics provider
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}
@@ -45,7 +47,6 @@ func newProviderWithDBDef(couchDBDef *couchdb.CouchDBDef) (*Provider, error) {
 // OpenStore creates a handle to the private data store for the given ledger ID
 func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
 	pvtDataStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, pvtDataStoreName)
-
 
 	if ledgerconfig.IsCommitter() {
 		return createCommitterPvtDataStore(p.couchInstance, pvtDataStoreDBName)

@@ -15,10 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/pkg/errors"
-	"net"
 )
 
 var expectedDatabaseNamePattern = `[a-z][a-z0-9.$_()+-]*`
@@ -35,7 +34,7 @@ var collectionNameAllowedLength = 50
 
 //CreateCouchInstance creates a CouchDB instance
 func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
-	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool) (*CouchInstance, error) {
+	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool, metricsProvider metrics.Provider) (*CouchInstance, error) {
 
 	couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
 		id, pw, maxRetries, maxRetriesOnStartup, connectionTimeout, createGlobalChangesDB)
@@ -55,9 +54,15 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 
 	//Create the CouchDB instance
 	couchInstance := &CouchInstance{conf: *couchConf, client: client}
-	connectInfo, verifyErr := couchInstance.VerifyCouchConfig()
+	couchInstance.stats = newStats(metricsProvider)
+	connectInfo, retVal, verifyErr := couchInstance.VerifyCouchConfig()
 	if verifyErr != nil {
 		return nil, verifyErr
+	}
+
+	//return an error if the http return value is not 200
+	if retVal.StatusCode != 200 {
+		return nil, errors.Errorf("CouchDB connection error, expecting return code of 200, received %v", retVal.StatusCode)
 	}
 
 	//check the CouchDB version number, return an error if the version is not at least 2.0.0
@@ -68,22 +73,7 @@ func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 
 	return couchInstance, nil
 }
-func createHTTPTransport() (*http.Transport, error) {
-	// Copy of http.DefaultTransport with overrides.
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: ledgerconfig.GetCouchDBKeepAliveTimeout(),
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          ledgerconfig.GetCouchDBMaxIdleConns(),
-		MaxIdleConnsPerHost:   ledgerconfig.GetCouchDBMaxIdleConnsPerHost(),
-		IdleConnTimeout:       ledgerconfig.GetCouchDBIdleConnTimeout(),
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}, nil
-}
+
 //checkCouchDBVersion verifies CouchDB is at least 2.0.0
 func checkCouchDBVersion(version string) error {
 
@@ -99,8 +89,8 @@ func checkCouchDBVersion(version string) error {
 	return nil
 }
 
-// NewCouchDatabase creates a CouchDB database object, but not the underlying database if it does not exist
-func NewCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
+//CreateCouchDatabase creates a CouchDB database object, as well as the underlying database if it does not exist
+func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
 
 	databaseName, err := mapAndValidateDatabaseName(dbName)
 	if err != nil {
@@ -109,16 +99,6 @@ func NewCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDataba
 	}
 
 	couchDBDatabase := CouchDatabase{CouchInstance: couchInstance, DBName: databaseName, IndexWarmCounter: 1}
-	return &couchDBDatabase, nil
-}
-
-//CreateCouchDatabase creates a CouchDB database object, as well as the underlying database if it does not exist
-func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
-
-	couchDBDatabase, err := NewCouchDatabase(couchInstance, dbName)
-	if err != nil {
-		return nil, err
-	}
 
 	// Create CouchDB database upon ledger startup, if it doesn't already exist
 	err = couchDBDatabase.CreateDatabaseIfNotExist()
@@ -127,7 +107,7 @@ func CreateCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDat
 		return nil, err
 	}
 
-	return couchDBDatabase, nil
+	return &couchDBDatabase, nil
 }
 
 //CreateSystemDatabasesIfNotExist - creates the system databases if they do not exist
@@ -180,38 +160,17 @@ func constructCouchDBUrl(connectURL *url.URL, dbName string, pathElements ...str
 // ConstructMetadataDBName truncates the db name to couchdb allowed length to
 // construct the metadataDBName
 func ConstructMetadataDBName(dbName string) string {
-	return ConstructBlockchainDBName(dbName, "")
-}
-
-// ConstructBlockchainDBName truncates the db name to couchdb allowed length to
-// construct the blockchain-related databases.
-func ConstructBlockchainDBName(chainName, dbName string) string {
-	chainDBName := joinSystemDBName(chainName, dbName)
-
-	if len(chainDBName) > maxLength {
-		untruncatedDBName := chainDBName
-
-		// As truncated namespaceDBName is of form 'chainName_escapedNamespace', both chainName
-		// and escapedNamespace need to be truncated to defined allowed length.
-		if len(chainName) > chainNameAllowedLength {
-			// Truncate chainName to chainNameAllowedLength
-			chainName = chainName[:chainNameAllowedLength]
-		}
-
+	if len(dbName) > maxLength {
+		untruncatedDBName := dbName
+		// Truncate the name if the length violates the allowed limit
+		// As the passed dbName is same as chain/channel name, truncate using chainNameAllowedLength
+		dbName = dbName[:chainNameAllowedLength]
 		// For metadataDB (i.e., chain/channel DB), the dbName contains <first 50 chars
 		// (i.e., chainNameAllowedLength) of chainName> + (SHA256 hash of actual chainName)
-		chainDBName = joinSystemDBName(chainName, dbName) + "(" + hex.EncodeToString(util.ComputeSHA256([]byte(untruncatedDBName))) + ")"
+		dbName = dbName + "(" + hex.EncodeToString(util.ComputeSHA256([]byte(untruncatedDBName))) + ")"
 		// 50 chars for dbName + 1 char for ( + 64 chars for sha256 + 1 char for ) = 116 chars
 	}
-	return chainDBName + "_"
-}
-
-func joinSystemDBName(chainName, dbName string) string {
-	systemDBName := chainName
-	if len(dbName) > 0 {
-		systemDBName += "$$" + dbName
-	}
-	return systemDBName
+	return dbName + "_"
 }
 
 // ConstructNamespaceDBName truncates db name to couchdb allowed length to
@@ -311,4 +270,48 @@ func escapeUpperCase(dbName string) string {
 	re := regexp.MustCompile(`([A-Z])`)
 	dbName = re.ReplaceAllString(dbName, "$$"+"$1")
 	return strings.ToLower(dbName)
+}
+
+// ConstructBlockchainDBName truncates the db name to couchdb allowed length to
+// construct the blockchain-related databases.
+func ConstructBlockchainDBName(chainName, dbName string) string {
+	chainDBName := joinSystemDBName(chainName, dbName)
+
+	if len(chainDBName) > maxLength {
+		untruncatedDBName := chainDBName
+
+		// As truncated namespaceDBName is of form 'chainName_escapedNamespace', both chainName
+		// and escapedNamespace need to be truncated to defined allowed length.
+		if len(chainName) > chainNameAllowedLength {
+			// Truncate chainName to chainNameAllowedLength
+			chainName = chainName[:chainNameAllowedLength]
+		}
+
+		// For metadataDB (i.e., chain/channel DB), the dbName contains <first 50 chars
+		// (i.e., chainNameAllowedLength) of chainName> + (SHA256 hash of actual chainName)
+		chainDBName = joinSystemDBName(chainName, dbName) + "(" + hex.EncodeToString(util.ComputeSHA256([]byte(untruncatedDBName))) + ")"
+		// 50 chars for dbName + 1 char for ( + 64 chars for sha256 + 1 char for ) = 116 chars
+	}
+	return chainDBName + "_"
+}
+
+func joinSystemDBName(chainName, dbName string) string {
+	systemDBName := chainName
+	if len(dbName) > 0 {
+		systemDBName += "$$" + dbName
+	}
+	return systemDBName
+}
+
+// NewCouchDatabase creates a CouchDB database object, but not the underlying database if it does not exist
+func NewCouchDatabase(couchInstance *CouchInstance, dbName string) (*CouchDatabase, error) {
+
+	databaseName, err := mapAndValidateDatabaseName(dbName)
+	if err != nil {
+		logger.Errorf("Error during CouchDB CreateDatabaseIfNotExist() for dbName: %s  error: %s\n", dbName, err.Error())
+		return nil, err
+	}
+
+	couchDBDatabase := CouchDatabase{CouchInstance: couchInstance, DBName: databaseName, IndexWarmCounter: 1}
+	return &couchDBDatabase, nil
 }

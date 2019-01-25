@@ -10,8 +10,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"strconv"
+
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
@@ -147,7 +148,7 @@ func expiryEntriesToJSONValue(expiryEntries []*expiryEntry, purgeInterval uint64
 // lookupLastBlock will lookup the last committed block in the pvt store and return it
 // this function query pvt storage to get the last committed block, it may be different than block storage
 func lookupLastBlock(db *couchdb.CouchDatabase) (uint64, bool, error) {
-	info, err := db.GetDatabaseInfo()
+	info, _, err := db.GetDatabaseInfo()
 	if err != nil {
 		return 0, false, err
 	}
@@ -233,7 +234,7 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
     	"skip": %d
 	}`
 
-	results,_, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
+	results, _, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
 	if err != nil {
 		return nil, err
 	}

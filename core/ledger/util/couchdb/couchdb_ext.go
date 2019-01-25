@@ -6,7 +6,6 @@ SPDX-License-Identifier: Apache-2.0
 package couchdb
 
 import (
-	"net/http"
 	"strings"
 	"time"
 
@@ -58,15 +57,12 @@ func (dbclient *CouchDatabase) CreateNewIndexWithRetry(indexdefinition string, d
 
 // Exists determines if the database exists
 func (dbclient *CouchDatabase) Exists() (bool, error) {
-	_, err := dbclient.GetDatabaseInfo()
+	_, couchDBReturn, err := dbclient.GetDatabaseInfo()
 	if err != nil {
-		dbErr, ok := err.(*dbResponseError)
-		if !ok || dbErr.StatusCode != http.StatusNotFound {
+		if couchDBReturn == nil || couchDBReturn.StatusCode != 404 {
 			return false, err
 		}
-		return false, nil
 	}
-
 	return true, nil
 }
 
