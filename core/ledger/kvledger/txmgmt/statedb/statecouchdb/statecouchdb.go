@@ -13,6 +13,7 @@ import (
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
+	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/kvcache"
@@ -43,8 +44,9 @@ type VersionedDBProvider struct {
 func NewVersionedDBProvider(metricsProvider metrics.Provider) (*VersionedDBProvider, error) {
 	logger.Debugf("constructing CouchDB VersionedDBProvider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
+	//TODO add metrics provider
 	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB)
+		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
 	if err != nil {
 		return nil, err
 	}
@@ -151,13 +153,13 @@ func newVersionedDB(couchInstance *couchdb.CouchInstance, dbName string) (*Versi
 	kvCacheProvider := kvcache.NewKVCacheProvider()
 	namespaceDBMap := make(map[string]*couchdb.CouchDatabase)
 	return &VersionedDB{
-		kvCacheProvider:    kvCacheProvider,
-		couchInstance:      couchInstance,
-		metadataDB:         metadataDB,
-		chainName:          chainName,
-		namespaceDBs:       namespaceDBMap,
-		committedDataCache: newVersionCache(),
-		mux:                sync.RWMutex{},
+		kvCacheProvider:        kvCacheProvider,
+		couchInstance:          couchInstance,
+		metadataDB:             metadataDB,
+		chainName:              chainName,
+		namespaceDBs:           namespaceDBMap,
+		committedDataCache:     newVersionCache(),
+		mux:                    sync.RWMutex{},
 		committedWSetDataCache: make(map[uint64]*versionsCache),
 		verWSetCacheLock:       &sync.RWMutex{},
 		lsccStateCache: &lsccStateCache{
