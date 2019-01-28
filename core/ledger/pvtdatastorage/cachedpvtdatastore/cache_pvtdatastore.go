@@ -30,8 +30,8 @@ type cachedPvtDataStore struct {
 }
 
 type pvtPrepareData struct {
-	blockNum uint64
-	pvtData  []*ledger.TxPvtData
+	blockNum       uint64
+	pvtData        []*ledger.TxPvtData
 	missingPvtData ledger.TxMissingPvtDataMap
 }
 
@@ -60,13 +60,13 @@ func (c *cachedPvtDataStore) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 
 // Prepare pvt data in cache and send pvt data to background prepare/commit go routine
 func (c *cachedPvtDataStore) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, pvtMissingDataMap ledger.TxMissingPvtDataMap) error {
-	err := c.pvtDataCache.Prepare(blockNum, pvtData, pvtMissingDataMap )
+	err := c.pvtDataCache.Prepare(blockNum, pvtData, pvtMissingDataMap)
 	if err != nil {
 		return errors.WithMessage(err, "Prepare pvtdata in cache failed")
 	}
 	if blockNum == 0 {
 		c.commitImmediately = true
-		return c.pvtDataStore.Prepare(blockNum, pvtData, pvtMissingDataMap )
+		return c.pvtDataStore.Prepare(blockNum, pvtData, pvtMissingDataMap)
 	}
 	if c.firstExecuteDone {
 		<-c.prepareReadyCh
@@ -178,6 +178,31 @@ func (c *cachedPvtDataStore) HasPendingBatch() (bool, error) {
 
 func (c *cachedPvtDataStore) LastCommittedBlockHeight() (uint64, error) {
 	return c.pvtDataCache.LastCommittedBlockHeight()
+}
+
+func (c *cachedPvtDataStore) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	//TODO
+	return nil, nil
+}
+
+func (c *cachedPvtDataStore) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	//TODO
+	return nil
+}
+
+func (c *cachedPvtDataStore) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	//TODO
+	return nil, nil
+}
+
+func (c *cachedPvtDataStore) ResetLastUpdatedOldBlocksList() error {
+	//TODO
+	return nil
+}
+
+func (c *cachedPvtDataStore) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	//TODO
+	return nil
 }
 
 func (c *cachedPvtDataStore) IsEmpty() (bool, error) {

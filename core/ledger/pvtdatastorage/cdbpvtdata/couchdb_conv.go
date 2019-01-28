@@ -16,6 +16,7 @@ import (
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
+	"github.com/willf/bitset"
 )
 
 const (
@@ -26,6 +27,7 @@ const (
 	purgeBlockNumbersIndexName = "by_purge_block_number"
 	purgeBlockNumbersIndexDoc  = "indexPurgeBlockNumber"
 	dataField                  = "data"
+	missingDataField           = "missingData"
 	expiryField                = "expiry"
 	blockKeyPrefix             = ""
 	blockNumberBase            = 10
@@ -48,18 +50,24 @@ func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry, blockNumber uint64, purgeInterval uint64) (*couchdb.CouchDoc, error) {
+func createBlockCouchDoc(storeEntries *storeEntries, blockNumber uint64, purgeInterval uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 	jsonMap[idField] = blockNumberToKey(blockNumber)
 	jsonMap[purgeIntervalField] = strconv.FormatUint(purgeInterval, 10)
 
-	dataJSON, err := dataEntriesToJSONValue(dataEntries)
+	dataJSON, err := dataEntriesToJSONValue(storeEntries.dataEntries)
 	if err != nil {
 		return nil, err
 	}
 	jsonMap[dataField] = dataJSON
 
-	ei, err := expiryEntriesToJSONValue(expiryEntries, purgeInterval)
+	missingDataEntriesJSON, err := missingDataEntriesToJSONValue(storeEntries.missingDataEntries)
+	if err != nil {
+		return nil, err
+	}
+	jsonMap[missingDataField] = missingDataEntriesJSON
+
+	ei, err := expiryEntriesToJSONValue(storeEntries.expiryEntries, purgeInterval)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +95,23 @@ func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
 	for _, dataEntry := range dataEntries {
 		keyBytes := encodeDataKey(dataEntry.key)
 		valBytes, err := encodeDataValue(dataEntry.value)
+		if err != nil {
+			return nil, err
+		}
+
+		keyBytesHex := hex.EncodeToString(keyBytes)
+		data[keyBytesHex] = valBytes
+	}
+
+	return data, nil
+}
+
+func missingDataEntriesToJSONValue(missingDataEntries map[missingDataKey]*bitset.BitSet) (jsonValue, error) {
+	data := make(jsonValue)
+
+	for k, v := range missingDataEntries {
+		keyBytes := encodeMissingDataKey(&k)
+		valBytes, err := encodeMissingDataValue(v)
 		if err != nil {
 			return nil, err
 		}

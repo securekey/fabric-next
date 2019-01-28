@@ -56,17 +56,17 @@ func (s *store) initState() error {
 	return nil
 }
 
-func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
+func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
 	if s.pendingDocs != nil {
 		return errors.New("previous commit is pending")
 	}
 
-	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
+	storeEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy, missingPvtData)
 	if err != nil {
 		return err
 	}
 
-	blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
+	blockDoc, err := createBlockCouchDoc(storeEntries, blockNum, s.purgeInterval)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,8 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 	for _, expiryKey := range expiryEntries {
 		expiryBytesStr := hex.EncodeToString(encodeExpiryKey(expiryKey.key))
 
-		dataKeys := deriveDataKeys(expiryKey)
+		//TODO delete missing data keys
+		dataKeys, _ := deriveKeys(expiryKey)
 		allPurged := true
 		for _, dataKey := range dataKeys {
 			keyBytesStr := hex.EncodeToString(encodeDataKey(dataKey))
@@ -157,7 +158,6 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 				allPurged = false
 			}
 		}
-
 		if allPurged {
 			delete(blockPvtData.Expiry, expiryBytesStr)
 			logger.Debugf("purge: deleted expiry key [%s]", expiryBytesStr)

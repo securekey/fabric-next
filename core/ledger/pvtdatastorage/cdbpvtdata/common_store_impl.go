@@ -17,9 +17,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
-	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 	"github.com/pkg/errors"
+	"github.com/willf/bitset"
 )
 
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
@@ -43,7 +43,7 @@ type dataEntry struct {
 
 type expiryEntry struct {
 	key   *expiryKey
-	value *pvtmetadata.ExpiryData
+	value *ExpiryData
 }
 
 type expiryKey struct {
@@ -51,11 +51,27 @@ type expiryKey struct {
 	committingBlk uint64
 }
 
-type dataKey struct {
-	blkNum   uint64
-	txNum    uint64
+type nsCollBlk struct {
 	ns, coll string
-	purge    bool
+	blkNum   uint64
+}
+
+type dataKey struct {
+	nsCollBlk
+	txNum uint64
+	purge bool
+}
+
+type missingDataKey struct {
+	nsCollBlk
+	isEligible bool
+	purge      bool
+}
+
+type storeEntries struct {
+	dataEntries        []*dataEntry
+	expiryEntries      []*expiryEntry
+	missingDataEntries map[missingDataKey]*bitset.BitSet
 }
 
 func (s *store) nextBlockNum() uint64 {
@@ -75,8 +91,8 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, data ledge
 		panic("calling Prepare on a peer that is not a committer")
 	}
 
-/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_duration")
-	defer stopWatch()*/
+	/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_duration")
+		defer stopWatch()*/
 
 	if s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call.
@@ -87,7 +103,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, data ledge
 		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Expected block number=%d, recived block number=%d", expectedBlockNum, blockNum))
 	}
 
-	err := s.prepareDB(blockNum, pvtData)
+	err := s.prepareDB(blockNum, pvtData, data)
 	if err != nil {
 		return err
 	}
@@ -103,8 +119,8 @@ func (s *store) Commit() error {
 		panic("calling Commit on a peer that is not a committer")
 	}
 
-/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_duration")
-	defer stopWatch()*/
+	/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_duration")
+		defer stopWatch()*/
 
 	if !s.batchPending {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to commit")
@@ -126,8 +142,8 @@ func (s *store) Commit() error {
 }
 
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
-/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_initLastCommittedBlock_duration")
-	defer stopWatch()*/
+	/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_initLastCommittedBlock_duration")
+		defer stopWatch()*/
 	if !(s.isEmpty && !s.batchPending) {
 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
 	}
@@ -161,8 +177,8 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 }
 
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_getPvtDataByBlockNum_duration")
-	defer stopWatch()*/
+	/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_getPvtDataByBlockNum_duration")
+		defer stopWatch()*/
 
 	logger.Debugf("Get private data for block [%d] from DB [%s], filter=%#v", blockNum, s.db.DBName, filter)
 	if s.isEmpty {
@@ -213,7 +229,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 			return v11RetrievePvtdata(results, filter)
 		}
 		dataKey := decodeDatakey(dataKeyBytes)
-		expired, err := isExpired(dataKey, s.btlPolicy, lastCommittedBlock)
+		expired, err := isExpired(dataKey.nsCollBlk, s.btlPolicy, lastCommittedBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -361,24 +377,30 @@ func (s *store) getLastCommittedBlockFromPvtStore() (uint64, error) {
 	logger.Debugf("Returning lastCommittedBlock %d for [%s]", lastCommittedBlock, s.db.DBName)
 	return lastCommittedBlock + 1, nil
 }
+
 // GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
 // most recent `maxBlock` blocks which miss at least a private data of a eligible collection.
 func (s *store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
-	return s.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+	//TODO
+	return nil, nil
 }
 
-func (s *store) CommitPvtDataOfOldBlocks (blocksPvtData map[uint64][]*ledger.TxPvtData) error {
-	return s.CommitPvtDataOfOldBlocks(blocksPvtData)
-	}
+func (s *store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	//TODO
+	return nil
+}
 
-func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error){
-	return s.GetLastUpdatedOldBlocksPvtData()
+func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	//TODO
+	return nil, nil
 }
 
 func (s *store) ResetLastUpdatedOldBlocksList() error {
-	return s.ResetLastUpdatedOldBlocksList()
+	//TODO
+	return nil
 }
 
-func (s *store)  ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
-	return s.ProcessCollsEligibilityEnabled(committingBlk,nsCollMap)
+func (s *store) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	//TODO
+	return nil
 }
