@@ -29,8 +29,8 @@ type cachedPvtDataStore struct {
 }
 
 type pvtPrepareData struct {
-	blockNum uint64
-	pvtData  []*ledger.TxPvtData
+	blockNum       uint64
+	pvtData        []*ledger.TxPvtData
 	missingPvtData ledger.TxMissingPvtDataMap
 }
 
@@ -209,6 +209,31 @@ func (c *cachedPvtDataStore) Shutdown() {
 	<-c.writerClosedCh
 	c.pvtDataCache.Shutdown()
 	c.pvtDataStore.Shutdown()
+}
+
+func (c *cachedPvtDataStore) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	//TODO
+	return nil, nil
+}
+
+func (c *cachedPvtDataStore) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	//TODO
+	return nil
+}
+
+func (c *cachedPvtDataStore) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	//TODO
+	return nil, nil
+}
+
+func (c *cachedPvtDataStore) ResetLastUpdatedOldBlocksList() error {
+	//TODO
+	return nil
+}
+
+func (c *cachedPvtDataStore) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	//TODO
+	return nil
 }
 
 func (c *cachedPvtDataStore) waitForPvt(ctx context.Context, blockNum uint64) {
