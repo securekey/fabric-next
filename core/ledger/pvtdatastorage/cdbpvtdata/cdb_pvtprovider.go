@@ -8,6 +8,7 @@ package cdbpvtdata
 
 import (
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -21,7 +22,8 @@ const (
 )
 
 type Provider struct {
-	couchInstance *couchdb.CouchInstance
+	couchInstance            *couchdb.CouchInstance
+	missingDataIndexProvider *leveldbhelper.Provider
 }
 
 // NewProvider instantiates a private data storage provider backed by CouchDB
@@ -39,22 +41,25 @@ func newProviderWithDBDef(couchDBDef *couchdb.CouchDBDef) (*Provider, error) {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}
 
-	return &Provider{couchInstance}, nil
+	dbPath := ledgerconfig.GetPvtdataStorePath()
+	missingDataIndexProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
+
+	return &Provider{couchInstance, missingDataIndexProvider}, nil
 }
 
 // OpenStore creates a handle to the private data store for the given ledger ID
 func (p *Provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
 	pvtDataStoreDBName := couchdb.ConstructBlockchainDBName(ledgerid, pvtDataStoreName)
-
+	missingDataIndexDB := p.missingDataIndexProvider.GetDBHandle(ledgerid)
 
 	if ledgerconfig.IsCommitter() {
-		return createCommitterPvtDataStore(p.couchInstance, pvtDataStoreDBName)
+		return createCommitterPvtDataStore(p.couchInstance, pvtDataStoreDBName, missingDataIndexDB)
 	}
 
-	return createPvtDataStore(p.couchInstance, pvtDataStoreDBName)
+	return createPvtDataStore(p.couchInstance, pvtDataStoreDBName, missingDataIndexDB)
 }
 
-func createPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string) (pvtdatastorage.Store, error) {
+func createPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string, missingDataIndexDB *leveldbhelper.DBHandle) (pvtdatastorage.Store, error) {
 	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
@@ -74,10 +79,10 @@ func createPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string) (pv
 	if !indexExists {
 		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
 	}
-	return newStore(db)
+	return newStore(db, missingDataIndexDB)
 }
 
-func createCommitterPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string) (pvtdatastorage.Store, error) {
+func createCommitterPvtDataStore(couchInstance *couchdb.CouchInstance, dbName string, missingDataIndexDB *leveldbhelper.DBHandle) (pvtdatastorage.Store, error) {
 	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
 	if err != nil {
 		return nil, err
@@ -88,7 +93,7 @@ func createCommitterPvtDataStore(couchInstance *couchdb.CouchInstance, dbName st
 		return nil, err
 	}
 
-	return newStore(db)
+	return newStore(db, missingDataIndexDB)
 }
 
 func createPvtStoreIndices(db *couchdb.CouchDatabase) error {
