@@ -40,14 +40,14 @@ func newStore(db *couchdb.CouchDatabase) (*store, error) {
 	return &s, nil
 }
 
-func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
+func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
+	storeEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy, missingPvtData)
 	if err != nil {
 		return err
 	}
 
-	if len(dataEntries) > 0 || len(expiryEntries) > 0 {
-		blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
+	if len(storeEntries.dataEntries) > 0 || len(storeEntries.missingDataEntries) > 0 || len(storeEntries.expiryEntries) > 0 {
+		blockDoc, err := createBlockCouchDoc(storeEntries, blockNum, s.purgeInterval)
 		if err != nil {
 			return err
 		}
@@ -134,8 +134,8 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 	logger.Debugf("purge: processing [%d] expiry entries for block [%d]", len(expiryEntries), blockNumber)
 	for _, expiryKey := range expiryEntries {
 		expiryBytesStr := hex.EncodeToString(encodeExpiryKey(expiryKey.key))
-
-		dataKeys := deriveDataKeys(expiryKey)
+		//TODO delete missing data keys
+		dataKeys, _ := deriveKeys(expiryKey)
 		allPurged := true
 		for _, dataKey := range dataKeys {
 			keyBytesStr := hex.EncodeToString(encodeDataKey(dataKey))

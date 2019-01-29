@@ -7,23 +7,31 @@ package cdbpvtdata
 import (
 	"math"
 
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
-
 	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+	"github.com/willf/bitset"
 )
 
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
-func prepareStoreEntries(blockNum uint64, pvtdata []*ledger.TxPvtData, btlPolicy pvtdatapolicy.BTLPolicy) ([]*dataEntry, []*expiryEntry, error) {
-	dataEntries := prepareDataEntries(blockNum, pvtdata)
-	expiryEntries, err := prepareExpiryEntries(blockNum, dataEntries, btlPolicy)
+func prepareStoreEntries(blockNum uint64, pvtData []*ledger.TxPvtData, btlPolicy pvtdatapolicy.BTLPolicy,
+	missingPvtData ledger.TxMissingPvtDataMap) (*storeEntries, error) {
+	dataEntries := prepareDataEntries(blockNum, pvtData)
+
+	missingDataEntries := prepareMissingDataEntries(blockNum, missingPvtData)
+
+	expiryEntries, err := prepareExpiryEntries(blockNum, dataEntries, missingDataEntries, btlPolicy)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return dataEntries, expiryEntries, nil
+
+	return &storeEntries{
+		dataEntries:        dataEntries,
+		expiryEntries:      expiryEntries,
+		missingDataEntries: missingDataEntries}, nil
 }
+
 func prepareDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) []*dataEntry {
 	var dataEntries []*dataEntry
 	for _, txPvtdata := range pvtData {
@@ -32,7 +40,7 @@ func prepareDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) []*dataEnt
 				txnum := txPvtdata.SeqInBlock
 				ns := nsPvtdata.Namespace
 				coll := collPvtdata.CollectionName
-				dataKey := &dataKey{blockNum, txnum, ns, coll, getPurgeFlag(coll)}
+				dataKey := &dataKey{nsCollBlk: nsCollBlk{ns, coll, blockNum}, txNum: txnum}
 				dataEntries = append(dataEntries, &dataEntry{key: dataKey, value: collPvtdata})
 			}
 		}
@@ -40,65 +48,129 @@ func prepareDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) []*dataEnt
 	return dataEntries
 }
 
-func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, btlPolicy pvtdatapolicy.BTLPolicy) ([]*expiryEntry, error) {
-	mapByExpiringBlk := make(map[uint64]*pvtmetadata.ExpiryData)
-	for _, dataEntry := range dataEntries {
-		expiringBlk, err := btlPolicy.GetExpiringBlock(dataEntry.key.ns, dataEntry.key.coll, dataEntry.key.blkNum)
-		if err != nil {
-			return nil, err
+func prepareMissingDataEntries(committingBlk uint64, missingPvtData ledger.TxMissingPvtDataMap) map[missingDataKey]*bitset.BitSet {
+	missingDataEntries := make(map[missingDataKey]*bitset.BitSet)
+
+	for txNum, missingData := range missingPvtData {
+		for _, nsColl := range missingData {
+			key := missingDataKey{nsCollBlk: nsCollBlk{nsColl.Namespace, nsColl.Collection, committingBlk},
+				isEligible: nsColl.IsEligible}
+
+			if _, ok := missingDataEntries[key]; !ok {
+				missingDataEntries[key] = &bitset.BitSet{}
+			}
+			bitmap := missingDataEntries[key]
+
+			bitmap.Set(uint(txNum))
 		}
-		if neverExpires(expiringBlk) {
-			continue
-		}
-		expiryData, ok := mapByExpiringBlk[expiringBlk]
-		if !ok {
-			expiryData = pvtmetadata.NewExpiryData()
-			mapByExpiringBlk[expiringBlk] = expiryData
-		}
-		expiryData.Add(dataEntry.key.ns, dataEntry.key.coll, dataEntry.key.txNum)
 	}
+
+	return missingDataEntries
+}
+
+// prepareExpiryEntries returns expiry entries for both private data which is present in the committingBlk
+// and missing private.
+func prepareExpiryEntries(committingBlk uint64, dataEntries []*dataEntry, missingDataEntries map[missingDataKey]*bitset.BitSet,
+	btlPolicy pvtdatapolicy.BTLPolicy) ([]*expiryEntry, error) {
+
 	var expiryEntries []*expiryEntry
+	mapByExpiringBlk := make(map[uint64]*ExpiryData)
+
+	// 1. prepare expiryData for non-missing data
+	for _, dataEntry := range dataEntries {
+		prepareExpiryEntriesForPresentData(mapByExpiringBlk, dataEntry.key, btlPolicy)
+	}
+
+	// 2. prepare expiryData for missing data
+	for missingDataKey := range missingDataEntries {
+		prepareExpiryEntriesForMissingData(mapByExpiringBlk, &missingDataKey, btlPolicy)
+	}
+
 	for expiryBlk, expiryData := range mapByExpiringBlk {
 		expiryKey := &expiryKey{expiringBlk: expiryBlk, committingBlk: committingBlk}
 		expiryEntries = append(expiryEntries, &expiryEntry{key: expiryKey, value: expiryData})
 	}
+
 	return expiryEntries, nil
 }
 
-func getPurgeFlag(coll string) bool {
-	return !stringInSlice(coll, ledgerconfig.GetPvtdataSkipPurgeForCollections())
-}
-
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
+// prepareExpiryDataForPresentData creates expiryData for non-missing pvt data
+func prepareExpiryEntriesForPresentData(mapByExpiringBlk map[uint64]*ExpiryData, dataKey *dataKey, btlPolicy pvtdatapolicy.BTLPolicy) error {
+	expiringBlk, err := btlPolicy.GetExpiringBlock(dataKey.ns, dataKey.coll, dataKey.blkNum)
+	if err != nil {
+		return err
 	}
-	return false
+	if neverExpires(expiringBlk) {
+		return nil
+	}
+
+	expiryData := getOrCreateExpiryData(mapByExpiringBlk, expiringBlk)
+
+	expiryData.addPresentData(dataKey.ns, dataKey.coll, dataKey.txNum)
+	return nil
 }
 
-func deriveDataKeys(expiryEntry *expiryEntry) []*dataKey {
-	var dataKeys []*dataKey
+// prepareExpiryDataForMissingData creates expiryData for missing pvt data
+func prepareExpiryEntriesForMissingData(mapByExpiringBlk map[uint64]*ExpiryData, missingKey *missingDataKey, btlPolicy pvtdatapolicy.BTLPolicy) error {
+	expiringBlk, err := btlPolicy.GetExpiringBlock(missingKey.ns, missingKey.coll, missingKey.blkNum)
+	if err != nil {
+		return err
+	}
+	if neverExpires(expiringBlk) {
+		return nil
+	}
+
+	expiryData := getOrCreateExpiryData(mapByExpiringBlk, expiringBlk)
+
+	expiryData.addMissingData(missingKey.ns, missingKey.coll)
+	return nil
+}
+
+func getOrCreateExpiryData(mapByExpiringBlk map[uint64]*ExpiryData, expiringBlk uint64) *ExpiryData {
+	expiryData, ok := mapByExpiringBlk[expiringBlk]
+	if !ok {
+		expiryData = newExpiryData()
+		mapByExpiringBlk[expiringBlk] = expiryData
+	}
+	return expiryData
+}
+
+// deriveKeys constructs dataKeys and missingDataKey from an expiryEntry
+func deriveKeys(expiryEntry *expiryEntry) (dataKeys []*dataKey, missingDataKeys []*missingDataKey) {
 	for ns, colls := range expiryEntry.value.Map {
+		// 1. constructs dataKeys of expired existing pvt data
 		for coll, txNums := range colls.Map {
 			for _, txNum := range txNums.List {
-				dataKeys = append(dataKeys, &dataKey{expiryEntry.key.committingBlk, txNum, ns, coll, getPurgeFlag(coll)})
+				dataKeys = append(dataKeys,
+					&dataKey{nsCollBlk{ns, coll, expiryEntry.key.committingBlk}, txNum, getPurgeFlag(coll)})
 			}
 		}
+		// 2. constructs missingDataKeys of expired missing pvt data
+		for coll := range colls.MissingDataMap {
+			// one key for eligible entries and another for ieligible entries
+			missingDataKeys = append(missingDataKeys,
+				&missingDataKey{nsCollBlk: nsCollBlk{ns, coll, expiryEntry.key.committingBlk}, isEligible: true})
+			missingDataKeys = append(missingDataKeys,
+				&missingDataKey{nsCollBlk: nsCollBlk{ns, coll, expiryEntry.key.committingBlk}, isEligible: false})
+
+		}
 	}
-	return dataKeys
+	return
 }
+
 func passesFilter(dataKey *dataKey, filter ledger.PvtNsCollFilter) bool {
 	return filter == nil || filter.Has(dataKey.ns, dataKey.coll)
 }
-func isExpired(dataKey *dataKey, btl pvtdatapolicy.BTLPolicy, latestBlkNum uint64) (bool, error) {
-	expiringBlk, err := btl.GetExpiringBlock(dataKey.ns, dataKey.coll, dataKey.blkNum)
+
+func isExpired(key nsCollBlk, btl pvtdatapolicy.BTLPolicy, latestBlkNum uint64) (bool, error) {
+	expiringBlk, err := btl.GetExpiringBlock(key.ns, key.coll, key.blkNum)
 	if err != nil {
 		return false, err
 	}
+
 	return latestBlkNum >= expiringBlk, nil
 }
+
 func neverExpires(expiringBlkNum uint64) bool {
 	return expiringBlkNum == math.MaxUint64
 }
@@ -113,12 +185,14 @@ type txPvtdataAssembler struct {
 func newTxPvtdataAssembler(blockNum, txNum uint64) *txPvtdataAssembler {
 	return &txPvtdataAssembler{blockNum, txNum, &rwset.TxPvtReadWriteSet{}, nil, true}
 }
+
 func (a *txPvtdataAssembler) add(ns string, collPvtWset *rwset.CollectionPvtReadWriteSet) {
 	// start a NsWset
 	if a.firstCall {
 		a.currentNsWSet = &rwset.NsPvtReadWriteSet{Namespace: ns}
 		a.firstCall = false
 	}
+
 	// if a new ns started, add the existing NsWset to TxWset and start a new one
 	if a.currentNsWSet.Namespace != ns {
 		a.txWset.NsPvtRwset = append(a.txWset.NsPvtRwset, a.currentNsWSet)
@@ -127,13 +201,28 @@ func (a *txPvtdataAssembler) add(ns string, collPvtWset *rwset.CollectionPvtRead
 	// add the collWset to the current NsWset
 	a.currentNsWSet.CollectionPvtRwset = append(a.currentNsWSet.CollectionPvtRwset, collPvtWset)
 }
+
 func (a *txPvtdataAssembler) done() {
 	if a.currentNsWSet != nil {
 		a.txWset.NsPvtRwset = append(a.txWset.NsPvtRwset, a.currentNsWSet)
 	}
 	a.currentNsWSet = nil
 }
+
 func (a *txPvtdataAssembler) getTxPvtdata() *ledger.TxPvtData {
 	a.done()
 	return &ledger.TxPvtData{SeqInBlock: a.txNum, WriteSet: a.txWset}
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+func getPurgeFlag(coll string) bool {
+	return !stringInSlice(coll, ledgerconfig.GetPvtdataSkipPurgeForCollections())
 }
