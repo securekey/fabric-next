@@ -17,6 +17,7 @@ import (
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
+	"github.com/willf/bitset"
 )
 
 const (
@@ -27,10 +28,10 @@ const (
 	purgeBlockNumberIndexName = "by_purge_block_number"
 	purgeBlockNumberIndexDoc  = "indexPurgeBlockNumber"
 	dataField                 = "data"
+	missingDataField          = "missingData"
 	expiryField               = "expiry"
 	blockKeyPrefix            = ""
 	blockNumberBase           = 10
-	numMetaDocs               = 1
 )
 
 const purgeBlockNumberIndexDef = `
@@ -49,18 +50,24 @@ func (v jsonValue) toBytes() ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func createBlockCouchDoc(dataEntries []*dataEntry, expiryEntries []*expiryEntry, blockNumber uint64, purgeInterval uint64) (*couchdb.CouchDoc, error) {
+func createBlockCouchDoc(storeEntries *storeEntries, blockNumber uint64, purgeInterval uint64) (*couchdb.CouchDoc, error) {
 	jsonMap := make(jsonValue)
 	jsonMap[idField] = blockNumberToKey(blockNumber)
 	jsonMap[purgeIntervalField] = strconv.FormatUint(purgeInterval, 10)
 
-	dataJSON, err := dataEntriesToJSONValue(dataEntries)
+	dataJSON, err := dataEntriesToJSONValue(storeEntries.dataEntries)
 	if err != nil {
 		return nil, err
 	}
 	jsonMap[dataField] = dataJSON
 
-	ei, err := expiryEntriesToJSONValue(expiryEntries)
+	missingDataEntriesJSON, err := missingDataEntriesToJSONValue(storeEntries.missingDataEntries)
+	if err != nil {
+		return nil, err
+	}
+	jsonMap[missingDataField] = missingDataEntriesJSON
+
+	ei, err := expiryEntriesToJSONValue(storeEntries.expiryEntries)
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +142,23 @@ func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
 	return data, nil
 }
 
+func missingDataEntriesToJSONValue(missingDataEntries map[missingDataKey]*bitset.BitSet) (jsonValue, error) {
+	data := make(jsonValue)
+
+	for k, v := range missingDataEntries {
+		keyBytes := encodeMissingDataKey(&k)
+		valBytes, err := encodeMissingDataValue(v)
+		if err != nil {
+			return nil, err
+		}
+
+		keyBytesHex := hex.EncodeToString(keyBytes)
+		data[keyBytesHex] = valBytes
+	}
+
+	return data, nil
+}
+
 type expiryInfo struct {
 	json       jsonValue
 	expiryKeys []string
@@ -177,6 +201,7 @@ type blockPvtDataResponse struct {
 	PurgeBlock    string            `json:"purge_block_number"`
 	ExpiryBlocks  []string          `json:"expiry_block_numbers"`
 	Data          map[string][]byte `json:"data"`
+	MissingData   map[string][]byte `json:"missingData"`
 	Expiry        map[string][]byte `json:"expiry"`
 	Deleted       bool              `json:"_deleted"`
 }
@@ -200,6 +225,32 @@ func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataRe
 	return &blockPvtData, nil
 }
 
+func retrieveRangeBlockPvtData(db *couchdb.CouchDatabase, startKey, endKey string) ([]*blockPvtDataResponse, error) {
+	limit := ledgerconfig.GetInternalQueryLimit()
+	results, _, err := db.ReadDocRange(startKey, endKey, int32(limit))
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Debugf("Number of blocks that meet purge criteria: %d", len(results))
+
+	if len(results) == 0 {
+		return nil, NewErrNotFoundInIndex()
+	}
+
+	var responses []*blockPvtDataResponse
+	for _, result := range results {
+		var blockPvtData blockPvtDataResponse
+		err = json.Unmarshal(result.Value, &blockPvtData)
+		if err != nil {
+			return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
+		}
+		responses = append(responses, &blockPvtData)
+	}
+
+	return responses, nil
+}
+
 func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtDataResponse, error) {
 
 	purgeInterval := ledgerconfig.GetPvtdataStorePurgeInterval()
@@ -220,7 +271,7 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
     	"skip": %d
 	}`
 
-	results,_, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
+	results, _, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
 	if err != nil {
 		return nil, err
 	}
