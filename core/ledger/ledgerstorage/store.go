@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/fsblkstorage"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/ldbblkindex"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage/memblkcache"
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
@@ -109,7 +110,9 @@ func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
 		if err != nil {
 			return nil, err
 		}
-		return cachedpvtdatastore.NewProvider(dbPvtData, mempvtdatacache.NewProvider(pvtDataCacheSize)), nil
+		dbPath := ledgerconfig.GetPvtdataStorePath()
+		missingDataIndexProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
+		return cachedpvtdatastore.NewProvider(dbPvtData, mempvtdatacache.NewProvider(pvtDataCacheSize), missingDataIndexProvider), nil
 	}
 	return nil, errors.New("private data storage provider creation failed due to unknown configuration")
 
