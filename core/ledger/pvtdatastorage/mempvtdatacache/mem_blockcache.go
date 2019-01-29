@@ -8,6 +8,7 @@ package mempvtdatacache
 
 import (
 	"encoding/hex"
+	"errors"
 	"sort"
 
 	"github.com/golang/groupcache/lru"
@@ -82,7 +83,7 @@ func (c *pvtDataCache) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	c.btlPolicy = btlPolicy
 }
 
-func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData,missingPvtData ledger.TxMissingPvtDataMap) error {
+func (c *pvtDataCache) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if c.batchPending {
@@ -239,24 +240,36 @@ func (c *pvtDataCache) Rollback(blockNum uint64) error {
 // Shutdown closes the storage instance
 func (c *pvtDataCache) Shutdown() {
 }
+
 // GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
 // most recent `maxBlock` blocks which miss at least a private data of a eligible collection.
 func (c *pvtDataCache) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
-	return c.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+	return nil, errors.New("GetMissingPvtDataInfoForMostRecentBlocks not supported in mem pvt store")
+
 }
-func (c *pvtDataCache) CommitPvtDataOfOldBlocks (blocksPvtData map[uint64][]*ledger.TxPvtData) error {
-	return c.CommitPvtDataOfOldBlocks(blocksPvtData)
+func (c *pvtDataCache) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	for blockNum, pvtData := range blocksPvtData {
+		pvtDataEntries, err := preparePvtDataEntries(blockNum, pvtData)
+		if err != nil {
+			return err
+		}
+		c.pvtData.Add(blockNum, pvtDataEntries)
+	}
+	return nil
 }
 
-func (c *pvtDataCache) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error){
-	return c.GetLastUpdatedOldBlocksPvtData()
+func (c *pvtDataCache) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	return nil, errors.New("GetLastUpdatedOldBlocksPvtData not supported in mem pvt store")
+
 }
 
 func (c *pvtDataCache) ResetLastUpdatedOldBlocksList() error {
-	return c.ResetLastUpdatedOldBlocksList()
+	return errors.New("ResetLastUpdatedOldBlocksList not supported in mem pvt store")
+
 }
-func (c *pvtDataCache)  ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
-	return c.ProcessCollsEligibilityEnabled(committingBlk,nsCollMap)
+func (c *pvtDataCache) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	return errors.New("ProcessCollsEligibilityEnabled not supported in mem pvt store")
+
 }
 func preparePvtDataEntries(blockNum uint64, pvtData []*ledger.TxPvtData) (map[string][]byte, error) {
 	data := make(map[string][]byte)

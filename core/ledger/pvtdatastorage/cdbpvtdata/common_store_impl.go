@@ -13,13 +13,18 @@ import (
 
 	"encoding/hex"
 
+	"sync/atomic"
+
+	"time"
+
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
-	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage/pvtmetadata"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 	"github.com/pkg/errors"
+	"github.com/willf/bitset"
 )
 
 // TODO: This file contains code copied from the base private data store. Both of these packages should be refactored.
@@ -30,6 +35,29 @@ type commonStore struct {
 	isEmpty            bool
 	lastCommittedBlock uint64
 	purgerLock         sync.Mutex
+	// After committing the pvtdata of old blocks,
+	// the `isLastUpdatedOldBlocksSet` is set to true.
+	// Once the stateDB is updated with these pvtdata,
+	// the `isLastUpdatedOldBlocksSet` is set to false.
+	// isLastUpdatedOldBlocksSet is mainly used during the
+	// recovery process. During the peer startup, if the
+	// isLastUpdatedOldBlocksSet is set to true, the pvtdata
+	// in the stateDB needs to be updated before finishing the
+	// recovery operation.
+	isLastUpdatedOldBlocksSet bool
+}
+
+// lastUpdatedOldBlocksList keeps the list of last updated blocks
+// and is stored as the value of lastUpdatedOldBlocksKey (defined in kv_encoding.go)
+type lastUpdatedOldBlocksList []uint64
+
+type entriesForPvtDataOfOldBlocks struct {
+	// for each <ns, coll, blkNum, txNum>, store the dataEntry, i.e., pvtData
+	dataEntries map[dataKey]*rwset.CollectionPvtReadWriteSet
+	// store the retrieved (& updated) expiryData in expiryEntries
+	expiryEntries map[expiryKey]*ExpiryData
+	// for each <ns, coll, blkNum>, store the retrieved (& updated) bitmap in the missingDataEntries
+	missingDataEntries map[nsCollBlk]*bitset.BitSet
 }
 
 type blkTranNumKey []byte
@@ -41,7 +69,7 @@ type dataEntry struct {
 
 type expiryEntry struct {
 	key   *expiryKey
-	value *pvtmetadata.ExpiryData
+	value *ExpiryData
 }
 
 type expiryKey struct {
@@ -49,27 +77,43 @@ type expiryKey struct {
 	committingBlk uint64
 }
 
-type dataKey struct {
-	blkNum   uint64
-	txNum    uint64
+type nsCollBlk struct {
 	ns, coll string
-	purge    bool
+	blkNum   uint64
+}
+
+type missingDataKey struct {
+	nsCollBlk
+	isEligible bool
+}
+
+type dataKey struct {
+	nsCollBlk
+	txNum uint64
+	//TODO set purge value
+	purge bool
+}
+
+type storeEntries struct {
+	dataEntries        []*dataEntry
+	expiryEntries      []*expiryEntry
+	missingDataEntries map[missingDataKey]*bitset.BitSet
 }
 
 func (s *store) Init(btlPolicy pvtdatapolicy.BTLPolicy) {
 	s.btlPolicy = btlPolicy
 }
 
-func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, data ledger.TxMissingPvtDataMap) error {
+func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
 	//TODO:TxMissingPvtDataMap to handle
 	if !ledgerconfig.IsCommitter() {
 		panic("calling Prepare on a peer that is not a committer")
 	}
 
-/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_duration")
-	defer stopWatch()*/
+	/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_prepare_duration")
+		defer stopWatch()*/
 
-	if s.checkPendingPvt(blockNum) {
+	if s.checkPendingPvtData(blockNum) {
 		return pvtdatastorage.NewErrIllegalCall(`A pending batch exists as as result of last invoke to "Prepare" call. Invoke "Commit" or "Rollback" on the pending batch before invoking "Prepare" function`)
 	}
 
@@ -77,7 +121,7 @@ func (s *store) Prepare(blockNum uint64, pvtData []*ledger.TxPvtData, data ledge
 		return pvtdatastorage.NewErrIllegalArgs(fmt.Sprintf("Last committed block number in pvt store=%d is greater than recived block number=%d. Cannot prepare an old block # for commit.", s.lastCommittedBlock, blockNum))
 	}
 
-	err := s.prepareDB(blockNum, pvtData)
+	err := s.prepareDB(blockNum, pvtData, missingPvtData)
 	if err != nil {
 		return err
 	}
@@ -95,7 +139,7 @@ func (s *store) Commit(blockNum uint64) error {
 	/*stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_commit_duration")
 	defer stopWatch()*/
 
-	if !s.checkPendingPvt(blockNum) {
+	if !s.checkPendingPvtData(blockNum) {
 		logger.Debugf("There are no committed private data for block [%d] - setting lastCommittedBlock, isEmpty=false and calling performPurgeIfScheduled", blockNum)
 		s.lastCommittedBlock = blockNum
 		s.isEmpty = false
@@ -118,7 +162,7 @@ func (s *store) Commit(blockNum uint64) error {
 func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 	/*stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_initLastCommittedBlock_duration")
 	defer stopWatch()*/
-	if !s.isEmpty || len(s.pendingPvtDocs) != 0 {
+	if !s.isEmpty || len(s.pendingPvtData) != 0 {
 		return pvtdatastorage.NewErrIllegalCall("The private data store is not empty. InitLastCommittedBlock() function call is not allowed")
 	}
 	s.isEmpty = false
@@ -128,8 +172,8 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
 }
 
 func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
-/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_getPvtDataByBlockNum_duration")
-	defer stopWatch()*/
+	/*	stopWatch := metrics.StopWatch("pvtdatastorage_couchdb_getPvtDataByBlockNum_duration")
+		defer stopWatch()*/
 
 	logger.Debugf("Get private data for block [%d] from DB [%s], filter=%#v", blockNum, s.db.DBName, filter)
 	if s.isEmpty {
@@ -164,7 +208,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 	firstItr := true
 
 	var sortedKeys []string
-	for key, _ := range results {
+	for key := range results {
 		sortedKeys = append(sortedKeys, key)
 	}
 	sort.Strings(sortedKeys)
@@ -180,7 +224,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 			return v11RetrievePvtdata(results, filter)
 		}
 		dataKey := decodeDatakey(dataKeyBytes)
-		expired, err := isExpired(dataKey, s.btlPolicy, lastCommittedBlock)
+		expired, err := isExpired(dataKey.nsCollBlk, s.btlPolicy, lastCommittedBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +259,7 @@ func (s *store) GetPvtDataByBlockNum(blockNum uint64, filter ledger.PvtNsCollFil
 }
 
 func (s *store) HasPendingBatch() (bool, error) {
-	return len(s.pendingPvtDocs) != 0, nil
+	return len(s.pendingPvtData) != 0, nil
 }
 
 // Warning
@@ -234,10 +278,10 @@ func (s *store) IsEmpty() (bool, error) {
 
 // Rollback implements the function in the interface `Store`
 func (s *store) Rollback(blockNum uint64) error {
-	if !s.checkPendingPvt(blockNum) {
+	if !s.checkPendingPvtData(blockNum) {
 		return pvtdatastorage.NewErrIllegalCall("No pending batch to rollback")
 	}
-	s.popPendingPvt(blockNum)
+	s.popPendingPvtData(blockNum)
 	return nil
 }
 
@@ -304,24 +348,381 @@ func (s *store) Shutdown() {
 func (s *store) getLastCommittedBlock() (uint64, error) {
 	return s.lastCommittedBlock, nil
 }
+
 // GetMissingPvtDataInfoForMostRecentBlocks returns the missing private data information for the
 // most recent `maxBlock` blocks which miss at least a private data of a eligible collection.
 func (s *store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
-	return s.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
-}
-
-func (s *store) CommitPvtDataOfOldBlocks (blocksPvtData map[uint64][]*ledger.TxPvtData) error {
-	return s.CommitPvtDataOfOldBlocks(blocksPvtData)
+	// we assume that this function would be called by the gossip only after processing the
+	// last retrieved missing pvtdata info and committing the same.
+	if maxBlock < 1 {
+		return nil, nil
 	}
 
-func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error){
-	return s.GetLastUpdatedOldBlocksPvtData()
+	missingPvtDataInfo := make(ledger.MissingPvtDataInfo)
+	numberOfBlockProcessed := 0
+	lastProcessedBlock := uint64(0)
+	isMaxBlockLimitReached := false
+
+	// as we are not acquiring a read lock, new blocks can get committed while we
+	// construct the MissingPvtDataInfo. As a result, lastCommittedBlock can get
+	// changed. To ensure consistency, we atomically load the lastCommittedBlock value
+	lastCommittedBlock := atomic.LoadUint64(&s.lastCommittedBlock)
+
+	startKey, endKey := createRangeScanKeysForEligibleMissingDataEntries(lastCommittedBlock)
+	dbItr := s.missingDataIndexDB.GetIterator(startKey, endKey)
+	defer dbItr.Release()
+
+	for dbItr.Next() {
+		missingDataKeyBytes := dbItr.Key()
+		missingDataKey := decodeMissingDataKey(missingDataKeyBytes)
+
+		if isMaxBlockLimitReached && (missingDataKey.blkNum != lastProcessedBlock) {
+			// esnures that exactly maxBlock number
+			// of blocks' entries are processed
+			break
+		}
+
+		// check whether the entry is expired. If so, move to the next item.
+		// As we may use the old lastCommittedBlock value, there is a possibility that
+		// this missing data is actually expired but we may get the stale information.
+		// Though it may leads to extra work of pulling the expired data, it will not
+		// affect the correctness. Further, as we try to fetch the most recent missing
+		// data (less possibility of expiring now), such scenario would be rare. In the
+		// best case, we can load the latest lastCommittedBlock value here atomically to
+		// make this scenario very rare.
+		lastCommittedBlock = atomic.LoadUint64(&s.lastCommittedBlock)
+		expired, err := isExpired(missingDataKey.nsCollBlk, s.btlPolicy, lastCommittedBlock)
+		if err != nil {
+			return nil, err
+		}
+		if expired {
+			continue
+		}
+
+		// check for an existing entry for the blkNum in the MissingPvtDataInfo.
+		// If no such entry exists, create one. Also, keep track of the number of
+		// processed block due to maxBlock limit.
+		if _, ok := missingPvtDataInfo[missingDataKey.blkNum]; !ok {
+			numberOfBlockProcessed++
+			if numberOfBlockProcessed == maxBlock {
+				isMaxBlockLimitReached = true
+				// as there can be more than one entry for this block,
+				// we cannot `break` here
+				lastProcessedBlock = missingDataKey.blkNum
+			}
+		}
+
+		valueBytes := dbItr.Value()
+		bitmap, err := decodeMissingDataValue(valueBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		// for each transaction which misses private data, make an entry in missingBlockPvtDataInfo
+		for index, isSet := bitmap.NextSet(0); isSet; index, isSet = bitmap.NextSet(index + 1) {
+			txNum := uint64(index)
+			missingPvtDataInfo.Add(missingDataKey.blkNum, txNum, missingDataKey.ns, missingDataKey.coll)
+		}
+	}
+
+	return missingPvtDataInfo, nil
+}
+
+func (s *store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	if s.isLastUpdatedOldBlocksSet {
+		return pvtdatastorage.NewErrIllegalCall(`The lastUpdatedOldBlocksList is set. It means that the
+		stateDB may not be in sync with the pvtStore`)
+	}
+
+	err := s.commitPvtDataOfOldBlocksDB(blocksPvtData)
+	if err != nil {
+		return err
+	}
+
+	s.isLastUpdatedOldBlocksSet = true
+
+	return nil
+}
+
+func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	if !s.isLastUpdatedOldBlocksSet {
+		return nil, nil
+	}
+
+	updatedBlksList, err := s.getLastUpdatedOldBlocksList()
+	if err != nil {
+		return nil, err
+	}
+
+	blksPvtData := make(map[uint64][]*ledger.TxPvtData)
+	for _, blkNum := range updatedBlksList {
+		if blksPvtData[blkNum], err = s.GetPvtDataByBlockNum(blkNum, nil); err != nil {
+			return nil, err
+		}
+	}
+	return blksPvtData, nil
 }
 
 func (s *store) ResetLastUpdatedOldBlocksList() error {
-	return s.ResetLastUpdatedOldBlocksList()
+	if err := s.deleteLastUpdatedOldBlocksList(); err != nil {
+		return err
+	}
+	s.isLastUpdatedOldBlocksSet = false
+	return nil
 }
 
-func (s *store)  ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
-	return s.ProcessCollsEligibilityEnabled(committingBlk,nsCollMap)
+func (s *store) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	key := encodeCollElgKey(committingBlk)
+	m := newCollElgInfo(nsCollMap)
+	val, err := encodeCollElgVal(m)
+	if err != nil {
+		return err
+	}
+	batch := leveldbhelper.NewUpdateBatch()
+	batch.Put(key, val)
+	if err = s.missingDataIndexDB.WriteBatch(batch, true); err != nil {
+		return err
+	}
+	s.collElgProcSync.notify()
+	return nil
+
+}
+
+func (s *store) constructUpdateEntriesFromDataEntries(dataEntries []*dataEntry) (*entriesForPvtDataOfOldBlocks, error) {
+	updateEntries := &entriesForPvtDataOfOldBlocks{
+		dataEntries:        make(map[dataKey]*rwset.CollectionPvtReadWriteSet),
+		expiryEntries:      make(map[expiryKey]*ExpiryData),
+		missingDataEntries: make(map[nsCollBlk]*bitset.BitSet)}
+
+	// for each data entry, first, get the expiryData and missingData from the pvtStore.
+	// Second, update the expiryData and missingData as per the data entry. Finally, add
+	// the data entry along with the updated expiryData and missingData to the update entries
+	for _, dataEntry := range dataEntries {
+		// get the expiryBlk number to construct the expiryKey
+		expiryKey, err := s.constructExpiryKeyFromDataEntry(dataEntry)
+		if err != nil {
+			return nil, err
+		}
+
+		// get the existing expiryData ntry
+		var expiryData *ExpiryData
+		if !neverExpires(expiryKey.expiringBlk) {
+			if expiryData, err = s.getExpiryDataFromUpdateEntriesOrStore(updateEntries, expiryKey); err != nil {
+				return nil, err
+			}
+			if expiryData == nil {
+				// data entry is already expired
+				// and purged (a rare scenario)
+				continue
+			}
+		}
+
+		// get the existing missingData entry
+		var missingData *bitset.BitSet
+		nsCollBlk := dataEntry.key.nsCollBlk
+		if missingData, err = s.getMissingDataFromUpdateEntriesOrStore(updateEntries, nsCollBlk); err != nil {
+			return nil, err
+		}
+		if missingData == nil {
+			// data entry is already expired
+			// and purged (a rare scenario)
+			continue
+		}
+
+		updateEntries.addDataEntry(dataEntry)
+		if expiryData != nil { // would be nill for the never expiring entry
+			expiryEntry := &expiryEntry{&expiryKey, expiryData}
+			updateEntries.updateAndAddExpiryEntry(expiryEntry, dataEntry.key)
+		}
+		updateEntries.updateAndAddMissingDataEntry(missingData, dataEntry.key)
+	}
+	return updateEntries, nil
+}
+
+func (s *store) constructExpiryKeyFromDataEntry(dataEntry *dataEntry) (expiryKey, error) {
+	// get the expiryBlk number to construct the expiryKey
+	nsCollBlk := dataEntry.key.nsCollBlk
+	expiringBlk, err := s.btlPolicy.GetExpiringBlock(nsCollBlk.ns, nsCollBlk.coll, nsCollBlk.blkNum)
+	if err != nil {
+		return expiryKey{}, err
+	}
+	return expiryKey{expiringBlk, nsCollBlk.blkNum}, nil
+}
+
+func (s *store) getExpiryDataFromUpdateEntriesOrStore(updateEntries *entriesForPvtDataOfOldBlocks, expiryKey expiryKey) (*ExpiryData, error) {
+	expiryData, ok := updateEntries.expiryEntries[expiryKey]
+	if !ok {
+		var err error
+		expiryData, err = s.getExpiryDataOfExpiryKey(&expiryKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return expiryData, nil
+}
+
+func (s *store) getExpiryDataOfExpiryKey(expiryKey *expiryKey) (*ExpiryData, error) {
+	var expiryEntriesMap map[string][]byte
+	var err error
+	if expiryEntriesMap, err = s.getExpiryEntriesDB(expiryKey.committingBlk); err != nil {
+		return nil, err
+	}
+	v := expiryEntriesMap[hex.EncodeToString(encodeExpiryKey(expiryKey))]
+	if v == nil {
+		return nil, nil
+	}
+	return decodeExpiryValue(v)
+}
+
+func (s *store) getMissingDataFromUpdateEntriesOrStore(updateEntries *entriesForPvtDataOfOldBlocks, nsCollBlk nsCollBlk) (*bitset.BitSet, error) {
+	missingData, ok := updateEntries.missingDataEntries[nsCollBlk]
+	if !ok {
+		var err error
+		missingDataKey := &missingDataKey{nsCollBlk: nsCollBlk, isEligible: true}
+		missingData, err = s.getBitmapOfMissingDataKey(missingDataKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return missingData, nil
+}
+
+func (s *store) getBitmapOfMissingDataKey(missingDataKey *missingDataKey) (*bitset.BitSet, error) {
+	var missingEntriesMap map[string][]byte
+	var err error
+	if missingEntriesMap, err = s.getRangeMissingPvtDataByMaxBlockNumDB(missingDataKey.blkNum, missingDataKey.blkNum); err != nil {
+		return nil, err
+	}
+	v := missingEntriesMap[hex.EncodeToString(encodeMissingDataKey(missingDataKey))]
+	if v == nil {
+		return nil, nil
+	}
+	return decodeMissingDataValue(v)
+}
+
+func (updateEntries *entriesForPvtDataOfOldBlocks) addDataEntry(dataEntry *dataEntry) {
+	dataKey := dataKey{nsCollBlk: dataEntry.key.nsCollBlk, txNum: dataEntry.key.txNum}
+	updateEntries.dataEntries[dataKey] = dataEntry.value
+}
+
+func (updateEntries *entriesForPvtDataOfOldBlocks) updateAndAddExpiryEntry(expiryEntry *expiryEntry, dataKey *dataKey) {
+	txNum := dataKey.txNum
+	nsCollBlk := dataKey.nsCollBlk
+	// update
+	expiryEntry.value.addPresentData(nsCollBlk.ns, nsCollBlk.coll, txNum)
+	// we cannot delete entries from MissingDataMap as
+	// we keep only one entry per missing <ns-col>
+	// irrespective of the number of txNum.
+
+	// add
+	expiryKey := expiryKey{expiryEntry.key.expiringBlk, expiryEntry.key.committingBlk}
+	updateEntries.expiryEntries[expiryKey] = expiryEntry.value
+}
+
+func (updateEntries *entriesForPvtDataOfOldBlocks) updateAndAddMissingDataEntry(missingData *bitset.BitSet, dataKey *dataKey) {
+
+	txNum := dataKey.txNum
+	nsCollBlk := dataKey.nsCollBlk
+	// update
+	missingData.Clear(uint(txNum))
+	// add
+	updateEntries.missingDataEntries[nsCollBlk] = missingData
+}
+
+type collElgProcSync struct {
+	notification, procComplete chan bool
+}
+
+func (sync *collElgProcSync) notify() {
+	select {
+	case sync.notification <- true:
+		logger.Debugf("Signaled to collection eligibility processing routine")
+	default: //noop
+		logger.Debugf("Previous signal still pending. Skipping new signal")
+	}
+}
+
+func (sync *collElgProcSync) waitForNotification() {
+	<-sync.notification
+}
+
+func (sync *collElgProcSync) done() {
+	select {
+	case sync.procComplete <- true:
+	default:
+	}
+}
+
+func (s *store) launchCollElgProc() {
+	maxBatchSize := ledgerconfig.GetPvtdataStoreCollElgProcMaxDbBatchSize()
+	batchesInterval := ledgerconfig.GetPvtdataStoreCollElgProcDbBatchesInterval()
+	go func() {
+		s.processCollElgEvents(maxBatchSize, batchesInterval) // process collection eligibility events when store is opened - in case there is an unprocessed events from previous run
+		for {
+			logger.Debugf("Waiting for collection eligibility event")
+			s.collElgProcSync.waitForNotification()
+			s.processCollElgEvents(maxBatchSize, batchesInterval)
+			s.collElgProcSync.done()
+		}
+	}()
+}
+
+func (s *store) processCollElgEvents(maxBatchSize, batchesInterval int) {
+	logger.Debugf("Starting to process collection eligibility events")
+	s.purgerLock.Lock()
+	defer s.purgerLock.Unlock()
+	collElgStartKey, collElgEndKey := createRangeScanKeysForCollElg()
+	eventItr := s.missingDataIndexDB.GetIterator(collElgStartKey, collElgEndKey)
+	defer eventItr.Release()
+	batch := leveldbhelper.NewUpdateBatch()
+	totalEntriesConverted := 0
+
+	for eventItr.Next() {
+		collElgKey, collElgVal := eventItr.Key(), eventItr.Value()
+		blkNum := decodeCollElgKey(collElgKey)
+		CollElgInfo, err := decodeCollElgVal(collElgVal)
+		logger.Debugf("Processing collection eligibility event [blkNum=%d], CollElgInfo=%s", blkNum, CollElgInfo)
+		if err != nil {
+			logger.Errorf("This error is not expected %s", err)
+			continue
+		}
+		for ns, colls := range CollElgInfo.NsCollMap {
+			var coll string
+			for _, coll = range colls.Entries {
+				logger.Infof("Converting missing data entries from ineligible to eligible for [ns=%s, coll=%s]", ns, coll)
+				startKey, endKey := createRangeScanKeysForIneligibleMissingData(blkNum, ns, coll)
+				collItr := s.missingDataIndexDB.GetIterator(startKey, endKey)
+				collEntriesConverted := 0
+
+				for collItr.Next() { // each entry
+					originalKey, originalVal := collItr.Key(), collItr.Value()
+					modifiedKey := decodeMissingDataKey(originalKey)
+					modifiedKey.isEligible = true
+					batch.Delete(originalKey)
+					copyVal := make([]byte, len(originalVal))
+					copy(copyVal, originalVal)
+					batch.Put(encodeMissingDataKey(modifiedKey), copyVal)
+					collEntriesConverted++
+					if batch.Len() > maxBatchSize {
+						s.missingDataIndexDB.WriteBatch(batch, true)
+						batch = leveldbhelper.NewUpdateBatch()
+						sleepTime := time.Duration(batchesInterval)
+						logger.Infof("Going to sleep for %d milliseconds between batches. Entries for [ns=%s, coll=%s] converted so far = %d",
+							sleepTime, ns, coll, collEntriesConverted)
+						s.purgerLock.Unlock()
+						time.Sleep(sleepTime * time.Millisecond)
+						s.purgerLock.Lock()
+					}
+				} // entry loop
+
+				collItr.Release()
+				logger.Infof("Converted all [%d] entries for [ns=%s, coll=%s]", collEntriesConverted, ns, coll)
+				totalEntriesConverted += collEntriesConverted
+			} // coll loop
+		} // ns loop
+		batch.Delete(collElgKey) // delete the collection eligibility event key as well
+	} // event loop
+
+	s.missingDataIndexDB.WriteBatch(batch, true)
+	logger.Debugf("Converted [%d] inelligible mising data entries to elligible", totalEntriesConverted)
 }
