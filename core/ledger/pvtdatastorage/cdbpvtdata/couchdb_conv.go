@@ -7,12 +7,15 @@ SPDX-License-Identifier: Apache-2.0
 package cdbpvtdata
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
 	"strconv"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
@@ -20,17 +23,18 @@ import (
 )
 
 const (
-	idField                   = "_id"
-	expiryBlockNumbersField   = "expiry_block_numbers"
-	purgeBlockNumberField     = "purge_block_number"
-	purgeIntervalField        = "purge_interval"
-	purgeBlockNumberIndexName = "by_purge_block_number"
-	purgeBlockNumberIndexDoc  = "indexPurgeBlockNumber"
-	dataField                 = "data"
-	expiryField               = "expiry"
-	blockKeyPrefix            = ""
-	blockNumberBase           = 10
-	numMetaDocs               = 1
+	idField                          = "_id"
+	expiryBlockNumbersField          = "expiry_block_numbers"
+	purgeBlockNumberField            = "purge_block_number"
+	purgeIntervalField               = "purge_interval"
+	purgeBlockNumberIndexName        = "by_purge_block_number"
+	purgeBlockNumberIndexDoc         = "indexPurgeBlockNumber"
+	dataField                        = "data"
+	expiryField                      = "expiry"
+	blockKeyPrefix                   = ""
+	blockNumberBase                  = 10
+	lastUpdatedOldBlocksKey          = "lastUpdatedOldBlocks"
+	lastUpdatedOldBlocksKeyDataField = "data"
 )
 
 const purgeBlockNumberIndexDef = `
@@ -110,6 +114,57 @@ func getPurgeBlockNumber(expiryBlocks []string, purgeInterval uint64) (string, e
 
 }
 
+func createLastUpdatedOldBlocksDoc(updatedBlksList lastUpdatedOldBlocksList) (*couchdb.CouchDoc, error) {
+
+	jsonMap := make(jsonValue)
+	jsonMap[idField] = lastUpdatedOldBlocksKey
+
+	buf := proto.NewBuffer(nil)
+	buf.EncodeVarint(uint64(len(updatedBlksList)))
+	for _, blkNum := range updatedBlksList {
+		buf.EncodeVarint(blkNum)
+	}
+
+	commitMap := make(jsonValue)
+	commitMap[lastUpdatedOldBlocksKeyDataField] = buf.Bytes()
+
+	jsonBytes, err := jsonMap.toBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
+
+	return &couchDoc, nil
+}
+
+func retrieveLastUpdatedOldBlocksDoc(db *couchdb.CouchDatabase) ([]byte, error) {
+	doc, _, err := db.ReadDoc(lastUpdatedOldBlocksKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if doc == nil {
+		return nil, NewErrNotFoundInIndex()
+	}
+
+	jsonResult := make(map[string]interface{})
+	decoder := json.NewDecoder(bytes.NewBuffer(doc.JSONValue))
+	decoder.UseNumber()
+
+	err = decoder.Decode(&jsonResult)
+	if err != nil {
+		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
+	}
+
+	dbVal, err := base64.StdEncoding.DecodeString(jsonResult[lastUpdatedOldBlocksKeyDataField].(string))
+	if err != nil {
+		return nil, errors.Wrapf(err, "error from DecodeString for transientDataField")
+	}
+
+	return dbVal, nil
+}
+
 func blockNumberToKey(blockNum uint64) string {
 	return blockKeyPrefix + strconv.FormatUint(blockNum, 10)
 }
@@ -134,6 +189,23 @@ func dataEntriesToJSONValue(dataEntries []*dataEntry) (jsonValue, error) {
 
 	return data, nil
 }
+
+//func missingDataEntriesToJSONValue(missingDataEntries map[missingDataKey]*bitset.BitSet) (jsonValue, error) {
+//	data := make(jsonValue)
+//
+//	for k, v := range missingDataEntries {
+//		keyBytes := encodeMissingDataKey(&k)
+//		valBytes, err := encodeMissingDataValue(v)
+//		if err != nil {
+//			return nil, err
+//		}
+//
+//		keyBytesHex := hex.EncodeToString(keyBytes)
+//		data[keyBytesHex] = valBytes
+//	}
+//
+//	return data, nil
+//}
 
 type expiryInfo struct {
 	json       jsonValue
@@ -177,6 +249,7 @@ type blockPvtDataResponse struct {
 	PurgeBlock    string            `json:"purge_block_number"`
 	ExpiryBlocks  []string          `json:"expiry_block_numbers"`
 	Data          map[string][]byte `json:"data"`
+	MissingData   map[string][]byte `json:"missingData"`
 	Expiry        map[string][]byte `json:"expiry"`
 	Deleted       bool              `json:"_deleted"`
 }
@@ -200,6 +273,32 @@ func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataRe
 	return &blockPvtData, nil
 }
 
+func retrieveRangeBlockPvtData(db *couchdb.CouchDatabase, startKey, endKey string) ([]*blockPvtDataResponse, error) {
+	limit := ledgerconfig.GetInternalQueryLimit()
+	results, _, err := db.ReadDocRange(startKey, endKey, int32(limit))
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Debugf("Number of blocks that meet purge criteria: %d", len(results))
+
+	if len(results) == 0 {
+		return nil, NewErrNotFoundInIndex()
+	}
+
+	var responses []*blockPvtDataResponse
+	for _, result := range results {
+		var blockPvtData blockPvtDataResponse
+		err = json.Unmarshal(result.Value, &blockPvtData)
+		if err != nil {
+			return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
+		}
+		responses = append(responses, &blockPvtData)
+	}
+
+	return responses, nil
+}
+
 func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtDataResponse, error) {
 
 	purgeInterval := ledgerconfig.GetPvtdataStorePurgeInterval()
@@ -220,7 +319,7 @@ func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtD
     	"skip": %d
 	}`
 
-	results,_, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
+	results, _, err := db.QueryDocuments(fmt.Sprintf(queryFmt, id, limit, skip))
 	if err != nil {
 		return nil, err
 	}

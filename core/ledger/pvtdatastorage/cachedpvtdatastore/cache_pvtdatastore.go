@@ -9,6 +9,7 @@ package cachedpvtdatastore
 import (
 	"context"
 
+	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
@@ -17,34 +18,36 @@ import (
 )
 
 type cachedPvtDataStore struct {
-	pvtDataStore      pvtdatastorage.Store
-	pvtDataCache      pvtdatastorage.Store
-	pvtDataStoreCh    chan *pvtPrepareData
-	pvtDataCommitCh   chan *pvtPrepareData
-	pvtDataRollbackCh chan *pvtPrepareData
-	writerClosedCh    chan struct{}
-	doneCh            chan struct{}
-	pvtReadyCh        chan bool
-	sigCh             chan struct{}
+	pvtDataStore       pvtdatastorage.Store
+	pvtDataCache       pvtdatastorage.Store
+	pvtDataStoreCh     chan *pvtPrepareData
+	pvtDataCommitCh    chan *pvtPrepareData
+	pvtDataRollbackCh  chan *pvtPrepareData
+	writerClosedCh     chan struct{}
+	doneCh             chan struct{}
+	pvtReadyCh         chan bool
+	sigCh              chan struct{}
+	missingDataIndexDB *leveldbhelper.DBHandle
 }
 
 type pvtPrepareData struct {
-	blockNum uint64
-	pvtData  []*ledger.TxPvtData
+	blockNum       uint64
+	pvtData        []*ledger.TxPvtData
 	missingPvtData ledger.TxMissingPvtDataMap
 }
 
-func newCachedPvtDataStore(pvtDataStore pvtdatastorage.Store, pvtDataCache pvtdatastorage.Store) (*cachedPvtDataStore, error) {
+func newCachedPvtDataStore(pvtDataStore pvtdatastorage.Store, pvtDataCache pvtdatastorage.Store, missingDataIndexDBHandle *leveldbhelper.DBHandle) (*cachedPvtDataStore, error) {
 	c := cachedPvtDataStore{
-		pvtDataStore:      pvtDataStore,
-		pvtDataCache:      pvtDataCache,
-		pvtDataStoreCh:    make(chan *pvtPrepareData),
-		pvtDataCommitCh:   make(chan *pvtPrepareData),
-		pvtDataRollbackCh: make(chan *pvtPrepareData),
-		writerClosedCh:    make(chan struct{}),
-		doneCh:            make(chan struct{}),
-		pvtReadyCh:        make(chan bool),
-		sigCh:             make(chan struct{}),
+		pvtDataStore:       pvtDataStore,
+		pvtDataCache:       pvtDataCache,
+		pvtDataStoreCh:     make(chan *pvtPrepareData),
+		pvtDataCommitCh:    make(chan *pvtPrepareData),
+		pvtDataRollbackCh:  make(chan *pvtPrepareData),
+		writerClosedCh:     make(chan struct{}),
+		doneCh:             make(chan struct{}),
+		pvtReadyCh:         make(chan bool),
+		sigCh:              make(chan struct{}),
+		missingDataIndexDB: missingDataIndexDBHandle,
 	}
 
 	concurrentBlockWrites := ledgerconfig.GetConcurrentBlockWrites()
@@ -209,6 +212,35 @@ func (c *cachedPvtDataStore) Shutdown() {
 	<-c.writerClosedCh
 	c.pvtDataCache.Shutdown()
 	c.pvtDataStore.Shutdown()
+}
+
+func (c *cachedPvtDataStore) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.MissingPvtDataInfo, error) {
+	return c.pvtDataStore.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock)
+}
+
+func (c *cachedPvtDataStore) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string) error {
+	c.pvtDataStore.ProcessCollsEligibilityEnabled(committingBlk, nsCollMap)
+}
+
+func (c *cachedPvtDataStore) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+
+	err := c.pvtDataCache.CommitPvtDataOfOldBlocks(blocksPvtData)
+	if err != nil {
+		return errors.WithMessage(err, "CommitPvtDataOfOldBlocks in cache failed")
+	}
+	err = c.pvtDataStore.CommitPvtDataOfOldBlocks(blocksPvtData)
+	if err != nil {
+		return errors.WithMessage(err, "CommitPvtDataOfOldBlocks in store failed")
+	}
+	return nil
+}
+
+func (c *cachedPvtDataStore) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData, error) {
+	return c.pvtDataStore.GetLastUpdatedOldBlocksPvtData()
+}
+
+func (c *cachedPvtDataStore) ResetLastUpdatedOldBlocksList() error {
+	return c.pvtDataStore.ResetLastUpdatedOldBlocksList()
 }
 
 func (c *cachedPvtDataStore) waitForPvt(ctx context.Context, blockNum uint64) {
