@@ -39,7 +39,9 @@ func (c *CachedPvtDataProvider) OpenStore(ledgerID string) (pvtdatastorage.Store
 		return nil, err
 	}
 
-	s, err := newCachedPvtDataStore(pvtDataStore, pvtDataCache)
+	dbHandle := c.missingDataIndexProvider.GetDBHandle(ledgerID)
+
+	s, err := newCachedPvtDataStore(pvtDataStore, pvtDataCache, dbHandle)
 	if err != nil {
 		return nil, err
 	}
