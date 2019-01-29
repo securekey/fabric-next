@@ -16,9 +16,12 @@ import (
 
 	"sync"
 
+	"sort"
+
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+	"github.com/willf/bitset"
 )
 
 type store struct {
@@ -40,14 +43,14 @@ func newStore(db *couchdb.CouchDatabase) (*store, error) {
 	return &s, nil
 }
 
-func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData) error {
-	dataEntries, expiryEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy)
+func (s *store) prepareDB(blockNum uint64, pvtData []*ledger.TxPvtData, missingPvtData ledger.TxMissingPvtDataMap) error {
+	storeEntries, err := prepareStoreEntries(blockNum, pvtData, s.btlPolicy, missingPvtData)
 	if err != nil {
 		return err
 	}
 
-	if len(dataEntries) > 0 || len(expiryEntries) > 0 {
-		blockDoc, err := createBlockCouchDoc(dataEntries, expiryEntries, blockNum, s.purgeInterval)
+	if len(storeEntries.dataEntries) > 0 || len(storeEntries.missingDataEntries) > 0 || len(storeEntries.expiryEntries) > 0 {
+		blockDoc, err := createBlockCouchDoc(storeEntries, blockNum, s.purgeInterval)
 		if err != nil {
 			return err
 		}
@@ -78,6 +81,75 @@ func (s *store) commitDB(blockNum uint64) error {
 	return nil
 }
 
+func (s *store) commitPvtDataOfOldBlocksDB(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+	docs := make([]*couchdb.CouchDoc, 0)
+
+	// create a list of blocks' pvtData which are being stored. If this list is
+	// found during the recovery, the stateDB may not be in sync with the pvtData
+	// and needs recovery. In a normal flow, once the stateDB is synced, the
+	// block list would be deleted.
+	updatedBlksListMap := make(map[uint64]bool)
+
+	// construct dataEntries for all pvtData
+	for blkNum, pvtData := range blocksPvtData {
+
+		updatedBlksListMap[blkNum] = true
+
+		// construct update entries (i.e., dataEntries, expiryEntries, missingDataEntries) from the above created data entries
+		updateEntries, err := s.constructUpdateEntriesFromDataEntries(prepareDataEntries(blkNum, pvtData))
+		if err != nil {
+			return err
+		}
+		// create a db update batch from the update entries
+		logger.Debug("Constructing update batch from pvtdatastore entries")
+		if len(updateEntries.dataEntries) > 0 || len(updateEntries.missingDataEntries) > 0 || len(updateEntries.expiryEntries) > 0 {
+			var dataEntries []*dataEntry
+			for k, v := range updateEntries.dataEntries {
+				dataEntries = append(dataEntries, &dataEntry{key: &k, value: v})
+			}
+
+			missingDataEntries := make(map[missingDataKey]*bitset.BitSet)
+			for k, v := range updateEntries.missingDataEntries {
+				missingDataEntries[missingDataKey{nsCollBlk: k, isEligible: true}] = v
+			}
+
+			var expiryEntries []*expiryEntry
+			for k, v := range updateEntries.expiryEntries {
+				expiryEntries = append(expiryEntries, &expiryEntry{key: &k, value: v})
+			}
+
+			blockDoc, err := createBlockCouchDoc(&storeEntries{
+				dataEntries:        dataEntries,
+				expiryEntries:      expiryEntries,
+				missingDataEntries: missingDataEntries}, blkNum, s.purgeInterval)
+			if err != nil {
+				return err
+			}
+
+			if blockDoc != nil {
+				docs = append(docs, blockDoc)
+			}
+		}
+	}
+
+	var updatedBlksList lastUpdatedOldBlocksList
+	for blkNum := range updatedBlksListMap {
+		updatedBlksList = append(updatedBlksList, blkNum)
+	}
+	sort.SliceStable(updatedBlksList, func(i, j int) bool {
+		return updatedBlksList[i] < updatedBlksList[j]
+	})
+	doc, err := createLastUpdatedOldBlocksDoc(updatedBlksList)
+	if err != nil {
+		return err
+	}
+	if doc != nil {
+		docs = append(docs, doc)
+	}
+	s.db.BatchUpdateDocuments(docs)
+	return nil
+}
+
 func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, error) {
 	pd, err := retrieveBlockPvtData(s.db, blockNumberToKey(blockNum))
 	if err != nil {
@@ -85,6 +157,22 @@ func (s *store) getPvtDataByBlockNumDB(blockNum uint64) (map[string][]byte, erro
 	}
 
 	return pd.Data, nil
+}
+
+func (s *store) getRangeMissingPvtDataByMaxBlockNumDB(startBlockNum, endBlockNum uint64) (map[string][]byte, error) {
+	pds, err := retrieveRangeBlockPvtData(s.db, blockNumberToKey(startBlockNum), blockNumberToKey(endBlockNum))
+	if err != nil {
+		return nil, err
+	}
+
+	missingPvtData := make(map[string][]byte)
+	for _, pd := range pds {
+		for k, v := range pd.Expiry {
+			missingPvtData[k] = v
+		}
+	}
+
+	return missingPvtData, nil
 }
 
 func (s *store) getExpiryEntriesDB(blockNum uint64) (map[string][]byte, error) {
@@ -134,17 +222,27 @@ func (s *store) purgeExpiredDataForBlockDB(blockNumber uint64, maxBlkNum uint64,
 	logger.Debugf("purge: processing [%d] expiry entries for block [%d]", len(expiryEntries), blockNumber)
 	for _, expiryKey := range expiryEntries {
 		expiryBytesStr := hex.EncodeToString(encodeExpiryKey(expiryKey.key))
-
-		dataKeys := deriveDataKeys(expiryKey)
+		dataKeys, missingDataKeys := deriveKeys(expiryKey)
 		allPurged := true
 		for _, dataKey := range dataKeys {
 			keyBytesStr := hex.EncodeToString(encodeDataKey(dataKey))
+			//TODO purge not set
 			if dataKey.purge {
 				logger.Debugf("purge: deleting data key[%s] for expiry entry[%s]", keyBytesStr, expiryBytesStr)
 				delete(blockPvtData.Data, keyBytesStr)
 			} else {
 				logger.Debugf("purge: skipping data key[%s] for expiry entry[%s]", keyBytesStr, expiryBytesStr)
 				allPurged = false
+			}
+		}
+		for _, missingDataKey := range missingDataKeys {
+			missingDatakeyBytesStr := hex.EncodeToString(encodeMissingDataKey(missingDataKey))
+			//TODO purge not set
+			if missingDataKey.purge {
+				logger.Debugf("purge: deleting missing data key[%s] for expiry entry[%s]", missingDatakeyBytesStr, expiryBytesStr)
+				delete(blockPvtData.MissingData, missingDatakeyBytesStr)
+			} else {
+				logger.Debugf("purge: skipping missing data key[%s] for expiry entry[%s]", missingDatakeyBytesStr, expiryBytesStr)
 			}
 		}
 
