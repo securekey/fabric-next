@@ -28,9 +28,10 @@ type cachedStateStore struct {
 	bulkOptimizable statedb.BulkOptimizable
 	indexCapable    statedb.IndexCapable
 	ledgerID        string
+	stateKeyIndex   statekeyindex.StateKeyIndex
 }
 
-func newCachedBlockStore(vdb statedb.VersionedDB, ledgerID string) *cachedStateStore {
+func newCachedStateStore(vdb statedb.VersionedDB, stateKeyIndex statekeyindex.StateKeyIndex, ledgerID string) *cachedStateStore {
 	bulkOptimizable, _ := vdb.(statedb.BulkOptimizable)
 	indexCapable, _ := vdb.(statedb.IndexCapable)
 
@@ -39,6 +40,7 @@ func newCachedBlockStore(vdb statedb.VersionedDB, ledgerID string) *cachedStateS
 		ledgerID:        ledgerID,
 		bulkOptimizable: bulkOptimizable,
 		indexCapable:    indexCapable,
+		stateKeyIndex:   stateKeyIndex,
 	}
 	return &s
 }
@@ -72,7 +74,7 @@ func (c *cachedStateStore) GetState(namespace string, key string) (*statedb.Vers
 	if versionedValue, ok := c.vdb.GetKVCacheProvider().GetFromKVCache(c.ledgerID, namespace, key); ok {
 		logger.Debugf("[%s] state retrieved from cache [ns=%s, key=%s]", c.ledgerID, namespace, key)
 		/*metrics.IncrementCounter("cachestatestore_getstate_cache_request_hit")*/
-		return &statedb.VersionedValue{versionedValue.Value, nil , versionedValue.Version}, nil
+		return &statedb.VersionedValue{versionedValue.Value, nil, versionedValue.Version}, nil
 	}
 	versionedValue, err := c.vdb.GetState(namespace, key)
 
@@ -149,8 +151,8 @@ func (c *cachedStateStore) GetStateRangeScanIterator(namespace string, startKey 
 	}
 
 	dbItr.Prev()
-/*	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
-*/
+	/*	metrics.IncrementCounter("cachestatestore_getstaterangescaniterator_cache_request_hit")
+	 */
 	return newKVScanner(namespace, keyRange, dbItr, c), nil
 }
 
@@ -170,14 +172,17 @@ func (c *cachedStateStore) GetNonDurableStateRangeScanIterator(namespace string,
 	}
 	return &nonDurableKVScanner{namespace, sortedKeys, nextIndex, lastIndex, c}, nil
 }
+
 // ExecuteQuery implements method in VersionedDB interface
 func (c *cachedStateStore) ExecuteQuery(namespace, query string) (statedb.ResultsIterator, error) {
 	return c.vdb.ExecuteQuery(namespace, query)
 }
+
 // ExecuteQuery implements method in VersionedDB interface
-func (c *cachedStateStore) ExecuteQueryWithMetadata(namespace, query string,metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
+func (c *cachedStateStore) ExecuteQueryWithMetadata(namespace, query string, metadata map[string]interface{}) (statedb.QueryResultsIterator, error) {
 	return c.vdb.ExecuteQueryWithMetadata(namespace, query, metadata)
 }
+
 // ApplyUpdates implements method in VersionedDB interface
 func (c *cachedStateStore) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
 	return c.vdb.ApplyUpdates(batch, height)
@@ -187,6 +192,50 @@ func (c *cachedStateStore) ApplyUpdates(batch *statedb.UpdateBatch, height *vers
 func (c *cachedStateStore) GetLatestSavePoint() (*version.Height, error) {
 	return c.vdb.GetLatestSavePoint()
 }
+
+func (c *cachedStateStore) LoadCommittedVersions(keys []*statedb.CompositeKey, preLoaded map[*statedb.CompositeKey]*version.Height) error {
+	preloaded := make(map[*statedb.CompositeKey]*version.Height)
+	notPreloaded := make([]*statedb.CompositeKey, 0)
+	for _, key := range keys {
+		metadata, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
+		}
+		if found {
+			preloaded[key] = version.NewHeight(metadata.BlockNumber, metadata.TxNumber)
+		} else {
+			notPreloaded = append(notPreloaded, key)
+		}
+	}
+	err := c.bulkOptimizable.LoadCommittedVersions(notPreloaded, preloaded)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *cachedStateStore) LoadWSetCommittedVersions(keys []*statedb.CompositeKey, keysExist []*statedb.CompositeKey, blockNum uint64) error {
+	keysExist = make([]*statedb.CompositeKey, 0)
+	keysNotExist := make([]*statedb.CompositeKey, 0)
+	for _, key := range keys {
+		_, found, err := c.stateKeyIndex.GetMetadata(&statekeyindex.CompositeKey{Key: key.Key, Namespace: key.Namespace})
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve metadata from the stateindex for key: %v", key)
+		}
+		if found {
+			keysExist = append(keysExist, key)
+		} else {
+			keysNotExist = append(keysNotExist, key)
+
+		}
+	}
+	err := c.bulkOptimizable.LoadWSetCommittedVersions(keysNotExist, keysExist, blockNum)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *cachedStateStore) GetWSetCacheLock() *sync.RWMutex {
 	return c.bulkOptimizable.GetWSetCacheLock()
 }
@@ -194,6 +243,7 @@ func (c *cachedStateStore) GetWSetCacheLock() *sync.RWMutex {
 func (c *cachedStateStore) GetCachedVersion(namespace, key string) (*version.Height, bool) {
 	return c.bulkOptimizable.GetCachedVersion(namespace, key)
 }
+
 func (c *cachedStateStore) ClearCachedVersions() {
 	c.bulkOptimizable.ClearCachedVersions()
 }
@@ -201,6 +251,7 @@ func (c *cachedStateStore) ClearCachedVersions() {
 func (c *cachedStateStore) GetDBType() string {
 	return c.indexCapable.GetDBType()
 }
+
 func (c *cachedStateStore) ProcessIndexesForChaincodeDeploy(namespace string, fileEntries []*ccprovider.TarFileEntry) error {
 	return c.indexCapable.ProcessIndexesForChaincodeDeploy(namespace, fileEntries)
 }
