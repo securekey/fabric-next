@@ -5,12 +5,13 @@ SPDX-License-Identifier: Apache-2.0
 package ledgerconfig
 
 import (
-	"github.com/hyperledger/fabric/core/config"
-	"github.com/spf13/viper"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hyperledger/fabric/core/config"
+	"github.com/spf13/viper"
 )
 
 //IsCouchDBEnabled exposes the useCouchDB variable
@@ -32,6 +33,7 @@ const confBookkeeper = "bookkeeper"
 const confConfigHistory = "configHistory"
 const confChains = "chains"
 const confPvtdataStore = "pvtdataStore"
+const confMissingPvtdataKeysStore = "missingPvtdataKeysStore"
 const confTotalQueryLimit = "ledger.state.totalQueryLimit"
 const confInternalQueryLimit = "ledger.state.couchDBConfig.internalQueryLimit"
 const confEnableHistoryDatabase = "ledger.history.enableHistoryDatabase"
@@ -150,6 +152,11 @@ func GetBlockStorePath() string {
 // GetPvtdataStorePath returns the filesystem path that is used for permanent storage of private write-sets
 func GetPvtdataStorePath() string {
 	return filepath.Join(GetRootPath(), confPvtdataStore)
+}
+
+// GetMissingPvtdataKeysStorePath returns the filesystem path that is used for permanent storage of private write-sets
+func GetMissingPvtdataKeysStorePath() string {
+	return filepath.Join(GetRootPath(), confMissingPvtdataKeysStore)
 }
 
 // GetInternalBookkeeperPath returns the filesystem path that is used for bookkeeping the internal stuff by by KVledger (such as expiration time for pvt)
