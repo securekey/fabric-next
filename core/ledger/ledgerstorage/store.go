@@ -110,7 +110,7 @@ func createPvtDataStoreProvider() (pvtdatastorage.Provider, error) {
 		if err != nil {
 			return nil, err
 		}
-		dbPath := ledgerconfig.GetPvtdataStorePath()
+		dbPath := ledgerconfig.GetMissingPvtdataStorePath()
 		missingDataIndexProvider := leveldbhelper.NewProvider(&leveldbhelper.Conf{DBPath: dbPath})
 		return cachedpvtdatastore.NewProvider(dbPvtData, mempvtdatacache.NewProvider(pvtDataCacheSize), missingDataIndexProvider), nil
 	}
