@@ -133,7 +133,7 @@ func InitCrypto(mspMgrConfigDir, localMSPID, localMSPType string) error {
 	}
 
 	// Init the BCCSP
-	SetBCCSPKeystorePath()
+	//SetBCCSPKeystorePath()
 	var bccspConfig *factory.FactoryOpts
 	err = viperutil.EnhancedExactUnmarshalKey("peer.BCCSP", &bccspConfig)
 	if err != nil {
