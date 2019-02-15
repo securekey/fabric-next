@@ -32,7 +32,7 @@ git config user.email jenkins@jenkins.com
 
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
-
+git am $MY_PATH/../patches/0001-Apply-go-modules.patch
 
 #[FAB-12982] & [FAB-13534] cherry picks are required to [FAB-12914] gossip private data metrics
 
