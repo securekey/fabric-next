@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/bccsp"
+	pb "github.com/hyperledger/fabric/bccsp/grep11/protos"
 	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/bccsp/utils"
 	"github.com/hyperledger/fabric/common/flogging"
-	pb "github.com/hyperledger/fabric/bccsp/grep11/protos"
 )
 
 var (

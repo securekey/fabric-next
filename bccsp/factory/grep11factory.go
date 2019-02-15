@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	"github.com/hyperledger/fabric/bccsp"
-	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/bccsp/grep11"
+	"github.com/hyperledger/fabric/bccsp/sw"
 )
 
 const (
