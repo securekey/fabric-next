@@ -210,7 +210,6 @@ linter: check-deps buildenv
 
 check-deps: buildenv
 	@echo "DEP: Checking for dependency issues.."
-	@$(DRUN) $(DOCKER_NS)/fabric-buildenv:$(DOCKER_TAG) ./scripts/check_deps.sh
 
 check-metrics-doc: buildenv
 	@echo "METRICS: Checking for outdated reference documentation.."
@@ -230,11 +229,14 @@ $(BUILD_DIR)/%/chaintool: Makefile
 # directory so that subsequent builds are faster
 $(BUILD_DIR)/docker/bin/%: $(PROJECT_FILES)
 	$(eval TARGET = ${patsubst $(BUILD_DIR)/docker/bin/%,%,${@}})
+	rm -rf on/
 	@echo "Building $@"
 	@mkdir -p $(BUILD_DIR)/docker/bin $(BUILD_DIR)/docker/$(TARGET)/pkg
 	@$(DRUN) \
 		-v $(abspath $(BUILD_DIR)/docker/bin):/opt/gopath/bin \
 		-v $(abspath $(BUILD_DIR)/docker/$(TARGET)/pkg):/opt/gopath/pkg \
+		-e GO111MODULE=on \
+        -e GOCACHE=on \
 		$(BASE_DOCKER_NS)/fabric-baseimage:$(BASE_DOCKER_TAG) \
 		go install -tags "$(GO_TAGS)" -ldflags "$(DOCKER_GO_LDFLAGS)" $(pkgmap.$(@F))
 	@touch $@
@@ -259,7 +261,8 @@ $(BUILD_DIR)/docker/gotools: gotools.mk
 $(BUILD_DIR)/bin/%: $(PROJECT_FILES)
 	@mkdir -p $(@D)
 	@echo "$@"
-	$(CGO_FLAGS) GOBIN=$(abspath $(@D)) go install -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
+	rm -rf on/
+	$(CGO_FLAGS) GOBIN=$(abspath $(@D)) GOCACHE=on GO111MODULE=on go install -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
 	@echo "Binary available as $@"
 	@touch $@
 

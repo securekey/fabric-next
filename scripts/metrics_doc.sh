@@ -4,6 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+export GO111MODULE=on
 fabric_dir="$(cd "$(dirname "$0")/.." && pwd)"
 metrics_template="${fabric_dir}/docs/source/metrics_reference.rst.tmpl"
 metrics_doc="${fabric_dir}/docs/source/metrics_reference.rst"
