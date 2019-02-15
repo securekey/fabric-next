@@ -9,9 +9,9 @@ package factory
 
 import (
 	"github.com/hyperledger/fabric/bccsp"
+	"github.com/hyperledger/fabric/bccsp/grep11"
 	"github.com/hyperledger/fabric/bccsp/pkcs11"
 	"github.com/pkg/errors"
-	"github.com/hyperledger/fabric/bccsp/grep11"
 )
 
 // FactoryOpts holds configuration information used to initialize factory implementations
