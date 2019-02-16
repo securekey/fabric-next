@@ -52,7 +52,7 @@ $MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 make clean
-GO111MODULE=on DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" make docker
+GO111MODULE=on DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE GO_TAGS="pkcs11 pluginsenabled" make docker
 
 chmod -R +rw $TMP
 
