@@ -28,3 +28,4 @@ list_deps() {
 }
 
 list_deps $1 | sort | uniq
+echo $GOPATH/src/github.com/hyperledger/fabric/go.mod
