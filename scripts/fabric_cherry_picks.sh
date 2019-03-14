@@ -34,6 +34,9 @@ git config user.email jenkins@jenkins.com
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
 
+# [FAB-14646] Update dependency github.com/opencontainers/runc
+git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/94/30094/1 && git cherry-pick FETCH_HEAD
+
 #[FAB-12982] & [FAB-13534] cherry picks are required to [FAB-12914] gossip private data metrics
 
 #[FAB-12982] spray pvt across maximum eligible orgs
