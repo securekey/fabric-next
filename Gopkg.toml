@@ -173,6 +173,10 @@ noverify = [
   name = "github.com/go-kit/kit"
   version = "0.7.0"
 
+[[override]]
+  name = "github.com/opencontainers/runc"
+  revision = "2b18fe1d885ee5083ef9f0838fee39b62d653e30"
+
 [prune]
   go-tests = true
   unused-packages = true
