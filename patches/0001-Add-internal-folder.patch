@@ -1,0 +1,65 @@
+From 53002fc3314920f3e3540a920659809226aa1ec5 Mon Sep 17 00:00:00 2001
+From: jenkins <jenkins@jenkins.com>
+Date: Fri, 29 Mar 2019 14:56:46 -0400
+Subject: [PATCH] Add internal folder
+
+Signed-off-by: jenkins <jenkins@jenkins.com>
+---
+ internal/util/util.go | 21 +++++++++++++++++++++
+ peer/node/start.go    |  4 +++-
+ 2 files changed, 24 insertions(+), 1 deletion(-)
+ create mode 100644 internal/util/util.go
+
+diff --git a/internal/util/util.go b/internal/util/util.go
+new file mode 100644
+index 000000000..005eab15f
+--- /dev/null
++++ b/internal/util/util.go
+@@ -0,0 +1,21 @@
++/*
++Copyright IBM Corp. 2017 All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++		 http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++package util
++
++func TestInternalFolder() string  {
++	return "TestInternalFolder"
++}
+\ No newline at end of file
+diff --git a/peer/node/start.go b/peer/node/start.go
+index 623bfeace..94d5032b7 100644
+--- a/peer/node/start.go
++++ b/peer/node/start.go
+@@ -14,7 +14,7 @@ import (
+ 	"os/signal"
+ 	"syscall"
+ 	"time"
+-
++	"github.com/hyperledger/fabric/internal/util"
+ 	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/common/cauthdsl"
+ 	ccdef "github.com/hyperledger/fabric/common/chaincode"
+@@ -123,6 +123,8 @@ var nodeStartCmd = &cobra.Command{
+ }
+ 
+ func serve(args []string) error {
++	// Test internal folder
++	logger.Info(util.TestInternalFolder())
+ 	// currently the peer only works with the standard MSP
+ 	// because in certain scenarios the MSP has to make sure
+ 	// that from a single credential you only have a single 'identity'.
+-- 
+2.20.1 (Apple Git-117)
+

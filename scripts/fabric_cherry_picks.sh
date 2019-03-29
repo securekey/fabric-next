@@ -59,3 +59,6 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/51/28851/17 && gi
 #[FAB-12914] gossip private data metrics
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/38/28938/7 && git cherry-pick FETCH_HEAD
 
+
+#### !!!!proof of concept Add internal folder patch to test if snaps works
+git am $MY_PATH/../patches/0001-Add-internal-folder.patch
