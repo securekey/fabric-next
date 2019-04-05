@@ -61,3 +61,7 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/51/28851/17 && gi
 #[FAB-12914] gossip private data metrics
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/38/28938/7 && git cherry-pick FETCH_HEAD
 
+# [FAB-15070] Gossip State Metrics (The patch contains changes from https://gerrit.hyperledger.org/r/#/c/30747 minus 
+# gossip/state/metrics_test.goas new file has compilation error due to changes to other components which are not 
+# cherry-picked/merged till now)
+git apply $MY_PATH/../patches/FAB-15070-state-block-metrics.patch
