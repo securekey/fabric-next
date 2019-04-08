@@ -28,7 +28,7 @@ ENV   GOROOT=${goroot} \
 RUN   set -xe; \
       export ARCH_URL=amd64 && \
       if [ "${ARCH}" = "s390x" ]; then export ARCH_URL=s390x; \
-      echo 'deb http://ftp.debian.org/debian jessie-backports main' >> /etc/apt/sources.list; fi && \
+      echo 'deb [check-valid-until=no] http://archive.debian.org/debian jessie-backports main' >> /etc/apt/sources.list; fi && \
       apt-get update && \
       apt-get install -y --no-install-recommends softhsm2 curl git gcc g++ libtool libltdl-dev && \
       rm -rf /var/lib/apt/lists/* && \
