@@ -16,6 +16,7 @@ ARG   go_version=1.10
 ARG   gopath=/opt/gopath
 ARG   goroot=/opt/go
 ARG   pkcs11_tool_url=https://github.com/hyperledger/fabric-sdk-go
+ARG   pkcs11_tool_tag=v1.0.0-alpha5
 ARG   ARCH=amd64
 
 LABEL maintainer=sk-service-eng-team
@@ -40,7 +41,7 @@ RUN   set -xe; \
       tar -xvzf /tmp/go.tar.gz -C /opt/ && \
       rm -rf /tmp/go.tar.gz && \
       go get -u github.com/golang/dep/cmd/dep && \
-      git clone ${pkcs11_tool_url} /tmp/pk11 && \
+      git clone --branch ${pkcs11_tool_tag} --depth 1 ${pkcs11_tool_url} /tmp/pk11 && \
       cp -rp /tmp/pk11/scripts/_go/src/pkcs11helper ${GOPATH}/src/ && \
       rm -rf /tmp/pk11 && \
       cd ${GOPATH}/src/pkcs11helper && dep ensure -vendor-only -v && \
