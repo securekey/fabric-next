@@ -1,4 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
 [gerrit]
-host=gerrit.securekey.com
+host=gerrit.hyperledger.org
 port=29418
-project=fabric-next
+project=fabric
