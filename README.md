@@ -12,7 +12,8 @@ Prerequisites:
 - Docker - 17.06.2-ce or later
 - Docker Compose - 1.14.0 or later
 - You may need libtool - sudo apt-get install -y libtool (linux) or brew install libtool (macOS)
-- You may need GNU tar on macOS -  brew install gnu-tar --with-default-names
+- You may need GNU tar on macOS -  brew install gnu-tar (you should explicitly add the binary to the path, 
+  as instructed when installing to make sure it is preferred over the library that is shipped with macOS)
 
 *Note:* The tagged version of fabric-next being used must match the corresponding tag in fabric-snaps. e.g v17.11.1 of fabric-next is compatible with v17.11.1 of fabric-snaps.
 
