@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/kvledger"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
@@ -45,6 +46,7 @@ type Initializer struct {
 	MembershipInfoProvider        ledger.MembershipInfoProvider
 	MetricsProvider               metrics.Provider
 	HealthCheckRegistry           ledger.HealthCheckRegistry
+	CollDataProvider              storeapi.Provider
 }
 
 // Initialize initializes ledgermgmt
@@ -76,6 +78,7 @@ func initialize(initializer *Initializer) {
 		MembershipInfoProvider:        initializer.MembershipInfoProvider,
 		MetricsProvider:               initializer.MetricsProvider,
 		HealthCheckRegistry:           initializer.HealthCheckRegistry,
+		CollDataProvider:              initializer.CollDataProvider,
 	})
 	if err != nil {
 		panic(errors.WithMessage(err, "Error initializing ledger provider"))
