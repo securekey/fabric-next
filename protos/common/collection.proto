@@ -13,6 +13,15 @@ option java_package = "org.hyperledger.fabric.protos.common";
 
 package common;
 
+// CollectionType enumerates the various types of private data collections.
+enum CollectionType {
+    COL_UNKNOWN = 0;    // Unspecified type - will use PRIVATE as default.
+    COL_PRIVATE = 1;    // Persisted private data collection.
+    COL_TRANSIENT = 2;  // Transient private data collection.
+    COL_OFFLEDGER = 3;  // Off-ledger private data collection.
+    COL_DCAS = 4;       // Distributed Content Addressable Store (CAS) private data collection.
+}
+
 // CollectionConfigPackage represents an array of CollectionConfig
 // messages; the extra struct is required because repeated oneof is
 // forbidden by the protobuf syntax
@@ -56,6 +65,14 @@ message StaticCollectionConfig {
     // read the data (if set to false, for example if you want to implement more granular
     // access logic in the chaincode)
     bool member_only_read = 6;
+    // The type of collection.
+    CollectionType type = 9900;
+    // The time after which the collection data expires. For example,
+    // if the value is set to "10m" then the data will be purged
+    // 10 minutes after it was stored. An empty value indicates that
+    // the data should never be purged.
+    // The format of this string must be parseable by time.ParseDuration
+    string time_to_live = 9901;
 }
 
 
