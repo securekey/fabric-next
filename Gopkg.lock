@@ -94,6 +94,21 @@
   revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
 
 [[projects]]
+  digest = "1:b870f4fc8ac5a04b3dbb6540e81a4c16da874e9f922dbe8762a90d9bcc294910"
+  name = "github.com/bluele/gcache"
+  packages = ["."]
+  pruneopts = "NUT"
+  revision = "79ae3b2d8680cbc7ad3dba9db66b8a648575221c"
+
+[[projects]]
+  branch = "master"
+  digest = "1:9af5b27cadd7fefde7d20dfc72470d39679337e972460a251c129062a70f8518"
+  name = "github.com/btcsuite/btcutil"
+  packages = ["base58"]
+  pruneopts = "NUT"
+  revision = "9e5f4b9a998d263e3ce9c56664a7816001ac8000"
+
+[[projects]]
   branch = "master"
   digest = "1:4a029051269e04c040c092eb4ddd92732f8f3a3921a8b43b82b30804e00f3357"
   name = "github.com/containerd/continuity"
@@ -958,6 +973,8 @@
     "github.com/Knetic/govaluate",
     "github.com/Shopify/sarama",
     "github.com/Shopify/sarama/mocks",
+    "github.com/bluele/gcache",
+    "github.com/btcsuite/btcutil/base58",
     "github.com/davecgh/go-spew/spew",
     "github.com/fsouza/go-dockerclient",
     "github.com/go-kit/kit/metrics",

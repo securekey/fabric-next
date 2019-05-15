@@ -13,8 +13,12 @@ import (
 	"github.com/hyperledger/fabric/core/committer"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/common/privdata"
-	"github.com/hyperledger/fabric/core/deliverservice"
+	deliverclient "github.com/hyperledger/fabric/core/deliverservice"
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
+	"github.com/hyperledger/fabric/core/ledger"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	kgossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
+	"github.com/hyperledger/fabric/extensions/gossip/dispatcher"
 	"github.com/hyperledger/fabric/gossip/api"
 	gossipCommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/election"
@@ -214,6 +218,9 @@ type Support struct {
 	Store                privdata2.TransientStore
 	Cs                   privdata.CollectionStore
 	IdDeserializeFactory privdata2.IdentityDeserializerFactory
+	CollDataStore        storeapi.Store
+	Ledger               ledger.PeerLedger
+	BlockPublisher       kgossipapi.BlockPublisher
 }
 
 // DataStoreSupport aggregates interfaces capable
@@ -253,6 +260,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 		CollectionStore: support.Cs,
 		Validator:       support.Validator,
 		TransientStore:  support.Store,
+		CollDataStore:   support.CollDataStore,
 		Committer:       support.Committer,
 		Fetcher:         fetcher,
 	}, g.createSelfSignedData(), g.metrics.PrivdataMetrics, coordinatorConfig)
@@ -277,7 +285,8 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, endpoints []string
 	g.privateHandlers[chainID].reconciler.Start()
 
 	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
-		g.metrics.StateMetrics, getStateConfiguration())
+		g.metrics.StateMetrics, getStateConfiguration(),
+		dispatcher.New(chainID, support.CollDataStore, servicesAdapter, support.Ledger, support.BlockPublisher))
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, endpoints, g.mcs)
