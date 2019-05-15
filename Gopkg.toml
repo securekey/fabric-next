@@ -197,3 +197,7 @@ noverify = [
 [[constraint]]
   name = "github.com/prometheus/client_golang"
   version = "0.9.0"
+
+[[constraint]]
+  name = "github.com/bluele/gcache"
+  revision = "79ae3b2d8680cbc7ad3dba9db66b8a648575221c"
