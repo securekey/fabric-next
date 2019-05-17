@@ -21,8 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Fabric release-1.4 (Jan 24, 2019)
-git checkout 1fdb6917c71bc4bfbd2cddde9a6d285a2a8ee390
+# Fabric release-1.4.1-rc1 (Mar 29, 2019)
+git checkout 29433f0b610b9515f2a5fe0d62ab323275eaaab7
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -34,6 +34,8 @@ git config user.email jenkins@jenkins.com
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 git am $MY_PATH/../patches/0001-Apply-go-modules.patch
 git am $MY_PATH/../patches/0001-Fix-ccenv-image.patch
+#apply trustbloc/Fabric-Mod transient data changes with fabric 1.4.1
+git am $MY_PATH/../patches/0001-Backport-transient-data-to-Fabric-1.4.1.patch
 
 #[FAB-12982] & [FAB-13534] cherry picks are required to [FAB-12914] gossip private data metrics
 
