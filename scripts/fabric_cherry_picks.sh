@@ -37,3 +37,7 @@ git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 # [FAB-14646] Update dependency github.com/opencontainers/runc
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/94/30094/1 && git cherry-pick FETCH_HEAD
 
+
+#apply trustbloc/Fabric-Mod transient data changes with fabric 1.4.1
+git am $MY_PATH/../patches/0001-Backport-transient-data-to-Fabric-1.4.1.patch
+
