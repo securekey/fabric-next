@@ -37,3 +37,12 @@ git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 # [FAB-14646] Update dependency github.com/opencontainers/runc
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/94/30094/1 && git cherry-pick FETCH_HEAD
 
+
+#apply trustbloc/Fabric-Mod transient data changes with fabric 1.4.1 in three steps
+# step 1 apply go mod (to match dependencies in trustbloc/Fabric-Mod)
+git am $MY_PATH/../patches/0001-Apply-go-modules-for-src-1.4.1.patch
+# step 2 apply backport of transient data
+git am $MY_PATH/../patches/0002-DEV-13700-Backport-transient-data-to-Fabric-1.4.1.patch
+# step 3 apply gossip protos upgrade to Fab 2.0 to match trustbloc dependencies
+git am $MY_PATH/../patches/0003-upgrade-gossip-protos-to-2.0.patch
+
