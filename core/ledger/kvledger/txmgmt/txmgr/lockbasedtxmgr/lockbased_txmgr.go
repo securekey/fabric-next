@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	"github.com/hyperledger/fabric/core/ledger/util"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
@@ -41,6 +42,8 @@ type LockBasedTxMgr struct {
 	commitRWLock    sync.RWMutex
 	oldBlockCommit  sync.Mutex
 	current         *current
+
+	collDataProvider storeapi.Provider
 }
 
 type current struct {

@@ -9,6 +9,7 @@ require (
 	github.com/VividCortex/gohistogram v1.0.0 // indirect
 	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc // indirect
 	github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf // indirect
+	github.com/bluele/gcache v0.0.0-20190301044115-79ae3b2d8680
 	github.com/containerd/continuity v0.0.0-20181003075958-be9bd761db19 // indirect
 	github.com/coreos/etcd v3.3.9+incompatible
 	github.com/coreos/pkg v0.0.0-20180108230652-97fdf19511ea // indirect
@@ -30,6 +31,7 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hyperledger/fabric-amcl v0.0.0-20180903120555-6b78f7a22d95
 	github.com/hyperledger/fabric-lib-go v1.0.0
+	github.com/hyperledger/fabric/extensions v0.0.0
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515 // indirect
 	github.com/kr/pretty v0.1.0
 	github.com/magiconair/properties v1.8.0 // indirect
@@ -81,3 +83,11 @@ replace github.com/docker/libnetwork => github.com/docker/libnetwork v0.0.0-2018
 replace github.com/docker/docker => github.com/docker/docker v0.0.0-20180827131323-0c5f8d2b9b23
 
 replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20180827131323-e3636079e1a4
+
+replace github.com/hyperledger/fabric/extensions => github.com/trustbloc/fabric-peer-ext/mod/peer v0.0.0-20190521162923-e85101b1c766
+
+replace github.com/trustbloc/fabric-peer-ext => github.com/trustbloc/fabric-peer-ext v0.0.0-20190521162923-e85101b1c766
+
+//replace github.com/hyperledger/fabric/extensions => ../../trustbloc/fabric-peer-ext/mod/peer
+
+//replace github.com/trustbloc/fabric-peer-ext => ../../trustbloc/fabric-peer-ext
