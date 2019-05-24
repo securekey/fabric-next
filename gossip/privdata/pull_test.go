@@ -25,6 +25,7 @@ import (
 	gmetricsmocks "github.com/hyperledger/fabric/gossip/metrics/mocks"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 	"github.com/hyperledger/fabric/gossip/privdata/mocks"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	fcommon "github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -165,9 +166,9 @@ func (dr *dataRetrieverMock) CollectionRWSet(dig []*proto.PvtDataDigest, blockNu
 }
 
 type receivedMsg struct {
-	responseChan chan proto.ReceivedMessage
+	responseChan chan protoext.ReceivedMessage
 	*comm.RemotePeer
-	*proto.SignedGossipMessage
+	*protoext.SignedGossipMessage
 }
 
 func (msg *receivedMsg) Ack(_ error) {
@@ -175,11 +176,11 @@ func (msg *receivedMsg) Ack(_ error) {
 }
 
 func (msg *receivedMsg) Respond(message *proto.GossipMessage) {
-	m, _ := message.NoopSign()
+	m, _ := protoext.NoopSign(message)
 	msg.responseChan <- &receivedMsg{SignedGossipMessage: m, RemotePeer: &comm.RemotePeer{}}
 }
 
-func (msg *receivedMsg) GetGossipMessage() *proto.SignedGossipMessage {
+func (msg *receivedMsg) GetGossipMessage() *protoext.SignedGossipMessage {
 	return msg.SignedGossipMessage
 }
 
@@ -187,10 +188,10 @@ func (msg *receivedMsg) GetSourceEnvelope() *proto.Envelope {
 	panic("implement me")
 }
 
-func (msg *receivedMsg) GetConnectionInfo() *proto.ConnectionInfo {
-	return &proto.ConnectionInfo{
+func (msg *receivedMsg) GetConnectionInfo() *protoext.ConnectionInfo {
+	return &protoext.ConnectionInfo{
 		Identity: api.PeerIdentityType(msg.RemotePeer.PKIID),
-		Auth: &proto.AuthInfo{
+		Auth: &protoext.AuthInfo{
 			SignedData: []byte{},
 			Signature:  []byte{},
 		},
@@ -199,14 +200,14 @@ func (msg *receivedMsg) GetConnectionInfo() *proto.ConnectionInfo {
 
 type mockGossip struct {
 	mock.Mock
-	msgChan chan proto.ReceivedMessage
+	msgChan chan protoext.ReceivedMessage
 	id      *comm.RemotePeer
 	network *gossipNetwork
 }
 
 func newMockGossip(id *comm.RemotePeer) *mockGossip {
 	return &mockGossip{
-		msgChan: make(chan proto.ReceivedMessage),
+		msgChan: make(chan protoext.ReceivedMessage),
 		id:      id,
 	}
 }
@@ -229,7 +230,7 @@ func (g *mockGossip) PeerFilter(channel common.ChainID, messagePredicate api.Sub
 }
 
 func (g *mockGossip) Send(msg *proto.GossipMessage, peers ...*comm.RemotePeer) {
-	sMsg, _ := msg.NoopSign()
+	sMsg, _ := protoext.NoopSign(msg)
 	for _, peer := range g.network.peers {
 		if bytes.Equal(peer.id.PKIID, peers[0].PKIID) {
 			peer.msgChan <- &receivedMsg{
@@ -246,7 +247,7 @@ func (g *mockGossip) PeersOfChannel(common.ChainID) []discovery.NetworkMember {
 	return g.Called().Get(0).([]discovery.NetworkMember)
 }
 
-func (g *mockGossip) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage) {
+func (g *mockGossip) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage) {
 	return nil, g.msgChan
 }
 

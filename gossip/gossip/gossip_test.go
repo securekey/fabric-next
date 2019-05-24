@@ -31,6 +31,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/gossip/channel"
 	"github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/metrics/mocks"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/assert"
@@ -90,7 +91,7 @@ func acceptData(m interface{}) bool {
 
 func acceptLeadershp(message interface{}) bool {
 	validMsg := message.(*proto.GossipMessage).Tag == proto.GossipMessage_CHAN_AND_ORG &&
-		message.(*proto.GossipMessage).IsLeadershipMsg()
+		protoext.IsLeadershipMsg(message.(*proto.GossipMessage))
 
 	return validMsg
 }
@@ -676,7 +677,7 @@ func TestNoMessagesSelfLoop(t *testing.T) {
 	// Wait until both peers get connected
 	waitUntilOrFail(t, checkPeersMembership(t, []Gossip{peer}, 1))
 	_, commCh := boot.Accept(func(msg interface{}) bool {
-		return msg.(proto.ReceivedMessage).GetGossipMessage().IsDataMsg()
+		return protoext.IsDataMsg(msg.(protoext.ReceivedMessage).GetGossipMessage().GossipMessage)
 	}, true)
 
 	wg := sync.WaitGroup{}
@@ -684,13 +685,13 @@ func TestNoMessagesSelfLoop(t *testing.T) {
 
 	// Make sure sending peer is not getting his own
 	// message back
-	go func(ch <-chan proto.ReceivedMessage) {
+	go func(ch <-chan protoext.ReceivedMessage) {
 		defer wg.Done()
 		for {
 			select {
 			case msg := <-ch:
 				{
-					if msg.GetGossipMessage().IsDataMsg() {
+					if protoext.IsDataMsg(msg.GetGossipMessage().GossipMessage) {
 						t.Fatal("Should not receive data message back, got", msg)
 					}
 				}
@@ -986,27 +987,27 @@ func TestMembershipRequestSpoofing(t *testing.T) {
 	waitUntilOrFail(t, checkPeersMembership(t, []Gossip{g2, g3}, 1))
 	// Obtain an alive message from p3
 	_, aliveMsgChan := g2.Accept(func(o interface{}) bool {
-		msg := o.(proto.ReceivedMessage).GetGossipMessage()
+		msg := o.(protoext.ReceivedMessage).GetGossipMessage()
 		// Make sure we get an AliveMessage and it's about g3
-		return msg.IsAliveMsg() && bytes.Equal(msg.GetAliveMsg().Membership.PkiId, []byte(endpoint2))
+		return protoext.IsAliveMsg(msg.GossipMessage) && bytes.Equal(msg.GetAliveMsg().Membership.PkiId, []byte(endpoint2))
 	}, true)
 	aliveMsg := <-aliveMsgChan
 
 	// Obtain channel for messages from g1 to g2
 	_, g1ToG2 := g2.Accept(func(o interface{}) bool {
-		connInfo := o.(proto.ReceivedMessage).GetConnectionInfo()
+		connInfo := o.(protoext.ReceivedMessage).GetConnectionInfo()
 		return bytes.Equal([]byte(endpoint0), connInfo.ID)
 	}, true)
 
 	// Obtain channel for messages from g1 to g3
 	_, g1ToG3 := g3.Accept(func(o interface{}) bool {
-		connInfo := o.(proto.ReceivedMessage).GetConnectionInfo()
+		connInfo := o.(protoext.ReceivedMessage).GetConnectionInfo()
 		return bytes.Equal([]byte(endpoint0), connInfo.ID)
 	}, true)
 
 	// Now, create a membership request message
-	memRequestSpoofFactory := func(aliveMsgEnv *proto.Envelope) *proto.SignedGossipMessage {
-		sMsg, _ := (&proto.GossipMessage{
+	memRequestSpoofFactory := func(aliveMsgEnv *proto.Envelope) *protoext.SignedGossipMessage {
+		sMsg, _ := protoext.NoopSign(&proto.GossipMessage{
 			Tag:   proto.GossipMessage_EMPTY,
 			Nonce: uint64(0),
 			Content: &proto.GossipMessage_MemReq{
@@ -1015,7 +1016,7 @@ func TestMembershipRequestSpoofing(t *testing.T) {
 					Known:           [][]byte{},
 				},
 			},
-		}).NoopSign()
+		})
 		return sMsg
 	}
 	spoofedMemReq := memRequestSpoofFactory(aliveMsg.GetSourceEnvelope())
@@ -1278,7 +1279,7 @@ func TestSendByCriteria(t *testing.T) {
 		p.UpdateLedgerHeight(1, common.ChainID("A"))
 	}
 	defer stopPeers(peers)
-	msg, _ := createDataMsg(1, []byte{}, common.ChainID("A")).NoopSign()
+	msg, _ := protoext.NoopSign(createDataMsg(1, []byte{}, common.ChainID("A")))
 
 	// We send without specifying maximum peers,
 	// which sets it to the zero value, and
@@ -1335,12 +1336,12 @@ func TestSendByCriteria(t *testing.T) {
 	// We retry the test above, but this time the peers acknowledge
 	// Peers now ack
 	acceptDataMsgs := func(m interface{}) bool {
-		return m.(proto.ReceivedMessage).GetGossipMessage().IsDataMsg()
+		return protoext.IsDataMsg(m.(protoext.ReceivedMessage).GetGossipMessage().GossipMessage)
 	}
 	_, ackChan2 := g2.Accept(acceptDataMsgs, true)
 	_, ackChan3 := g3.Accept(acceptDataMsgs, true)
 	_, ackChan4 := g4.Accept(acceptDataMsgs, true)
-	ack := func(c <-chan proto.ReceivedMessage) {
+	ack := func(c <-chan protoext.ReceivedMessage) {
 		msg := <-c
 		msg.Ack(nil)
 	}
@@ -1352,7 +1353,7 @@ func TestSendByCriteria(t *testing.T) {
 	assert.NoError(t, err)
 
 	// We send to 3 peers, but 2 out of 3 peers acknowledge with an error
-	nack := func(c <-chan proto.ReceivedMessage) {
+	nack := func(c <-chan protoext.ReceivedMessage) {
 		msg := <-c
 		msg.Ack(fmt.Errorf("uh oh"))
 	}
@@ -1366,7 +1367,7 @@ func TestSendByCriteria(t *testing.T) {
 	// We try to send to either g2 or g3, but neither would ack us, so we would fail.
 	// However - what we actually check in this test is that we send to peers according to the
 	// filter passed in the criteria
-	failOnAckRequest := func(c <-chan proto.ReceivedMessage, peerId int) {
+	failOnAckRequest := func(c <-chan protoext.ReceivedMessage, peerId int) {
 		msg := <-c
 		if msg == nil {
 			return
@@ -1392,7 +1393,7 @@ func TestSendByCriteria(t *testing.T) {
 	// this property is respected - and only 1 peer receives a message, and not both
 	criteria.MaxPeers = 1
 	// invoke f() in case message has been received
-	waitForMessage := func(c <-chan proto.ReceivedMessage, f func()) {
+	waitForMessage := func(c <-chan protoext.ReceivedMessage, f func()) {
 		select {
 		case msg := <-c:
 			if msg == nil {

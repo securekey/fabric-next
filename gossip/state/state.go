@@ -19,6 +19,7 @@ import (
 	common2 "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/metrics"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -74,7 +75,7 @@ type GossipAdapter interface {
 	// If passThrough is false, the messages are processed by the gossip layer beforehand.
 	// If passThrough is true, the gossip layer doesn't intervene and the messages
 	// can be used to send a reply back to the sender
-	Accept(acceptor common2.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage)
+	Accept(acceptor common2.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage)
 
 	// UpdateLedgerHeight updates the ledger height the peer
 	// publishes to other peers in the channel
@@ -136,7 +137,7 @@ type ServicesMediator struct {
 }
 
 type messageDispatcher interface {
-	Dispatch(msg proto.ReceivedMessage) bool
+	Dispatch(msg protoext.ReceivedMessage) bool
 }
 
 // GossipStateProviderImpl the implementation of the GossipStateProvider interface
@@ -151,16 +152,16 @@ type GossipStateProviderImpl struct {
 	// Channel to read gossip messages from
 	gossipChan <-chan *proto.GossipMessage
 
-	commChan <-chan proto.ReceivedMessage
+	commChan <-chan protoext.ReceivedMessage
 
 	// Queue of payloads which wasn't acquired yet
 	payloads PayloadsBuffer
 
 	ledger ledgerResources
 
-	stateResponseCh chan proto.ReceivedMessage
+	stateResponseCh chan protoext.ReceivedMessage
 
-	stateRequestCh chan proto.ReceivedMessage
+	stateRequestCh chan protoext.ReceivedMessage
 
 	stopCh chan struct{}
 
@@ -204,14 +205,14 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 	gossipChan, _ := services.Accept(func(message interface{}) bool {
 		// Get only data messages
-		return message.(*proto.GossipMessage).IsDataMsg() &&
+		return protoext.IsDataMsg(message.(*proto.GossipMessage)) &&
 			bytes.Equal(message.(*proto.GossipMessage).Channel, []byte(chainID))
 	}, false)
 
 	remoteStateMsgFilter := func(message interface{}) bool {
-		receivedMsg := message.(proto.ReceivedMessage)
+		receivedMsg := message.(protoext.ReceivedMessage)
 		msg := receivedMsg.GetGossipMessage()
-		if !(msg.IsRemoteStateMessage() || msg.GetPrivateData() != nil ||
+		if !(protoext.IsRemoteStateMessage(msg.GossipMessage) || msg.GetPrivateData() != nil ||
 			msg.GetCollDataReq() != nil || msg.GetCollDataRes() != nil) {
 			return false
 		}
@@ -267,9 +268,9 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
 
 		ledger: ledger,
 
-		stateResponseCh: make(chan proto.ReceivedMessage, config.ChannelBufferSize),
+		stateResponseCh: make(chan protoext.ReceivedMessage, config.ChannelBufferSize),
 
-		stateRequestCh: make(chan proto.ReceivedMessage, config.ChannelBufferSize),
+		stateRequestCh: make(chan protoext.ReceivedMessage, config.ChannelBufferSize),
 
 		stopCh: make(chan struct{}, 1),
 
@@ -325,9 +326,9 @@ func (s *GossipStateProviderImpl) listen() {
 		}
 	}
 }
-func (s *GossipStateProviderImpl) dispatch(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) dispatch(msg protoext.ReceivedMessage) {
 	// Check type of the message
-	if msg.GetGossipMessage().IsRemoteStateMessage() {
+	if protoext.IsRemoteStateMessage(msg.GetGossipMessage().GossipMessage) {
 		logger.Debug("Handling direct state transfer message")
 		// Got state transfer request response
 		s.directMessage(msg)
@@ -342,7 +343,7 @@ func (s *GossipStateProviderImpl) dispatch(msg proto.ReceivedMessage) {
 	}
 
 }
-func (s *GossipStateProviderImpl) privateDataMessage(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) privateDataMessage(msg protoext.ReceivedMessage) {
 	if !bytes.Equal(msg.GetGossipMessage().Channel, []byte(s.chainID)) {
 		logger.Warning("Received state transfer request for channel",
 			string(msg.GetGossipMessage().Channel), "while expecting channel", s.chainID, "skipping request...")
@@ -393,7 +394,7 @@ func (s *GossipStateProviderImpl) privateDataMessage(msg proto.ReceivedMessage) 
 	logger.Debug("Private data for collection", collectionName, "has been stored")
 }
 
-func (s *GossipStateProviderImpl) directMessage(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) directMessage(msg protoext.ReceivedMessage) {
 	logger.Debug("[ENTER] -> directMessage")
 	defer logger.Debug("[EXIT] ->  directMessage")
 
@@ -442,7 +443,7 @@ func (s *GossipStateProviderImpl) processStateRequests() {
 
 // handleStateRequest handles state request message, validate batch size, reads current leader state to
 // obtain required blocks, builds response message and send it back
-func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) {
+func (s *GossipStateProviderImpl) handleStateRequest(msg protoext.ReceivedMessage) {
 	if msg == nil {
 		return
 	}
@@ -520,7 +521,7 @@ func (s *GossipStateProviderImpl) handleStateRequest(msg proto.ReceivedMessage) 
 	})
 }
 
-func (s *GossipStateProviderImpl) handleStateResponse(msg proto.ReceivedMessage) (uint64, error) {
+func (s *GossipStateProviderImpl) handleStateResponse(msg protoext.ReceivedMessage) (uint64, error) {
 	max := uint64(0)
 	// Send signal that response for given nonce has been received
 	response := msg.GetGossipMessage().GetStateResponse()
