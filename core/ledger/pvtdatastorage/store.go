@@ -100,11 +100,6 @@ func (err *ErrIllegalCall) Error() string {
 	return err.msg
 }
 
-// NewErrIllegalArgs creates an illegal args error
-func NewErrIllegalArgs(msg string) *ErrIllegalArgs {
-	return &ErrIllegalArgs{msg: msg}
-}
-
 // ErrIllegalArgs is to be thrown by a store impl if the args passed are not allowed
 type ErrIllegalArgs struct {
 	msg string
