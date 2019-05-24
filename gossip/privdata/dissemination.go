@@ -9,12 +9,12 @@ package privdata
 import (
 	"github.com/hyperledger/fabric/core/common/privdata"
 	extdissemination "github.com/hyperledger/fabric/extensions/collections/dissemination"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/protos/common"
-	protog "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/ledger/rwset"
 )
 
-func (d *distributorImpl) disseminationPlanForExt(ns string, rwSet *rwset.CollectionPvtReadWriteSet, colCP *common.CollectionConfig, colAP privdata.CollectionAccessPolicy, pvtDataMsg *protog.SignedGossipMessage) ([]*dissemination, error) {
+func (d *distributorImpl) disseminationPlanForExt(ns string, rwSet *rwset.CollectionPvtReadWriteSet, colCP *common.CollectionConfig, colAP privdata.CollectionAccessPolicy, pvtDataMsg *protoext.SignedGossipMessage) ([]*dissemination, error) {
 	dissPlan, handled, err := extdissemination.ComputeDisseminationPlan(d.chainID, ns, rwSet, colCP, colAP, pvtDataMsg, d.gossipAdapter)
 	if err != nil {
 		return nil, err

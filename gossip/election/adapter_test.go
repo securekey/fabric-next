@@ -19,6 +19,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/metrics/mocks"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/assert"
@@ -55,7 +56,7 @@ func TestAdapterImpl_CreateMessage(t *testing.T) {
 		metrics.NewGossipMetrics(&disabled.Provider{}).ElectionMetrics)
 	msg := adapter.CreateMessage(true)
 
-	if !msg.(*msgImpl).msg.IsLeadershipMsg() {
+	if !protoext.IsLeadershipMsg(msg.(*msgImpl).msg) {
 		t.Error("Newly created message should be LeadershipMsg")
 	}
 
@@ -65,7 +66,7 @@ func TestAdapterImpl_CreateMessage(t *testing.T) {
 
 	msg = adapter.CreateMessage(false)
 
-	if !msg.(*msgImpl).msg.IsLeadershipMsg() {
+	if !protoext.IsLeadershipMsg(msg.(*msgImpl).msg) {
 		t.Error("Newly created message should be LeadershipMsg")
 	}
 
@@ -195,7 +196,7 @@ func (g *peerMockGossip) Peers() []discovery.NetworkMember {
 	return res
 }
 
-func (g *peerMockGossip) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage) {
+func (g *peerMockGossip) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage) {
 	ch := make(chan *proto.GossipMessage, 100)
 	g.acceptorLock.Lock()
 	g.acceptors = append(g.acceptors, &mockAcceptor{

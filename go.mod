@@ -87,7 +87,3 @@ replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20180827131323-e363607
 replace github.com/hyperledger/fabric/extensions => github.com/trustbloc/fabric-peer-ext/mod/peer v0.0.0-20190521162923-e85101b1c766
 
 replace github.com/trustbloc/fabric-peer-ext => github.com/trustbloc/fabric-peer-ext v0.0.0-20190521162923-e85101b1c766
-
-//replace github.com/hyperledger/fabric/extensions => ../../trustbloc/fabric-peer-ext/mod/peer
-
-//replace github.com/trustbloc/fabric-peer-ext => ../../trustbloc/fabric-peer-ext

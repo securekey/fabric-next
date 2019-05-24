@@ -98,7 +98,7 @@ type GREP11Opts struct {
 	FileKeystore *FileKeystoreOpts `mapstructure:"filekeystore,omitempty" json:"filekeystore,omitempty"`
 
 	Address string `mapstructure:"address" json:"library"`
-	Port    string `mapstructure:"port" json:"library"`
+	Port    string `mapstructure:"port" json:"port"`
 
 	SoftVerify bool `mapstructure:"softwareverify,omitempty" json:"softwareverify,omitempty"`
 }
