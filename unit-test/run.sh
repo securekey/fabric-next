@@ -10,6 +10,7 @@ set -e
 # regexes for packages to exclude from unit test
 excluded_packages=(
     "/integration(/|$)"
+    "github.com/hyperledger/fabric/extensions(/|$)"
 )
 
 # regexes for packages that must be run serially

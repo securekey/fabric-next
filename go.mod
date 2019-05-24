@@ -9,9 +9,7 @@ require (
 	github.com/VividCortex/gohistogram v1.0.0 // indirect
 	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc // indirect
 	github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf // indirect
-	github.com/bluele/gcache v0.0.0-20190301044115-79ae3b2d8680
 	github.com/containerd/continuity v0.0.0-20181003075958-be9bd761db19 // indirect
-	github.com/coreos/etcd v3.3.9+incompatible
 	github.com/coreos/pkg v0.0.0-20180108230652-97fdf19511ea // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/eapache/go-resiliency v1.1.0 // indirect
@@ -28,7 +26,6 @@ require (
 	github.com/gorilla/mux v1.6.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/hashicorp/go-version v1.0.0
-	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hyperledger/fabric-amcl v0.0.0-20180903120555-6b78f7a22d95
 	github.com/hyperledger/fabric-lib-go v1.0.0
 	github.com/hyperledger/fabric/extensions v0.0.0
@@ -43,7 +40,6 @@ require (
 	github.com/onsi/ginkgo v1.6.0
 	github.com/onsi/gomega v1.4.2
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	github.com/pelletier/go-toml v1.2.0 // indirect
 	github.com/pierrec/lz4 v0.0.0-20180906185208-bb6bfd13c6a2 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.0
@@ -52,7 +48,6 @@ require (
 	github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/sirupsen/logrus v1.1.0 // indirect
-	github.com/spf13/afero v1.2.1 // indirect
 	github.com/spf13/cast v1.2.0 // indirect
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
@@ -84,10 +79,6 @@ replace github.com/docker/docker => github.com/docker/docker v0.0.0-201808271313
 
 replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20180827131323-e3636079e1a4
 
-replace github.com/hyperledger/fabric/extensions => github.com/trustbloc/fabric-peer-ext/mod/peer v0.0.0-20190521162923-e85101b1c766
+replace github.com/hyperledger/fabric/extensions => github.com/trustbloc/fabric-peer-ext/mod/peer v0.0.0-20190528231123-9b2d0053a5e4
 
-replace github.com/trustbloc/fabric-peer-ext => github.com/trustbloc/fabric-peer-ext v0.0.0-20190521162923-e85101b1c766
-
-//replace github.com/hyperledger/fabric/extensions => ../../trustbloc/fabric-peer-ext/mod/peer
-
-//replace github.com/trustbloc/fabric-peer-ext => ../../trustbloc/fabric-peer-ext
+replace github.com/trustbloc/fabric-peer-ext => github.com/trustbloc/fabric-peer-ext v0.0.0-20190528231123-9b2d0053a5e4
