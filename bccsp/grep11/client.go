@@ -16,13 +16,13 @@ limitations under the License.
 package grep11
 
 import (
+	"context"
 	"crypto/elliptic"
 	"encoding/asn1"
 	"fmt"
 	"math/big"
 
 	pb "github.com/hyperledger/fabric/bccsp/grep11/protos"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -105,7 +105,7 @@ func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (*ec
 	var k *pb.GenerateStatus
 	err = csp.reLoad(func() error {
 		var err error
-		k, err = csp.grepClient.GenerateECKey(context.Background(), &pb.GenerateInfo{marshaledOID})
+		k, err = csp.grepClient.GenerateECKey(context.Background(), &pb.GenerateInfo{Oid: marshaledOID})
 		return err
 	})
 
@@ -143,7 +143,7 @@ func (csp *impl) signP11ECDSA(keyBlob []byte, msg []byte) (R, S *big.Int, err er
 	var sig *pb.SignStatus
 	err = csp.reLoad(func() error {
 		var err error
-		sig, err = csp.grepClient.SignP11ECDSA(context.Background(), &pb.SignInfo{keyBlob, msg})
+		sig, err = csp.grepClient.SignP11ECDSA(context.Background(), &pb.SignInfo{PrivKey: keyBlob, Hash: msg})
 		return err
 	})
 

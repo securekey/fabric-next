@@ -16,11 +16,11 @@ limitations under the License.
 package grep11
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"time"
@@ -117,7 +117,7 @@ func (csp *impl) connectSession() error {
 		//      when container got moved to different LPAR)
 	}
 
-	r, err := csp.grepManager.Load(context.Background(), &pb.LoadInfo{pin, nonce})
+	r, err := csp.grepManager.Load(context.Background(), &pb.LoadInfo{Pin: pin, Nonce: nonce})
 	if err != nil {
 		return fmt.Errorf("Could not remote-load EP11 library [%s]\n Remote Response: <%+v>", err, r)
 	}
