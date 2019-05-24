@@ -158,6 +158,7 @@ message Properties {
     uint64 ledger_height = 1;
     bool left_channel = 2;
     repeated Chaincode chaincodes = 3;
+    repeated string roles = 99;
 }
 
 // StateInfoSnapshot is an aggregation of StateInfo messages
@@ -376,14 +377,6 @@ message Chaincode {
     string name = 1;
     string version = 2;
     bytes metadata = 3;
-}
-
-// ValidationResultsMessage is the message containing block validation results
-message ValidationResultsMessage {
-    uint64 seq_num = 1;
-    bytes txFlags  = 2;
-    bytes signature = 3;
-    bytes identity = 4;
 }
 
 // RemoteCollDataRequest message used to request
