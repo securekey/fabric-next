@@ -19,6 +19,24 @@
     },
     {
       "key": {
+        "uuid": "61d08757_acc4f5bd",
+        "filename": "core/ledger/pvtdatastorage/store.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2019-05-27T22:35:00Z",
+      "side": 1,
+      "message": "NewErrIllegalCall() and NewErrOutOfRange() are used by Fabric-peer-ext (in cdbpvtdatastore and cachedpvtdatastore/store_impl.go\n\nI will remove NewErrIllegalArgs() as it is not referenced",
+      "parentUuid": "96c70cc9_eeb30fb9",
+      "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "6279b44e_ffc02a9d",
         "filename": "go.mod",
         "patchSetId": 1
@@ -42,6 +60,30 @@
     },
     {
       "key": {
+        "uuid": "e0ae65f7_5f7fc6ce",
+        "filename": "go.mod",
+        "patchSetId": 1
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2019-05-27T22:35:00Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "6279b44e_ffc02a9d",
+      "range": {
+        "startLine": 91,
+        "startChar": 0,
+        "endLine": 93,
+        "endChar": 81
+      },
+      "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "ca38b9d4_d3cff243",
         "filename": "gossip/privdata/distributor_test.go",
         "patchSetId": 1
@@ -53,6 +95,24 @@
       "writtenOn": "2019-05-27T15:21:55Z",
       "side": 1,
       "message": "This might actually get called.",
+      "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "03ba177e_1465635f",
+        "filename": "gossip/privdata/distributor_test.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 108,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2019-05-27T22:35:00Z",
+      "side": 1,
+      "message": "unit tests of privdata package are successfully passing with this line",
+      "parentUuid": "ca38b9d4_d3cff243",
       "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
       "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
       "unresolved": false
