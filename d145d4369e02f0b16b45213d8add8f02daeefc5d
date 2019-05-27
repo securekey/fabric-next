@@ -1,0 +1,61 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "96c70cc9_eeb30fb9",
+        "filename": "core/ledger/pvtdatastorage/store.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2019-05-27T15:21:55Z",
+      "side": 1,
+      "message": "Changes to this file aren\u0027t necessary.",
+      "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "6279b44e_ffc02a9d",
+        "filename": "go.mod",
+        "patchSetId": 1
+      },
+      "lineNbr": 93,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2019-05-27T15:21:55Z",
+      "side": 1,
+      "message": "Should delete.",
+      "range": {
+        "startLine": 91,
+        "startChar": 0,
+        "endLine": 93,
+        "endChar": 81
+      },
+      "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "ca38b9d4_d3cff243",
+        "filename": "gossip/privdata/distributor_test.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 108,
+      "author": {
+        "id": 1000044
+      },
+      "writtenOn": "2019-05-27T15:21:55Z",
+      "side": 1,
+      "message": "This might actually get called.",
+      "revId": "d145d4369e02f0b16b45213d8add8f02daeefc5d",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": false
+    }
+  ]
+}
