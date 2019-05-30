@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/validation"
 	"github.com/hyperledger/fabric/core/ledger"
+	xendorser "github.com/hyperledger/fabric/extensions/endorser"
 	"github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/transientstore"
@@ -256,6 +257,7 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid 
 			return nil, nil, nil, nil, err
 		}
 
+		var collConfigs map[string]*common.CollectionConfigPackage
 		if simResult.PvtSimulationResults != nil {
 			if cid.Name == "lscc" {
 				// TODO: remove once we can store collection configuration outside of LSCC
@@ -283,10 +285,15 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid 
 			if err := e.distributePrivateData(txParams.ChannelID, txParams.TxID, pvtDataWithConfig, endorsedAt); err != nil {
 				return nil, nil, nil, nil, err
 			}
+			collConfigs = pvtDataWithConfig.CollectionConfigs
 		}
 
 		txParams.TXSimulator.Done()
-		if pubSimResBytes, err = simResult.GetPubSimulationBytes(); err != nil {
+		pubSimRes, err := xendorser.FilterPubSimulationResults(collConfigs, simResult.PubSimulationResults)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if pubSimResBytes, err = proto.Marshal(pubSimRes); err != nil {
 			return nil, nil, nil, nil, err
 		}
 	}

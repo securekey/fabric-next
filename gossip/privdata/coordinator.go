@@ -21,6 +21,8 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/transientstore"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	extcoord "github.com/hyperledger/fabric/extensions/gossip/coordinator"
 	"github.com/hyperledger/fabric/gossip/metrics"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 	"github.com/hyperledger/fabric/gossip/util"
@@ -113,7 +115,12 @@ type Support struct {
 	txvalidator.Validator
 	committer.Committer
 	TransientStore
+	CollDataStore storeapi.Store
 	Fetcher
+}
+
+type pvtDataStore interface {
+	StorePvtData(txID string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error
 }
 
 type coordinator struct {
@@ -122,6 +129,7 @@ type coordinator struct {
 	transientBlockRetention uint64
 	metrics                 *metrics.PrivdataMetrics
 	pullRetryThreshold      time.Duration
+	pvtDataStore            pvtDataStore
 }
 
 type CoordinatorConfig struct {
@@ -129,12 +137,19 @@ type CoordinatorConfig struct {
 	PullRetryThreshold      time.Duration
 }
 
+// getPvtDataStore may be overridden by unit tests
+var getPvtDataStore = func(channelID string, transientStore TransientStore, collDataStore storeapi.Store) pvtDataStore {
+	return extcoord.New(channelID, transientStore, collDataStore)
+}
+
 // NewCoordinator creates a new instance of coordinator
 func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *metrics.PrivdataMetrics,
 	config CoordinatorConfig) Coordinator {
 	return &coordinator{Support: support, selfSignedData: selfSignedData,
 		transientBlockRetention: config.TransientBlockRetention, metrics: metrics,
-		pullRetryThreshold: config.PullRetryThreshold}
+		pullRetryThreshold: config.PullRetryThreshold,
+		pvtDataStore:       getPvtDataStore(support.ChainID, support.TransientStore, support.CollDataStore),
+	}
 }
 
 // StorePvtData used to persist private date into transient store

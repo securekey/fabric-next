@@ -67,7 +67,7 @@ func (q *lockBasedQueryExecutor) ExecuteQueryWithMetadata(namespace, query strin
 
 // GetPrivateData implements method in interface `ledger.QueryExecutor`
 func (q *lockBasedQueryExecutor) GetPrivateData(namespace, collection, key string) ([]byte, error) {
-	return q.helper.getPrivateData(namespace, collection, key)
+	return q.helper.handleGetPrivateData(q.txid, namespace, collection, key)
 }
 
 // GetPrivateDataMetadata implements method in interface `ledger.QueryExecutor`
@@ -82,7 +82,7 @@ func (q *lockBasedQueryExecutor) GetPrivateDataMetadataByHash(namespace, collect
 
 // GetPrivateDataMultipleKeys implements method in interface `ledger.QueryExecutor`
 func (q *lockBasedQueryExecutor) GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([][]byte, error) {
-	return q.helper.getPrivateDataMultipleKeys(namespace, collection, keys)
+	return q.helper.handleGetPrivateDataMultipleKeys(q.txid, namespace, collection, keys)
 }
 
 // GetPrivateDataRangeScanIterator implements method in interface `ledger.QueryExecutor`
