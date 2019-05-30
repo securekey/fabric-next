@@ -18,10 +18,11 @@ import (
 	"github.com/hyperledger/fabric/common/localmsp"
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/comm"
-	"github.com/hyperledger/fabric/core/deliverservice"
+	deliverclient "github.com/hyperledger/fabric/core/deliverservice"
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
+	kmocks "github.com/hyperledger/fabric/extensions/gossip/mocks"
 	"github.com/hyperledger/fabric/gossip/api"
 	gcomm "github.com/hyperledger/fabric/gossip/comm"
 	gossipCommon "github.com/hyperledger/fabric/gossip/common"
@@ -34,7 +35,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/state"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/msp/mgmt"
-	"github.com/hyperledger/fabric/msp/mgmt/testtools"
+	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	peergossip "github.com/hyperledger/fabric/peer/gossip"
 	"github.com/hyperledger/fabric/peer/gossip/mocks"
 	"github.com/hyperledger/fabric/protos/common"
@@ -148,8 +149,9 @@ func TestLeaderElectionWithDeliverClient(t *testing.T) {
 		deliverServiceFactory.service.running[channelName] = false
 
 		gossips[i].InitializeChannel(channelName, []string{"endpoint"}, Support{
-			Store:     &mockTransientStore{},
-			Committer: &mockLedgerInfo{1},
+			Store:          &mockTransientStore{},
+			Committer:      &mockLedgerInfo{1},
+			BlockPublisher: kmocks.NewBlockPublisher(),
 		})
 		service, exist := gossips[i].(*gossipGRPC).gossipServiceImpl.leaderElection[channelName]
 		assert.True(t, exist, "Leader election service should be created for peer %d and channel %s", i, channelName)
@@ -206,8 +208,9 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
 		gossips[i].(*gossipGRPC).gossipServiceImpl.deliveryFactory = deliverServiceFactory
 		deliverServiceFactory.service.running[channelName] = false
 		gossips[i].InitializeChannel(channelName, []string{"endpoint"}, Support{
-			Committer: &mockLedgerInfo{1},
-			Store:     &mockTransientStore{},
+			Committer:      &mockLedgerInfo{1},
+			Store:          &mockTransientStore{},
+			BlockPublisher: kmocks.NewBlockPublisher(),
 		})
 	}
 
@@ -220,8 +223,9 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
 	for i := 0; i < n; i++ {
 		deliverServiceFactory.service.running[channelName] = false
 		gossips[i].InitializeChannel(channelName, []string{"endpoint"}, Support{
-			Committer: &mockLedgerInfo{1},
-			Store:     &mockTransientStore{},
+			Committer:      &mockLedgerInfo{1},
+			Store:          &mockTransientStore{},
+			BlockPublisher: kmocks.NewBlockPublisher(),
 		})
 	}
 
