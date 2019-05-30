@@ -17,6 +17,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/gossip/channel"
 	"github.com/hyperledger/fabric/gossip/metrics"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 )
 
@@ -43,8 +44,8 @@ func (cs *channelState) isStopping() bool {
 	return atomic.LoadInt32(&cs.stopping) == int32(1)
 }
 
-func (cs *channelState) lookupChannelForMsg(msg proto.ReceivedMessage) channel.GossipChannel {
-	if msg.GetGossipMessage().IsStateInfoPullRequestMsg() {
+func (cs *channelState) lookupChannelForMsg(msg protoext.ReceivedMessage) channel.GossipChannel {
+	if protoext.IsStateInfoPullRequestMsg(msg.GetGossipMessage().GossipMessage) {
 		sipr := msg.GetGossipMessage().GetStateInfoPullReq()
 		mac := sipr.Channel_MAC
 		pkiID := msg.GetConnectionInfo().ID
@@ -54,7 +55,7 @@ func (cs *channelState) lookupChannelForMsg(msg proto.ReceivedMessage) channel.G
 }
 
 func (cs *channelState) lookupChannelForGossipMsg(msg *proto.GossipMessage) channel.GossipChannel {
-	if !msg.IsStateInfoMsg() {
+	if !protoext.IsStateInfoMsg(msg) {
 		// If we reached here then the message isn't:
 		// 1) StateInfoPullRequest
 		// 2) StateInfo
@@ -134,25 +135,25 @@ func (ga *gossipAdapterImpl) GetConf() channel.Config {
 	}
 }
 
-func (ga *gossipAdapterImpl) Sign(msg *proto.GossipMessage) (*proto.SignedGossipMessage, error) {
+func (ga *gossipAdapterImpl) Sign(msg *proto.GossipMessage) (*protoext.SignedGossipMessage, error) {
 	signer := func(msg []byte) ([]byte, error) {
 		return ga.mcs.Sign(msg)
 	}
-	sMsg := &proto.SignedGossipMessage{
+	sMsg := &protoext.SignedGossipMessage{
 		GossipMessage: msg,
 	}
 	e, err := sMsg.Sign(signer)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.SignedGossipMessage{
+	return &protoext.SignedGossipMessage{
 		Envelope:      e,
 		GossipMessage: msg,
 	}, nil
 }
 
 // Gossip gossips a message
-func (ga *gossipAdapterImpl) Gossip(msg *proto.SignedGossipMessage) {
+func (ga *gossipAdapterImpl) Gossip(msg *protoext.SignedGossipMessage) {
 	ga.gossipServiceImpl.emitter.Add(&emittedGossipMessage{
 		SignedGossipMessage: msg,
 		filter: func(_ common.PKIidType) bool {
@@ -162,20 +163,20 @@ func (ga *gossipAdapterImpl) Gossip(msg *proto.SignedGossipMessage) {
 }
 
 // Forward sends message to the next hops
-func (ga *gossipAdapterImpl) Forward(msg proto.ReceivedMessage) {
+func (ga *gossipAdapterImpl) Forward(msg protoext.ReceivedMessage) {
 	ga.gossipServiceImpl.emitter.Add(&emittedGossipMessage{
 		SignedGossipMessage: msg.GetGossipMessage(),
 		filter:              msg.GetConnectionInfo().ID.IsNotSameFilter,
 	})
 }
 
-func (ga *gossipAdapterImpl) Send(msg *proto.SignedGossipMessage, peers ...*comm.RemotePeer) {
+func (ga *gossipAdapterImpl) Send(msg *protoext.SignedGossipMessage, peers ...*comm.RemotePeer) {
 	ga.gossipServiceImpl.comm.Send(msg, peers...)
 }
 
 // ValidateStateInfoMessage returns error if a message isn't valid
 // nil otherwise
-func (ga *gossipAdapterImpl) ValidateStateInfoMessage(msg *proto.SignedGossipMessage) error {
+func (ga *gossipAdapterImpl) ValidateStateInfoMessage(msg *protoext.SignedGossipMessage) error {
 	return ga.gossipServiceImpl.validateStateInfoMsg(msg)
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/api"
 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
 	gdisc "github.com/hyperledger/fabric/gossip/discovery"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/discovery"
 	"github.com/hyperledger/fabric/protos/gossip"
@@ -716,7 +717,7 @@ func TestAddEndorsersQueryInvalidInput(t *testing.T) {
 
 func TestValidateAliveMessage(t *testing.T) {
 	am := aliveMessage(1)
-	msg, _ := am.ToGossipMessage()
+	msg, _ := protoext.EnvelopeToGossipMessage(am)
 
 	// Scenario I: Valid alive message
 	assert.NoError(t, validateAliveMessage(msg))
@@ -889,7 +890,7 @@ func aliveMessage(id int) *gossip.Envelope {
 			},
 		},
 	}
-	sMsg, _ := g.NoopSign()
+	sMsg, _ := protoext.NoopSign(g)
 	return sMsg.Envelope
 }
 
@@ -912,7 +913,7 @@ func stateInfoMessageWithHeight(ledgerHeight uint64, chaincodes ...*gossip.Chain
 			},
 		},
 	}
-	sMsg, _ := g.NoopSign()
+	sMsg, _ := protoext.NoopSign(g)
 	return sMsg.Envelope
 }
 
