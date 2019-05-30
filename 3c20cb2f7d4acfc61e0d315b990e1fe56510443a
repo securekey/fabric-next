@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c9104b51_f6678deb",
+        "filename": "protos/gossip/message.pb.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 393,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2019-05-30T17:57:35Z",
+      "side": 1,
+      "message": "interface had to be exposed as extensions have moved to gossip/protoext package",
+      "range": {
+        "startLine": 393,
+        "startChar": 5,
+        "endLine": 393,
+        "endChar": 28
+      },
+      "revId": "3c20cb2f7d4acfc61e0d315b990e1fe56510443a",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
