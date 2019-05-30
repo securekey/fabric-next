@@ -33,6 +33,9 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/customtx"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/transientstore"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	"github.com/hyperledger/fabric/extensions/collections/storeprovider"
+	"github.com/hyperledger/fabric/extensions/gossip/blockpublisher"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -77,6 +80,26 @@ type chainSupport struct {
 }
 
 var TransientStoreFactory = &storeProvider{stores: make(map[string]transientstore.Store)}
+
+var collectionDataStoreFactory CollStoreProvider
+var initCollDataStoreFactoryOnce sync.Once
+
+// CollStoreProvider manages the collection stores for multiple channels
+type CollStoreProvider interface {
+	StoreForChannel(channelID string) storeapi.Store
+	OpenStore(channelID string) (storeapi.Store, error)
+}
+
+// CollectionDataStoreFactory returns transient data stores by channel ID
+func CollectionDataStoreFactory() CollStoreProvider {
+	initCollDataStoreFactoryOnce.Do(func() {
+		collectionDataStoreFactory = storeprovider.NewProviderFactory()
+	})
+	return collectionDataStoreFactory
+}
+
+// publisher manages the block publishers for all channels
+var BlockPublisher = blockpublisher.NewProvider()
 
 type storeProvider struct {
 	stores map[string]transientstore.Store
@@ -206,7 +229,8 @@ var validationWorkersSemaphore *semaphore.Weighted
 // ready
 func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider,
 	pm txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
-	membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider) {
+	membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider,
+	collDataProvider storeapi.Provider) {
 	nWorkers := viper.GetInt("peer.validatorPoolSize")
 	if nWorkers <= 0 {
 		nWorkers = runtime.NumCPU()
@@ -224,6 +248,7 @@ func Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccp
 		DeployedChaincodeInfoProvider: deployedCCInfoProvider,
 		MembershipInfoProvider:        membershipProvider,
 		MetricsProvider:               metricsProvider,
+		CollDataProvider:              collDataProvider,
 	})
 	ledgerIds, err := ledgermgmt.GetLedgerIDs()
 	if err != nil {
@@ -385,12 +410,20 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		*semaphore.Weighted
 	}{cs, validationWorkersSemaphore}
 	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm)
+
+	blockPublisher := BlockPublisher.ForChannel(cid)
 	c := committer.NewLedgerCommitterReactive(ledger, func(block *common.Block) error {
-		chainID, err := utils.GetChainIDFromBlock(block)
-		if err != nil {
-			return err
+		// Updating CSCC with new configuration block
+		if utils.IsConfigBlock(block) {
+			logger.Debug("Received configuration update, calling CSCC ConfigUpdate")
+			err := SetCurrConfigBlock(block, cid)
+			if err != nil {
+				return err
+			}
 		}
-		return SetCurrConfigBlock(block, chainID)
+		// Inform applicable registered handlers of the new block
+		blockPublisher.Publish(block)
+		return nil
 	})
 
 	ordererAddresses := bundle.ChannelConfig().OrdererAddresses()
@@ -403,6 +436,10 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 	if err != nil {
 		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
 	}
+	collDataStore, err := CollectionDataStoreFactory().OpenStore(bundle.ConfigtxValidator().ChainID())
+	if err != nil {
+		return errors.Wrapf(err, "[channel %s] failed opening transient data store", bundle.ConfigtxValidator().ChainID())
+	}
 	csStoreSupport := &CollectionSupport{
 		PeerLedger: ledger,
 	}
@@ -412,8 +449,11 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 		Validator:            validator,
 		Committer:            c,
 		Store:                store,
+		CollDataStore:        collDataStore,
 		Cs:                   simpleCollectionStore,
 		IdDeserializeFactory: csStoreSupport,
+		Ledger:               ledger,
+		BlockPublisher:       blockPublisher,
 	})
 
 	chains.Lock()
