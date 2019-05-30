@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5f12d700_6db632bb",
+        "filename": "gossip/protoext/extensions.go",
+        "patchSetId": 2
+      },
+      "lineNbr": 508,
+      "author": {
+        "id": 1000058
+      },
+      "writtenOn": "2019-05-30T18:02:51Z",
+      "side": 0,
+      "message": "this code remained in protos/gossip package with the gossip proto message to maintain compatibility (added file protoes/gossip/message_ext.go)",
+      "range": {
+        "startLine": 493,
+        "startChar": 0,
+        "endLine": 508,
+        "endChar": 1
+      },
+      "revId": "19e1cf28908c5ec09854ba860ab29073c4fa99bf",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
