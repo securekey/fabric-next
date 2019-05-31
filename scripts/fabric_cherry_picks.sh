@@ -45,4 +45,8 @@ git am $MY_PATH/../patches/0001-Apply-go-modules-for-src-1.4.1.patch
 git am $MY_PATH/../patches/0002-gossip-protos-extensions-refactoring.patch
 # step 3 apply transient data changes from trustbloc version of Fabric
 git am $MY_PATH/../patches/0003-Backport-Transient-Data-to-Fabric-1.4.1.patch
+# step 4 Revert go mod
+git am $MY_PATH/../patches/0004-Revert-Apply-go-modules-for-src-1.4.1.patch
+# step 5 Add extensions folder
+git am $MY_PATH/../patches/0005-Add-extensions-folder.patch
 
