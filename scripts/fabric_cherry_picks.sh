@@ -49,4 +49,6 @@ git am $MY_PATH/../patches/0003-Backport-Transient-Data-to-Fabric-1.4.1.patch
 git am $MY_PATH/../patches/0004-Revert-Apply-go-modules-for-src-1.4.1.patch
 # step 5 Add extensions folder
 git am $MY_PATH/../patches/0005-Add-extensions-folder.patch
+# step 6 Upgrade grpc to 1.19.0
+git am $MY_PATH/../patches/0006-Upgrade-grpc-to-1.19.0.patch
 
