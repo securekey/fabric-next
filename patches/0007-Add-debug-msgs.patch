@@ -1,0 +1,116 @@
+From 69e196a0bfb93b1191a5c3ca3de3024a6ef0ae6b Mon Sep 17 00:00:00 2001
+From: Firas Qutishat <firas.qutishat@securekey.com>
+Date: Tue, 11 Jun 2019 11:57:10 -0400
+Subject: [PATCH] Add debug msgs
+
+Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
+Change-Id: I9324288f2df2c73716c9476a3da687fbea0de2c0
+---
+ core/endorser/endorser.go           | 18 ++++++++++++++++++
+ core/endorser/pvtrwset_assembler.go | 13 +++++++++++++
+ 2 files changed, 31 insertions(+)
+
+diff --git a/core/endorser/endorser.go b/core/endorser/endorser.go
+index e8b8d267..6a727ccb 100644
+--- a/core/endorser/endorser.go
++++ b/core/endorser/endorser.go
+@@ -264,6 +264,22 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid
+ 				txParams.TXSimulator.Done()
+ 				return nil, nil, nil, nil, errors.New("Private data is forbidden to be used in instantiate")
+ 			}
++
++			// For Debugging ...
++			if simResult.PubSimulationResults != nil {
++				for _, rwSet := range simResult.PubSimulationResults.NsRwset {
++					if len(rwSet.CollectionHashedRwset) == 0 {
++						endorserLogger.Warningf("+++++ No collection hash read-writes for chaincode [%s]", rwSet.Namespace)
++					} else {
++						for _, hRwSet := range rwSet.CollectionHashedRwset {
++							endorserLogger.Warningf("+++++ ... found hashed read-writes for collection [%s:%s]. PvtRwsetHash: %v, HashedRwsetSize: %d", rwSet.Namespace, hRwSet.CollectionName, hRwSet.PvtRwsetHash, len(hRwSet.HashedRwset))
++						}
++					}
++				}
++			} else {
++				endorserLogger.Warning("+++++ PubSimulationResults are nil")
++			}
++
+ 			pvtDataWithConfig, err := e.AssemblePvtRWSet(simResult.PvtSimulationResults, txParams.TXSimulator)
+ 			// To read collection config need to read collection updates before
+ 			// releasing the lock, hence txParams.TXSimulator.Done()  moved down here
+@@ -286,6 +302,8 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid
+ 				return nil, nil, nil, nil, err
+ 			}
+ 			collConfigs = pvtDataWithConfig.CollectionConfigs
++		} else {
++			endorserLogger.Warning("+++++ PvtSimulationResults are nil")
+ 		}
+ 
+ 		txParams.TXSimulator.Done()
+diff --git a/core/endorser/pvtrwset_assembler.go b/core/endorser/pvtrwset_assembler.go
+index 82df4c66..94f41707 100644
+--- a/core/endorser/pvtrwset_assembler.go
++++ b/core/endorser/pvtrwset_assembler.go
+@@ -50,23 +50,30 @@ func (as *rwSetAssembler) AssemblePvtRWSet(privData *rwset.TxPvtReadWriteSet, tx
+ 		CollectionConfigs: make(map[string]*common.CollectionConfigPackage),
+ 	}
+ 
++	endorserLogger.Warningf("+++++ Assembling read-write set with private collection config...")
++
+ 	for _, pvtRwset := range privData.NsPvtRwset {
+ 		namespace := pvtRwset.Namespace
+ 		if _, found := txPvtRwSetWithConfig.CollectionConfigs[namespace]; !found {
++			endorserLogger.Warningf("+++++ ... getting private collection config for chaincode [%s]", namespace)
+ 			cb, err := txsim.GetState("lscc", privdata.BuildCollectionKVSKey(namespace))
+ 			if err != nil {
++				endorserLogger.Errorf("+++++ Error getting chaincode data for [%s]: %s", namespace, err)
+ 				return nil, errors.WithMessage(err, fmt.Sprintf("error while retrieving collection config for chaincode %#v", namespace))
+ 			}
+ 			if cb == nil {
++				endorserLogger.Errorf("+++++ No chaincode data found for [%s]", namespace)
+ 				return nil, errors.New(fmt.Sprintf("no collection config for chaincode %#v", namespace))
+ 			}
+ 
+ 			colCP := &common.CollectionConfigPackage{}
+ 			err = proto.Unmarshal(cb, colCP)
+ 			if err != nil {
++				endorserLogger.Errorf("+++++ Error unmarshalling chaincode data for [%s]: %s", namespace, err)
+ 				return nil, errors.Wrapf(err, "invalid configuration for collection criteria %#v", namespace)
+ 			}
+ 
++			endorserLogger.Warningf("+++++ ... added private collection config package for chaincode [%s]", namespace)
+ 			txPvtRwSetWithConfig.CollectionConfigs[namespace] = colCP
+ 		}
+ 	}
+@@ -75,6 +82,7 @@ func (as *rwSetAssembler) AssemblePvtRWSet(privData *rwset.TxPvtReadWriteSet, tx
+ }
+ 
+ func (as *rwSetAssembler) trimCollectionConfigs(pvtData *transientstore.TxPvtReadWriteSetWithConfigInfo) {
++	endorserLogger.Warning("+++++ Trimming collection configs...")
+ 	flags := make(map[string]map[string]struct{})
+ 	for _, pvtRWset := range pvtData.PvtRwset.NsPvtRwset {
+ 		namespace := pvtRWset.Namespace
+@@ -82,6 +90,7 @@ func (as *rwSetAssembler) trimCollectionConfigs(pvtData *transientstore.TxPvtRea
+ 			if _, found := flags[namespace]; !found {
+ 				flags[namespace] = make(map[string]struct{})
+ 			}
++			endorserLogger.Warningf("+++++ ... flagging collection [%s:%s]", namespace, col.CollectionName)
+ 			flags[namespace][col.CollectionName] = struct{}{}
+ 		}
+ 	}
+@@ -93,9 +102,13 @@ func (as *rwSetAssembler) trimCollectionConfigs(pvtData *transientstore.TxPvtRea
+ 			if colConf := conf.GetStaticCollectionConfig(); colConf != nil {
+ 				if _, found := flags[namespace][colConf.Name]; found {
+ 					filteredConfigs[namespace].Config = append(filteredConfigs[namespace].Config, conf)
++					endorserLogger.Errorf("+++++ ... adding collection config for [%s:%s]", namespace, colConf.Name)
+ 				}
++			} else {
++				endorserLogger.Errorf("+++++ StaticCollectionConfig is nil for chaincode [%s]!!!!", namespace)
+ 			}
+ 		}
+ 	}
+ 	pvtData.CollectionConfigs = filteredConfigs
++	endorserLogger.Warning("+++++ ... done trimming collection configs")
+ }
+-- 
+2.21.0 (Apple Git-120)
+
