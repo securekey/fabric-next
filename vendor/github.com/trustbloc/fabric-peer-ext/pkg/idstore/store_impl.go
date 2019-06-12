@@ -9,6 +9,8 @@ package idstore
 import (
 	"fmt"
 
+	"github.com/hyperledger/fabric/core/ledger"
+
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/idstore"
@@ -32,8 +34,8 @@ type Store struct {
 }
 
 //OpenIDStore return id store
-func OpenIDStore(path string) idstore.IDStore {
-	couchInstance, err := createCouchInstance()
+func OpenIDStore(path string, ledgerconfig *ledger.Config) idstore.IDStore {
+	couchInstance, err := createCouchInstance(ledgerconfig)
 	if err != nil {
 		logger.Errorf("create couchdb instance failed %s", err.Error())
 		return nil
@@ -104,11 +106,10 @@ func createIndices(db *couchdb.CouchDatabase) error {
 	return nil
 }
 
-func createCouchInstance() (*couchdb.CouchInstance, error) {
+func createCouchInstance(ledgerconfig *ledger.Config) (*couchdb.CouchInstance, error) {
 	logger.Debugf("constructing CouchDB block storage provider")
-	couchDBDef := couchdb.GetCouchDBDefinition()
-	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
+	couchDBConfig := ledgerconfig.StateDB.CouchDB
+	couchInstance, err := couchdb.CreateCouchInstance(couchDBConfig, &disabled.Provider{})
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}

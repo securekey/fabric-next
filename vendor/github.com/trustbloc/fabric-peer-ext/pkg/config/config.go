@@ -10,11 +10,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hyperledger/fabric/core/ledger/ledgerconfig"
+	"github.com/hyperledger/fabric/core/config"
+
 	"github.com/spf13/viper"
 )
 
 const (
+	confPeerFileSystemPath = "peer.fileSystemPath"
+	confLedgerDataPath     = "ledgersData"
+
 	confRoles            = "ledger.roles"
 	confPvtDataCacheSize = "ledger.blockchain.pvtDataStorage.cacheSize"
 
@@ -59,7 +63,7 @@ func GetPvtDataCacheSize() int {
 
 // GetTransientDataLevelDBPath returns the filesystem path that is used to maintain the transient data level db
 func GetTransientDataLevelDBPath() string {
-	return filepath.Join(ledgerconfig.GetRootPath(), confTransientDataLeveldb)
+	return filepath.Join(filepath.Clean(config.GetPath(confPeerFileSystemPath)), confTransientDataLeveldb)
 }
 
 // GetTransientDataExpiredIntervalTime is time when background routine check expired transient data in db to cleanup.
@@ -82,7 +86,7 @@ func GetTransientDataCacheSize() int {
 
 // GetOLCollLevelDBPath returns the filesystem path that is used to maintain the off-ledger level db
 func GetOLCollLevelDBPath() string {
-	return filepath.Join(ledgerconfig.GetRootPath(), confOLCollLeveldb)
+	return filepath.Join(filepath.Join(filepath.Clean(config.GetPath(confPeerFileSystemPath)), confLedgerDataPath), confOLCollLeveldb)
 }
 
 // GetOLCollExpirationCheckInterval is time when the background routine checks expired collection data in db to cleanup.
