@@ -17,7 +17,7 @@ noverify = [
 
 [[constraint]]
   name = "github.com/trustbloc/fabric-peer-ext"
-  revision = "9b2d0053a5e40e93141576b7210ef021fe881852"
+  revision = "0d0def4cdb6e15bd478e9116bc91b773a820ef85"
 
 [[override]]
   name = "github.com/bluele/gcache"

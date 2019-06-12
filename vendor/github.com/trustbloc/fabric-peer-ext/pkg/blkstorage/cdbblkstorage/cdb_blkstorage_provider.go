@@ -9,13 +9,14 @@ package cdbblkstorage
 import (
 	"strings"
 
-	"github.com/trustbloc/fabric-peer-ext/pkg/roles"
+	"github.com/hyperledger/fabric/core/ledger"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/ledger/blkstorage"
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
 	"github.com/pkg/errors"
+	"github.com/trustbloc/fabric-peer-ext/pkg/roles"
 )
 
 var logger = flogging.MustGetLogger("cdbblkstorage")
@@ -32,11 +33,10 @@ type CDBBlockstoreProvider struct {
 }
 
 // NewProvider creates a new CouchDB BlockStoreProvider
-func NewProvider(indexConfig *blkstorage.IndexConfig) (blkstorage.BlockStoreProvider, error) {
+func NewProvider(indexConfig *blkstorage.IndexConfig, ledgerconfig *ledger.Config) (blkstorage.BlockStoreProvider, error) {
 	logger.Debugf("constructing CouchDB block storage provider")
-	couchDBDef := couchdb.GetCouchDBDefinition()
-	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
-		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
+	couchDBConfig := ledgerconfig.StateDB.CouchDB
+	couchInstance, err := couchdb.CreateCouchInstance(couchDBConfig, &disabled.Provider{})
 	if err != nil {
 		return nil, errors.WithMessage(err, "obtaining CouchDB instance failed")
 	}
