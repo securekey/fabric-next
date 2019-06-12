@@ -116,6 +116,40 @@ type QueryResult struct {
 	Attachments []*AttachmentInfo
 }
 
+// Config is a structure used to configure a CouchInstance.
+// NOTE: This struct is added in order to satisfy the compilation of fabric-peer-ext.
+type Config struct {
+	// Address is the hostname:port of the CouchDB database instance.
+	Address string
+	// Username is the username used to authenticate with CouchDB.  This username
+	// must have read and write access permissions.
+	Username string
+	// Password is the password for Username.
+	Password string
+	// MaxRetries is the maximum number of times to retry CouchDB operations on
+	// failure.
+	MaxRetries int
+	// MaxRetriesOnStartup is the maximum number of times to retry CouchDB operations on
+	// failure when initializing the ledger.
+	MaxRetriesOnStartup int
+	// RequestTimeout is the timeout used for CouchDB operations.
+	RequestTimeout time.Duration
+	// InternalQueryLimit is the maximum number of records to return internally
+	// when querying CouchDB.
+	InternalQueryLimit int
+	// MaxBatchUpdateSize is the maximum number of records to included in CouchDB
+	// bulk update operations.
+	MaxBatchUpdateSize int
+	// WarmIndexesAfterNBlocks is the number of blocks after which to warm any
+	// CouchDB indexes.
+	WarmIndexesAfterNBlocks int
+	// CreateGlobalChangesDB determines whether or not to create the "_global_changes"
+	// system database.
+	CreateGlobalChangesDB bool
+	// RedoLogPath is the directory where the CouchDB redo log files are stored.
+	RedoLogPath string
+}
+
 //CouchConnectionDef contains parameters
 type CouchConnectionDef struct {
 	URL                   string
