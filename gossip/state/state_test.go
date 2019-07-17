@@ -40,6 +40,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/privdata"
 	capabilitymock "github.com/hyperledger/fabric/gossip/privdata/mocks"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/state/mocks"
 	gossiputil "github.com/hyperledger/fabric/gossip/util"
 	gutil "github.com/hyperledger/fabric/gossip/util"
@@ -485,12 +486,12 @@ func TestNilDirectMsg(t *testing.T) {
 	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
 	g := &mocks.GossipMock{}
 	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	p := newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
 	defer p.shutdown()
 	p.s.handleStateRequest(nil)
 	p.s.directMessage(nil)
-	sMsg, _ := p.s.stateRequestMessage(uint64(10), uint64(8)).NoopSign()
+	sMsg, _ := protoext.NoopSign(p.s.stateRequestMessage(uint64(10), uint64(8)))
 	req := &comm.ReceivedMessageImpl{
 		SignedGossipMessage: sMsg,
 	}
@@ -503,7 +504,7 @@ func TestNilAddPayload(t *testing.T) {
 	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
 	g := &mocks.GossipMock{}
 	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	p := newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
 	defer p.shutdown()
 	err := p.s.AddPayload(nil)
@@ -517,7 +518,7 @@ func TestAddPayloadLedgerUnavailable(t *testing.T) {
 	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
 	g := &mocks.GossipMock{}
 	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	p := newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
 	defer p.shutdown()
 	// Simulate a problem in the ledger
@@ -549,7 +550,7 @@ func TestLargeBlockGap(t *testing.T) {
 	mc.On("CommitWithPvtData", mock.Anything).Run(func(arg mock.Arguments) {
 		blocksPassedToLedger <- arg.Get(0).(*pcomm.Block).Header.Number
 	})
-	msgsFromPeer := make(chan proto.ReceivedMessage)
+	msgsFromPeer := make(chan protoext.ReceivedMessage)
 	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
 	mc.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
 	g := &mocks.GossipMock{}
@@ -587,7 +588,7 @@ func TestLargeBlockGap(t *testing.T) {
 			res.GetStateResponse().Payloads = append(res.GetStateResponse().Payloads, payload)
 		}
 		// Finally, send the response down the channel the peer expects to receive it from
-		sMsg, _ := res.NoopSign()
+		sMsg, _ := protoext.NoopSign(res)
 		msgsFromPeer <- &comm.ReceivedMessageImpl{
 			SignedGossipMessage: sMsg,
 		}
@@ -625,7 +626,7 @@ func TestOverPopulation(t *testing.T) {
 	mc.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
 	g := &mocks.GossipMock{}
 	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	p := newPeerNode(0, mc, noopPeerIdentityAcceptor)
 	defer p.shutdown()
 
@@ -689,7 +690,7 @@ func TestBlockingEnqueue(t *testing.T) {
 	mc.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
 	g := &mocks.GossipMock{}
 	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	p := newPeerNode(0, mc, noopPeerIdentityAcceptor)
 	defer p.shutdown()
 
@@ -790,7 +791,7 @@ func TestHaltChainProcessing(t *testing.T) {
 	gossipMsgs := make(chan *proto.GossipMessage)
 
 	g.On("Accept", mock.Anything, false).Return(gossipChannel(gossipMsgs), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	g.On("PeersOfChannel", mock.Anything).Return([]discovery.NetworkMember{})
 
 	v := &validator.MockValidator{}
@@ -811,7 +812,7 @@ func TestFailures(t *testing.T) {
 	mc.On("LedgerHeight", mock.Anything).Return(uint64(0), nil)
 	g := &mocks.GossipMock{}
 	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	g.On("PeersOfChannel", mock.Anything).Return([]discovery.NetworkMember{})
 	assert.Panics(t, func() {
 		newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
@@ -875,7 +876,7 @@ func TestGossipReception(t *testing.T) {
 	g.On("Accept", mock.Anything, false).Return(rmc, nil).Run(func(_ mock.Arguments) {
 		signalChan <- struct{}{}
 	})
-	g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+	g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 	g.On("PeersOfChannel", mock.Anything).Return([]discovery.NetworkMember{})
 	mc := &mockCommitter{Mock: &mock.Mock{}}
 	receivedChan := make(chan struct{})
@@ -918,7 +919,7 @@ func TestLedgerHeightFromProperties(t *testing.T) {
 			finChan <- struct{}{}
 		})
 		g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
-		g.On("Accept", mock.Anything, true).Return(nil, make(chan proto.ReceivedMessage))
+		g.On("Accept", mock.Anything, true).Return(nil, make(chan protoext.ReceivedMessage))
 		defaultPeer := discovery.NetworkMember{
 			InternalEndpoint: "b",
 			PKIid:            common.PKIidType("b"),
@@ -1169,7 +1170,7 @@ func TestGossipStateProvider_TestStateMessages(t *testing.T) {
 	defer peer.shutdown()
 
 	naiveStateMsgPredicate := func(message interface{}) bool {
-		return message.(proto.ReceivedMessage).GetGossipMessage().IsRemoteStateMessage()
+		return protoext.IsRemoteStateMessage(message.(protoext.ReceivedMessage).GetGossipMessage().GossipMessage)
 	}
 
 	_, bootCh := bootPeer.g.Accept(naiveStateMsgPredicate, true)
@@ -1254,7 +1255,7 @@ func TestNewGossipStateProvider_BatchingOfStateRequest(t *testing.T) {
 	defer peer.shutdown()
 
 	naiveStateMsgPredicate := func(message interface{}) bool {
-		return message.(proto.ReceivedMessage).GetGossipMessage().IsRemoteStateMessage()
+		return protoext.IsRemoteStateMessage(message.(protoext.ReceivedMessage).GetGossipMessage().GossipMessage)
 	}
 	_, peerCh := peer.g.Accept(naiveStateMsgPredicate, true)
 
@@ -1368,9 +1369,9 @@ func (mock *receivedMessageMock) Respond(msg *proto.GossipMessage) {
 	mock.Called(msg)
 }
 
-func (mock *receivedMessageMock) GetGossipMessage() *proto.SignedGossipMessage {
+func (mock *receivedMessageMock) GetGossipMessage() *protoext.SignedGossipMessage {
 	args := mock.Called()
-	return args.Get(0).(*proto.SignedGossipMessage)
+	return args.Get(0).(*protoext.SignedGossipMessage)
 }
 
 func (mock *receivedMessageMock) GetSourceEnvelope() *proto.Envelope {
@@ -1378,9 +1379,9 @@ func (mock *receivedMessageMock) GetSourceEnvelope() *proto.Envelope {
 	return args.Get(0).(*proto.Envelope)
 }
 
-func (mock *receivedMessageMock) GetConnectionInfo() *proto.ConnectionInfo {
+func (mock *receivedMessageMock) GetConnectionInfo() *protoext.ConnectionInfo {
 	args := mock.Called()
-	return args.Get(0).(*proto.ConnectionInfo)
+	return args.Get(0).(*protoext.ConnectionInfo)
 }
 
 type testData struct {
@@ -1397,7 +1398,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
 	coord1 := new(coordinatorMock)
 
 	gossipChannel := make(chan *proto.GossipMessage)
-	commChannel := make(chan proto.ReceivedMessage)
+	commChannel := make(chan protoext.ReceivedMessage)
 
 	gossipChannelFactory := func(ch chan *proto.GossipMessage) <-chan *proto.GossipMessage {
 		return ch
@@ -1504,15 +1505,15 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
 		}},
 	}
 
-	msg, _ := requestGossipMsg.NoopSign()
+	msg, _ := protoext.NoopSign(requestGossipMsg)
 
 	requestMsg.On("GetGossipMessage").Return(msg)
-	requestMsg.On("GetConnectionInfo").Return(&proto.ConnectionInfo{
-		Auth: &proto.AuthInfo{},
+	requestMsg.On("GetConnectionInfo").Return(&protoext.ConnectionInfo{
+		Auth: &protoext.AuthInfo{},
 	})
 
 	// Channel to send responses back
-	responseChannel := make(chan proto.ReceivedMessage)
+	responseChannel := make(chan protoext.ReceivedMessage)
 	defer close(responseChannel)
 
 	requestMsg.On("Respond", mock.Anything).Run(func(args mock.Arguments) {
@@ -1521,7 +1522,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
 		// Wrap it up into received response
 		receivedMsg := new(receivedMessageMock)
 		// Create sign response
-		msg, _ := response.NoopSign()
+		msg, _ := protoext.NoopSign(response)
 		// Mock to respond
 		receivedMsg.On("GetGossipMessage").Return(msg)
 		// Send response
@@ -1577,7 +1578,7 @@ type testPeer struct {
 	*mocks.GossipMock
 	id            string
 	gossipChannel chan *proto.GossipMessage
-	commChannel   chan proto.ReceivedMessage
+	commChannel   chan protoext.ReceivedMessage
 	coord         *coordinatorMock
 }
 
@@ -1585,7 +1586,7 @@ func (t testPeer) Gossip() <-chan *proto.GossipMessage {
 	return t.gossipChannel
 }
 
-func (t testPeer) Comm() chan proto.ReceivedMessage {
+func (t testPeer) Comm() chan protoext.ReceivedMessage {
 	return t.commChannel
 }
 
@@ -1593,14 +1594,14 @@ var peers = map[string]testPeer{
 	"peer1": {
 		id:            "peer1",
 		gossipChannel: make(chan *proto.GossipMessage),
-		commChannel:   make(chan proto.ReceivedMessage),
+		commChannel:   make(chan protoext.ReceivedMessage),
 		GossipMock:    &mocks.GossipMock{},
 		coord:         new(coordinatorMock),
 	},
 	"peer2": {
 		id:            "peer2",
 		gossipChannel: make(chan *proto.GossipMessage),
-		commChannel:   make(chan proto.ReceivedMessage),
+		commChannel:   make(chan protoext.ReceivedMessage),
 		GossipMock:    &mocks.GossipMock{},
 		coord:         new(coordinatorMock),
 	},
@@ -1626,7 +1627,7 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
 			Return(nil, peer.Comm()).
 			Once().
 			On("Accept", mock.Anything, true).
-			Return(nil, make(chan proto.ReceivedMessage))
+			Return(nil, make(chan protoext.ReceivedMessage))
 
 		peer.On("UpdateChannelMetadata", mock.Anything, mock.Anything)
 		peer.coord.On("Close")
@@ -1694,16 +1695,16 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
 	peers["peer2"].On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		request := args.Get(0).(*proto.GossipMessage)
 		requestMsg := new(receivedMessageMock)
-		msg, _ := request.NoopSign()
+		msg, _ := protoext.NoopSign(request)
 		requestMsg.On("GetGossipMessage").Return(msg)
-		requestMsg.On("GetConnectionInfo").Return(&proto.ConnectionInfo{
-			Auth: &proto.AuthInfo{},
+		requestMsg.On("GetConnectionInfo").Return(&protoext.ConnectionInfo{
+			Auth: &protoext.AuthInfo{},
 		})
 
 		requestMsg.On("Respond", mock.Anything).Run(func(args mock.Arguments) {
 			response := args.Get(0).(*proto.GossipMessage)
 			receivedMsg := new(receivedMessageMock)
-			msg, _ := response.NoopSign()
+			msg, _ := protoext.NoopSign(response)
 			receivedMsg.On("GetGossipMessage").Return(msg)
 			// Send response back to the peer
 			peers["peer2"].commChannel <- receivedMsg

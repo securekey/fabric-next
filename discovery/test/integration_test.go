@@ -33,7 +33,7 @@ import (
 	"github.com/hyperledger/fabric/common/tools/configtxgen/encoder"
 	genesisconfig "github.com/hyperledger/fabric/common/tools/configtxgen/localconfig"
 	"github.com/hyperledger/fabric/common/util"
-	"github.com/hyperledger/fabric/core/cclifecycle"
+	cc "github.com/hyperledger/fabric/core/cclifecycle"
 	lifecyclemocks "github.com/hyperledger/fabric/core/cclifecycle/mocks"
 	"github.com/hyperledger/fabric/core/comm"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
@@ -48,6 +48,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/api"
 	gcommon "github.com/hyperledger/fabric/gossip/common"
 	gdisc "github.com/hyperledger/fabric/gossip/discovery"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protos/common"
 	. "github.com/hyperledger/fabric/protos/discovery"
@@ -745,7 +746,7 @@ func peersToTestPeers(peers []*disc.Peer) testPeerSet {
 		pkiID := gcommon.PKIidType(hex.EncodeToString(util.ComputeSHA256(p.Identity)))
 		var stateInfoMember gdisc.NetworkMember
 		if p.StateInfoMessage != nil {
-			stateInfo, _ := p.StateInfoMessage.ToGossipMessage()
+			stateInfo, _ := protoext.EnvelopeToGossipMessage(p.StateInfoMessage.Envelope)
 			stateInfoMember = gdisc.NetworkMember{
 				PKIid:      pkiID,
 				Envelope:   p.StateInfoMessage.Envelope,
@@ -815,7 +816,7 @@ func stateInfoMsg(pkiID gcommon.PKIidType) gdisc.NetworkMember {
 			StateInfo: si,
 		},
 	}
-	sm, _ := gm.NoopSign()
+	sm, _ := protoext.NoopSign(gm)
 	return gdisc.NetworkMember{
 		Properties: si.Properties,
 		PKIid:      pkiID,
@@ -836,7 +837,7 @@ func aliveMsg(pkiID gcommon.PKIidType) gdisc.NetworkMember {
 			AliveMsg: am,
 		},
 	}
-	sm, _ := gm.NoopSign()
+	sm, _ := protoext.NoopSign(gm)
 	return gdisc.NetworkMember{
 		PKIid:    pkiID,
 		Endpoint: string(pkiID),

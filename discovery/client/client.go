@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/protos/discovery"
-	"github.com/hyperledger/fabric/protos/gossip"
 	"github.com/hyperledger/fabric/protos/msp"
 	"github.com/pkg/errors"
 )
@@ -407,13 +407,13 @@ func peersForChannel(membersRes *discovery.PeerMembershipResult, qt discovery.Qu
 	var peers []*Peer
 	for org, peersOfCurrentOrg := range membersRes.PeersByOrg {
 		for _, peer := range peersOfCurrentOrg.Peers {
-			aliveMsg, err := peer.MembershipInfo.ToGossipMessage()
+			aliveMsg, err := protoext.EnvelopeToGossipMessage(peer.MembershipInfo)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed unmarshaling alive message")
 			}
-			var stateInfoMsg *gossip.SignedGossipMessage
+			var stateInfoMsg *protoext.SignedGossipMessage
 			if isStateInfoExpected(qt) {
-				stateInfoMsg, err = peer.StateInfo.ToGossipMessage()
+				stateInfoMsg, err = protoext.EnvelopeToGossipMessage(peer.StateInfo)
 				if err != nil {
 					return nil, errors.Wrap(err, "failed unmarshaling stateInfo message")
 				}
@@ -525,11 +525,11 @@ func endorser(peer *discovery.Peer, chaincode, channel string) (*Peer, error) {
 	if peer.MembershipInfo == nil || peer.StateInfo == nil {
 		return nil, errors.Errorf("received empty envelope(s) for endorsers for chaincode %s, channel %s", chaincode, channel)
 	}
-	aliveMsg, err := peer.MembershipInfo.ToGossipMessage()
+	aliveMsg, err := protoext.EnvelopeToGossipMessage(peer.MembershipInfo)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed unmarshaling gossip envelope to alive message")
 	}
-	stateInfMsg, err := peer.StateInfo.ToGossipMessage()
+	stateInfMsg, err := protoext.EnvelopeToGossipMessage(peer.StateInfo)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed unmarshaling gossip envelope to state info message")
 	}
@@ -564,7 +564,7 @@ func NewClient(createConnection Dialer, s Signer, signerCacheSize uint) *Client 
 	}
 }
 
-func validateAliveMessage(message *gossip.SignedGossipMessage) error {
+func validateAliveMessage(message *protoext.SignedGossipMessage) error {
 	am := message.GetAliveMsg()
 	if am == nil {
 		return errors.New("message isn't an alive message")
@@ -579,7 +579,7 @@ func validateAliveMessage(message *gossip.SignedGossipMessage) error {
 	return nil
 }
 
-func validateStateInfoMessage(message *gossip.SignedGossipMessage) error {
+func validateStateInfoMessage(message *protoext.SignedGossipMessage) error {
 	si := message.GetStateInfo()
 	if si == nil {
 		return errors.New("message isn't a stateInfo message")
