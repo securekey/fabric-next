@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/gossip/common"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/assert"
@@ -20,12 +21,12 @@ import (
 func TestInterceptAcks(t *testing.T) {
 	pubsub := util.NewPubSub()
 	pkiID := common.PKIidType("pkiID")
-	msgs := make(chan *proto.SignedGossipMessage, 1)
-	handlerFunc := func(message *proto.SignedGossipMessage) {
+	msgs := make(chan *protoext.SignedGossipMessage, 1)
+	handlerFunc := func(message *protoext.SignedGossipMessage) {
 		msgs <- message
 	}
 	wrappedHandler := interceptAcks(handlerFunc, pkiID, pubsub)
-	ack := &proto.SignedGossipMessage{
+	ack := &protoext.SignedGossipMessage{
 		GossipMessage: &proto.GossipMessage{
 			Nonce: 1,
 			Content: &proto.GossipMessage_Ack{
@@ -42,7 +43,7 @@ func TestInterceptAcks(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test none acks are just forwarded
-	notAck := &proto.SignedGossipMessage{
+	notAck := &protoext.SignedGossipMessage{
 		GossipMessage: &proto.GossipMessage{
 			Nonce: 2,
 			Content: &proto.GossipMessage_DataMsg{
@@ -71,15 +72,15 @@ func TestAck(t *testing.T) {
 	defer comm4.Stop()
 
 	acceptData := func(o interface{}) bool {
-		return o.(proto.ReceivedMessage).GetGossipMessage().IsDataMsg()
+		return protoext.IsDataMsg(o.(protoext.ReceivedMessage).GetGossipMessage().GossipMessage)
 	}
 
-	ack := func(c <-chan proto.ReceivedMessage) {
+	ack := func(c <-chan protoext.ReceivedMessage) {
 		msg := <-c
 		msg.Ack(nil)
 	}
 
-	nack := func(c <-chan proto.ReceivedMessage) {
+	nack := func(c <-chan protoext.ReceivedMessage) {
 		msg := <-c
 		msg.Ack(errors.New("Failed processing message because reasons"))
 	}
