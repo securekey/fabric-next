@@ -21,8 +21,8 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric
 cd fabric
 git config advice.detachedHead false
-# Fabric release-1.4.1 (Apr 11, 2019) - https://github.com/hyperledger/fabric/releases/tag/v1.4.1
-git checkout 87074a73f3f6fcdff7e82707c9b476596d030d04
+# https://github.com/hyperledger/fabric/releases/tag/v1.4.2
+git checkout v1.4.2
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 
@@ -32,25 +32,12 @@ git config user.email jenkins@jenkins.com
 
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
-
-
 # [FAB-14646] Update dependency github.com/opencontainers/runc
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/94/30094/1 && git cherry-pick FETCH_HEAD
 
 
-#apply trustbloc/Fabric-Mod transient data changes with fabric 1.4.1 in three steps
-# step 1 apply go mod (to match dependencies in trustbloc/Fabric-Mod)
-git am $MY_PATH/../patches/0001-Apply-go-modules-for-src-1.4.1.patch
-# step 2 apply gossip protos extensions to match trustbloc/fabric-peer-ext package names dependencies
-git am $MY_PATH/../patches/0002-gossip-protos-extensions-refactoring.patch
-# step 3 apply transient data changes from trustbloc version of Fabric
-git am $MY_PATH/../patches/0003-Backport-Transient-Data-to-Fabric-1.4.1.patch
-# step 4 Revert go mod
-git am $MY_PATH/../patches/0004-Revert-Apply-go-modules-for-src-1.4.1.patch
-# step 5 Add extensions folder
-git am $MY_PATH/../patches/0005-Add-extensions-folder.patch
-# step 6 Upgrade grpc to 1.19.0
-git am $MY_PATH/../patches/0006-Upgrade-grpc-to-1.19.0.patch
-# step 7 Add fix for collection config not found
-git am $MY_PATH/../patches/0007-Fix-for-collection-config-not-found.patch
+# step 1 apply gossip protos extensions to match trustbloc/fabric-peer-ext package names dependencies
+git am $MY_PATH/../patches/0001-gossip-protos-extensions-refactoring.patch
+# step 2 apply transient data changes from trustbloc version of Fabric
+git am $MY_PATH/../patches/0002-Backport-Transient-Data.patch
 
