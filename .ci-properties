@@ -6,7 +6,7 @@
 
 # Release Parameters
 BASE_VERSION=1.4.1-0.0.5
-IS_RELEASE=false
+IS_RELEASE=true
 
 ARCH=$(go env GOARCH)
 
@@ -21,4 +21,4 @@ fi
 export FABRIC_NEXT_IMAGE_TAG=$ARCH-$PROJECT_VERSION
 
 GO_MIN_VER=1.11
-GO_MAX_VER=1.11.5
+GO_MAX_VER=1.12.5
