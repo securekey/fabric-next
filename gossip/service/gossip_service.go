@@ -9,12 +9,17 @@ package service
 import (
 	"sync"
 
+	"github.com/hyperledger/fabric/core/ledger"
+
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/core/committer"
 	"github.com/hyperledger/fabric/core/committer/txvalidator"
 	"github.com/hyperledger/fabric/core/common/privdata"
 	deliverclient "github.com/hyperledger/fabric/core/deliverservice"
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	extgossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
+	"github.com/hyperledger/fabric/extensions/gossip/dispatcher"
 	"github.com/hyperledger/fabric/gossip/api"
 	gossipCommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/election"
@@ -225,6 +230,9 @@ type Support struct {
 	Cs                   privdata.CollectionStore
 	IdDeserializeFactory privdata2.IdentityDeserializerFactory
 	Capabilities         privdata2.AppCapabilities
+	CollDataStore        storeapi.Store
+	Ledger               ledger.PeerLedger
+	BlockPublisher       extgossipapi.BlockPublisher
 }
 
 // DataStoreSupport aggregates interfaces capable
@@ -265,6 +273,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
 		CollectionStore: support.Cs,
 		Validator:       support.Validator,
 		TransientStore:  support.Store,
+		CollDataStore:   support.CollDataStore,
 		Committer:       support.Committer,
 		Fetcher:         fetcher,
 		AppCapabilities: support.Capabilities,
@@ -290,7 +299,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
 	g.privateHandlers[chainID].reconciler.Start()
 
 	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
-		g.metrics.StateMetrics, getStateConfiguration())
+		g.metrics.StateMetrics, getStateConfiguration(), dispatcher.New(chainID, support.CollDataStore, servicesAdapter, support.Ledger, support.BlockPublisher))
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, oac, g.mcs)

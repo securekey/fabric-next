@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
 	lutil "github.com/hyperledger/fabric/core/ledger/util"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/utils"
@@ -58,6 +59,7 @@ func newKVLedger(
 	bookkeeperProvider bookkeeping.Provider,
 	ccInfoProvider ledger.DeployedChaincodeInfoProvider,
 	stats *ledgerStats,
+	collDataProvider storeapi.Provider,
 ) (*kvLedger, error) {
 	logger.Debugf("Creating KVLedger ledgerID=%s: ", ledgerID)
 	// Create a kvLedger for this chain/ledger, which encasulates the underlying
@@ -80,7 +82,7 @@ func newKVLedger(
 		cceventmgmt.GetMgr().Register(ledgerID, ccEventListener)
 	}
 	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(&collectionInfoRetriever{l, ccInfoProvider})
-	if err := l.initTxMgr(versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider); err != nil {
+	if err := l.initTxMgr(versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider, collDataProvider); err != nil {
 		return nil, err
 	}
 	l.initBlockStore(btlPolicy)
@@ -95,9 +97,10 @@ func newKVLedger(
 }
 
 func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
-	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider) error {
+	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider,
+	collDataProvider storeapi.Provider) error {
 	var err error
-	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider)
+	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider, collDataProvider)
 	return err
 }
 

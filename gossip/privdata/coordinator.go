@@ -21,6 +21,8 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/transientstore"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	extcoord "github.com/hyperledger/fabric/extensions/gossip/coordinator"
 	"github.com/hyperledger/fabric/gossip/metrics"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 	"github.com/hyperledger/fabric/gossip/util"
@@ -121,8 +123,13 @@ type Support struct {
 	txvalidator.Validator
 	committer.Committer
 	TransientStore
+	CollDataStore storeapi.Store
 	Fetcher
 	AppCapabilities
+}
+
+type pvtDataStore interface {
+	StorePvtData(txID string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error
 }
 
 type coordinator struct {
@@ -131,6 +138,7 @@ type coordinator struct {
 	transientBlockRetention        uint64
 	metrics                        *metrics.PrivdataMetrics
 	pullRetryThreshold             time.Duration
+	pvtDataStore                   pvtDataStore
 	skipPullingInvalidTransactions bool
 }
 
@@ -138,6 +146,11 @@ type CoordinatorConfig struct {
 	TransientBlockRetention        uint64
 	PullRetryThreshold             time.Duration
 	SkipPullingInvalidTransactions bool
+}
+
+// getPvtDataStore may be overridden by unit tests
+var getPvtDataStore = func(channelID string, transientStore TransientStore, collDataStore storeapi.Store) pvtDataStore {
+	return extcoord.New(channelID, transientStore, collDataStore)
 }
 
 // NewCoordinator creates a new instance of coordinator
@@ -148,12 +161,13 @@ func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *
 		transientBlockRetention:        config.TransientBlockRetention,
 		metrics:                        metrics,
 		pullRetryThreshold:             config.PullRetryThreshold,
+		pvtDataStore:                   getPvtDataStore(support.ChainID, support.TransientStore, support.CollDataStore),
 		skipPullingInvalidTransactions: config.SkipPullingInvalidTransactions}
 }
 
 // StorePvtData used to persist private date into transient store
 func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error {
-	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
+	return c.pvtDataStore.StorePvtData(txID, privData, blkHeight)
 }
 
 // StoreBlock stores block with private data into the ledger
