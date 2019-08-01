@@ -17,6 +17,7 @@ type MockBlockPublisher struct {
 	HandleConfigUpdate gossipapi.ConfigUpdateHandler
 	HandleWrite        gossipapi.WriteHandler
 	HandleRead         gossipapi.ReadHandler
+	HandleLSCCWrite    gossipapi.LSCCWriteHandler
 	HandleCCEvent      gossipapi.ChaincodeEventHandler
 }
 
@@ -45,6 +46,11 @@ func (m *MockBlockPublisher) AddReadHandler(handler gossipapi.ReadHandler) {
 	m.HandleRead = handler
 }
 
+// AddLSCCWriteHandler adds a write handler
+func (m *MockBlockPublisher) AddLSCCWriteHandler(handler gossipapi.LSCCWriteHandler) {
+	m.HandleLSCCWrite = handler
+}
+
 // AddCCEventHandler adds a chaincode event handler
 func (m *MockBlockPublisher) AddCCEventHandler(handler gossipapi.ChaincodeEventHandler) {
 	m.HandleCCEvent = handler
@@ -52,5 +58,10 @@ func (m *MockBlockPublisher) AddCCEventHandler(handler gossipapi.ChaincodeEventH
 
 // Publish is not implemented and panics if invoked
 func (m *MockBlockPublisher) Publish(block *common.Block) {
+	panic("not implemented")
+}
+
+// LedgerHeight is not implemented and panics if invoked
+func (m *MockBlockPublisher) LedgerHeight() uint64 {
 	panic("not implemented")
 }

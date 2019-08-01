@@ -39,7 +39,7 @@ func NewProvider(
 	gossipProvider func() supportapi.GossipAdapter,
 	blockPublisherProvider func(channelID string) gossipapi.BlockPublisher) storeapi.Provider {
 
-	support := supp.New(ledgerProvider, blockPublisherProvider)
+	support := supp.New(blockPublisherProvider)
 
 	tdataStoreProvider := func(channelID string) tdataapi.Store { return storeProvider(channelID) }
 	offLedgerStoreProvider := func(channelID string) olapi.Store { return storeProvider(channelID) }
@@ -105,6 +105,11 @@ func (r *retriever) GetDataMultipleKeys(ctxt context.Context, key *storeapi.Mult
 	return r.offLedgerRetriever.GetDataMultipleKeys(ctxt, key)
 }
 
+// Query executes the given rich query
+func (r *retriever) Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
+	return r.offLedgerRetriever.Query(ctxt, key)
+}
+
 // Support defines the supporting functions required by the transient data provider
 type Support interface {
 	Config(channelID, ns, coll string) (*cb.StaticCollectionConfig, error)
@@ -119,6 +124,6 @@ var getTransientDataProvider = func(storeProvider func(channelID string) tdataap
 var getOffLedgerProvider = func(storeProvider func(channelID string) olapi.Store, support Support, gossipProvider func() supportapi.GossipAdapter) olapi.Provider {
 	return olretriever.NewProvider(storeProvider, support, gossipProvider,
 		olretriever.WithValidator(cb.CollectionType_COL_DCAS, dcas.Validator),
-		olretriever.WithKeyDecorator(cb.CollectionType_COL_DCAS, dcas.KeyDecorator),
+		olretriever.WithDecorator(cb.CollectionType_COL_DCAS, dcas.Decorator),
 	)
 }
