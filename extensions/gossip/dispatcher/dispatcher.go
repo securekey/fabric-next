@@ -33,5 +33,5 @@ func New(
 	gossipAdapter gossipAdapter,
 	ledger ledger.PeerLedger,
 	blockPublisher blockPublisher) *extdispatcher.Dispatcher {
-	return extdispatcher.New(channelID, dataStore, gossipAdapter, ledger, blockPublisher)
+	return extdispatcher.New(channelID, dataStore, gossipAdapter)
 }
