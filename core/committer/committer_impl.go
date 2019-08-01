@@ -10,7 +10,6 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos/common"
-	"github.com/hyperledger/fabric/protos/utils"
 	"github.com/pkg/errors"
 )
 
@@ -73,12 +72,9 @@ func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEve
 // preCommit takes care to validate the block and update based on its
 // content
 func (lc *LedgerCommitter) preCommit(block *common.Block) error {
-	// Updating CSCC with new configuration block
-	if utils.IsConfigBlock(block) {
-		logger.Debug("Received configuration update, calling CSCC ConfigUpdate")
-		if err := lc.eventer(block); err != nil {
-			return errors.WithMessage(err, "could not update CSCC with new configuration update")
-		}
+	logger.Debug("Received block, calling eventer")
+	if err := lc.eventer(block); err != nil {
+		return errors.WithMessage(err, "error returned from block eventer")
 	}
 	return nil
 }
