@@ -40,4 +40,5 @@ git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/94/30094/1 && git
 git am $MY_PATH/../patches/0001-gossip-protos-extensions-refactoring.patch
 # step 2 apply transient data changes from trustbloc version of Fabric
 git am $MY_PATH/../patches/0002-Backport-Transient-Data.patch
-
+# step 3 apply transient data fix BLOC-1741 Fix for deadlock
+git am $MY_PATH/../patches/0001-BLOC-1741-Fix-deadlock-when-retrieving-transient-dat.patch

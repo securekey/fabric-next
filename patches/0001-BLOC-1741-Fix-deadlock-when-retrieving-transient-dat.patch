@@ -1,0 +1,4027 @@
+From 61b64968f4c570109d4c359cddb73b3447f915ae Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Thu, 1 Aug 2019 10:54:15 -0400
+Subject: [PATCH] [BLOC-1741] Fix deadlock when retrieving transient data
+
+Intermittent deadlocks occur attempting to retrieve transient data. When a block is being committed, the committer attempts to acquire a write lock while the chaincode already has a read-lock. Then GetPrivateData attempts to acquire a read-lock to retrieve collection config data from the ledger. This commit adds an LSCC handler to the collection config retriever so that the collection config cache is populated directly from the data provided by the handler which eliminates the need to pull the config from the ledger.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: I52539f2c39646c49f2ff06d988774e69e9b003ac
+---
+ Gopkg.lock                                    |   5 +-
+ Gopkg.toml                                    |   2 +-
+ core/committer/committer_impl.go              |  10 +-
+ core/peer/peer.go                             |   3 +
+ extensions/collections/api/store/key.go       |  23 ++
+ extensions/collections/api/store/provider.go  |  23 ++
+ extensions/endorser/endorser.go               |   4 +-
+ extensions/gossip/api/gossipapi.go            |  24 +-
+ extensions/gossip/dispatcher/dispatcher.go    |   2 +-
+ extensions/gossip/mocks/blockpublisher.go     |   4 +
+ extensions/gossip/state/state.go              |  22 ++
+ extensions/mocks/mockdatastore.go             |   5 +
+ extensions/mocks/mockprovider.go              |   4 +
+ .../cdbblkstorage/cdb_blkstorage.go           |  14 +-
+ .../collections/offledger/api/offledger.go    |   8 +
+ .../pkg/collections/offledger/dcas/cas.go     |  70 +++-
+ .../pkg/collections/offledger/dcas/dcas.go    |  68 ++--
+ .../offledger/dcas/test_exports.go            |  19 +
+ .../dissemination/disseminationplan.go        |  23 +-
+ .../offledger/mocks/mockprovider.go           |  18 +
+ .../offledger/retriever/olretriever.go        | 122 ++++++-
+ .../offledger/storeprovider/olstore.go        | 139 +++++--
+ .../storeprovider/olstoreprovider.go          |  23 +-
+ .../storeprovider/resultsiterator.go          |  37 ++
+ .../offledger/storeprovider/store/api/api.go  |   8 +-
+ .../storeprovider/store/cache/cache.go        |   2 +-
+ .../store/couchdbstore/dbstore.go             | 339 ++++++++++++++----
+ .../store/couchdbstore/dbstore_provider.go    |  22 +-
+ .../pvtdatahandler/pvtdatahandler.go          |  69 ++++
+ .../pkg/collections/retriever/retriever.go    |   9 +-
+ .../pkg/collections/storeprovider/store.go    |   5 +
+ .../storeprovider/storeprovider.go            |   1 -
+ .../retriever/transientdataretriever.go       |   6 +-
+ .../transientdata/storeprovider/tdstore.go    |   2 +-
+ .../pkg/common/support/collconfigretriever.go | 100 ++++--
+ .../pkg/common/support/support.go             |  29 +-
+ .../fabric-peer-ext/pkg/config/config.go      |   9 +-
+ .../fabric-peer-ext/pkg/endorser/endorser.go  |  31 +-
+ .../gossip/blockpublisher/blockpublisher.go   | 237 ++++++++----
+ .../pkg/gossip/dispatcher/dispatcher.go       |  12 +-
+ .../pkg/idstore/couchdoc_conv.go              |  15 +-
+ .../fabric-peer-ext/pkg/idstore/store_impl.go |  63 ++--
+ .../pkg/idstore/test_exports.go               |  31 +-
+ .../pkg/mocks/mockblockhandler.go             |  22 +-
+ .../pkg/mocks/mockblockpublisher.go           |  11 +
+ .../pkg/mocks/mockdataprovider.go             |  58 ++-
+ .../pkg/mocks/mockdatastore.go                |   5 +
+ .../fabric-peer-ext/pkg/mocks/mockledger.go   |   5 +
+ .../pkg/mocks/mockqueryexecutor.go            | 100 +++++-
+ .../pkg/mocks/mockresultsiterator.go          |  55 +++
+ .../cachedpvtdatastore/store_impl.go          |   2 +-
+ .../cdbpvtdatastore/couchdb_conv.go           |  49 +--
+ .../cdbpvtdatastore/store_impl.go             |  85 +++--
+ .../pkg/pvtdatastorage/common/store.go        |  15 +-
+ .../pkg/pvtdatastorage/common/v11.go          |  12 +
+ .../pkg/pvtdatastorage/store_impl.go          |   7 +-
+ .../fabric-peer-ext/pkg/roles/roles.go        |   8 +-
+ 57 files changed, 1551 insertions(+), 545 deletions(-)
+ create mode 100644 extensions/gossip/state/state.go
+ create mode 100644 vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/test_exports.go
+ create mode 100644 vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/resultsiterator.go
+ create mode 100644 vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockresultsiterator.go
+
+diff --git a/Gopkg.lock b/Gopkg.lock
+index f52db3264..18d8425f1 100644
+--- a/Gopkg.lock
++++ b/Gopkg.lock
+@@ -729,7 +729,7 @@
+   revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
+ 
+ [[projects]]
+-  digest = "1:2af3aeb5d098d72b09e268dfb269f99383d724344676b74c0f5f072b99850cee"
++  digest = "1:a9676af4cb03d4dfe8d10d063260d128c63c59a60b4fb9ea327bf25d6bb840ba"
+   name = "github.com/trustbloc/fabric-peer-ext"
+   packages = [
+     "pkg/blkstorage/cdbblkstorage",
+@@ -777,7 +777,7 @@
+     "pkg/transientstore/common",
+   ]
+   pruneopts = "NUT"
+-  revision = "9b20d84ee0a4b89039086a3a2da103584e7ed1d8"
++  revision = "60e327262316a5654e4078c78e781a7ee743dccc"
+ 
+ [[projects]]
+   digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
+@@ -1096,6 +1096,7 @@
+     "github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/mocks",
+     "github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/policy",
+     "github.com/trustbloc/fabric-peer-ext/pkg/common",
++    "github.com/trustbloc/fabric-peer-ext/pkg/common/support",
+     "github.com/trustbloc/fabric-peer-ext/pkg/endorser",
+     "github.com/trustbloc/fabric-peer-ext/pkg/gossip/blockpublisher",
+     "github.com/trustbloc/fabric-peer-ext/pkg/gossip/dispatcher",
+diff --git a/Gopkg.toml b/Gopkg.toml
+index fb1c7c3ec..33d2db627 100644
+--- a/Gopkg.toml
++++ b/Gopkg.toml
+@@ -17,7 +17,7 @@ noverify = [
+ 
+ [[constraint]]
+   name = "github.com/trustbloc/fabric-peer-ext"
+-  revision = "9b20d84ee0a4b89039086a3a2da103584e7ed1d8"
++  revision = "60e327262316a5654e4078c78e781a7ee743dccc"
+ 
+ [[override]]
+   name = "github.com/bluele/gcache"
+diff --git a/core/committer/committer_impl.go b/core/committer/committer_impl.go
+index 25f06287f..768576b62 100644
+--- a/core/committer/committer_impl.go
++++ b/core/committer/committer_impl.go
+@@ -10,7 +10,6 @@ import (
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/protos/common"
+-	"github.com/hyperledger/fabric/protos/utils"
+ 	"github.com/pkg/errors"
+ )
+ 
+@@ -73,12 +72,9 @@ func NewLedgerCommitterReactive(ledger PeerLedgerSupport, eventer ConfigBlockEve
+ // preCommit takes care to validate the block and update based on its
+ // content
+ func (lc *LedgerCommitter) preCommit(block *common.Block) error {
+-	// Updating CSCC with new configuration block
+-	if utils.IsConfigBlock(block) {
+-		logger.Debug("Received configuration update, calling CSCC ConfigUpdate")
+-		if err := lc.eventer(block); err != nil {
+-			return errors.WithMessage(err, "could not update CSCC with new configuration update")
+-		}
++	logger.Debug("Received block, calling eventer")
++	if err := lc.eventer(block); err != nil {
++		return errors.WithMessage(err, "error returned from block eventer")
+ 	}
+ 	return nil
+ }
+diff --git a/core/peer/peer.go b/core/peer/peer.go
+index 7c72e8361..8e9ebb94a 100644
+--- a/core/peer/peer.go
++++ b/core/peer/peer.go
+@@ -36,6 +36,7 @@ import (
+ 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+ 	"github.com/hyperledger/fabric/extensions/collections/storeprovider"
+ 	"github.com/hyperledger/fabric/extensions/gossip/blockpublisher"
++	xstate "github.com/hyperledger/fabric/extensions/gossip/state"
+ 	"github.com/hyperledger/fabric/gossip/api"
+ 	"github.com/hyperledger/fabric/gossip/service"
+ 	"github.com/hyperledger/fabric/msp"
+@@ -453,6 +454,8 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
+ 	}{cs, validationWorkersSemaphore}
+ 	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm)
+ 	blockPublisher := BlockPublisher.ForChannel(cid)
++	xstate.ChannelJoined(cid, ledger, blockPublisher)
++
+ 	c := committer.NewLedgerCommitterReactive(ledger, func(block *common.Block) error {
+ 		// Updating CSCC with new configuration block
+ 		if utils.IsConfigBlock(block) {
+diff --git a/extensions/collections/api/store/key.go b/extensions/collections/api/store/key.go
+index 68b4b17f7..9761167de 100644
+--- a/extensions/collections/api/store/key.go
++++ b/extensions/collections/api/store/key.go
+@@ -55,3 +55,26 @@ func NewMultiKey(endorsedAtTxID string, ns string, coll string, keys ...string)
+ func (k *MultiKey) String() string {
+ 	return fmt.Sprintf("%s:%s:%s-%s", k.Namespace, k.Collection, k.Keys, k.EndorsedAtTxID)
+ }
++
++// QueryKey holds the criteria for retrieving collection data in rich queries
++type QueryKey struct {
++	EndorsedAtTxID string
++	Namespace      string
++	Collection     string
++	Query          string
++}
++
++// NewQueryKey returns a new collection data query-key
++func NewQueryKey(endorsedAtTxID string, ns string, coll string, query string) *QueryKey {
++	return &QueryKey{
++		EndorsedAtTxID: endorsedAtTxID,
++		Namespace:      ns,
++		Collection:     coll,
++		Query:          query,
++	}
++}
++
++// String returns the string representation of the key
++func (k *QueryKey) String() string {
++	return fmt.Sprintf("%s:%s:[%s]-%s", k.Namespace, k.Collection, k.Query, k.EndorsedAtTxID)
++}
+diff --git a/extensions/collections/api/store/provider.go b/extensions/collections/api/store/provider.go
+index 376356480..bb4ba4a1e 100644
+--- a/extensions/collections/api/store/provider.go
++++ b/extensions/collections/api/store/provider.go
+@@ -24,6 +24,22 @@ type ExpiringValue struct {
+ // ExpiringValues expiring values
+ type ExpiringValues []*ExpiringValue
+ 
++// QueryResult holds a single item from the query result set
++type QueryResult struct {
++	*Key
++	*ExpiringValue
++}
++
++// ResultsIterator is an iterator returned by a query
++type ResultsIterator interface {
++	// Next returns the next item in the result set. The result is expected to be nil when
++	// the iterator gets exhausted
++	Next() (*QueryResult, error)
++
++	// Close releases resources occupied by the iterator
++	Close()
++}
++
+ // Store manages the storage of private data collections.
+ type Store interface {
+ 	// Persist stores the private write set of a transaction.
+@@ -41,6 +57,10 @@ type Store interface {
+ 	// GetDataMultipleKeys gets the values for the multiple items in a single call
+ 	GetDataMultipleKeys(key *MultiKey) (ExpiringValues, error)
+ 
++	// Query executes the given query
++	// NOTE: This function is only supported on CouchDB
++	Query(key *QueryKey) (ResultsIterator, error)
++
+ 	// PutData stores the key/value.
+ 	PutData(config *cb.StaticCollectionConfig, key *Key, value *ExpiringValue) error
+ 
+@@ -61,6 +81,9 @@ type Retriever interface {
+ 
+ 	// GetDataMultipleKeys gets the values for the multiple data items in a single call
+ 	GetDataMultipleKeys(ctxt context.Context, key *MultiKey) (ExpiringValues, error)
++
++	// Query returns the results of the given query
++	Query(ctxt context.Context, key *QueryKey) (ResultsIterator, error)
+ }
+ 
+ // Provider provides private data retrievers
+diff --git a/extensions/endorser/endorser.go b/extensions/endorser/endorser.go
+index 0e034474b..9bf327146 100644
+--- a/extensions/endorser/endorser.go
++++ b/extensions/endorser/endorser.go
+@@ -19,6 +19,6 @@ type CollRWSetFilter interface {
+ }
+ 
+ // NewCollRWSetFilter returns a new collection RW set filter
+-func NewCollRWSetFilter(qepf api.QueryExecutorProviderFactory, bpp api.BlockPublisherProvider) CollRWSetFilter {
+-	return extendorser.NewCollRWSetFilter(qepf, bpp)
++func NewCollRWSetFilter(api.QueryExecutorProviderFactory, api.BlockPublisherProvider) CollRWSetFilter {
++	return extendorser.NewCollRWSetFilter()
+ }
+diff --git a/extensions/gossip/api/gossipapi.go b/extensions/gossip/api/gossipapi.go
+index a53afea57..b9c055a9f 100644
+--- a/extensions/gossip/api/gossipapi.go
++++ b/extensions/gossip/api/gossipapi.go
+@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
+ package api
+ 
+ import (
++	"github.com/hyperledger/fabric/core/common/ccprovider"
+ 	cb "github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+ 	pb "github.com/hyperledger/fabric/protos/peer"
+@@ -16,16 +17,19 @@ import (
+ type ConfigUpdateHandler func(blockNum uint64, configUpdate *cb.ConfigUpdate) error
+ 
+ // WriteHandler handles a KV write
+-type WriteHandler func(blockNum uint64, channelID, txID, namespace string, kvWrite *kvrwset.KVWrite) error
++type WriteHandler func(txMetadata TxMetadata, namespace string, kvWrite *kvrwset.KVWrite) error
+ 
+ // ReadHandler handles a KV read
+-type ReadHandler func(blockNum uint64, channelID, txID, namespace string, kvRead *kvrwset.KVRead) error
++type ReadHandler func(txMetadata TxMetadata, namespace string, kvRead *kvrwset.KVRead) error
+ 
+ // ChaincodeEventHandler handles a chaincode event
+-type ChaincodeEventHandler func(blockNum uint64, channelID, txID string, event *pb.ChaincodeEvent) error
++type ChaincodeEventHandler func(txMetadata TxMetadata, event *pb.ChaincodeEvent) error
+ 
+ // ChaincodeUpgradeHandler handles chaincode upgrade events
+-type ChaincodeUpgradeHandler func(blockNum uint64, txID string, chaincodeName string) error
++type ChaincodeUpgradeHandler func(txMetadata TxMetadata, chaincodeName string) error
++
++// LSCCWriteHandler handles chaincode instantiation/upgrade events
++type LSCCWriteHandler func(txMetadata TxMetadata, chaincodeName string, ccData *ccprovider.ChaincodeData, ccp *cb.CollectionConfigPackage) error
+ 
+ // BlockPublisher allows clients to add handlers for various block events
+ type BlockPublisher interface {
+@@ -37,8 +41,20 @@ type BlockPublisher interface {
+ 	AddWriteHandler(handler WriteHandler)
+ 	// AddReadHandler adds a handler for KV reads
+ 	AddReadHandler(handler ReadHandler)
++	// AddLSCCWriteHandler adds a handler for LSCC writes (for chaincode instantiate/upgrade)
++	AddLSCCWriteHandler(handler LSCCWriteHandler)
+ 	// AddCCEventHandler adds a handler for chaincode events
+ 	AddCCEventHandler(handler ChaincodeEventHandler)
+ 	// Publish traverses the block and invokes all applicable handlers
+ 	Publish(block *cb.Block)
++	//LedgerHeight returns current in memory ledger height
++	LedgerHeight() uint64
++}
++
++// TxMetadata contain txn metadata
++type TxMetadata struct {
++	BlockNum  uint64
++	TxNum     uint64
++	ChannelID string
++	TxID      string
+ }
+diff --git a/extensions/gossip/dispatcher/dispatcher.go b/extensions/gossip/dispatcher/dispatcher.go
+index 9ddb4ed51..9f57f78c7 100644
+--- a/extensions/gossip/dispatcher/dispatcher.go
++++ b/extensions/gossip/dispatcher/dispatcher.go
+@@ -33,5 +33,5 @@ func New(
+ 	gossipAdapter gossipAdapter,
+ 	ledger ledger.PeerLedger,
+ 	blockPublisher blockPublisher) *extdispatcher.Dispatcher {
+-	return extdispatcher.New(channelID, dataStore, gossipAdapter, ledger, blockPublisher)
++	return extdispatcher.New(channelID, dataStore, gossipAdapter)
+ }
+diff --git a/extensions/gossip/mocks/blockpublisher.go b/extensions/gossip/mocks/blockpublisher.go
+index 688bcdaa1..8d060b13f 100644
+--- a/extensions/gossip/mocks/blockpublisher.go
++++ b/extensions/gossip/mocks/blockpublisher.go
+@@ -40,6 +40,10 @@ func (m *BlockPublisher) AddReadHandler(handler api.ReadHandler) {
+ 	// Not implemented
+ }
+ 
++func (p *BlockPublisher) AddLSCCWriteHandler(handler api.LSCCWriteHandler) {
++	// Not implemented
++}
++
+ // AddCCEventHandler adds a handler for chaincode events
+ func (m *BlockPublisher) AddCCEventHandler(handler api.ChaincodeEventHandler) {
+ 	// Not implemented
+diff --git a/extensions/gossip/state/state.go b/extensions/gossip/state/state.go
+new file mode 100644
+index 000000000..86bcf580e
+--- /dev/null
++++ b/extensions/gossip/state/state.go
+@@ -0,0 +1,22 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package state
++
++import (
++	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/core/ledger"
++	"github.com/hyperledger/fabric/extensions/gossip/api"
++	"github.com/trustbloc/fabric-peer-ext/pkg/common/support"
++)
++
++var logger = flogging.MustGetLogger("ext_gossip_state")
++
++// ChannelJoined is invoked when the peer joins a channel
++func ChannelJoined(channelID string, ledger ledger.PeerLedger, publisher api.BlockPublisher) {
++	logger.Infof("Initializing collection config retriever for channel [%s]", channelID)
++	support.InitCollectionConfigRetriever(channelID, ledger, publisher)
++}
+diff --git a/extensions/mocks/mockdatastore.go b/extensions/mocks/mockdatastore.go
+index 7410c46d0..52d988214 100644
+--- a/extensions/mocks/mockdatastore.go
++++ b/extensions/mocks/mockdatastore.go
+@@ -96,6 +96,11 @@ func (m *DataStore) GetDataMultipleKeys(key *storeapi.MultiKey) (storeapi.Expiri
+ 	return values, m.err
+ }
+ 
++// Query executes the given query
++func (m *DataStore) Query(key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	panic("not implemented")
++}
++
+ // Close closes the store
+ func (m *DataStore) Close() {
+ }
+diff --git a/extensions/mocks/mockprovider.go b/extensions/mocks/mockprovider.go
+index b33774bcb..5132000fe 100644
+--- a/extensions/mocks/mockprovider.go
++++ b/extensions/mocks/mockprovider.go
+@@ -51,3 +51,7 @@ func (m *dataRetriever) GetDataMultipleKeys(ctxt context.Context, key *storeapi.
+ 	}
+ 	return values, nil
+ }
++
++func (m *dataRetriever) Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	panic("not implemented")
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/blkstorage/cdbblkstorage/cdb_blkstorage.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/blkstorage/cdbblkstorage/cdb_blkstorage.go
+index 753b92ec2..8fb1731c1 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/blkstorage/cdbblkstorage/cdb_blkstorage.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/blkstorage/cdbblkstorage/cdb_blkstorage.go
+@@ -89,7 +89,7 @@ func (s *cdbBlockStore) AddBlock(block *common.Block) error {
+ 		return err
+ 	}
+ 
+-	return s.checkpointBlock(block)
++	return s.CheckpointBlock(block)
+ }
+ 
+ //validateBlock validates block before adding to store
+@@ -154,17 +154,19 @@ func (s *cdbBlockStore) storeTransactions(block *common.Block) error {
+ 	return nil
+ }
+ 
+-func (s *cdbBlockStore) checkpointBlock(block *common.Block) error {
++func (s *cdbBlockStore) CheckpointBlock(block *common.Block) error {
+ 	//Update the checkpoint info with the results of adding the new block
+ 	newCPInfo := &checkpointInfo{
+ 		isChainEmpty:    false,
+ 		lastBlockNumber: block.Header.Number,
+ 		currentHash:     protoutil.BlockHeaderHash(block.Header),
+ 	}
+-	//save the checkpoint information in the database
+-	err := s.cp.saveCurrentInfo(newCPInfo)
+-	if err != nil {
+-		return errors.WithMessage(err, "adding cpInfo to couchDB failed")
++	if roles.IsCommitter() {
++		//save the checkpoint information in the database
++		err := s.cp.saveCurrentInfo(newCPInfo)
++		if err != nil {
++			return errors.WithMessage(err, "adding cpInfo to couchDB failed")
++		}
+ 	}
+ 	//update the checkpoint info (for storage) and the blockchain info (for APIs) in the manager
+ 	s.updateCheckpoint(newCPInfo)
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/api/offledger.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/api/offledger.go
+index c0b429c0a..475a3c896 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/api/offledger.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/api/offledger.go
+@@ -28,6 +28,10 @@ type Store interface {
+ 	// GetDataMultipleKeys gets the values for the multiple items in a single call
+ 	GetDataMultipleKeys(key *storeapi.MultiKey) (storeapi.ExpiringValues, error)
+ 
++	// Query executes the given query
++	// NOTE: This function is only supported on CouchDB
++	Query(key *storeapi.QueryKey) (storeapi.ResultsIterator, error)
++
+ 	// Close closes the store
+ 	Close()
+ }
+@@ -48,6 +52,10 @@ type Retriever interface {
+ 
+ 	// GetDataMultipleKeys gets the values for the multiple data items in a single call
+ 	GetDataMultipleKeys(ctxt context.Context, key *storeapi.MultiKey) (storeapi.ExpiringValues, error)
++
++	// Query returns the results from the given query
++	// NOTE: This function is only supported on CouchDB
++	Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error)
+ }
+ 
+ // Provider provides data retrievers
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/cas.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/cas.go
+index c00ab0064..0a7d39708 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/cas.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/cas.go
+@@ -9,22 +9,49 @@ package dcas
+ import (
+ 	"crypto"
+ 	"encoding/base64"
++	"encoding/json"
+ 
+ 	"github.com/btcsuite/btcutil/base58"
+ )
+ 
+-// GetCASKey returns the content-addressable key for the given content.
+-func GetCASKey(content []byte) string {
+-	hash := getHash(content)
+-	buf := make([]byte, base64.URLEncoding.EncodedLen(len(hash)))
+-	base64.URLEncoding.Encode(buf, hash)
+-	return string(buf)
++// GetCASKeyAndValue first normalizes the content (i.e. if the content is a JSON doc then the fields
++// are marshaled in a deterministic order) and returns the content-addressable key
++// (encoded in base64) along with the normalized value.
++func GetCASKeyAndValue(content []byte) (string, []byte, error) {
++	bytes, err := getNormalizedContent(content)
++	if err != nil {
++		return "", nil, err
++	}
++	return string(getCASKey(bytes)), bytes, nil
+ }
+ 
+-// GetFabricCASKey returns the content-addressable key for the given content,
+-// encoded in base58 so that it may be used as a key in Fabric.
+-func GetFabricCASKey(content []byte) string {
+-	return Base58Encode(GetCASKey(content))
++// GetCASKeyAndValueBase58 first normalizes the content (i.e. if the content is a JSON doc then the fields
++// are marshaled in a deterministic order) and returns the content-addressable key
++// (first encoded in base64 and then in base58) along with the normalized value.
++func GetCASKeyAndValueBase58(content []byte) (string, []byte, error) {
++	bytes, err := getNormalizedContent(content)
++	if err != nil {
++		return "", nil, err
++	}
++	return base58.Encode(getCASKey(bytes)), bytes, nil
++}
++
++// getNormalizedContent ensures that, if the content is a JSON doc, then the fields are marshaled in a deterministic order
++// so that the hash of the content is also deterministic.
++func getNormalizedContent(content []byte) ([]byte, error) {
++	m, err := unmarshalJSONMap(content)
++	if err != nil {
++		// This is not a JSON document
++		return content, nil
++	}
++
++	// This is a JSON doc. Re-marshal it in order to ensure that the JSON fields are marshaled in a deterministic order.
++	bytes, err := marshalJSONMap(m)
++	if err != nil {
++		return nil, err
++	}
++
++	return bytes, nil
+ }
+ 
+ // getHash will compute the hash for the supplied bytes using SHA256
+@@ -36,7 +63,24 @@ func getHash(bytes []byte) []byte {
+ 	return h.Sum(nil)
+ }
+ 
+-// Base58Encode encodes the given string in base 58
+-func Base58Encode(s string) string {
+-	return base58.Encode([]byte(s))
++func getCASKey(content []byte) []byte {
++	hash := getHash(content)
++	buf := make([]byte, base64.URLEncoding.EncodedLen(len(hash)))
++	base64.URLEncoding.Encode(buf, hash)
++	return buf
++}
++
++// marshalJSONMap marshals a JSON map. This variable may be overridden by unit tests.
++var marshalJSONMap = func(m map[string]interface{}) ([]byte, error) {
++	return json.Marshal(&m)
++}
++
++// unmarshalJSONMap unmarshals a JSON map from the given bytes. This variable may be overridden by unit tests.
++var unmarshalJSONMap = func(bytes []byte) (map[string]interface{}, error) {
++	m := make(map[string]interface{})
++	err := json.Unmarshal(bytes, &m)
++	if err != nil {
++		return nil, err
++	}
++	return m, nil
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/dcas.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/dcas.go
+index c715d1797..27ffcad39 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/dcas.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/dcas.go
+@@ -7,61 +7,53 @@ SPDX-License-Identifier: Apache-2.0
+ package dcas
+ 
+ import (
++	"github.com/btcsuite/btcutil/base58"
++	"github.com/hyperledger/fabric/common/flogging"
+ 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+ 	"github.com/pkg/errors"
+ )
+ 
++var logger = flogging.MustGetLogger("ext_offledger")
++
+ // Validator is an off-ledger validator that validates the CAS key against the value
+ func Validator(_, _, _, key string, value []byte) error {
+-	if value == nil {
+-		return errors.Errorf("nil value for key [%s]", key)
+-	}
+-	expectedKey := GetCASKey(value)
+-	if key != expectedKey {
+-		return errors.Errorf("Invalid CAS key [%s] - the key should be the hash of the value", key)
+-	}
+-	return nil
++	return validateCASKey(key, value)
+ }
+ 
+-// Decorator is an off-ledger decorator that ensures the given key is the hash of the value. If the key is not
+-// specified then it is generated. If the key is provided then it is validated against the value.
+-func Decorator(key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error) {
+-	dcasKey, err := validateCASKey(key.Key, value.Value)
+-	if err != nil {
+-		return nil, nil, err
+-	}
++// Decorator is an off-ledger decorator that ensures the key is the hash of the value.
++var Decorator = &decorator{}
+ 
+-	// The key needs to be base58 encoded since Fabric doesn't allow
+-	// certain characters to be used in the key.
+-	newKey := &storeapi.Key{
+-		EndorsedAtTxID: key.EndorsedAtTxID,
+-		Namespace:      key.Namespace,
+-		Collection:     key.Collection,
+-		Key:            Base58Encode(dcasKey),
++type decorator struct {
++}
++
++// BeforeSave ensures that the given key is the base58 encoded hash of the value.
++func (d *decorator) BeforeSave(key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error) {
++	if err := validateCASKey(key.Key, value.Value); err != nil {
++		return nil, nil, err
+ 	}
++	return key, value, nil
++}
+ 
+-	return newKey, value, nil
++// BeforeLoad returns the key.
++func (d *decorator) BeforeLoad(key *storeapi.Key) (*storeapi.Key, error) {
++	return key, nil
+ }
+ 
+-// KeyDecorator is an off-ledger decorator that ensures the given key is base58 encoded
+-// since Fabric doesn't allow certain characters to be used in the key.
+-func KeyDecorator(key *storeapi.Key) (*storeapi.Key, error) {
+-	return &storeapi.Key{
+-		EndorsedAtTxID: key.EndorsedAtTxID,
+-		Namespace:      key.Namespace,
+-		Collection:     key.Collection,
+-		Key:            Base58Encode(key.Key),
+-	}, nil
++// AfterQuery returns the key/value.
++func (d *decorator) AfterQuery(key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error) {
++	return key, value, nil
+ }
+ 
+-func validateCASKey(key string, value []byte) (string, error) {
++func validateCASKey(key string, value []byte) error {
+ 	if value == nil {
+-		return "", errors.Errorf("attempt to put nil value for key [%s]", key)
++		return errors.Errorf("attempt to put nil value for key [%s]", key)
+ 	}
+ 
+-	casKey := GetCASKey(value)
+-	if key != "" && key != casKey {
+-		return casKey, errors.New("invalid CAS key - the key should be the hash of the value")
++	casKey := base58.Encode(getCASKey(value))
++	logger.Debugf("Validating key [%s] against value [%s]", key, value)
++	if key != casKey {
++		return errors.Errorf("invalid CAS key - the key should be the hash of the value [%s]", casKey)
+ 	}
+-	return casKey, nil
++
++	return nil
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/test_exports.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/test_exports.go
+new file mode 100644
+index 000000000..b2d4c4519
+--- /dev/null
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dcas/test_exports.go
+@@ -0,0 +1,19 @@
++// +build testing
++
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package dcas
++
++// SetJSONMarshaller sets the JSON map marshaller for unit tests.
++// Returns a function that resets the marshaller to the previous value.
++func SetJSONMarshaller(marshaller func(m map[string]interface{}) ([]byte, error)) func() {
++	prevMarshaller := marshalJSONMap
++	marshalJSONMap = marshaller
++	return func() {
++		marshalJSONMap = prevMarshaller
++	}
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dissemination/disseminationplan.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dissemination/disseminationplan.go
+index c27e8a2c8..b8497fae1 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dissemination/disseminationplan.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dissemination/disseminationplan.go
+@@ -39,13 +39,13 @@ func ComputeDisseminationPlan(
+ 	gossipAdapter gossipAdapter) ([]*dissemination.Plan, bool, error) {
+ 	logger.Debugf("Computing dissemination plan for [%s:%s]", ns, rwSet.CollectionName)
+ 
+-	kvRwSet := &kvrwset.KVRWSet{}
+-	if err := protobuf.Unmarshal(rwSet.Rwset, kvRwSet); err != nil {
++	kvRwSet, err := unmarshalKVRWSet(rwSet.Rwset)
++	if err != nil {
+ 		return nil, true, errors.WithMessage(err, "error unmarshalling KV read/write set")
+ 	}
+ 
+ 	if err := validateAll(collConfig.Type, kvRwSet); err != nil {
+-		return nil, false, errors.WithMessagef(err, "one or more keys did not validate for collection [%s:%s]", ns, rwSet.CollectionName)
++		return nil, true, errors.WithMessagef(err, "one or more keys did not validate for collection [%s:%s]", ns, rwSet.CollectionName)
+ 	}
+ 
+ 	peers := New(channelID, ns, rwSet.CollectionName, colAP, gossipAdapter).resolvePeersForDissemination().Remote()
+@@ -87,10 +87,23 @@ func validateAll(collType cb.CollectionType, kvRWSet *kvrwset.KVRWSet) error {
+ 
+ func validate(collType cb.CollectionType, ws *kvrwset.KVWrite) error {
+ 	if collType == cb.CollectionType_COL_DCAS && ws.Value != nil {
+-		expectedKey := dcas.GetCASKey(ws.Value)
++		expectedKey, _, err := dcas.GetCASKeyAndValueBase58(ws.Value)
++		if err != nil {
++			return err
++		}
+ 		if ws.Key != expectedKey {
+-			return errors.Errorf("invalid CAS key [%s] - the key should be the hash of the value", ws.Key)
++			return errors.Errorf("invalid CAS key [%s] - the key should be the hash of the value [%s]", ws.Key, expectedKey)
+ 		}
+ 	}
+ 	return nil
+ }
++
++// unmarshalKVRWSet unmarshals the given KV rw-set bytes. This variable may be overridden by unit tests.
++var unmarshalKVRWSet = func(bytes []byte) (*kvrwset.KVRWSet, error) {
++	kvRwSet := &kvrwset.KVRWSet{}
++	err := protobuf.Unmarshal(bytes, kvRwSet)
++	if err != nil {
++		return nil, err
++	}
++	return kvRwSet, nil
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/mocks/mockprovider.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/mocks/mockprovider.go
+index efb33e706..f6e583304 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/mocks/mockprovider.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/mocks/mockprovider.go
+@@ -38,3 +38,21 @@ func (m *retriever) GetDataMultipleKeys(ctxt context.Context, key *storeapi.Mult
+ 	}
+ 	return values, nil
+ }
++
++func (m *retriever) Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	return newResultsIterator(), nil
++}
++
++type resultsIterator struct {
++}
++
++func newResultsIterator() *resultsIterator {
++	return &resultsIterator{}
++}
++
++func (it *resultsIterator) Next() (*storeapi.QueryResult, error) {
++	return nil, nil
++}
++
++func (it *resultsIterator) Close() {
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/retriever/olretriever.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/retriever/olretriever.go
+index 96e0501ee..b17ce21c0 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/retriever/olretriever.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/retriever/olretriever.go
+@@ -40,8 +40,15 @@ type support interface {
+ // Validator is a key/value validator
+ type Validator func(txID, ns, coll, key string, value []byte) error
+ 
+-// KeyDecorator allows for modification of the provided key
+-type KeyDecorator func(key *storeapi.Key) (*storeapi.Key, error)
++// Decorator allows the key/value to be modified/validated before being persisted. It is also
++// applied to query results before the results are returned to the caller.
++type Decorator interface {
++	// BeforeLoad has the opportunity to decorate the key before target is loaded or deleted.
++	BeforeLoad(key *storeapi.Key) (*storeapi.Key, error)
++
++	// AfterQuery has the opportunity to decorate the key and/or value that is returned from a DB query.
++	AfterQuery(key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error)
++}
+ 
+ // Provider is a collection data data provider.
+ type Provider struct {
+@@ -49,7 +56,7 @@ type Provider struct {
+ 	storeForChannel func(channelID string) olapi.Store
+ 	gossipAdapter   func() supportapi.GossipAdapter
+ 	validators      map[cb.CollectionType]Validator
+-	keyDecorators   map[cb.CollectionType]KeyDecorator
++	decorators      map[cb.CollectionType]Decorator
+ }
+ 
+ // Option is a provider option
+@@ -62,10 +69,10 @@ func WithValidator(collType cb.CollectionType, validator Validator) Option {
+ 	}
+ }
+ 
+-// WithKeyDecorator sets the key decorator
+-func WithKeyDecorator(collType cb.CollectionType, decorator KeyDecorator) Option {
++// WithDecorator sets the decorator
++func WithDecorator(collType cb.CollectionType, decorator Decorator) Option {
+ 	return func(p *Provider) {
+-		p.keyDecorators[collType] = decorator
++		p.decorators[collType] = decorator
+ 	}
+ }
+ 
+@@ -76,7 +83,7 @@ func NewProvider(storeProvider func(channelID string) olapi.Store, support suppo
+ 		storeForChannel: storeProvider,
+ 		gossipAdapter:   gossipProvider,
+ 		validators:      make(map[cb.CollectionType]Validator),
+-		keyDecorators:   make(map[cb.CollectionType]KeyDecorator),
++		decorators:      make(map[cb.CollectionType]Decorator),
+ 	}
+ 
+ 	// Apply options
+@@ -96,11 +103,11 @@ func (p *Provider) RetrieverForChannel(channelID string) olapi.Retriever {
+ 		reqMgr:        requestmgr.Get(channelID),
+ 		resolvers:     make(map[collKey]resolver),
+ 		validators:    p.validators,
+-		keyDecorators: p.keyDecorators,
++		decorators:    p.decorators,
+ 	}
+ 
+ 	// Add a handler so that we can remove the resolver for a chaincode that has been upgraded
+-	p.support.BlockPublisher(channelID).AddCCUpgradeHandler(func(blockNum uint64, txID string, chaincodeID string) error {
++	p.support.BlockPublisher(channelID).AddCCUpgradeHandler(func(txMetadata gossipapi.TxMetadata, chaincodeID string) error {
+ 		logger.Infof("[%s] Chaincode [%s] has been upgraded. Clearing resolver cache for chaincode.", channelID, chaincodeID)
+ 		r.removeResolvers(chaincodeID)
+ 		return nil
+@@ -132,7 +139,7 @@ type retriever struct {
+ 	lock          sync.RWMutex
+ 	reqMgr        requestmgr.RequestMgr
+ 	validators    map[cb.CollectionType]Validator
+-	keyDecorators map[cb.CollectionType]KeyDecorator
++	decorators    map[cb.CollectionType]Decorator
+ }
+ 
+ // GetData gets the values for the data item
+@@ -202,8 +209,35 @@ func (r *retriever) GetDataMultipleKeys(ctxt context.Context, key *storeapi.Mult
+ 	return values, nil
+ }
+ 
++// Query executes the given rich query
++func (r *retriever) Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	authorized, err := r.isAuthorized(key.Namespace, key.Collection)
++	if err != nil {
++		return nil, err
++	}
++	if !authorized {
++		logger.Infof("[%s] This peer does not have access to the collection [%s:%s]", r.channelID, key.Namespace, key.Collection)
++		return noResultsIt, nil
++	}
++
++	it, err := r.store.Query(key)
++	if err != nil {
++		return nil, err
++	}
++
++	decorator, err := r.getDecorator(key.Namespace, key.Collection)
++	if err != nil {
++		return nil, err
++	}
++	if decorator == nil {
++		return it, nil
++	}
++
++	return newDecoratingIterator(it, decorator), nil
++}
++
+ func (r *retriever) getMultipleKeysFromLocal(key *storeapi.MultiKey) (storeapi.ExpiringValues, error) {
+-	decorateKey, err := r.getKeyDecorator(key.Namespace, key.Collection)
++	decorateKey, err := r.getDecorator(key.Namespace, key.Collection)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -224,20 +258,20 @@ func (r *retriever) getMultipleKeysFromLocal(key *storeapi.MultiKey) (storeapi.E
+ 	return localValues, nil
+ }
+ 
+-func (r *retriever) getKeyDecorator(ns, coll string) (KeyDecorator, error) {
++func (r *retriever) getDecorator(ns, coll string) (Decorator, error) {
+ 	collConfig, err := r.Config(r.channelID, ns, coll)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	return r.keyDecorators[collConfig.Type], nil
++	return r.decorators[collConfig.Type], nil
+ }
+ 
+-func getKey(decorateKey KeyDecorator, txID, ns, coll, k string) (*storeapi.Key, error) {
++func getKey(decorateKey Decorator, txID, ns, coll, k string) (*storeapi.Key, error) {
+ 	key := storeapi.NewKey(txID, ns, coll, k)
+ 	if decorateKey == nil {
+ 		return key, nil
+ 	}
+-	return decorateKey(key)
++	return decorateKey.BeforeLoad(key)
+ }
+ 
+ func getMissingKeyIndexes(values []*storeapi.ExpiringValue) []int {
+@@ -319,11 +353,11 @@ func (r *retriever) getResolver(ns, coll string) (resolver, error) {
+ 	key := newCollKey(ns, coll)
+ 
+ 	r.lock.RLock()
+-	resolver, ok := r.resolvers[key]
++	reslvr, ok := r.resolvers[key]
+ 	r.lock.RUnlock()
+ 
+ 	if ok {
+-		return resolver, nil
++		return reslvr, nil
+ 	}
+ 
+ 	return r.getOrCreateResolver(key)
+@@ -468,3 +502,57 @@ func asExpiringValues(cv common.Values) storeapi.ExpiringValues {
+ 	}
+ 	return vals
+ }
++
++type decoratingIterator struct {
++	target    storeapi.ResultsIterator
++	decorator Decorator
++}
++
++func newDecoratingIterator(it storeapi.ResultsIterator, decorator Decorator) *decoratingIterator {
++	return &decoratingIterator{
++		target:    it,
++		decorator: decorator,
++	}
++}
++
++// Next returns the next item in the result set. The result is decorated before the result is returned.
++func (it *decoratingIterator) Next() (*storeapi.QueryResult, error) {
++	next, err := it.target.Next()
++	if err != nil {
++		return nil, err
++	}
++	if next == nil {
++		return nil, nil
++	}
++
++	logger.Debugf("Applying decorator to [%s]...", next.Key)
++	k, v, err := it.decorator.AfterQuery(next.Key, next.ExpiringValue)
++	if err != nil {
++		return nil, err
++	}
++
++	logger.Debugf("... decorated key [%s]", k)
++	return &storeapi.QueryResult{
++		Key:           k,
++		ExpiringValue: v,
++	}, nil
++}
++
++// Close releases resources occupied by the iterator
++func (it *decoratingIterator) Close() {
++	it.target.Close()
++}
++
++var noResultsIt = &emptyIterator{}
++
++type emptyIterator struct {
++}
++
++// Next always returns nil
++func (it *emptyIterator) Next() (*storeapi.QueryResult, error) {
++	return nil, nil
++}
++
++// Close has no effect
++func (it *emptyIterator) Close() {
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstore.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstore.go
+index 703763e16..66cfdae8a 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstore.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstore.go
+@@ -35,12 +35,18 @@ type store struct {
+ 
+ func newStore(channelID string, dbProvider api.DBProvider, collConfigs map[common.CollectionType]*collTypeConfig) *store {
+ 	logger.Debugf("constructing collection data store")
+-	return &store{
++
++	store := &store{
+ 		channelID:   channelID,
+ 		collConfigs: collConfigs,
+ 		dbProvider:  dbProvider,
+-		cache:       cache.New(channelID, dbProvider, config.GetOLCollCacheSize()),
+ 	}
++
++	if config.GetOLCollCacheEnabled() {
++		store.cache = cache.New(channelID, dbProvider, config.GetOLCollCacheSize())
++	}
++
++	return store
+ }
+ 
+ // Close closes the store
+@@ -75,7 +81,7 @@ func (s *store) PutData(config *cb.StaticCollectionConfig, key *storeapi.Key, va
+ 		return errors.Errorf("invalid collection config for key [%s]", key)
+ 	}
+ 
+-	key, value, err := s.decorate(config, key, value)
++	key, value, err := s.beforeSave(config, key, value)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -88,7 +94,7 @@ func (s *store) PutData(config *cb.StaticCollectionConfig, key *storeapi.Key, va
+ 		}
+ 	}
+ 
+-	db, err := s.dbProvider.GetDB(key.Namespace, key.Collection)
++	db, err := s.dbProvider.GetDB(s.channelID, key.Collection, key.Namespace)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -99,14 +105,16 @@ func (s *store) PutData(config *cb.StaticCollectionConfig, key *storeapi.Key, va
+ 		return err
+ 	}
+ 
+-	logger.Debugf("[%s] Putting key [%s] to cache", s.channelID, key)
+-	s.cache.Put(key.Namespace, key.Collection, key.Key,
+-		&api.Value{
+-			Value:      value.Value,
+-			TxID:       key.EndorsedAtTxID,
+-			ExpiryTime: value.Expiry,
+-		},
+-	)
++	if s.cache != nil {
++		logger.Debugf("[%s] Putting key [%s] to cache", s.channelID, key)
++		s.cache.Put(key.Namespace, key.Collection, key.Key,
++			&api.Value{
++				Value:      value.Value,
++				TxID:       key.EndorsedAtTxID,
++				ExpiryTime: value.Expiry,
++			},
++		)
++	}
+ 
+ 	return nil
+ }
+@@ -116,11 +124,39 @@ func (s *store) GetData(key *storeapi.Key) (*storeapi.ExpiringValue, error) {
+ 	return s.getData(key.EndorsedAtTxID, key.Namespace, key.Collection, key.Key)
+ }
+ 
+-// tDataMultipleKeys returns the  data for the given keys
++// GetDataMultipleKeys returns the  data for the given keys
+ func (s *store) GetDataMultipleKeys(key *storeapi.MultiKey) (storeapi.ExpiringValues, error) {
+ 	return s.getDataMultipleKeys(key.EndorsedAtTxID, key.Namespace, key.Collection, key.Keys...)
+ }
+ 
++// Query executes the given rich query
++func (s *store) Query(key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	db, err := s.dbProvider.GetDB(s.channelID, key.Collection, key.Namespace)
++	if err != nil {
++		return nil, err
++	}
++
++	results, err := db.Query(key.Query)
++	if err != nil {
++		return nil, err
++	}
++
++	var queryResults []*storeapi.QueryResult
++	for _, result := range results {
++		if result.TxID == key.EndorsedAtTxID {
++			logger.Debugf("[%s] Key [%s:%s:%s] was persisted in same transaction [%s] as caller. Not adding key to result set.", s.channelID, key.Namespace, key.Collection, result.Key, key.EndorsedAtTxID)
++		} else {
++			r := &storeapi.QueryResult{
++				Key:           storeapi.NewKey(result.TxID, key.Namespace, key.Collection, result.Key),
++				ExpiringValue: &storeapi.ExpiringValue{Value: result.Value.Value, Expiry: result.ExpiryTime},
++			}
++			queryResults = append(queryResults, r)
++		}
++	}
++
++	return newResultsIterator(queryResults), nil
++}
++
+ func (s *store) persistColl(txID string, ns string, collConfigPkgs map[string]*common.CollectionConfigPackage, collRWSet *rwsetutil.CollPvtRwSet) error {
+ 	config, exists := s.getCollectionConfig(collConfigPkgs, ns, collRWSet.CollectionName)
+ 	if !exists {
+@@ -137,7 +173,7 @@ func (s *store) persistColl(txID string, ns string, collConfigPkgs map[string]*c
+ 		return nil
+ 	}
+ 
+-	logger.Debugf("[%s] Collection [%s:%s] is a  collection", s.channelID, ns, collRWSet.CollectionName)
++	logger.Debugf("[%s] Collection [%s:%s] is of type [%s]", s.channelID, ns, collRWSet.CollectionName, config.Type)
+ 
+ 	expiryTime, err := s.getExpirationTime(config)
+ 	if err != nil {
+@@ -149,7 +185,7 @@ func (s *store) persistColl(txID string, ns string, collConfigPkgs map[string]*c
+ 		return err
+ 	}
+ 
+-	db, err := s.dbProvider.GetDB(ns, collRWSet.CollectionName)
++	db, err := s.dbProvider.GetDB(s.channelID, collRWSet.CollectionName, ns)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -159,23 +195,45 @@ func (s *store) persistColl(txID string, ns string, collConfigPkgs map[string]*c
+ 		return errors.WithMessagef(err, "error persisting to [%s:%s]", ns, collRWSet.CollectionName)
+ 	}
+ 
++	if s.cache != nil {
++		s.updateCache(ns, batch, collRWSet)
++	}
++
++	return nil
++}
++
++func (s *store) updateCache(ns string, batch []*api.KeyValue, collRWSet *rwsetutil.CollPvtRwSet) {
+ 	for _, kv := range batch {
+ 		if kv.Value != nil {
+-			logger.Infof("[%s] Putting key [%s:%s:%s] in Tx [%s]", s.channelID, ns, collRWSet.CollectionName, kv.Key, kv.TxID)
++			logger.Debugf("[%s] Putting key [%s:%s:%s] in Tx [%s]", s.channelID, ns, collRWSet.CollectionName, kv.Key, kv.TxID)
+ 			s.cache.Put(ns, collRWSet.CollectionName, kv.Key, kv.Value)
+ 		} else {
+-			logger.Infof("[%s] Deleting key [%s:%s:%s]", s.channelID, ns, collRWSet.CollectionName, kv.Key)
++			logger.Debugf("[%s] Deleting key [%s:%s:%s]", s.channelID, ns, collRWSet.CollectionName, kv.Key)
+ 			s.cache.Delete(ns, collRWSet.CollectionName, kv.Key)
+ 		}
+ 	}
+-
+-	return nil
+ }
+ 
+ func (s *store) getData(txID, ns, coll, key string) (*storeapi.ExpiringValue, error) {
+-	value, err := s.cache.Get(ns, coll, key)
+-	if err != nil {
+-		return nil, err
++
++	var value *api.Value
++	var err error
++
++	if s.cache == nil {
++		var db api.DB
++		db, err = s.dbProvider.GetDB(s.channelID, coll, ns)
++		if err != nil {
++			return nil, errors.WithMessage(err, "error getting database")
++		}
++		value, err = db.Get(key)
++		if err != nil {
++			return nil, errors.WithMessage(err, "error loading value")
++		}
++	} else {
++		value, err = s.cache.Get(ns, coll, key)
++		if err != nil {
++			return nil, err
++		}
+ 	}
+ 
+ 	if value == nil {
+@@ -192,9 +250,26 @@ func (s *store) getData(txID, ns, coll, key string) (*storeapi.ExpiringValue, er
+ }
+ 
+ func (s *store) getDataMultipleKeys(txID, ns, coll string, keys ...string) (storeapi.ExpiringValues, error) {
+-	values, err := s.cache.GetMultiple(ns, coll, keys...)
+-	if err != nil {
+-		return nil, err
++
++	var values []*api.Value
++	var err error
++
++	if s.cache == nil {
++		var db api.DB
++		db, err = s.dbProvider.GetDB(s.channelID, coll, ns)
++		if err != nil {
++			return nil, errors.WithMessage(err, "error getting database")
++		}
++
++		values, err = db.GetMultiple(keys...)
++		if err != nil {
++			return nil, errors.WithMessage(err, "error loading values")
++		}
++	} else {
++		values, err = s.cache.GetMultiple(ns, coll, keys...)
++		if err != nil {
++			return nil, err
++		}
+ 	}
+ 
+ 	if len(values) != len(keys) {
+@@ -233,14 +308,14 @@ func (s *store) createBatch(txID, ns string, config *cb.StaticCollectionConfig,
+ func (s *store) newKeyValue(txID, ns string, config *cb.StaticCollectionConfig, expiryTime time.Time, w *kvrwset.KVWrite) (*api.KeyValue, error) {
+ 	key := storeapi.NewKey(txID, ns, config.Name, w.Key)
+ 	if w.IsDelete {
+-		dKey, err := s.decorateKey(config, key)
++		dKey, err := s.beforeLoad(config, key)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+ 		return &api.KeyValue{Key: dKey.Key}, nil
+ 	}
+ 
+-	dKey, value, err := s.decorate(config, key,
++	dKey, value, err := s.beforeSave(config, key,
+ 		&storeapi.ExpiringValue{
+ 			Value:  w.Value,
+ 			Expiry: expiryTime,
+@@ -314,20 +389,20 @@ func (s *store) getCollectionConfig(collConfigPkgs map[string]*common.Collection
+ 	return nil, false
+ }
+ 
+-func (s *store) decorate(config *cb.StaticCollectionConfig, key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error) {
++func (s *store) beforeSave(config *cb.StaticCollectionConfig, key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error) {
+ 	cfg, ok := s.collConfigs[config.Type]
+ 	if !ok || cfg.decorator == nil {
+ 		return key, value, nil
+ 	}
+-	return cfg.decorator(key, value)
++	return cfg.decorator.BeforeSave(key, value)
+ }
+ 
+-func (s *store) decorateKey(config *cb.StaticCollectionConfig, key *storeapi.Key) (*storeapi.Key, error) {
++func (s *store) beforeLoad(config *cb.StaticCollectionConfig, key *storeapi.Key) (*storeapi.Key, error) {
+ 	cfg, ok := s.collConfigs[config.Type]
+-	if !ok || cfg.keyDecorator == nil {
++	if !ok || cfg.decorator == nil {
+ 		return key, nil
+ 	}
+-	return cfg.keyDecorator(key)
++	return cfg.decorator.BeforeLoad(key)
+ }
+ 
+ func (s *store) collTypeSupported(collType cb.CollectionType) bool {
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstoreprovider.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstoreprovider.go
+index c6c2290f4..690a8d089 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstoreprovider.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/olstoreprovider.go
+@@ -35,8 +35,14 @@ func WithCollectionType(collType common.CollectionType, opts ...CollOption) Opti
+ 	}
+ }
+ 
+-// Decorator allows the key/value to be modified/validated before being persisted
+-type Decorator func(key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error)
++// Decorator allows the key/value to be modified/validated before being persisted.
++type Decorator interface {
++	// BeforeSave has the opportunity to decorate the key and/or value before the key-value is saved.
++	BeforeSave(key *storeapi.Key, value *storeapi.ExpiringValue) (*storeapi.Key, *storeapi.ExpiringValue, error)
++
++	// BeforeLoad has the opportunity to decorate the key before it is loaded/deleted.
++	BeforeLoad(key *storeapi.Key) (*storeapi.Key, error)
++}
+ 
+ // WithDecorator sets a decorator for a collection type allowing the key/value to be validated/modified before being persisted
+ func WithDecorator(decorator Decorator) CollOption {
+@@ -45,19 +51,8 @@ func WithDecorator(decorator Decorator) CollOption {
+ 	}
+ }
+ 
+-// KeyDecorator allows the key to be modified/validated
+-type KeyDecorator func(key *storeapi.Key) (*storeapi.Key, error)
+-
+-// WithKeyDecorator sets a key decorator for a collection type allowing the key to be validated/modified
+-func WithKeyDecorator(decorator KeyDecorator) CollOption {
+-	return func(c *collTypeConfig) {
+-		c.keyDecorator = decorator
+-	}
+-}
+-
+ type collTypeConfig struct {
+-	decorator    Decorator
+-	keyDecorator KeyDecorator
++	decorator Decorator
+ }
+ 
+ // New returns a store provider factory
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/resultsiterator.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/resultsiterator.go
+new file mode 100644
+index 000000000..6d3bee469
+--- /dev/null
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/resultsiterator.go
+@@ -0,0 +1,37 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package storeprovider
++
++import (
++	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
++)
++
++type resultsIterator struct {
++	results []*storeapi.QueryResult
++	nextIdx int
++}
++
++func newResultsIterator(results []*storeapi.QueryResult) *resultsIterator {
++	return &resultsIterator{
++		results: results,
++	}
++}
++
++// Next returns the next item in the result set. The `QueryResult` is expected to be nil when
++// the iterator gets exhausted
++func (it *resultsIterator) Next() (*storeapi.QueryResult, error) {
++	if it.nextIdx >= len(it.results) {
++		return nil, nil
++	}
++	qr := it.results[it.nextIdx]
++	it.nextIdx++
++	return qr, nil
++}
++
++// Close releases resources occupied by the iterator
++func (it *resultsIterator) Close() {
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/api/api.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/api/api.go
+index e5fc5fda3..51cb8eb63 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/api/api.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/api/api.go
+@@ -15,6 +15,7 @@ type Value struct {
+ 	Value      []byte
+ 	TxID       string
+ 	ExpiryTime time.Time
++	Revision   string
+ }
+ 
+ // KeyValue is a struct to store a key value pair
+@@ -49,12 +50,15 @@ type DB interface {
+ 
+ 	// DeleteExpiredKeys deletes all of the expired keys
+ 	DeleteExpiredKeys() error
++
++	// Query returns a set of keys/values for the given query
++	Query(query string) ([]*KeyValue, error)
+ }
+ 
+ // DBProvider returns the persister for the given namespace/collection
+ type DBProvider interface {
+-	// GetDB return the DB for the given namespace/collection
+-	GetDB(ns, coll string) (DB, error)
++	// GetDB return the DB for the given channel, namespace. and collection
++	GetDB(channelID string, coll string, ns string) (DB, error)
+ 
+ 	// Close closes the DB provider
+ 	Close()
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/cache/cache.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/cache/cache.go
+index 0113daed4..1a5abb54a 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/cache/cache.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/cache/cache.go
+@@ -135,7 +135,7 @@ func (c *Cache) GetMultiple(ns, coll string, keys ...string) ([]*api.Value, erro
+ }
+ 
+ func (c *Cache) load(key cacheKey) (*api.Value, *time.Duration, error) {
+-	db, err := c.dbProvider.GetDB(key.namespace, key.collection)
++	db, err := c.dbProvider.GetDB(c.channelID, key.collection, key.namespace)
+ 	if err != nil {
+ 		return nil, nil, errors.WithMessage(err, "error getting database")
+ 	}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore.go
+index 3c80ee404..4b9d949e1 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore.go
+@@ -6,8 +6,11 @@ SPDX-License-Identifier: Apache-2.0
+ package couchdbstore
+ 
+ import (
++	"bytes"
+ 	"encoding/json"
+ 	"fmt"
++	"reflect"
++	"strings"
+ 	"time"
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
+@@ -16,9 +19,18 @@ import (
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/api"
+ )
+ 
+-var (
+-	logger          = flogging.MustGetLogger("ext_offledger")
+-	compositeKeySep = "!"
++var logger = flogging.MustGetLogger("ext_offledger")
++
++const (
++	fieldsField = "fields"
++)
++
++type docType int32
++
++const (
++	typeDelete docType = iota
++	typeJSON
++	typeAttachment
+ )
+ 
+ const (
+@@ -29,20 +41,14 @@ const (
+ 				"$lt": %v
+ 			}
+ 		},
++		"fields": [
++			"` + idField + `",
++			"` + revField + `"
++		],
+ 		"use_index": ["_design/` + expiryIndexDoc + `", "` + expiryIndexName + `"]
+ 	}`
+ )
+ 
+-// dataModel couch doc dataModel
+-type dataModel struct {
+-	ID      string `json:"_id"`
+-	Rev     string `json:"_rev,omitempty"`
+-	Data    string `json:"dataModel"`
+-	TxnID   string `json:"txnID"`
+-	Expiry  int64  `json:"expiry"`
+-	Deleted bool   `json:"_deleted"`
+-}
+-
+ type dbstore struct {
+ 	dbName string
+ 	db     *couchdb.CouchDatabase
+@@ -58,7 +64,7 @@ func newDBStore(db *couchdb.CouchDatabase, dbName string) *dbstore {
+ func (s *dbstore) Put(keyVal ...*api.KeyValue) error {
+ 	var docs []*couchdb.CouchDoc
+ 	for _, kv := range keyVal {
+-		dataDoc, err := s.createCouchDoc(string(encodeKey(kv.Key, time.Time{})), kv.Value)
++		dataDoc, err := s.createCouchDoc(kv.Key, kv.Value)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -82,17 +88,11 @@ func (s *dbstore) Put(keyVal ...*api.KeyValue) error {
+ 
+ // GetKey get dataModel based on key from db
+ func (s *dbstore) Get(key string) (*api.Value, error) {
+-	data, err := fetchData(s.db, string(encodeKey(key, time.Time{})))
++	data, err := s.fetchData(s.db, key)
+ 	if err != nil {
+ 		return nil, errors.Wrapf(err, "Failed to load key [%s] from db", key)
+ 	}
+-
+-	if data != nil {
+-		val := &api.Value{Value: []byte(data.Data), TxID: data.TxnID, ExpiryTime: time.Unix(0, data.Expiry)}
+-		return val, nil
+-	}
+-
+-	return nil, nil
++	return data, nil
+ }
+ 
+ // GetMultiple retrieves values for multiple keys at once
+@@ -109,6 +109,39 @@ func (s *dbstore) GetMultiple(keys ...string) ([]*api.Value, error) {
+ 	return values, nil
+ }
+ 
++// Query executes a query against the CouchDB and returns the key/value result set
++func (s *dbstore) Query(query string) ([]*api.KeyValue, error) {
++	query, err := decorateQuery(query)
++	if err != nil {
++		return nil, err
++	}
++
++	results, _, err := s.db.QueryDocuments(query)
++	if err != nil {
++		return nil, err
++	}
++
++	if len(results) == 0 {
++		logger.Debugf("No results for query [%s]", query)
++		return nil, nil
++	}
++
++	var responses []*api.KeyValue
++	for _, result := range results {
++		value, err := unmarshalData(result.Value, result.Attachments)
++		if err != nil {
++			return nil, err
++		}
++		responses = append(responses, &api.KeyValue{
++			Key:   result.ID,
++			Value: value,
++		})
++		logger.Debugf("Added result for query [%s]: Key [%s], Revision [%s], TxID [%s], Expiry [%s], Value [%s]", query, result.ID, value.Revision, value.TxID, value.ExpiryTime, value.Value)
++	}
++
++	return responses, nil
++}
++
+ // DeleteExpiredKeys delete expired keys from db
+ func (s *dbstore) DeleteExpiredKeys() error {
+ 	data, err := fetchExpiryData(s.db, time.Now())
+@@ -123,8 +156,8 @@ func (s *dbstore) DeleteExpiredKeys() error {
+ 	docs := make([]*couchdb.CouchDoc, 0)
+ 	docIDs := make([]string, 0)
+ 	for _, doc := range data {
+-		updateDoc := &dataModel{ID: doc.ID, Rev: doc.Rev, Deleted: true}
+-		jsonBytes, err := json.Marshal(updateDoc)
++		updateDoc := &expiryData{ID: doc.ID, Rev: doc.Rev, Deleted: true}
++		jsonBytes, err := jsonMarshal(updateDoc)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -148,67 +181,114 @@ func (s *dbstore) DeleteExpiredKeys() error {
+ func (s *dbstore) Close() {
+ }
+ 
+-//-----------------helper functions--------------------//
+-func encodeKey(key string, expiryTime time.Time) []byte {
+-	var compositeKey []byte
+-	if !expiryTime.IsZero() {
+-		compositeKey = append(compositeKey, []byte(fmt.Sprintf("%d", expiryTime.UnixNano()/int64(time.Millisecond)))...)
+-		compositeKey = append(compositeKey, compositeKeySep...)
++func (s *dbstore) fetchData(db *couchdb.CouchDatabase, key string) (*api.Value, error) {
++	doc, _, err := db.ReadDoc(key)
++	if err != nil || doc == nil {
++		return nil, err
+ 	}
+-	compositeKey = append(compositeKey, []byte(key)...)
+-	return compositeKey
++	return unmarshalData(doc.JSONValue, doc.Attachments)
+ }
+ 
+-//-----------------database helper functions--------------------//
+-func fetchData(db *couchdb.CouchDatabase, key string) (*dataModel, error) {
+-	doc, _, err := db.ReadDoc(key)
+-	if err != nil {
++func unmarshalData(jsonValue []byte, attachments []*couchdb.AttachmentInfo) (*api.Value, error) {
++	// create a generic map unmarshal the json
++	jsonResult := make(jsonMap)
++	decoder := json.NewDecoder(bytes.NewBuffer(jsonValue))
++	decoder.UseNumber()
++	if err := decoder.Decode(&jsonResult); err != nil {
+ 		return nil, err
+ 	}
+ 
+-	if doc == nil {
+-		return nil, nil
++	data := &api.Value{
++		Revision: jsonResult[revField].(string),
++		TxID:     jsonResult[txnIDField].(string),
+ 	}
+ 
+-	var data dataModel
+-	err = json.Unmarshal(doc.JSONValue, &data)
++	var err error
++	data.ExpiryTime, err = getExpiry(jsonResult)
+ 	if err != nil {
+-		return nil, errors.Wrapf(err, "Result from DB is not JSON encoded")
++		return nil, err
+ 	}
+ 
+-	return &data, nil
++	// Delete the meta-data fields so that they're not returned as part of the value
++	delete(jsonResult, idField)
++	delete(jsonResult, revField)
++	delete(jsonResult, txnIDField)
++	delete(jsonResult, expiryField)
++
++	// handle binary or json data
++	// nolint : S1031: unnecessary nil check around range (gosimple) -- here actual logic is implemnted for
++	// attachement == nil in else block
++	if attachments != nil { // binary attachment
++		// get binary data from attachment
++		for _, attachment := range attachments {
++			if attachment.Name == binaryWrapperField {
++				data.Value = attachment.AttachmentBytes
++			}
++		}
++	} else {
++		// marshal the returned JSON data.
++		if data.Value, err = jsonMarshal(jsonResult); err != nil {
++			return nil, err
++		}
++	}
++	return data, nil
+ }
+ 
+-func (s *dbstore) createCouchDoc(key string, value *api.Value) (*couchdb.CouchDoc, error) {
+-	var data *dataModel
+-	if value == nil {
+-		logger.Debugf("[%s] Deleting key [%s]", s.dbName, key)
++func (s *dbstore) fetchRevision(key string) (string, error) {
++	// Get the revision on the current doc
++	current, err := s.fetchData(s.db, key)
++	if err != nil {
++		return "", errors.Wrapf(err, "Failed to load key [%s] from db", key)
++	}
++	if current != nil {
++		return current.Revision, nil
++	}
++	return "", nil
++}
+ 
+-		// Get the revision on the current doc
+-		current, err := fetchData(s.db, string(encodeKey(key, time.Time{})))
++func (s *dbstore) createCouchDoc(key string, value *api.Value) (*couchdb.CouchDoc, error) {
++	var err error
++	var revision string
++	if value != nil && value.Revision != "" {
++		revision = value.Revision
++	} else {
++		revision, err = s.fetchRevision(key)
+ 		if err != nil {
+-			return nil, errors.Wrapf(err, "Failed to load key [%s] from db", key)
+-		}
+-		if current == nil {
+-			logger.Debugf("[%s] Current key not found to delete [%s]", s.dbName, key)
+-			return nil, nil
++			return nil, err
+ 		}
+-		data = &dataModel{ID: key, Rev: current.Rev, Deleted: true}
+-	} else {
+-		data = &dataModel{ID: key, Data: string(value.Value), TxnID: value.TxID, Expiry: value.ExpiryTime.UnixNano() / int64(time.Millisecond)}
+ 	}
+ 
+-	jsonBytes, err := json.Marshal(data)
++	jsonMapVal, docTypeVal, err := newJSONMap(key, revision, value)
++	if err != nil {
++		return nil, err
++	}
++	if docTypeVal == typeDelete && jsonMapVal == nil {
++		logger.Debugf("[%s] Current key/revision not found to delete [%s]", s.dbName, key)
++		return nil, nil
++	}
++
++	jsonBytes, err := jsonMapVal.toBytes()
+ 	if err != nil {
+-		return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
++		return nil, err
+ 	}
+ 
+ 	couchDoc := couchdb.CouchDoc{JSONValue: jsonBytes}
++	if value != nil && docTypeVal == typeAttachment {
++		couchDoc.Attachments = append([]*couchdb.AttachmentInfo{}, asAttachment(value.Value))
++	}
+ 
+ 	return &couchDoc, nil
+ }
+ 
+-func fetchExpiryData(db *couchdb.CouchDatabase, expiry time.Time) ([]*dataModel, error) {
++//-----------------helper functions--------------------//
++
++type expiryData struct {
++	ID      string `json:"_id"`
++	Rev     string `json:"_rev"`
++	Deleted bool   `json:"_deleted"`
++}
++
++func fetchExpiryData(db *couchdb.CouchDatabase, expiry time.Time) ([]*expiryData, error) {
+ 	results, _, err := db.QueryDocuments(fmt.Sprintf(fetchExpiryDataQuery, expiry.UnixNano()/int64(time.Millisecond)))
+ 	if err != nil {
+ 		return nil, err
+@@ -218,10 +298,10 @@ func fetchExpiryData(db *couchdb.CouchDatabase, expiry time.Time) ([]*dataModel,
+ 		return nil, nil
+ 	}
+ 
+-	var responses []*dataModel
++	var responses []*expiryData
+ 	for _, result := range results {
+-		var data dataModel
+-		err = json.Unmarshal(result.Value, &data)
++		var data expiryData
++		err = jsonUnmarshal(result.Value, &data)
+ 		if err != nil {
+ 			return nil, errors.Wrapf(err, "result from DB is not JSON encoded")
+ 		}
+@@ -230,3 +310,138 @@ func fetchExpiryData(db *couchdb.CouchDatabase, expiry time.Time) ([]*dataModel,
+ 
+ 	return responses, nil
+ }
++
++func getExpiry(jsonResult jsonMap) (time.Time, error) {
++	jnExpiry, ok := jsonResult[expiryField].(json.Number)
++	if !ok {
++		return time.Time{}, errors.Errorf("expiry [%+v] is not a valid JSON number. Type: %s", jsonResult[expiryField], reflect.TypeOf(jsonResult[expiryField]))
++	}
++
++	nExpiry, err := jnExpiry.Int64()
++	if err != nil {
++		return time.Time{}, err
++	}
++	if nExpiry == 0 {
++		return time.Time{}, nil
++	}
++
++	return time.Unix(0, nExpiry*int64(time.Millisecond)), nil
++}
++
++func getUnixExpiry(expiry time.Time) int64 {
++	if expiry.IsZero() {
++		return 0
++	}
++	return expiry.UnixNano() / int64(time.Millisecond)
++}
++
++func decorateQuery(query string) (string, error) {
++	// create a generic map unmarshal the json
++	jsonQuery := make(jsonMap)
++	decoder := json.NewDecoder(bytes.NewBuffer([]byte(query)))
++	decoder.UseNumber()
++	err := decoder.Decode(&jsonQuery)
++	if err != nil {
++		return "", err
++	}
++
++	var fields []interface{}
++
++	// Get the fields specified in the query
++	fieldsJSONArray, ok := jsonQuery[fieldsField]
++	if ok {
++		switch fieldsJSONArray.(type) {
++		case []interface{}:
++			fields = fieldsJSONArray.([]interface{})
++		default:
++			return "", errors.New("fields definition must be an array")
++		}
++	}
++
++	// Append the internal fields
++	jsonQuery[fieldsField] = append(fields, idField, revField, txnIDField, expiryField)
++
++	decoratedQuery, err := jsonMarshal(jsonQuery)
++	if err != nil {
++		return "", err
++	}
++
++	logger.Debugf("Decorated query: [%s]", decoratedQuery)
++	return string(decoratedQuery), nil
++}
++
++func newJSONMap(key string, revision string, value *api.Value) (jsonMap, docType, error) {
++	m, docTypeVal, err := jsonMapFromValue(value)
++	if err != nil {
++		return nil, docTypeVal, err
++	}
++
++	if docTypeVal == typeDelete {
++		if revision == "" {
++			return nil, typeDelete, nil
++		}
++		m[deletedField] = true
++	}
++
++	m[idField] = key
++	if value != nil {
++		m[txnIDField] = value.TxID
++		m[expiryField] = getUnixExpiry(value.ExpiryTime)
++	}
++
++	if revision != "" {
++		m[revField] = revision
++	}
++
++	return m, docTypeVal, nil
++}
++
++func jsonMapFromValue(value *api.Value) (jsonMap, docType, error) {
++	m := make(jsonMap)
++
++	switch {
++	case value == nil || value.Value == nil:
++		return m, typeDelete, nil
++	case jsonUnmarshal(value.Value, &m) == nil && m != nil:
++		// Value is a JSON value. Ensure that it doesn't contain any reserved fields
++		if err := m.checkReservedFieldsNotPresent(); err != nil {
++			return nil, typeJSON, err
++		}
++		return m, typeJSON, nil
++	default:
++		return m, typeAttachment, nil
++	}
++}
++
++func asAttachment(value []byte) *couchdb.AttachmentInfo {
++	attachment := &couchdb.AttachmentInfo{}
++	attachment.AttachmentBytes = value
++	attachment.ContentType = "application/octet-stream"
++	attachment.Name = binaryWrapperField
++	return attachment
++}
++
++type jsonMap map[string]interface{}
++
++func (v jsonMap) toBytes() ([]byte, error) {
++	jsonBytes, err := jsonMarshal(v)
++	err = errors.Wrap(err, "error marshalling json data")
++	return jsonBytes, err
++}
++
++func (v jsonMap) checkReservedFieldsNotPresent() error {
++	for fieldName := range v {
++		if strings.HasPrefix(fieldName, "~") || strings.HasPrefix(fieldName, "_") {
++			return errors.Errorf("field [%s] is not valid for the CouchDB state database", fieldName)
++		}
++	}
++	return nil
++}
++
++var jsonUnmarshal = func(data []byte, v interface{}) error {
++	return json.Unmarshal(data, v)
++}
++
++var jsonMarshal = func(v interface{}) ([]byte, error) {
++	return json.Marshal(v)
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore_provider.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore_provider.go
+index d7807a75f..9c2f72ab4 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore_provider.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/storeprovider/store/couchdbstore/dbstore_provider.go
+@@ -20,10 +20,16 @@ import (
+ )
+ 
+ const (
+-	expiryField     = "expiry"
+-	expiryIndexName = "by_expiry"
+-	expiryIndexDoc  = "indexExpiry"
+-	expiryIndexDef  = `
++	idField            = "_id"
++	revField           = "_rev"
++	deletedField       = "_deleted"
++	txnIDField         = "~txnID"
++	expiryField        = "~expiry"
++	binaryWrapperField = "valueBytes"
++	expiryIndexName    = "by_expiry"
++	expiryIndexDoc     = "indexExpiry"
++
++	expiryIndexDef = `
+ 	{
+ 		"index": {
+ 			"fields": ["` + expiryField + `"]
+@@ -53,8 +59,8 @@ func NewDBProvider() *CouchDBProvider {
+ }
+ 
+ //GetDB based on ns%coll
+-func (p *CouchDBProvider) GetDB(ns, coll string) (api.DB, error) {
+-	dbName := dbName(ns, coll)
++func (p *CouchDBProvider) GetDB(channelID string, coll string, ns string) (api.DB, error) {
++	dbName := dbName(channelID, ns, coll)
+ 
+ 	p.mutex.RLock()
+ 	s, ok := p.stores[dbName]
+@@ -166,8 +172,8 @@ func (p *CouchDBProvider) getStores() []*dbstore {
+ 	return stores
+ }
+ 
+-func dbName(ns, coll string) string {
+-	return fmt.Sprintf("%s$%s", ns, coll)
++func dbName(channelID, ns, coll string) string {
++	return fmt.Sprintf("%s_%s$$p%s", channelID, ns, coll)
+ }
+ 
+ // getCouchDBConfig return the couchdb config
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/pvtdatahandler/pvtdatahandler.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/pvtdatahandler/pvtdatahandler.go
+index 859eaf233..bafc1dcad 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/pvtdatahandler/pvtdatahandler.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/pvtdatahandler/pvtdatahandler.go
+@@ -8,15 +8,23 @@ package pvtdatahandler
+ 
+ import (
+ 	"context"
++	"errors"
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
++	commonledger "github.com/hyperledger/fabric/common/ledger"
+ 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+ 	"github.com/hyperledger/fabric/protos/common"
++	"github.com/hyperledger/fabric/protos/ledger/queryresult"
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/config"
+ )
+ 
+ var logger = flogging.MustGetLogger("ext_pvtdatahandler")
+ 
++const (
++	nsJoiner      = "$$"
++	pvtDataPrefix = "p"
++)
++
+ // Handler handles the retrieval of kevlar-defined collection types
+ type Handler struct {
+ 	channelID        string
+@@ -79,6 +87,23 @@ func (h *Handler) HandleGetPrivateDataMultipleKeys(txID, ns string, config *comm
+ 	}
+ }
+ 
++// HandleExecuteQueryOnPrivateData executes the given query on the collection if the collection is one of the extended collections
++func (h *Handler) HandleExecuteQueryOnPrivateData(txID, ns string, config *common.StaticCollectionConfig, query string) (commonledger.ResultsIterator, bool, error) {
++	switch config.Type {
++	case common.CollectionType_COL_TRANSIENT:
++		logger.Debugf("Collection [%s:%s] is a TransientData store. Rich queries are not supported for transient data", ns, config.Name)
++		return nil, true, errors.New("rich queries not supported on transient data")
++	case common.CollectionType_COL_DCAS:
++		fallthrough
++	case common.CollectionType_COL_OFFLEDGER:
++		logger.Debugf("Collection [%s:%s] is an off-ledger store. Returning results for query [%s]", ns, config.Name, query)
++		values, err := h.executeQuery(txID, ns, config.Name, query)
++		return values, true, err
++	default:
++		return nil, false, nil
++	}
++}
++
+ func (h *Handler) getTransientData(txID, ns, coll, key string) ([]byte, error) {
+ 	ctxt, cancel := context.WithTimeout(context.Background(), config.GetTransientDataPullTimeout())
+ 	defer cancel()
+@@ -154,3 +179,47 @@ func (h *Handler) getDataMultipleKeys(txID, ns, coll string, keys []string) ([][
+ 	}
+ 	return values, nil
+ }
++
++func (h *Handler) executeQuery(txID, ns, coll string, query string) (commonledger.ResultsIterator, error) {
++	ctxt, cancel := context.WithTimeout(context.Background(), config.GetOLCollPullTimeout())
++	defer cancel()
++
++	it, err := h.collDataProvider.RetrieverForChannel(h.channelID).Query(ctxt, storeapi.NewQueryKey(txID, ns, coll, query))
++	if err != nil {
++		return nil, err
++	}
++	return newKVIterator(it), nil
++}
++
++type kvIterator struct {
++	it storeapi.ResultsIterator
++}
++
++func newKVIterator(it storeapi.ResultsIterator) *kvIterator {
++	return &kvIterator{
++		it: it,
++	}
++}
++
++func (kvit *kvIterator) Next() (commonledger.QueryResult, error) {
++	result, err := kvit.it.Next()
++	if err != nil {
++		return nil, err
++	}
++	if result == nil {
++		return nil, nil
++	}
++	return &queryresult.KV{
++		Namespace: asPvtDataNs(result.Namespace, result.Collection),
++		Key:       result.Key.Key,
++		Value:     result.Value,
++	}, nil
++}
++
++func (kvit *kvIterator) Close() {
++	kvit.it.Close()
++}
++
++func asPvtDataNs(ns, coll string) string {
++	return ns + nsJoiner + pvtDataPrefix + coll
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/retriever/retriever.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/retriever/retriever.go
+index 3272908c1..b8fab5ead 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/retriever/retriever.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/retriever/retriever.go
+@@ -39,7 +39,7 @@ func NewProvider(
+ 	gossipProvider func() supportapi.GossipAdapter,
+ 	blockPublisherProvider func(channelID string) gossipapi.BlockPublisher) storeapi.Provider {
+ 
+-	support := supp.New(ledgerProvider, blockPublisherProvider)
++	support := supp.New(blockPublisherProvider)
+ 
+ 	tdataStoreProvider := func(channelID string) tdataapi.Store { return storeProvider(channelID) }
+ 	offLedgerStoreProvider := func(channelID string) olapi.Store { return storeProvider(channelID) }
+@@ -105,6 +105,11 @@ func (r *retriever) GetDataMultipleKeys(ctxt context.Context, key *storeapi.Mult
+ 	return r.offLedgerRetriever.GetDataMultipleKeys(ctxt, key)
+ }
+ 
++// Query executes the given rich query
++func (r *retriever) Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	return r.offLedgerRetriever.Query(ctxt, key)
++}
++
+ // Support defines the supporting functions required by the transient data provider
+ type Support interface {
+ 	Config(channelID, ns, coll string) (*cb.StaticCollectionConfig, error)
+@@ -119,6 +124,6 @@ var getTransientDataProvider = func(storeProvider func(channelID string) tdataap
+ var getOffLedgerProvider = func(storeProvider func(channelID string) olapi.Store, support Support, gossipProvider func() supportapi.GossipAdapter) olapi.Provider {
+ 	return olretriever.NewProvider(storeProvider, support, gossipProvider,
+ 		olretriever.WithValidator(cb.CollectionType_COL_DCAS, dcas.Validator),
+-		olretriever.WithKeyDecorator(cb.CollectionType_COL_DCAS, dcas.KeyDecorator),
++		olretriever.WithDecorator(cb.CollectionType_COL_DCAS, dcas.Decorator),
+ 	)
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/store.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/store.go
+index 36854104a..6408fdf79 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/store.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/store.go
+@@ -74,6 +74,11 @@ func (d *store) GetDataMultipleKeys(key *storeapi.MultiKey) (storeapi.ExpiringVa
+ 	return d.offLedgerStore.GetDataMultipleKeys(key)
+ }
+ 
++// Query executes the given rich query against the off-ledger store
++func (d *store) Query(key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	return d.offLedgerStore.Query(key)
++}
++
+ // Close closes all of the stores store
+ func (d *store) Close() {
+ 	d.transientDataStore.Close()
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/storeprovider.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/storeprovider.go
+index cbfd826d9..6ded4de44 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/storeprovider.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider/storeprovider.go
+@@ -88,7 +88,6 @@ var newOffLedgerProvider = func() olapi.StoreProvider {
+ 		olstoreprovider.WithCollectionType(
+ 			cb.CollectionType_COL_DCAS,
+ 			olstoreprovider.WithDecorator(dcas.Decorator),
+-			olstoreprovider.WithKeyDecorator(dcas.KeyDecorator),
+ 		),
+ 	)
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/retriever/transientdataretriever.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/retriever/transientdataretriever.go
+index b2ca340cf..a801c938f 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/retriever/transientdataretriever.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/retriever/transientdataretriever.go
+@@ -62,7 +62,7 @@ func (p *Provider) RetrieverForChannel(channelID string) tdataapi.Retriever {
+ 	}
+ 
+ 	// Add a handler so that we can remove the resolver for a chaincode that has been upgraded
+-	p.support.BlockPublisher(channelID).AddCCUpgradeHandler(func(blockNum uint64, txID string, chaincodeID string) error {
++	p.support.BlockPublisher(channelID).AddCCUpgradeHandler(func(txnMetadata gossipapi.TxMetadata, chaincodeID string) error {
+ 		logger.Infof("[%s] Chaincode [%s] has been upgraded. Clearing resolver cache for chaincode.", channelID, chaincodeID)
+ 		r.removeResolvers(chaincodeID)
+ 		return nil
+@@ -249,11 +249,11 @@ func (r *retriever) getResolver(ns, coll string) (resolver, error) {
+ 	key := newCollKey(ns, coll)
+ 
+ 	r.lock.RLock()
+-	resolver, ok := r.resolvers[key]
++	reslvr, ok := r.resolvers[key]
+ 	r.lock.RUnlock()
+ 
+ 	if ok {
+-		return resolver, nil
++		return reslvr, nil
+ 	}
+ 
+ 	return r.getOrCreateResolver(key)
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go
+index 49d05d2b0..1f1e406ec 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go
+@@ -113,7 +113,7 @@ func (s *store) persistKVWrite(txID, ns, coll string, w *kvrwset.KVWrite, ttl ti
+ 	}
+ 
+ 	if s.cache.Get(key) != nil {
+-		logger.Warningf("[%s] Attempt to update transient data key [%s] in collection [%s]", s.channelID, w.Key, coll)
++		logger.Debugf("[%s] Transient data key [%s] in collection [%s] already exists", s.channelID, w.Key, coll)
+ 		return
+ 	}
+ 
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/collconfigretriever.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/collconfigretriever.go
+index e5a191511..39de31228 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/collconfigretriever.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/collconfigretriever.go
+@@ -9,9 +9,11 @@ package support
+ import (
+ 	"fmt"
+ 	"reflect"
++	"sync"
+ 
+ 	"github.com/bluele/gcache"
+ 	"github.com/golang/protobuf/proto"
++	"github.com/hyperledger/fabric/core/common/ccprovider"
+ 	"github.com/hyperledger/fabric/core/common/privdata"
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	gossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
+@@ -20,6 +22,37 @@ import (
+ 	"github.com/pkg/errors"
+ )
+ 
++type collectionConfigRetrieverCache struct {
++	mutex      sync.RWMutex
++	retrievers map[string]*CollectionConfigRetriever
++}
++
++var collConfigRetrieverCache = &collectionConfigRetrieverCache{
++	retrievers: make(map[string]*CollectionConfigRetriever),
++}
++
++// CollectionConfigRetrieverForChannel returns the collection config retriever for the given channel
++func CollectionConfigRetrieverForChannel(channelID string) *CollectionConfigRetriever {
++	return collConfigRetrieverCache.forChannel(channelID)
++}
++
++// InitCollectionConfigRetriever initializes a collection config retriever for the given channel
++func InitCollectionConfigRetriever(channelID string, ledger peerLedger, blockPublisher blockPublisher) {
++	collConfigRetrieverCache.init(channelID, ledger, blockPublisher)
++}
++
++func (rc *collectionConfigRetrieverCache) init(channelID string, ledger peerLedger, blockPublisher blockPublisher) {
++	rc.mutex.Lock()
++	defer rc.mutex.Unlock()
++	rc.retrievers[channelID] = newCollectionConfigRetriever(channelID, ledger, blockPublisher)
++}
++
++func (rc *collectionConfigRetrieverCache) forChannel(channelID string) *CollectionConfigRetriever {
++	rc.mutex.RLock()
++	defer rc.mutex.RUnlock()
++	return rc.retrievers[channelID]
++}
++
+ type peerLedger interface {
+ 	// NewQueryExecutor gives handle to a query executor.
+ 	// A client can obtain more than one 'QueryExecutor's for parallel execution.
+@@ -35,11 +68,10 @@ type CollectionConfigRetriever struct {
+ }
+ 
+ type blockPublisher interface {
+-	AddCCUpgradeHandler(handler gossipapi.ChaincodeUpgradeHandler)
++	AddLSCCWriteHandler(handler gossipapi.LSCCWriteHandler)
+ }
+ 
+-// NewCollectionConfigRetriever returns a new collection configuration retriever
+-func NewCollectionConfigRetriever(channelID string, ledger peerLedger, blockPublisher blockPublisher) *CollectionConfigRetriever {
++func newCollectionConfigRetriever(channelID string, ledger peerLedger, blockPublisher blockPublisher) *CollectionConfigRetriever {
+ 	r := &CollectionConfigRetriever{
+ 		channelID: channelID,
+ 		ledger:    ledger,
+@@ -48,6 +80,7 @@ func NewCollectionConfigRetriever(channelID string, ledger peerLedger, blockPubl
+ 	r.cache = gcache.New(0).Simple().LoaderFunc(
+ 		func(key interface{}) (interface{}, error) {
+ 			ccID := key.(string)
++			logger.Infof("Collection configs for chaincode [%s] are not cached. Loading...", ccID)
+ 			configs, err := r.loadConfigAndPolicy(ccID)
+ 			if err != nil {
+ 				logger.Debugf("Error loading collection configs for chaincode [%s]: %s", ccID, err)
+@@ -56,10 +89,17 @@ func NewCollectionConfigRetriever(channelID string, ledger peerLedger, blockPubl
+ 			return configs, nil
+ 		}).Build()
+ 
+-	// Add a handler to remove the collection configs from cache when the chaincode is upgraded
+-	blockPublisher.AddCCUpgradeHandler(func(blockNum uint64, txID string, chaincodeName string) error {
+-		if r.cache.Remove(chaincodeName) {
+-			logger.Infof("Chaincode [%s] was upgraded. Removed collection configs from cache.", chaincodeName)
++	// Add a handler to cache the collection config and policy when the chaincode is instantiated/upgraded
++	blockPublisher.AddLSCCWriteHandler(func(txnMetadata gossipapi.TxMetadata, ccID string, ccData *ccprovider.ChaincodeData, ccp *common.CollectionConfigPackage) error {
++		if ccp != nil {
++			logger.Infof("Updating collection configs for chaincode [%s].", ccID)
++			configs, err := r.getConfigAndPolicy(ccID, ccp)
++			if err != nil {
++				return errors.WithMessagef(err, "error getting collection configs for chaincode [%s]", ccID)
++			}
++			if err := r.cache.Set(ccID, configs); err != nil {
++				return errors.WithMessagef(err, "error setting collection configs for chaincode [%s]", ccID)
++			}
+ 		}
+ 		return nil
+ 	})
+@@ -136,20 +176,15 @@ func (s *CollectionConfigRetriever) loadConfigAndPolicy(ns string) (cacheItems,
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	return s.cacheItemsFromConfigs(ns, configs)
++}
+ 
+-	var items []*cacheItem
+-	for _, config := range configs {
+-		policy, err := s.loadPolicy(ns, config)
+-		if err != nil {
+-			return nil, err
+-		}
+-		items = append(items, &cacheItem{
+-			config: config,
+-			policy: policy,
+-		})
++func (s *CollectionConfigRetriever) getConfigAndPolicy(ns string, ccp *common.CollectionConfigPackage) (cacheItems, error) {
++	configs, err := s.configsFromCCP(ns, ccp)
++	if err != nil {
++		return nil, err
+ 	}
+-
+-	return items, nil
++	return s.cacheItemsFromConfigs(ns, configs)
+ }
+ 
+ func (s *CollectionConfigRetriever) loadConfigs(ns string) ([]*common.StaticCollectionConfig, error) {
+@@ -163,19 +198,36 @@ func (s *CollectionConfigRetriever) loadConfigs(ns string) ([]*common.StaticColl
+ 		return nil, errors.Errorf("no collection config for chaincode [%s]", ns)
+ 	}
+ 
+-	cp := &common.CollectionConfigPackage{}
+-	err = proto.Unmarshal(cpBytes, cp)
++	ccp := &common.CollectionConfigPackage{}
++	err = proto.Unmarshal(cpBytes, ccp)
+ 	if err != nil {
+ 		return nil, errors.Wrapf(err, "invalid collection configuration for [%s]", ns)
+ 	}
++	return s.configsFromCCP(ns, ccp)
++}
++
++func (s *CollectionConfigRetriever) cacheItemsFromConfigs(ns string, configs []*common.StaticCollectionConfig) (cacheItems, error) {
++	var items []*cacheItem
++	for _, config := range configs {
++		policy, err := s.loadPolicy(ns, config)
++		if err != nil {
++			return nil, err
++		}
++		items = append(items, &cacheItem{
++			config: config,
++			policy: policy,
++		})
++	}
++	return items, nil
++}
+ 
++func (s *CollectionConfigRetriever) configsFromCCP(ns string, ccp *common.CollectionConfigPackage) ([]*common.StaticCollectionConfig, error) {
+ 	var configs []*common.StaticCollectionConfig
+-	for _, collConfig := range cp.Config {
++	for _, collConfig := range ccp.Config {
+ 		config := collConfig.GetStaticCollectionConfig()
+ 		logger.Debugf("[%s] Checking collection config for [%s:%+v]", s.channelID, ns, config)
+ 		if config == nil {
+-			logger.Warningf("[%s] No config found for a collection in namespace [%s]", s.channelID, ns)
+-			continue
++			return nil, errors.Errorf("no config found for a collection in namespace [%s]", ns)
+ 		}
+ 		configs = append(configs, config)
+ 	}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/support.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/support.go
+index cfd202991..74cd4cdea 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/support.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/common/support/support.go
+@@ -7,57 +7,36 @@ SPDX-License-Identifier: Apache-2.0
+ package support
+ 
+ import (
+-	"github.com/bluele/gcache"
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/core/common/privdata"
+-	"github.com/hyperledger/fabric/core/ledger"
+ 	gossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
+ 	"github.com/hyperledger/fabric/protos/common"
+ )
+ 
+ var logger = flogging.MustGetLogger("ext_support")
+ 
+-type ledgerProvider func(channelID string) ledger.PeerLedger
+ type blockPublisherProvider func(channelID string) gossipapi.BlockPublisher
+ 
+ // Support holds the ledger provider and the cache
+ type Support struct {
+-	getLedger              ledgerProvider
+-	configRetrieverCache   gcache.Cache
+ 	blockPublisherProvider blockPublisherProvider
+ }
+ 
+ // New creates a new Support using the ledger provider
+-func New(ledgerProvider ledgerProvider, blockPublisherProvider blockPublisherProvider) *Support {
+-	s := &Support{
+-		getLedger:              ledgerProvider,
++func New(blockPublisherProvider blockPublisherProvider) *Support {
++	return &Support{
+ 		blockPublisherProvider: blockPublisherProvider,
+ 	}
+-	s.configRetrieverCache = gcache.New(0).Simple().LoaderFunc(
+-		func(key interface{}) (interface{}, error) {
+-			channelID := key.(string)
+-			logger.Debugf("[%s] Creating collection config retriever", channelID)
+-			return NewCollectionConfigRetriever(channelID, s.getLedger(channelID), blockPublisherProvider(channelID)), nil
+-		}).Build()
+-	return s
+ }
+ 
+ // Config returns the configuration for the given collection
+ func (s *Support) Config(channelID, ns, coll string) (*common.StaticCollectionConfig, error) {
+-	ccRetriever, err := s.configRetrieverCache.Get(channelID)
+-	if err != nil {
+-		return nil, err
+-	}
+-	return ccRetriever.(*CollectionConfigRetriever).Config(ns, coll)
++	return CollectionConfigRetrieverForChannel(channelID).Config(ns, coll)
+ }
+ 
+ // Policy returns the collection access policy for the given collection
+ func (s *Support) Policy(channelID, ns, coll string) (privdata.CollectionAccessPolicy, error) {
+-	ccRetriever, err := s.configRetrieverCache.Get(channelID)
+-	if err != nil {
+-		return nil, err
+-	}
+-	return ccRetriever.(*CollectionConfigRetriever).Policy(ns, coll)
++	return CollectionConfigRetrieverForChannel(channelID).Policy(ns, coll)
+ }
+ 
+ // BlockPublisher returns the block publisher for the given channel
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/config/config.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/config/config.go
+index 94b496f2a..d38964d93 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/config/config.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/config/config.go
+@@ -30,7 +30,8 @@ const (
+ 	confOLCollLeveldb              = "offLedgerLeveldb"
+ 	confOLCollCleanupIntervalTime  = "coll.offledger.cleanupExpired.Interval"
+ 	confOLCollMaxPeersForRetrieval = "coll.offledger.maxpeers"
+-	confOLCollCacheSize            = "coll.offledger.cacheSize"
++	confOLCollCacheEnabled         = "coll.offledger.cache.enable"
++	confOLCollCacheSize            = "coll.offledger.cache.size"
+ 	confOLCollPullTimeout          = "coll.offledger.gossip.pullTimeout"
+ 
+ 	confBlockPublisherBufferSize = "blockpublisher.buffersize"
+@@ -135,6 +136,12 @@ func GetOLCollCacheSize() int {
+ 	return size
+ }
+ 
++// GetOLCollCacheEnabled returns if off-ledger cache is enabled
++func GetOLCollCacheEnabled() bool {
++	enabled := viper.GetBool(confOLCollCacheEnabled)
++	return enabled
++}
++
+ // GetOLCollPullTimeout is the amount of time a peer waits for a response from another peer for transient data.
+ func GetOLCollPullTimeout() time.Duration {
+ 	timeout := viper.GetDuration(confOLCollPullTimeout)
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/endorser/endorser.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/endorser/endorser.go
+index c14284662..2816cbf40 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/endorser/endorser.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/endorser/endorser.go
+@@ -7,9 +7,7 @@ SPDX-License-Identifier: Apache-2.0
+ package endorser
+ 
+ import (
+-	"github.com/bluele/gcache"
+ 	"github.com/hyperledger/fabric/common/flogging"
+-	"github.com/hyperledger/fabric/extensions/endorser/api"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/common/support"
+@@ -17,28 +15,14 @@ import (
+ 
+ var endorserLogger = flogging.MustGetLogger("ext_endorser")
+ 
+-type collConfigRetriever interface {
+-	Config(ns, coll string) (*common.StaticCollectionConfig, error)
+-}
+-
+ // CollRWSetFilter filters out all off-ledger (including transient data) read-write sets from the simulation results
+ // so that they won't be included in the block.
+ type CollRWSetFilter struct {
+-	qepf                     api.QueryExecutorProviderFactory
+-	bpp                      api.BlockPublisherProvider
+-	collConfigRetrieverCache gcache.Cache
+ }
+ 
+ // NewCollRWSetFilter returns a new collection RW set filter
+-func NewCollRWSetFilter(qepf api.QueryExecutorProviderFactory, bpp api.BlockPublisherProvider) *CollRWSetFilter {
+-	return &CollRWSetFilter{
+-		qepf: qepf,
+-		bpp:  bpp,
+-		collConfigRetrieverCache: gcache.New(0).LoaderFunc(func(chID interface{}) (interface{}, error) {
+-			channelID := chID.(string)
+-			return support.NewCollectionConfigRetriever(channelID, qepf.GetQueryExecutorProvider(channelID), bpp.ForChannel(channelID)), nil
+-		}).Build(),
+-	}
++func NewCollRWSetFilter() *CollRWSetFilter {
++	return &CollRWSetFilter{}
+ }
+ 
+ // Filter filters out all off-ledger (including transient data) read-write sets from the simulation results
+@@ -93,22 +77,13 @@ func (f *CollRWSetFilter) filterNamespace(channelID string, nsRWSet *rwset.NsRea
+ }
+ 
+ func (f *CollRWSetFilter) isOffLedger(channelID, ns, coll string) (bool, error) {
+-	staticConfig, err := f.getConfigRetriever(channelID).Config(ns, coll)
++	staticConfig, err := support.CollectionConfigRetrieverForChannel(channelID).Config(ns, coll)
+ 	if err != nil {
+ 		return false, err
+ 	}
+ 	return isCollOffLedger(staticConfig), nil
+ }
+ 
+-func (f *CollRWSetFilter) getConfigRetriever(channelID string) collConfigRetriever {
+-	retriever, err := f.collConfigRetrieverCache.Get(channelID)
+-	if err != nil {
+-		// This should never happen
+-		panic(err.Error())
+-	}
+-	return retriever.(collConfigRetriever)
+-}
+-
+ func isCollOffLedger(collConfig *common.StaticCollectionConfig) bool {
+ 	return collConfig.Type == common.CollectionType_COL_TRANSIENT ||
+ 		collConfig.Type == common.CollectionType_COL_OFFLEDGER ||
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/blockpublisher/blockpublisher.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/blockpublisher/blockpublisher.go
+index 90940365a..b5b5df736 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/blockpublisher/blockpublisher.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/blockpublisher/blockpublisher.go
+@@ -7,12 +7,14 @@ SPDX-License-Identifier: Apache-2.0
+ package blockpublisher
+ 
+ import (
++	"strings"
+ 	"sync"
+ 	"sync/atomic"
+ 
+ 	"github.com/bluele/gcache"
+ 	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/core/common/ccprovider"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+ 	ledgerutil "github.com/hyperledger/fabric/core/ledger/util"
+ 	"github.com/hyperledger/fabric/extensions/gossip/api"
+@@ -25,8 +27,9 @@ import (
+ )
+ 
+ const (
+-	lsccID       = "lscc"
+-	upgradeEvent = "upgrade"
++	lsccID              = "lscc"
++	upgradeEvent        = "upgrade"
++	collectionSeparator = "~"
+ )
+ 
+ var logger = flogging.MustGetLogger("ext_blockpublisher")
+@@ -34,6 +37,7 @@ var logger = flogging.MustGetLogger("ext_blockpublisher")
+ type write struct {
+ 	blockNum  uint64
+ 	txID      string
++	txNum     uint64
+ 	namespace string
+ 	w         *kvrwset.KVWrite
+ }
+@@ -41,13 +45,22 @@ type write struct {
+ type read struct {
+ 	blockNum  uint64
+ 	txID      string
++	txNum     uint64
+ 	namespace string
+ 	r         *kvrwset.KVRead
+ }
+ 
++type lsccWrite struct {
++	blockNum uint64
++	txID     string
++	txNum    uint64
++	w        []*kvrwset.KVWrite
++}
++
+ type ccEvent struct {
+ 	blockNum uint64
+ 	txID     string
++	txNum    uint64
+ 	event    *pb.ChaincodeEvent
+ }
+ 
+@@ -87,21 +100,28 @@ func (p *Provider) Close() {
+ 	}
+ }
+ 
++type channels struct {
++	blockChan        chan *cb.Block
++	wChan            chan *write
++	rChan            chan *read
++	lsccChan         chan *lsccWrite
++	ccEvtChan        chan *ccEvent
++	configUpdateChan chan *configUpdate
++}
++
+ // Publisher traverses a block and publishes KV read, KV write, and chaincode events to registered handlers
+ type Publisher struct {
++	*channels
+ 	channelID            string
+ 	writeHandlers        []api.WriteHandler
+ 	readHandlers         []api.ReadHandler
++	lsccWriteHandlers    []api.LSCCWriteHandler
+ 	ccEventHandlers      []api.ChaincodeEventHandler
+ 	configUpdateHandlers []api.ConfigUpdateHandler
+ 	mutex                sync.RWMutex
+-	blockChan            chan *cb.Block
+-	wChan                chan *write
+-	rChan                chan *read
+-	ccEvtChan            chan *ccEvent
+-	configUpdateChan     chan *configUpdate
+ 	doneChan             chan struct{}
+ 	closed               uint32
++	lastCommittedBlock   uint64
+ }
+ 
+ // New returns a new block Publisher for the given channel
+@@ -109,13 +129,16 @@ func New(channelID string) *Publisher {
+ 	bufferSize := config.GetBlockPublisherBufferSize()
+ 
+ 	p := &Publisher{
+-		channelID:        channelID,
+-		blockChan:        make(chan *cb.Block, bufferSize),
+-		wChan:            make(chan *write, bufferSize),
+-		rChan:            make(chan *read, bufferSize),
+-		ccEvtChan:        make(chan *ccEvent, bufferSize),
+-		configUpdateChan: make(chan *configUpdate, bufferSize),
+-		doneChan:         make(chan struct{}),
++		channelID: channelID,
++		channels: &channels{
++			blockChan:        make(chan *cb.Block, bufferSize),
++			wChan:            make(chan *write, bufferSize),
++			rChan:            make(chan *read, bufferSize),
++			lsccChan:         make(chan *lsccWrite, bufferSize),
++			ccEvtChan:        make(chan *ccEvent, bufferSize),
++			configUpdateChan: make(chan *configUpdate, bufferSize),
++		},
++		doneChan: make(chan struct{}),
+ 	}
+ 	go p.listen()
+ 	return p
+@@ -173,9 +196,24 @@ func (p *Publisher) AddCCUpgradeHandler(handler api.ChaincodeUpgradeHandler) {
+ 	p.AddCCEventHandler(newChaincodeUpgradeHandler(handler))
+ }
+ 
++// AddLSCCWriteHandler adds a handler for chaincode instantiation/upgrade events
++func (p *Publisher) AddLSCCWriteHandler(handler api.LSCCWriteHandler) {
++	p.mutex.Lock()
++	defer p.mutex.Unlock()
++
++	logger.Debugf("[%s] Adding LSCC write handler", p.channelID)
++	p.lsccWriteHandlers = append(p.lsccWriteHandlers, handler)
++}
++
+ // Publish publishes a block
+ func (p *Publisher) Publish(block *cb.Block) {
+-	newBlockEvent(p.channelID, block, p.wChan, p.rChan, p.ccEvtChan, p.configUpdateChan).publish()
++	defer atomic.StoreUint64(&p.lastCommittedBlock, block.Header.Number)
++	newBlockEvent(p.channelID, block, p.channels).publish()
++}
++
++// LedgerHeight returns ledger height based on last block published
++func (p *Publisher) LedgerHeight() uint64 {
++	return atomic.LoadUint64(&p.lastCommittedBlock) + 1
+ }
+ 
+ func (p *Publisher) listen() {
+@@ -185,6 +223,8 @@ func (p *Publisher) listen() {
+ 			p.handleWrite(w)
+ 		case r := <-p.rChan:
+ 			p.handleRead(r)
++		case lscc := <-p.lsccChan:
++			p.handleLSCCWrite(lscc)
+ 		case ccEvt := <-p.ccEvtChan:
+ 			p.handleCCEvent(ccEvt)
+ 		case cu := <-p.configUpdateChan:
+@@ -199,7 +239,7 @@ func (p *Publisher) listen() {
+ func (p *Publisher) handleRead(r *read) {
+ 	logger.Debugf("[%s] Handling read: [%s]", p.channelID, r)
+ 	for _, handleRead := range p.getReadHandlers() {
+-		if err := handleRead(r.blockNum, p.channelID, r.txID, r.namespace, r.r); err != nil {
++		if err := handleRead(api.TxMetadata{BlockNum: r.blockNum, ChannelID: p.channelID, TxID: r.txID, TxNum: r.txNum}, r.namespace, r.r); err != nil {
+ 			logger.Warningf("[%s] Error returned from KV read handler: %s", p.channelID, err)
+ 		}
+ 	}
+@@ -208,16 +248,37 @@ func (p *Publisher) handleRead(r *read) {
+ func (p *Publisher) handleWrite(w *write) {
+ 	logger.Debugf("[%s] Handling write: [%s]", p.channelID, w)
+ 	for _, handleWrite := range p.getWriteHandlers() {
+-		if err := handleWrite(w.blockNum, p.channelID, w.txID, w.namespace, w.w); err != nil {
++		if err := handleWrite(api.TxMetadata{BlockNum: w.blockNum, ChannelID: p.channelID, TxID: w.txID, TxNum: w.txNum}, w.namespace, w.w); err != nil {
+ 			logger.Warningf("[%s] Error returned from KV write handler: %s", p.channelID, err)
+ 		}
+ 	}
+ }
+ 
++func (p *Publisher) handleLSCCWrite(w *lsccWrite) {
++	logger.Debugf("[%s] Handling LSCC write: [%s]", p.channelID, w)
++
++	if len(p.getLSCCWriteHandlers()) == 0 {
++		// No handlers registered
++		return
++	}
++
++	ccID, ccData, ccp, err := getCCInfo(w.w)
++	if err != nil {
++		logger.Warningf("[%s] Error getting chaincode info: %s", p.channelID, err)
++		return
++	}
++
++	for _, handler := range p.getLSCCWriteHandlers() {
++		if err := handler(api.TxMetadata{BlockNum: w.blockNum, ChannelID: p.channelID, TxID: w.txID, TxNum: w.txNum}, ccID, ccData, ccp); err != nil {
++			logger.Warningf("[%s] Error returned from LSCC write handler: %s", p.channelID, err)
++		}
++	}
++}
++
+ func (p *Publisher) handleCCEvent(event *ccEvent) {
+ 	logger.Debugf("[%s] Handling chaincode event: [%s]", p.channelID, event)
+ 	for _, handleCCEvent := range p.getCCEventHandlers() {
+-		if err := handleCCEvent(event.blockNum, p.channelID, event.txID, event.event); err != nil {
++		if err := handleCCEvent(api.TxMetadata{BlockNum: event.blockNum, ChannelID: p.channelID, TxID: event.txID, TxNum: event.txNum}, event.event); err != nil {
+ 			logger.Warningf("[%s] Error returned from CC event handler: %s", p.channelID, err)
+ 		}
+ 	}
+@@ -250,6 +311,15 @@ func (p *Publisher) getWriteHandlers() []api.WriteHandler {
+ 	return handlers
+ }
+ 
++func (p *Publisher) getLSCCWriteHandlers() []api.LSCCWriteHandler {
++	p.mutex.RLock()
++	defer p.mutex.RUnlock()
++
++	handlers := make([]api.LSCCWriteHandler, len(p.lsccWriteHandlers))
++	copy(handlers, p.lsccWriteHandlers)
++	return handlers
++}
++
+ func (p *Publisher) getCCEventHandlers() []api.ChaincodeEventHandler {
+ 	p.mutex.RLock()
+ 	defer p.mutex.RUnlock()
+@@ -269,41 +339,35 @@ func (p *Publisher) getConfigUpdateHandlers() []api.ConfigUpdateHandler {
+ }
+ 
+ type blockEvent struct {
+-	channelID        string
+-	block            *cb.Block
+-	wChan            chan<- *write
+-	rChan            chan<- *read
+-	ccEvtChan        chan<- *ccEvent
+-	configUpdateChan chan<- *configUpdate
++	*channels
++	channelID string
++	block     *cb.Block
+ }
+ 
+-func newBlockEvent(channelID string, block *cb.Block, wChan chan<- *write, rChan chan<- *read, ccEvtChan chan<- *ccEvent, configUpdateChan chan<- *configUpdate) *blockEvent {
++func newBlockEvent(channelID string, block *cb.Block, channels *channels) *blockEvent {
+ 	return &blockEvent{
+-		channelID:        channelID,
+-		block:            block,
+-		wChan:            wChan,
+-		rChan:            rChan,
+-		ccEvtChan:        ccEvtChan,
+-		configUpdateChan: configUpdateChan,
++		channels:  channels,
++		channelID: channelID,
++		block:     block,
+ 	}
+ }
+ 
+ func (p *blockEvent) publish() {
+ 	logger.Debugf("[%s] Publishing block #%d", p.channelID, p.block.Header.Number)
+-	for i := range p.block.Data.Data {
+-		envelope, err := protoutil.ExtractEnvelope(p.block, i)
++	for txNum := range p.block.Data.Data {
++		envelope, err := protoutil.ExtractEnvelope(p.block, txNum)
+ 		if err != nil {
+-			logger.Warningf("[%s] Error extracting envelope at index %d in block %d: %s", p.channelID, i, p.block.Header.Number, err)
++			logger.Warningf("[%s] Error extracting envelope at index %d in block %d: %s", p.channelID, txNum, p.block.Header.Number, err)
+ 		} else {
+-			err = p.visitEnvelope(i, envelope)
++			err = p.visitEnvelope(uint64(txNum), envelope)
+ 			if err != nil {
+-				logger.Warningf("[%s] Error checking envelope at index %d in block %d: %s", p.channelID, i, p.block.Header.Number, err)
++				logger.Warningf("[%s] Error checking envelope at index %d in block %d: %s", p.channelID, txNum, p.block.Header.Number, err)
+ 			}
+ 		}
+ 	}
+ }
+ 
+-func (p *blockEvent) visitEnvelope(i int, envelope *cb.Envelope) error {
++func (p *blockEvent) visitEnvelope(txNum uint64, envelope *cb.Envelope) error {
+ 	payload, err := protoutil.ExtractPayload(envelope)
+ 	if err != nil {
+ 		return err
+@@ -316,16 +380,16 @@ func (p *blockEvent) visitEnvelope(i int, envelope *cb.Envelope) error {
+ 
+ 	if cb.HeaderType(chdr.Type) == cb.HeaderType_ENDORSER_TRANSACTION {
+ 		txFilter := ledgerutil.TxValidationFlags(p.block.Metadata.Metadata[cb.BlockMetadataIndex_TRANSACTIONS_FILTER])
+-		code := txFilter.Flag(i)
++		code := txFilter.Flag(int(txNum))
+ 		if code != pb.TxValidationCode_VALID {
+-			logger.Debugf("[%s] Transaction at index %d in block %d is not valid. Status code: %s", p.channelID, i, p.block.Header.Number, code)
++			logger.Debugf("[%s] Transaction at index %d in block %d is not valid. Status code: %s", p.channelID, txNum, p.block.Header.Number, code)
+ 			return nil
+ 		}
+ 		tx, err := protoutil.GetTransaction(payload.Data)
+ 		if err != nil {
+ 			return err
+ 		}
+-		newTxEvent(p.channelID, p.block.Header.Number, chdr.TxId, tx, p.wChan, p.rChan, p.ccEvtChan).publish()
++		newTxEvent(p.channelID, p.block.Header.Number, txNum, chdr.TxId, tx, p.channels).publish()
+ 		return nil
+ 	}
+ 
+@@ -334,7 +398,7 @@ func (p *blockEvent) visitEnvelope(i int, envelope *cb.Envelope) error {
+ 		if err := proto.Unmarshal(payload.Data, envelope); err != nil {
+ 			return err
+ 		}
+-		newConfigUpdateEvent(p.channelID, p.block.Header.Number, envelope, p.configUpdateChan).publish()
++		newConfigUpdateEvent(p.channelID, p.block.Header.Number, envelope, p.channels).publish()
+ 		return nil
+ 	}
+ 
+@@ -342,24 +406,22 @@ func (p *blockEvent) visitEnvelope(i int, envelope *cb.Envelope) error {
+ }
+ 
+ type txEvent struct {
++	*channels
+ 	channelID string
+ 	blockNum  uint64
++	txNum     uint64
+ 	txID      string
+ 	tx        *pb.Transaction
+-	wChan     chan<- *write
+-	rChan     chan<- *read
+-	ccEvtChan chan<- *ccEvent
+ }
+ 
+-func newTxEvent(channelID string, blockNum uint64, txID string, tx *pb.Transaction, wChan chan<- *write, rChan chan<- *read, ccEvtChan chan<- *ccEvent) *txEvent {
++func newTxEvent(channelID string, blockNum uint64, txNum uint64, txID string, tx *pb.Transaction, channels *channels) *txEvent {
+ 	return &txEvent{
+ 		channelID: channelID,
+ 		blockNum:  blockNum,
++		txNum:     txNum,
+ 		txID:      txID,
+ 		tx:        tx,
+-		wChan:     wChan,
+-		rChan:     rChan,
+-		ccEvtChan: ccEvtChan,
++		channels:  channels,
+ 	}
+ }
+ 
+@@ -449,29 +511,47 @@ func (p *txEvent) visitNsReadWriteSet(nsRWSet *rwsetutil.NsRwSet) {
+ 			r:         r,
+ 		}
+ 	}
+-	for _, w := range nsRWSet.KvRwSet.Writes {
++	if nsRWSet.NameSpace == lsccID {
++		p.publishLSCCWrite(nsRWSet.KvRwSet.Writes)
++	} else {
++		p.publishWrites(nsRWSet.NameSpace, nsRWSet.KvRwSet.Writes)
++	}
++}
++
++// publishLSCCWrite publishes an LSCC write event which is a result of a chaincode instantiate/upgrade.
++// The event consists of two writes: CC data and collection configs.
++func (p *txEvent) publishLSCCWrite(writes []*kvrwset.KVWrite) {
++	p.lsccChan <- &lsccWrite{
++		blockNum: p.blockNum,
++		txID:     p.txID,
++		w:        writes,
++	}
++}
++
++func (p *txEvent) publishWrites(ns string, writes []*kvrwset.KVWrite) {
++	for _, w := range writes {
+ 		p.wChan <- &write{
+ 			blockNum:  p.blockNum,
+ 			txID:      p.txID,
+-			namespace: nsRWSet.NameSpace,
++			namespace: ns,
+ 			w:         w,
+ 		}
+ 	}
+ }
+ 
+ type configUpdateEvent struct {
+-	channelID        string
+-	blockNum         uint64
+-	envelope         *cb.ConfigUpdateEnvelope
+-	configUpdateChan chan<- *configUpdate
++	*channels
++	channelID string
++	blockNum  uint64
++	envelope  *cb.ConfigUpdateEnvelope
+ }
+ 
+-func newConfigUpdateEvent(channelID string, blockNum uint64, envelope *cb.ConfigUpdateEnvelope, configUpdateChan chan<- *configUpdate) *configUpdateEvent {
++func newConfigUpdateEvent(channelID string, blockNum uint64, envelope *cb.ConfigUpdateEnvelope, channels *channels) *configUpdateEvent {
+ 	return &configUpdateEvent{
+-		channelID:        channelID,
+-		blockNum:         blockNum,
+-		envelope:         envelope,
+-		configUpdateChan: configUpdateChan,
++		channels:  channels,
++		channelID: channelID,
++		blockNum:  blockNum,
++		envelope:  envelope,
+ 	}
+ }
+ 
+@@ -491,14 +571,14 @@ func (p *configUpdateEvent) publish() {
+ }
+ 
+ func newChaincodeUpgradeHandler(handleUpgrade api.ChaincodeUpgradeHandler) api.ChaincodeEventHandler {
+-	return func(blockNum uint64, channelID string, txID string, event *pb.ChaincodeEvent) error {
+-		logger.Debugf("[%s] Handling chaincode event: %s", channelID, event)
++	return func(txnMetadata api.TxMetadata, event *pb.ChaincodeEvent) error {
++		logger.Debugf("[%s] Handling chaincode event: %s", txnMetadata.ChannelID, event)
+ 		if event.ChaincodeId != lsccID {
+-			logger.Debugf("[%s] Chaincode event is not from 'lscc'", channelID)
++			logger.Debugf("[%s] Chaincode event is not from 'lscc'", txnMetadata.ChannelID)
+ 			return nil
+ 		}
+ 		if event.EventName != upgradeEvent {
+-			logger.Debugf("[%s] Chaincode event from 'lscc' is not an upgrade event", channelID)
++			logger.Debugf("[%s] Chaincode event from 'lscc' is not an upgrade event", txnMetadata.ChannelID)
+ 			return nil
+ 		}
+ 
+@@ -508,7 +588,34 @@ func newChaincodeUpgradeHandler(handleUpgrade api.ChaincodeUpgradeHandler) api.C
+ 			return errors.WithMessage(err, "error unmarshalling chaincode upgrade event")
+ 		}
+ 
+-		logger.Debugf("[%s] Handling chaincode upgrade of chaincode [%s]", channelID, ccData.ChaincodeName)
+-		return handleUpgrade(blockNum, txID, ccData.ChaincodeName)
++		logger.Debugf("[%s] Handling chaincode upgrade of chaincode [%s]", txnMetadata.ChannelID, ccData.ChaincodeName)
++		return handleUpgrade(txnMetadata, ccData.ChaincodeName)
++	}
++}
++
++func getCCInfo(writes []*kvrwset.KVWrite) (string, *ccprovider.ChaincodeData, *cb.CollectionConfigPackage, error) {
++	var ccID string
++	var ccp *cb.CollectionConfigPackage
++	var ccData *ccprovider.ChaincodeData
++
++	for _, kvWrite := range writes {
++		if isCollectionConfigKey(kvWrite.Key) {
++			ccp = &cb.CollectionConfigPackage{}
++			if err := proto.Unmarshal(kvWrite.Value, ccp); err != nil {
++				return "", nil, nil, errors.WithMessagef(err, "error unmarshaling collection configuration")
++			}
++		} else {
++			ccID = kvWrite.Key
++			ccData = &ccprovider.ChaincodeData{}
++			if err := proto.Unmarshal(kvWrite.Value, ccData); err != nil {
++				return "", nil, nil, errors.WithMessagef(err, "error unmarshaling chaincode data")
++			}
++		}
+ 	}
++
++	return ccID, ccData, ccp, nil
++}
++
++func isCollectionConfigKey(key string) bool {
++	return strings.Contains(key, collectionSeparator)
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/dispatcher/dispatcher.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/dispatcher/dispatcher.go
+index f409b7ec1..5c3e305eb 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/dispatcher/dispatcher.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/gossip/dispatcher/dispatcher.go
+@@ -11,10 +11,8 @@ import (
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
+ 	"github.com/hyperledger/fabric/core/common/privdata"
+-	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/extensions/collections/api/store"
+ 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+-	extgossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
+ 	ledgerconfig "github.com/hyperledger/fabric/extensions/roles"
+ 	gossipapi "github.com/hyperledger/fabric/gossip/api"
+ 	gcommon "github.com/hyperledger/fabric/gossip/common"
+@@ -38,10 +36,6 @@ type gossipAdapter interface {
+ 	IdentityInfo() gossipapi.PeerIdentitySet
+ }
+ 
+-type blockPublisher interface {
+-	AddCCUpgradeHandler(handler extgossipapi.ChaincodeUpgradeHandler)
+-}
+-
+ type ccRetriever interface {
+ 	Config(ns, coll string) (*cb.StaticCollectionConfig, error)
+ 	Policy(ns, coll string) (privdata.CollectionAccessPolicy, error)
+@@ -56,11 +50,9 @@ var isEndorser = func() bool {
+ func New(
+ 	channelID string,
+ 	dataStore storeapi.Store,
+-	gossipAdapter gossipAdapter,
+-	ledger ledger.PeerLedger,
+-	blockPublisher blockPublisher) *Dispatcher {
++	gossipAdapter gossipAdapter) *Dispatcher {
+ 	return &Dispatcher{
+-		ccRetriever: supp.NewCollectionConfigRetriever(channelID, ledger, blockPublisher),
++		ccRetriever: supp.CollectionConfigRetrieverForChannel(channelID),
+ 		channelID:   channelID,
+ 		reqMgr:      requestmgr.Get(channelID),
+ 		dataStore:   dataStore,
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/couchdoc_conv.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/couchdoc_conv.go
+index ad44d7008..a9aebbb16 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/couchdoc_conv.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/couchdoc_conv.go
+@@ -11,8 +11,9 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 
+-	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
++
++	"github.com/golang/protobuf/proto"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/pkg/errors"
+ )
+@@ -30,6 +31,16 @@ const (
+ 	typeLedgerName             = "ledger"
+ )
+ 
++type couchDB interface {
++	ExistsWithRetry() (bool, error)
++	IndexDesignDocExistsWithRetry(designDocs ...string) (bool, error)
++	CreateNewIndexWithRetry(indexdefinition string, designDoc string) error
++	SaveDoc(id string, rev string, couchDoc *couchdb.CouchDoc) (string, error)
++	ReadDoc(id string) (*couchdb.CouchDoc, string, error)
++	BatchUpdateDocuments(documents []*couchdb.CouchDoc) ([]*couchdb.BatchUpdateResponse, error)
++	QueryDocuments(query string) ([]*couchdb.QueryResult, string, error)
++}
++
+ const inventoryTypeIndexDef = `
+ 	{
+ 		"index": {
+@@ -123,7 +134,7 @@ func couchValueToJSON(value []byte) (jsonValue, error) {
+ 	return jsonResult, nil
+ }
+ 
+-func queryInventory(db *couchdb.CouchDatabase, inventoryType string) ([]*couchdb.QueryResult, error) {
++func queryInventory(db couchDB, inventoryType string) ([]*couchdb.QueryResult, error) {
+ 	const queryFmt = `
+ 	{
+ 		"selector": {
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/store_impl.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/store_impl.go
+index 36e701799..5567406ac 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/store_impl.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/store_impl.go
+@@ -21,44 +21,41 @@ import (
+ )
+ 
+ var logger = flogging.MustGetLogger("idstore")
+-
+-const (
+-	systemID      = "fabric_system_"
+-	inventoryName = "inventory"
+-)
++var systemID = "fabric_system_"
++var inventoryName = "inventory"
+ 
+ //Store contain couchdb instance
+ type Store struct {
+-	db               *couchdb.CouchDatabase
++	db               couchDB
+ 	couchMetadataRev string
+ }
+ 
+ //OpenIDStore return id store
+-func OpenIDStore(path string, ledgerconfig *ledger.Config) idstore.IDStore {
++func OpenIDStore(ledgerconfig *ledger.Config) (idstore.IDStore, error) {
+ 	couchInstance, err := createCouchInstance(ledgerconfig)
+ 	if err != nil {
+-		logger.Errorf("create couchdb instance failed %s", err.Error())
+-		return nil
++		return nil, errors.Wrapf(err, "create couchdb instance failed ")
+ 	}
+ 
+-	inventoryDBName := couchdb.ConstructBlockchainDBName(systemID, inventoryName)
++	dbName := couchdb.ConstructBlockchainDBName(systemID, inventoryName)
++
++	// check if it committer role
+ 	if roles.IsCommitter() {
+-		return newCommitterStore(couchInstance, inventoryDBName)
+-	}
+-	s, err := newStore(couchInstance, inventoryDBName)
+-	if err != nil {
+-		logger.Error(err.Error())
+-		return nil
++		db, dbErr := couchdb.CreateCouchDatabase(couchInstance, dbName)
++		if dbErr != nil {
++			return nil, errors.Wrapf(dbErr, "create new couchdb database failed ")
++		}
++		return newCommitterStore(db)
+ 	}
+-	return s
+-}
+ 
+-func newStore(couchInstance *couchdb.CouchInstance, dbName string) (idstore.IDStore, error) {
+ 	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+ 	if err != nil {
+-		return nil, errors.WithMessagef(err, "create new couchdb database called [%s] failed", dbName)
++		return nil, errors.WithMessagef(err, "new couchdb database [%s] failed", dbName)
+ 	}
++	return newStore(db, dbName)
++}
+ 
++func newStore(db couchDB, dbName string) (idstore.IDStore, error) {
+ 	dbExists, err := db.ExistsWithRetry()
+ 	if err != nil {
+ 		return nil, errors.WithMessagef(err, "check couchdb [%s] exist failed", dbName)
+@@ -73,41 +70,37 @@ func newStore(couchInstance *couchdb.CouchInstance, dbName string) (idstore.IDSt
+ 
+ 	}
+ 	if !indexExists {
+-		return nil, errors.New(fmt.Sprintf("DB index not found: [%s]", db.DBName))
++		return nil, errors.New(fmt.Sprintf("DB index not found: [%s]", dbName))
+ 	}
+ 
+ 	s := Store{db, ""}
+ 	return &s, nil
+ }
+ 
+-func newCommitterStore(couchInstance *couchdb.CouchInstance, dbName string) idstore.IDStore {
+-	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+-	if err != nil {
+-		logger.Errorf("create new couchdb database failed %s", err.Error())
+-		return nil
+-	}
+-
+-	err = createIndices(db)
++func newCommitterStore(db couchDB) (idstore.IDStore, error) {
++	err := createIndices(db)
+ 	if err != nil {
+-		logger.Errorf("create couchdb index failed %s", err.Error())
+-		return nil
++		return nil, errors.Wrapf(err, "create couchdb index failed")
+ 	}
+ 
+ 	s := Store{db, ""}
+ 
+-	return &s
++	return &s, nil
+ }
+ 
+-func createIndices(db *couchdb.CouchDatabase) error {
++func createIndices(db couchDB) error {
+ 	err := db.CreateNewIndexWithRetry(inventoryTypeIndexDef, inventoryTypeIndexDoc)
+ 	if err != nil {
+-		return errors.WithMessagef(err, "creation of inventory metadata index failed for [%s]", db.DBName)
++		return errors.WithMessagef(err, "creation of inventory metadata index failed")
+ 	}
+ 	return nil
+ }
+ 
+ func createCouchInstance(ledgerconfig *ledger.Config) (*couchdb.CouchInstance, error) {
+ 	logger.Debugf("constructing CouchDB block storage provider")
++	if ledgerconfig == nil {
++		return nil, errors.New("ledgerconfig is nil")
++	}
+ 	couchDBConfig := ledgerconfig.StateDB.CouchDB
+ 	couchInstance, err := couchdb.CreateCouchInstance(couchDBConfig, &disabled.Provider{})
+ 	if err != nil {
+@@ -245,7 +238,7 @@ func (s *Store) GetAllLedgerIds() ([]string, error) {
+ 	for _, r := range results {
+ 		ledgerJSON, err := couchValueToJSON(r.Value)
+ 		if err != nil {
+-			return nil, err
++			return nil, errors.Wrapf(err, "couchValueToJSON failed")
+ 		}
+ 
+ 		ledgerIDUT, ok := ledgerJSON[inventoryNameLedgerIDField]
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/test_exports.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/test_exports.go
+index 3b6a06941..0f9fb5f0e 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/test_exports.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/idstore/test_exports.go
+@@ -7,12 +7,10 @@ SPDX-License-Identifier: Apache-2.0
+ package idstore
+ 
+ import (
+-	"os"
+ 	"testing"
+ 
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/testutil"
+ 
+-	"github.com/hyperledger/fabric/common/metrics/disabled"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/idstore"
+ 	"github.com/hyperledger/fabric/core/ledger/util/couchdb"
+ )
+@@ -27,33 +25,10 @@ type StoreEnv struct {
+ 
+ // NewTestStoreEnv construct a StoreEnv for testing
+ func NewTestStoreEnv(t *testing.T, ledgerid string, couchDBConfig *couchdb.Config) *StoreEnv {
+-	removeStorePath()
+-	testStore := OpenIDStore(ledgerid, testutil.TestLedgerConf())
+-	s := &StoreEnv{t, testStore, ledgerid, couchDBConfig}
+-	return s
+-}
+-
+-//Cleanup env test
+-func (env *StoreEnv) Cleanup(ledgerid string) {
+-	//create a new connection
+-	couchInstance, err := couchdb.CreateCouchInstance(env.couchDBConfig, &disabled.Provider{})
++	testStore, err := OpenIDStore(testutil.TestLedgerConf())
+ 	if err != nil {
+ 		panic(err.Error())
+ 	}
+-	pvtDataStoreDBName := couchdb.ConstructBlockchainDBName(systemID, inventoryName)
+-	db := couchdb.CouchDatabase{CouchInstance: couchInstance, DBName: pvtDataStoreDBName}
+-	//drop the test database
+-	if _, err := db.DropDatabase(); err != nil {
+-		panic(err.Error())
+-	}
+-	env.TestStore.Close()
+-
+-	removeStorePath()
+-}
+-
+-func removeStorePath() {
+-	dbPath := testutil.TestLedgerConf().PrivateData.StorePath
+-	if err := os.RemoveAll(dbPath); err != nil {
+-		panic(err.Error())
+-	}
++	s := &StoreEnv{t, testStore, ledgerid, couchDBConfig}
++	return s
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockhandler.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockhandler.go
+index b094acb7b..42fdba5fd 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockhandler.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockhandler.go
+@@ -9,6 +9,8 @@ package mocks
+ import (
+ 	"sync/atomic"
+ 
++	"github.com/hyperledger/fabric/core/common/ccprovider"
++	"github.com/hyperledger/fabric/extensions/gossip/api"
+ 	cb "github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+ 	pb "github.com/hyperledger/fabric/protos/peer"
+@@ -21,6 +23,7 @@ type MockBlockHandler struct {
+ 	numCCEvents        int32
+ 	numCCUpgradeEvents int32
+ 	numConfigUpdates   int32
++	numLSCCWrites      int32
+ 	err                error
+ }
+ 
+@@ -45,6 +48,11 @@ func (m *MockBlockHandler) NumWrites() int {
+ 	return int(atomic.LoadInt32(&m.numWrites))
+ }
+ 
++// NumLSCCWrites returns the number of LSCC writes handled
++func (m *MockBlockHandler) NumLSCCWrites() int {
++	return int(atomic.LoadInt32(&m.numLSCCWrites))
++}
++
+ // NumCCEvents returns the number of chaincode events handled
+ func (m *MockBlockHandler) NumCCEvents() int {
+ 	return int(atomic.LoadInt32(&m.numCCEvents))
+@@ -61,25 +69,25 @@ func (m *MockBlockHandler) NumConfigUpdates() int {
+ }
+ 
+ // HandleRead handles a read event by incrementing the read counter
+-func (m *MockBlockHandler) HandleRead(blockNum uint64, channelID string, txID string, namespace string, kvRead *kvrwset.KVRead) error {
++func (m *MockBlockHandler) HandleRead(txMetadata api.TxMetadata, namespace string, kvRead *kvrwset.KVRead) error {
+ 	atomic.AddInt32(&m.numReads, 1)
+ 	return m.err
+ }
+ 
+ // HandleWrite handles a write event by incrementing the write counter
+-func (m *MockBlockHandler) HandleWrite(blockNum uint64, channelID string, txID string, namespace string, kvWrite *kvrwset.KVWrite) error {
++func (m *MockBlockHandler) HandleWrite(txMetadata api.TxMetadata, namespace string, kvWrite *kvrwset.KVWrite) error {
+ 	atomic.AddInt32(&m.numWrites, 1)
+ 	return m.err
+ }
+ 
+ // HandleChaincodeEvent handle a chaincode event by incrementing the CC event counter
+-func (m *MockBlockHandler) HandleChaincodeEvent(blockNum uint64, channelID string, txID string, event *pb.ChaincodeEvent) error {
++func (m *MockBlockHandler) HandleChaincodeEvent(txMetadata api.TxMetadata, event *pb.ChaincodeEvent) error {
+ 	atomic.AddInt32(&m.numCCEvents, 1)
+ 	return m.err
+ }
+ 
+ // HandleChaincodeUpgradeEvent handles a chaincode upgrade event by incrementing the chaincode upgrade counter
+-func (m *MockBlockHandler) HandleChaincodeUpgradeEvent(blockNum uint64, txID string, chaincodeName string) error {
++func (m *MockBlockHandler) HandleChaincodeUpgradeEvent(txMetadata api.TxMetadata, chaincodeName string) error {
+ 	atomic.AddInt32(&m.numCCUpgradeEvents, 1)
+ 	return m.err
+ }
+@@ -89,3 +97,9 @@ func (m *MockBlockHandler) HandleConfigUpdate(blockNum uint64, configUpdate *cb.
+ 	atomic.AddInt32(&m.numConfigUpdates, 1)
+ 	return m.err
+ }
++
++// HandleLSCCWrite handles an LSCC write by incrementing the LSCC write counter
++func (m *MockBlockHandler) HandleLSCCWrite(txMetadata api.TxMetadata, chaincodeName string, ccData *ccprovider.ChaincodeData, ccp *cb.CollectionConfigPackage) error {
++	atomic.AddInt32(&m.numLSCCWrites, 1)
++	return m.err
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockpublisher.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockpublisher.go
+index e9d33b65d..0c04d1a75 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockpublisher.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockblockpublisher.go
+@@ -17,6 +17,7 @@ type MockBlockPublisher struct {
+ 	HandleConfigUpdate gossipapi.ConfigUpdateHandler
+ 	HandleWrite        gossipapi.WriteHandler
+ 	HandleRead         gossipapi.ReadHandler
++	HandleLSCCWrite    gossipapi.LSCCWriteHandler
+ 	HandleCCEvent      gossipapi.ChaincodeEventHandler
+ }
+ 
+@@ -45,6 +46,11 @@ func (m *MockBlockPublisher) AddReadHandler(handler gossipapi.ReadHandler) {
+ 	m.HandleRead = handler
+ }
+ 
++// AddLSCCWriteHandler adds a write handler
++func (m *MockBlockPublisher) AddLSCCWriteHandler(handler gossipapi.LSCCWriteHandler) {
++	m.HandleLSCCWrite = handler
++}
++
+ // AddCCEventHandler adds a chaincode event handler
+ func (m *MockBlockPublisher) AddCCEventHandler(handler gossipapi.ChaincodeEventHandler) {
+ 	m.HandleCCEvent = handler
+@@ -54,3 +60,8 @@ func (m *MockBlockPublisher) AddCCEventHandler(handler gossipapi.ChaincodeEventH
+ func (m *MockBlockPublisher) Publish(block *common.Block) {
+ 	panic("not implemented")
+ }
++
++// LedgerHeight is not implemented and panics if invoked
++func (m *MockBlockPublisher) LedgerHeight() uint64 {
++	panic("not implemented")
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdataprovider.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdataprovider.go
+index a90e5ad5f..fa5b25d86 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdataprovider.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdataprovider.go
+@@ -14,14 +14,16 @@ import (
+ 
+ // DataProvider is a mock transient data provider
+ type DataProvider struct {
+-	data map[storeapi.Key]*storeapi.ExpiringValue
+-	err  error
++	data         map[storeapi.Key]*storeapi.ExpiringValue
++	queryResults map[storeapi.QueryKey][]*storeapi.QueryResult
++	err          error
+ }
+ 
+ // NewDataProvider returns a new Data Provider
+ func NewDataProvider() *DataProvider {
+ 	return &DataProvider{
+-		data: make(map[storeapi.Key]*storeapi.ExpiringValue),
++		data:         make(map[storeapi.Key]*storeapi.ExpiringValue),
++		queryResults: make(map[storeapi.QueryKey][]*storeapi.QueryResult),
+ 	}
+ }
+ 
+@@ -31,6 +33,12 @@ func (p *DataProvider) WithData(key *storeapi.Key, value *storeapi.ExpiringValue
+ 	return p
+ }
+ 
++// WithQueryResults sets the mock query results for the given query string
++func (p *DataProvider) WithQueryResults(key *storeapi.QueryKey, results []*storeapi.QueryResult) *DataProvider {
++	p.queryResults[*key] = results
++	return p
++}
++
+ // WithError sets the error to be returned by the retriever
+ func (p *DataProvider) WithError(err error) *DataProvider {
+ 	p.err = err
+@@ -40,14 +48,16 @@ func (p *DataProvider) WithError(err error) *DataProvider {
+ // RetrieverForChannel returns the retriever for the given channel
+ func (p *DataProvider) RetrieverForChannel(channel string) storeapi.Retriever {
+ 	return &dataRetriever{
+-		err:  p.err,
+-		data: p.data,
++		err:          p.err,
++		data:         p.data,
++		queryResults: p.queryResults,
+ 	}
+ }
+ 
+ type dataRetriever struct {
+-	err  error
+-	data map[storeapi.Key]*storeapi.ExpiringValue
++	err          error
++	data         map[storeapi.Key]*storeapi.ExpiringValue
++	queryResults map[storeapi.QueryKey][]*storeapi.QueryResult
+ }
+ 
+ // GetTransientData returns the transient data for the given context and key
+@@ -89,3 +99,37 @@ func (m *dataRetriever) GetDataMultipleKeys(ctxt context.Context, key *storeapi.
+ 	}
+ 	return values, nil
+ }
++
++// Query executes the given rich query
++func (m *dataRetriever) Query(ctxt context.Context, key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	if m.err != nil {
++		return nil, m.err
++	}
++	return newResultsIterator(m.queryResults[*key]), nil
++}
++
++type resultsIterator struct {
++	results []*storeapi.QueryResult
++	nextIdx int
++}
++
++func newResultsIterator(results []*storeapi.QueryResult) *resultsIterator {
++	return &resultsIterator{
++		results: results,
++	}
++}
++
++// Next returns the next item in the result set. The `QueryResult` is expected to be nil when
++// the iterator gets exhausted
++func (it *resultsIterator) Next() (*storeapi.QueryResult, error) {
++	if it.nextIdx >= len(it.results) {
++		return nil, nil
++	}
++	qr := it.results[it.nextIdx]
++	it.nextIdx++
++	return qr, nil
++}
++
++// Close releases resources occupied by the iterator
++func (it *resultsIterator) Close() {
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdatastore.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdatastore.go
+index 7410c46d0..c6942f595 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdatastore.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockdatastore.go
+@@ -96,6 +96,11 @@ func (m *DataStore) GetDataMultipleKeys(key *storeapi.MultiKey) (storeapi.Expiri
+ 	return values, m.err
+ }
+ 
++// Query is not implemented and will panic if called.
++func (m *DataStore) Query(key *storeapi.QueryKey) (storeapi.ResultsIterator, error) {
++	panic("not implemented")
++}
++
+ // Close closes the store
+ func (m *DataStore) Close() {
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockledger.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockledger.go
+index 366caf27f..368b488f6 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockledger.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockledger.go
+@@ -105,3 +105,8 @@ func (m *Ledger) CommitPvtDataOfOldBlocks(blockPvtData []*ledger2.BlockPvtData)
+ func (m *Ledger) GetMissingPvtDataTracker() (ledger2.MissingPvtDataTracker, error) {
+ 	panic("not implemented")
+ }
++
++//CheckpointBlock updates checkpoint info to given block
++func (m *Ledger) CheckpointBlock(block *common.Block) error {
++	panic("not implemented")
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockqueryexecutor.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockqueryexecutor.go
+index 5ee75fdbf..3d0ca160e 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockqueryexecutor.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockqueryexecutor.go
+@@ -11,34 +11,80 @@ import (
+ 
+ 	commonledger "github.com/hyperledger/fabric/common/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger"
++	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
+ )
+ 
+ // QueryExecutor is a mock query executor
+ type QueryExecutor struct {
+-	State map[string]map[string][]byte
+-	Error error
++	state        map[string]map[string][]byte
++	queryResults map[string][]*statedb.VersionedKV
++	error        error
++	itProvider   func() *ResultsIterator
+ }
+ 
+ // NewQueryExecutor returns a new mock query executor
+-func NewQueryExecutor(state map[string]map[string][]byte) *QueryExecutor {
++func NewQueryExecutor() *QueryExecutor {
+ 	return &QueryExecutor{
+-		State: state,
++		state:        make(map[string]map[string][]byte),
++		queryResults: make(map[string][]*statedb.VersionedKV),
++		itProvider:   NewResultsIterator,
+ 	}
+ }
+ 
++// WithState sets the state
++func (m *QueryExecutor) WithState(ns, key string, value []byte) *QueryExecutor {
++	nsState, ok := m.state[ns]
++	if !ok {
++		nsState = make(map[string][]byte)
++		m.state[ns] = nsState
++	}
++	nsState[key] = value
++	return m
++}
++
++// WithPrivateState sets the private state
++func (m *QueryExecutor) WithPrivateState(ns, collection, key string, value []byte) *QueryExecutor {
++	nskey := privateNamespace(ns, collection)
++	nsState, ok := m.state[nskey]
++	if !ok {
++		nsState = make(map[string][]byte)
++		m.state[nskey] = nsState
++	}
++	nsState[key] = value
++	return m
++}
++
++// WithQueryResults sets the query results for a given query on a namespace
++func (m *QueryExecutor) WithQueryResults(ns, query string, results []*statedb.VersionedKV) *QueryExecutor {
++	m.queryResults[queryResultsKey(ns, query)] = results
++	return m
++}
++
++// WithPrivateQueryResults sets the query results for a given query on a private collection
++func (m *QueryExecutor) WithPrivateQueryResults(ns, coll, query string, results []*statedb.VersionedKV) *QueryExecutor {
++	m.queryResults[privateQueryResultsKey(ns, coll, query)] = results
++	return m
++}
++
++// WithIteratorProvider sets the iterator provider
++func (m *QueryExecutor) WithIteratorProvider(p func() *ResultsIterator) *QueryExecutor {
++	m.itProvider = p
++	return m
++}
++
+ // WithError injects an error to the mock executor
+ func (m *QueryExecutor) WithError(err error) *QueryExecutor {
+-	m.Error = err
++	m.error = err
+ 	return m
+ }
+ 
+ // GetState returns the mock state for the given namespace and key
+ func (m *QueryExecutor) GetState(namespace string, key string) ([]byte, error) {
+-	if m.Error != nil {
+-		return nil, m.Error
++	if m.error != nil {
++		return nil, m.error
+ 	}
+ 
+-	ns := m.State[namespace]
++	ns := m.state[namespace]
+ 	if ns == nil {
+ 		return nil, fmt.Errorf("Could not retrieve namespace %s", namespace)
+ 	}
+@@ -69,9 +115,9 @@ func (m *QueryExecutor) GetStateRangeScanIteratorWithMetadata(namespace string,
+ 	panic("not implemented")
+ }
+ 
+-// ExecuteQuery is not currently implemented and will panic if called
++// ExecuteQuery returns mock results for the given query
+ func (m *QueryExecutor) ExecuteQuery(namespace, query string) (commonledger.ResultsIterator, error) {
+-	panic("not implemented")
++	return m.itProvider().WithResults(m.queryResults[queryResultsKey(namespace, query)]), m.error
+ }
+ 
+ // ExecuteQueryWithMetadata is not currently implemented and will panic if called
+@@ -81,7 +127,7 @@ func (m *QueryExecutor) ExecuteQueryWithMetadata(namespace, query string, metada
+ 
+ // GetPrivateData returns the private data for the given namespace, collection, and key
+ func (m *QueryExecutor) GetPrivateData(namespace, collection, key string) ([]byte, error) {
+-	return m.GetState(namespace+"$"+collection, key)
++	return m.GetState(privateNamespace(namespace, collection), key)
+ }
+ 
+ // GetPrivateDataHash is not currently implemented and will panic if called
+@@ -96,7 +142,7 @@ func (m *QueryExecutor) GetPrivateDataMetadataByHash(namespace, collection strin
+ 
+ // GetPrivateDataMultipleKeys returns the private data for the given namespace, collection, and keys
+ func (m *QueryExecutor) GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([][]byte, error) {
+-	return m.GetStateMultipleKeys(namespace+"$"+collection, keys)
++	return m.GetStateMultipleKeys(privateNamespace(namespace, collection), keys)
+ }
+ 
+ // GetPrivateDataRangeScanIterator is not currently implemented and will panic if called
+@@ -104,9 +150,9 @@ func (m *QueryExecutor) GetPrivateDataRangeScanIterator(namespace, collection, s
+ 	panic("not implemented")
+ }
+ 
+-// ExecuteQueryOnPrivateData is not currently implemented and will panic if called
++// ExecuteQueryOnPrivateData  returns mock results for the given query
+ func (m *QueryExecutor) ExecuteQueryOnPrivateData(namespace, collection, query string) (commonledger.ResultsIterator, error) {
+-	panic("not implemented")
++	return m.itProvider().WithResults(m.queryResults[privateQueryResultsKey(namespace, collection, query)]), m.error
+ }
+ 
+ // Done does nothing
+@@ -122,3 +168,29 @@ func (m *QueryExecutor) GetStateMetadata(namespace, key string) (map[string][]by
+ func (m *QueryExecutor) GetPrivateDataMetadata(namespace, collection, key string) (map[string][]byte, error) {
+ 	panic("not implemented")
+ }
++
++func privateNamespace(namespace, collection string) string {
++	return namespace + "$" + collection
++}
++
++func queryResultsKey(namespace, query string) string {
++	return namespace + "~" + query
++}
++
++func privateQueryResultsKey(namespace, coll, query string) string {
++	return privateNamespace(namespace, coll) + "~" + query
++}
++
++// QueryExecutorProvider is a mock query executor provider
++type QueryExecutorProvider struct {
++}
++
++// NewQueryExecutorProvider returns a mock query executor provider
++func NewQueryExecutorProvider() *QueryExecutorProvider {
++	return &QueryExecutorProvider{}
++}
++
++// GetQueryExecutorForLedger returns the query executor for the given channel ID
++func (m *QueryExecutorProvider) GetQueryExecutorForLedger(channelID string) (ledger.QueryExecutor, error) {
++	return NewQueryExecutor(), nil
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockresultsiterator.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockresultsiterator.go
+new file mode 100644
+index 000000000..ac0dae6da
+--- /dev/null
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/mocks/mockresultsiterator.go
+@@ -0,0 +1,55 @@
++/*
++Copyright SecureKey Technologies Inc. All Rights Reserved.
++
++SPDX-License-Identifier: Apache-2.0
++*/
++
++package mocks
++
++import (
++	commonledger "github.com/hyperledger/fabric/common/ledger"
++	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
++)
++
++// ResultsIterator is a mock key-value iterator
++type ResultsIterator struct {
++	results []*statedb.VersionedKV
++	nextIdx int
++	err     error
++}
++
++// NewResultsIterator returns a mock key-value iterator
++func NewResultsIterator() *ResultsIterator {
++	return &ResultsIterator{}
++}
++
++// WithResults sets the mock results
++func (m *ResultsIterator) WithResults(results []*statedb.VersionedKV) *ResultsIterator {
++	m.results = results
++	return m
++}
++
++// WithError injects an error
++func (m *ResultsIterator) WithError(err error) *ResultsIterator {
++	m.err = err
++	return m
++}
++
++// Next returns the next item in the result set. The `QueryResult` is expected to be nil when
++// the iterator gets exhausted
++func (m *ResultsIterator) Next() (commonledger.QueryResult, error) {
++	if m.err != nil {
++		return nil, m.err
++	}
++
++	if m.nextIdx >= len(m.results) {
++		return nil, nil
++	}
++	qr := m.results[m.nextIdx]
++	m.nextIdx++
++	return qr, nil
++}
++
++// Close releases resources occupied by the iterator
++func (m *ResultsIterator) Close() {
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cachedpvtdatastore/store_impl.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cachedpvtdatastore/store_impl.go
+index fd42f469b..d3af5c966 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cachedpvtdatastore/store_impl.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cachedpvtdatastore/store_impl.go
+@@ -228,7 +228,7 @@ func v11RetrievePvtdata(dataEntries []*common.DataEntry, filter ledger.PvtNsColl
+ 	for _, dataEntry := range dataEntries {
+ 		value, err := common.EncodeDataValue(dataEntry.Value)
+ 		if err != nil {
+-			return nil, err
++			return nil, errors.Wrapf(err, "EncodeDataValue failed")
+ 		}
+ 		pvtDatum, err := common.V11DecodeKV(common.EncodeDataKey(dataEntry.Key), value, filter)
+ 		if err != nil {
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/couchdb_conv.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/couchdb_conv.go
+index 24a3166c7..22265d102 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/couchdb_conv.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/couchdb_conv.go
+@@ -30,6 +30,16 @@ const (
+ 	lastCommittedBlockData        = "data"
+ )
+ 
++type couchDB interface {
++	ExistsWithRetry() (bool, error)
++	IndexDesignDocExistsWithRetry(designDocs ...string) (bool, error)
++	CreateNewIndexWithRetry(indexdefinition string, designDoc string) error
++	ReadDoc(id string) (*couchdb.CouchDoc, string, error)
++	BatchUpdateDocuments(documents []*couchdb.CouchDoc) ([]*couchdb.BatchUpdateResponse, error)
++	QueryDocuments(query string) ([]*couchdb.QueryResult, string, error)
++	DeleteDoc(id, rev string) error
++}
++
+ type blockPvtDataResponse struct {
+ 	ID              string            `json:"_id"`
+ 	Rev             string            `json:"_rev"`
+@@ -115,7 +125,7 @@ func createLastCommittedBlockDoc(committingBlockNum uint64, rev string) (*couchd
+ 
+ }
+ 
+-func lookupLastBlock(db *couchdb.CouchDatabase) (uint64, string, error) {
++func lookupLastBlock(db couchDB) (uint64, string, error) {
+ 	v, _, err := db.ReadDoc(lastCommittedBlockID)
+ 	if err != nil {
+ 		return 0, "", err
+@@ -123,11 +133,11 @@ func lookupLastBlock(db *couchdb.CouchDatabase) (uint64, string, error) {
+ 	if v != nil {
+ 		var lastBlockResponse lastCommittedBlockResponse
+ 		if err = json.Unmarshal(v.JSONValue, &lastBlockResponse); err != nil {
+-			return 0, "", err
++			return 0, "", errors.Wrapf(err, "Unmarshal lastBlockResponse failed")
+ 		}
+ 		lastBlockNum, err := strconv.ParseInt(lastBlockResponse.Data, 10, 64)
+ 		if err != nil {
+-			return 0, "", err
++			return 0, "", errors.Wrapf(err, "strconv.ParseInt lastBlockResponse.Data failed")
+ 		}
+ 		return uint64(lastBlockNum), lastBlockResponse.Rev, nil
+ 	}
+@@ -169,43 +179,34 @@ func expiryEntriesToJSONValue(expiryEntries []*common.ExpiryEntry) (jsonValue, [
+ 	return data, expiringBlkNums, nil
+ }
+ 
+-func createPvtDataCouchDB(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+-	db, err := couchdb.CreateCouchDatabase(couchInstance, dbName)
+-	if err != nil {
+-		return nil, err
+-	}
+-	err = db.CreateNewIndexWithRetry(expiringBlockNumbersIndexDef, expiringBlockNumbersIndexDoc)
++func createPvtDataCouchDB(db couchDB) error {
++	err := db.CreateNewIndexWithRetry(expiringBlockNumbersIndexDef, expiringBlockNumbersIndexDoc)
+ 	if err != nil {
+-		return nil, errors.WithMessage(err, "creation of purge block number index failed")
++		return errors.WithMessage(err, "creation of purge block number index failed")
+ 	}
+-	return db, err
++	return err
+ }
+ 
+-func getPvtDataCouchInstance(couchInstance *couchdb.CouchInstance, dbName string) (*couchdb.CouchDatabase, error) {
+-	db, err := couchdb.NewCouchDatabase(couchInstance, dbName)
+-	if err != nil {
+-		return nil, err
+-	}
+-
++func getPvtDataCouchInstance(db couchDB, dbName string) error {
+ 	dbExists, err := db.ExistsWithRetry()
+ 	if err != nil {
+-		return nil, err
++		return err
+ 	}
+ 	if !dbExists {
+-		return nil, errors.Errorf("DB not found: [%s]", db.DBName)
++		return errors.Errorf("DB not found: [%s]", dbName)
+ 	}
+ 
+ 	indexExists, err := db.IndexDesignDocExistsWithRetry(expiringBlockNumbersIndexDoc)
+ 	if err != nil {
+-		return nil, err
++		return err
+ 	}
+ 	if !indexExists {
+-		return nil, errors.Errorf("DB index not found: [%s]", db.DBName)
++		return errors.Errorf("DB index not found: [%s]", dbName)
+ 	}
+-	return db, nil
++	return nil
+ }
+ 
+-func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataResponse, error) {
++func retrieveBlockPvtData(db couchDB, id string) (*blockPvtDataResponse, error) {
+ 	doc, _, err := db.ReadDoc(id)
+ 	if err != nil {
+ 		return nil, err
+@@ -224,7 +225,7 @@ func retrieveBlockPvtData(db *couchdb.CouchDatabase, id string) (*blockPvtDataRe
+ 	return &blockPvtData, nil
+ }
+ 
+-func retrieveBlockExpiryData(db *couchdb.CouchDatabase, id string) ([]*blockPvtDataResponse, error) {
++func retrieveBlockExpiryData(db couchDB, id string) ([]*blockPvtDataResponse, error) {
+ 	const queryFmt = `
+ 	{
+ 		"selector": {
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/store_impl.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/store_impl.go
+index 083e87059..6ba50f828 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/store_impl.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore/store_impl.go
+@@ -34,6 +34,15 @@ const (
+ 	pvtDataStoreName = "pvtdata"
+ )
+ 
++// dbHandle is an handle to a named db
++type dbHandle interface {
++	WriteBatch(batch *leveldbhelper.UpdateBatch, sync bool) error
++	Delete(key []byte, sync bool) error
++	Get(key []byte) ([]byte, error)
++	GetIterator(startKey []byte, endKey []byte) *leveldbhelper.Iterator
++	Put(key []byte, value []byte, sync bool) error
++}
++
+ type provider struct {
+ 	couchInstance            *couchdb.CouchInstance
+ 	missingKeysIndexProvider *leveldbhelper.Provider
+@@ -43,13 +52,13 @@ type provider struct {
+ type store struct {
+ 	ledgerid           string
+ 	btlPolicy          pvtdatapolicy.BTLPolicy
+-	db                 *couchdb.CouchDatabase
++	db                 couchDB
+ 	lastCommittedBlock uint64
+ 	purgerLock         *sync.Mutex
+ 	pendingPvtData     *pendingPvtData
+ 	collElgProc        *common.CollElgProc
+ 	// missing keys db
+-	missingKeysIndexDB *leveldbhelper.DBHandle
++	missingKeysIndexDB dbHandle
+ 	isEmpty            bool
+ 	// After committing the pvtdata of old blocks,
+ 	// the `isLastUpdatedOldBlocksSet` is set to true.
+@@ -101,12 +110,14 @@ func newProviderWithDBDef(couchDBConfig *couchdb.Config, conf *ledger.PrivateDat
+ func (p *provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
+ 	// Create couchdb
+ 	pvtDataStoreDBName := couchdb.ConstructBlockchainDBName(strings.ToLower(ledgerid), pvtDataStoreName)
+-	var db *couchdb.CouchDatabase
+-	var err error
+ 	if roles.IsCommitter() {
+-		db, err = createPvtDataCouchDB(p.couchInstance, pvtDataStoreDBName)
++		db, err := couchdb.CreateCouchDatabase(p.couchInstance, pvtDataStoreDBName)
+ 		if err != nil {
+-			return nil, err
++			return nil, errors.Wrapf(err, "createCouchDatabase failed")
++		}
++		err = createPvtDataCouchDB(db)
++		if err != nil {
++			return nil, errors.Wrapf(err, "createPvtDataCouchDB failed")
+ 		}
+ 		// Create missing pvt keys index in leveldb
+ 		missingKeysIndexDB := p.missingKeysIndexProvider.GetDBHandle(ledgerid)
+@@ -130,10 +141,13 @@ func (p *provider) OpenStore(ledgerid string) (pvtdatastorage.Store, error) {
+ 
+ 		return s, nil
+ 	}
+-
+-	db, err = getPvtDataCouchInstance(p.couchInstance, pvtDataStoreDBName)
++	db, err := couchdb.NewCouchDatabase(p.couchInstance, pvtDataStoreDBName)
+ 	if err != nil {
+-		return nil, err
++		return nil, errors.Wrapf(err, "newCouchDatabase failed")
++	}
++	err = getPvtDataCouchInstance(db, db.DBName)
++	if err != nil {
++		return nil, errors.Wrapf(err, "getPvtDataCouchInstance failed")
+ 	}
+ 	s := &store{db: db, ledgerid: ledgerid,
+ 		pendingPvtData: &pendingPvtData{BatchPending: false},
+@@ -163,7 +177,7 @@ func (s *store) initState() error {
+ 	var blist lastUpdatedOldBlocksList
+ 	lastCommittedBlock, _, err := lookupLastBlock(s.db)
+ 	if err != nil {
+-		return err
++		return errors.Wrapf(err, "lookupLastBlock failed")
+ 	}
+ 	s.isEmpty = true
+ 	if lastCommittedBlock != 0 {
+@@ -172,11 +186,11 @@ func (s *store) initState() error {
+ 	}
+ 
+ 	if s.pendingPvtData, err = s.hasPendingCommit(); err != nil {
+-		return err
++		return errors.Wrap(err, "hasPendingCommit failed")
+ 	}
+ 
+ 	if blist, err = common.GetLastUpdatedOldBlocksList(s.missingKeysIndexDB); err != nil {
+-		return err
++		return errors.Wrap(err, "getLastUpdatedOldBlocksList failed")
+ 	}
+ 	if len(blist) > 0 {
+ 		s.isLastUpdatedOldBlocksSet = true
+@@ -250,13 +264,13 @@ func (s *store) Commit() error {
+ 
+ 	lastCommittedBlockDoc, err := s.prepareLastCommittedBlockDoc(committingBlockNum)
+ 	if err != nil {
+-		return err
++		return errors.WithMessage(err, "prepareLastCommittedBlockDoc failed")
+ 	}
+ 	docs = append(docs, lastCommittedBlockDoc)
+ 
+ 	_, err = s.db.BatchUpdateDocuments(docs)
+ 	if err != nil {
+-		return errors.WithMessage(err, fmt.Sprintf("writing private data to CouchDB failed [%d]", committingBlockNum))
++		return errors.WithMessagef(err, "writing private data to CouchDB failed [%d]", committingBlockNum)
+ 	}
+ 
+ 	batch := leveldbhelper.NewUpdateBatch()
+@@ -264,14 +278,11 @@ func (s *store) Commit() error {
+ 		for missingDataKey, missingDataValue := range s.pendingPvtData.MissingDataEntries {
+ 			batch.Put([]byte(missingDataKey), []byte(missingDataValue))
+ 		}
+-		if err := s.missingKeysIndexDB.WriteBatch(batch, true); err != nil {
+-			return err
+-		}
+ 	}
+ 
+ 	batch.Delete(common.PendingCommitKey)
+ 	if err := s.missingKeysIndexDB.WriteBatch(batch, true); err != nil {
+-		return err
++		return errors.Wrap(err, "WriteBatch failed")
+ 	}
+ 
+ 	s.pendingPvtData = &pendingPvtData{BatchPending: false}
+@@ -307,7 +318,7 @@ func (s *store) Rollback() error {
+ 
+ 	s.pendingPvtData = &pendingPvtData{BatchPending: false}
+ 	if err := s.missingKeysIndexDB.Delete(common.PendingCommitKey, true); err != nil {
+-		return err
++		return errors.Wrapf(err, "delete PendingCommitKey failed")
+ 	}
+ 	return nil
+ }
+@@ -365,10 +376,10 @@ func (s *store) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPv
+ 	// (4) commit the update entries to the pvtStore
+ 	logger.Debug("Committing the update batch to pvtdatastore")
+ 	if _, err := s.db.BatchUpdateDocuments(docs); err != nil {
+-		return err
++		return errors.Wrapf(err, "BatchUpdateDocuments failed")
+ 	}
+ 	if err := s.missingKeysIndexDB.WriteBatch(batch, true); err != nil {
+-		return err
++		return errors.Wrapf(err, "WriteBatch failed")
+ 	}
+ 	s.isLastUpdatedOldBlocksSet = true
+ 
+@@ -383,7 +394,7 @@ func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData
+ 
+ 	updatedBlksList, err := common.GetLastUpdatedOldBlocksList(s.missingKeysIndexDB)
+ 	if err != nil {
+-		return nil, err
++		return nil, errors.Wrapf(err, "GetLastUpdatedOldBlocksList failed")
+ 	}
+ 
+ 	blksPvtData := make(map[uint64][]*ledger.TxPvtData)
+@@ -398,7 +409,7 @@ func (s *store) GetLastUpdatedOldBlocksPvtData() (map[uint64][]*ledger.TxPvtData
+ // ResetLastUpdatedOldBlocksList implements the function in the interface `Store`
+ func (s *store) ResetLastUpdatedOldBlocksList() error {
+ 	if err := common.ResetLastUpdatedOldBlocksList(s.missingKeysIndexDB); err != nil {
+-		return err
++		return errors.Wrapf(err, "ResetLastUpdatedOldBlocksList failed")
+ 	}
+ 	s.isLastUpdatedOldBlocksSet = false
+ 	return nil
+@@ -444,7 +455,7 @@ func (s *store) checkLastCommittedBlock(blockNum uint64) error {
+ 	} else {
+ 		lastCommittedBlock, _, err := lookupLastBlock(s.db)
+ 		if err != nil {
+-			return err
++			return errors.Wrapf(err, "lookupLastBlock failed")
+ 		}
+ 		if lastCommittedBlock == 0 {
+ 			return pvtdatastorage.NewErrOutOfRange("The store is empty")
+@@ -487,7 +498,7 @@ func (s *store) Shutdown() {
+ func (s *store) preparePvtDataDoc(blockNum uint64, updateEntries *common.EntriesForPvtDataOfOldBlocks) (*couchdb.CouchDoc, error) {
+ 	dataEntries, expiryEntries, rev, err := s.retrieveBlockPvtEntries(blockNum)
+ 	if err != nil {
+-		return nil, err
++		return nil, errors.WithMessage(err, "retrieveBlockPvtEntries failed")
+ 	}
+ 	pvtDataDoc, err := createPvtDataCouchDoc(s.prepareStoreEntries(updateEntries, dataEntries, expiryEntries), blockNum, rev)
+ 	if err != nil {
+@@ -576,7 +587,7 @@ func (s *store) getBlockPvtData(results map[string][]byte, filter ledger.PvtNsCo
+ 			return nil, err
+ 		}
+ 		if common.V11Format(dataKeyBytes) {
+-			return v11RetrievePvtdata(results, filter)
++			return common.V11RetrievePvtdata(results, filter)
+ 		}
+ 		dataValueBytes := results[key]
+ 		dataKey := common.DecodeDatakey(dataKeyBytes)
+@@ -633,7 +644,7 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
+ 
+ 	_, rev, err := lookupLastBlock(s.db)
+ 	if err != nil {
+-		return err
++		return errors.WithMessage(err, "lookupLastBlock failed")
+ 	}
+ 	lastCommittedBlockDoc, err := createLastCommittedBlockDoc(s.lastCommittedBlock, rev)
+ 	if err != nil {
+@@ -641,7 +652,7 @@ func (s *store) InitLastCommittedBlock(blockNum uint64) error {
+ 	}
+ 	_, err = s.db.BatchUpdateDocuments([]*couchdb.CouchDoc{lastCommittedBlockDoc})
+ 	if err != nil {
+-		return err
++		return errors.WithMessage(err, "BatchUpdateDocuments failed")
+ 	}
+ 
+ 	logger.Debugf("InitLastCommittedBlock set to block [%d]", blockNum)
+@@ -653,23 +664,11 @@ func (s *store) GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int) (ledger.M
+ 	return common.GetMissingPvtDataInfoForMostRecentBlocks(maxBlock, s.lastCommittedBlock, s.btlPolicy, s.missingKeysIndexDB)
+ }
+ 
+-func v11RetrievePvtdata(pvtDataResults map[string][]byte, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
+-	var blkPvtData []*ledger.TxPvtData
+-	for key, val := range pvtDataResults {
+-		pvtDatum, err := common.V11DecodeKV([]byte(key), val, filter)
+-		if err != nil {
+-			return nil, err
+-		}
+-		blkPvtData = append(blkPvtData, pvtDatum)
+-	}
+-	return blkPvtData, nil
+-}
+-
+ func (s *store) getExpiryDataOfExpiryKey(expiryKey *common.ExpiryKey) (*common.ExpiryData, error) {
+ 	var expiryEntriesMap map[string][]byte
+ 	var err error
+ 	if expiryEntriesMap, err = s.getExpiryEntriesDB(expiryKey.CommittingBlk); err != nil {
+-		return nil, err
++		return nil, errors.WithMessage(err, "getExpiryEntriesDB failed")
+ 	}
+ 	v := expiryEntriesMap[hex.EncodeToString(common.EncodeExpiryKey(expiryKey))]
+ 	if v == nil {
+@@ -725,7 +724,7 @@ func (s *store) hasPendingCommit() (*pendingPvtData, error) {
+ 	if v != nil {
+ 		var pPvtData pendingPvtData
+ 		if err := json.Unmarshal(v, &pPvtData); err != nil {
+-			return nil, err
++			return nil, errors.Wrapf(err, "Unmarshal failed pendingPvtData")
+ 		}
+ 		return &pPvtData, nil
+ 	}
+@@ -739,7 +738,7 @@ func (s *store) savePendingKey() error {
+ 		return err
+ 	}
+ 	if err := s.missingKeysIndexDB.Put(common.PendingCommitKey, bytes, true); err != nil {
+-		return err
++		return errors.Wrapf(err, "put in leveldb failed for key PendingCommitKey")
+ 	}
+ 	return nil
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/store.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/store.go
+index bbc1433e2..12f65723f 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/store.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/store.go
+@@ -21,6 +21,13 @@ import (
+ // todo add pinning script to include copied code into this file, original file from fabric is found in fabric/core/ledger/pvtdatastorage/store_imp.go
+ // todo below functions are originally unexported, the pinning script must capitalize these functions to export them
+ 
++// dbHandle is an handle to a named db
++type dbHandle interface {
++	Get(key []byte) ([]byte, error)
++	WriteBatch(batch *leveldbhelper.UpdateBatch, sync bool) error
++	GetIterator(startKey []byte, endKey []byte) *leveldbhelper.Iterator
++}
++
+ type DataEntry struct {
+ 	Key   *DataKey
+ 	Value *rwset.CollectionPvtReadWriteSet
+@@ -274,7 +281,7 @@ func addUpdatedMissingDataEntriesToUpdateBatch(batch *leveldbhelper.UpdateBatch,
+ 	return nil
+ }
+ 
+-func GetLastUpdatedOldBlocksList(missingKeysIndexDB *leveldbhelper.DBHandle) ([]uint64, error) {
++func GetLastUpdatedOldBlocksList(missingKeysIndexDB dbHandle) ([]uint64, error) {
+ 	var v []byte
+ 	var err error
+ 	if v, err = missingKeysIndexDB.Get(LastUpdatedOldBlocksKey); err != nil {
+@@ -300,7 +307,7 @@ func GetLastUpdatedOldBlocksList(missingKeysIndexDB *leveldbhelper.DBHandle) ([]
+ 	return updatedBlksList, nil
+ }
+ 
+-func ResetLastUpdatedOldBlocksList(missingKeysIndexDB *leveldbhelper.DBHandle) error {
++func ResetLastUpdatedOldBlocksList(missingKeysIndexDB dbHandle) error {
+ 	batch := leveldbhelper.NewUpdateBatch()
+ 	batch.Delete(LastUpdatedOldBlocksKey)
+ 	if err := missingKeysIndexDB.WriteBatch(batch, true); err != nil {
+@@ -310,7 +317,7 @@ func ResetLastUpdatedOldBlocksList(missingKeysIndexDB *leveldbhelper.DBHandle) e
+ }
+ 
+ // GetMissingPvtDataInfoForMostRecentBlocks
+-func GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int, lastCommittedBlk uint64, btlPolicy pvtdatapolicy.BTLPolicy, missingKeysIndexDB *leveldbhelper.DBHandle) (ledger.MissingPvtDataInfo, error) {
++func GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int, lastCommittedBlk uint64, btlPolicy pvtdatapolicy.BTLPolicy, missingKeysIndexDB dbHandle) (ledger.MissingPvtDataInfo, error) {
+ 	// we assume that this function would be called by the gossip only after processing the
+ 	// last retrieved missing pvtdata info and committing the same.
+ 	if maxBlock < 1 {
+@@ -387,7 +394,7 @@ func GetMissingPvtDataInfoForMostRecentBlocks(maxBlock int, lastCommittedBlk uin
+ }
+ 
+ // ProcessCollsEligibilityEnabled
+-func ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string, collElgProcSync *CollElgProc, missingKeysIndexDB *leveldbhelper.DBHandle) error {
++func ProcessCollsEligibilityEnabled(committingBlk uint64, nsCollMap map[string][]string, collElgProcSync *CollElgProc, missingKeysIndexDB dbHandle) error {
+ 	key := encodeCollElgKey(committingBlk)
+ 	m := newCollElgInfo(nsCollMap)
+ 	val, err := encodeCollElgVal(m)
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/v11.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/v11.go
+index 804729f4d..72ae27913 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/v11.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/common/v11.go
+@@ -76,3 +76,15 @@ func v11TrimPvtWSet(pvtWSet *rwset.TxPvtReadWriteSet, filter ledger.PvtNsCollFil
+ 	}
+ 	return filteredTxPvtRwSet
+ }
++
++func V11RetrievePvtdata(pvtDataResults map[string][]byte, filter ledger.PvtNsCollFilter) ([]*ledger.TxPvtData, error) {
++	var blkPvtData []*ledger.TxPvtData
++	for key, val := range pvtDataResults {
++		pvtDatum, err := V11DecodeKV([]byte(key), val, filter)
++		if err != nil {
++			return nil, err
++		}
++		blkPvtData = append(blkPvtData, pvtDatum)
++	}
++	return blkPvtData, nil
++}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/store_impl.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/store_impl.go
+index aea54516c..e7e3cf5cd 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/store_impl.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/store_impl.go
+@@ -10,7 +10,6 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
+ 	"github.com/hyperledger/fabric/core/ledger/pvtdatastorage"
+-	"github.com/pkg/errors"
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cachedpvtdatastore"
+ 	cdbpvtdatastore "github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage/cdbpvtdatastore"
+ )
+@@ -188,11 +187,7 @@ func (c *pvtDataStore) ProcessCollsEligibilityEnabled(committingBlk uint64, nsCo
+ 
+ //CommitPvtDataOfOldBlocks implements the function in the interface `Store`
+ func (c *pvtDataStore) CommitPvtDataOfOldBlocks(blocksPvtData map[uint64][]*ledger.TxPvtData) error {
+-	err := c.pvtDataDBStore.CommitPvtDataOfOldBlocks(blocksPvtData)
+-	if err != nil {
+-		return errors.WithMessage(err, "CommitPvtDataOfOldBlocks in store failed")
+-	}
+-	return nil
++	return c.pvtDataDBStore.CommitPvtDataOfOldBlocks(blocksPvtData)
+ }
+ 
+ //GetLastUpdatedOldBlocksPvtData implements the function in the interface `Store`
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go
+index fe540a440..56e0942a4 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go
+@@ -66,8 +66,12 @@ func HasRole(role Role) bool {
+ 	})
+ 
+ 	if len(roles) == 0 {
+-		// No roles were explicitly set, therefore the peer is assumed to have all roles.
+-		return true
++		exists := struct{}{}
++		roles = make(map[Role]struct{})
++		// No roles were explicitly set, therefore the peer is assumed to have these roles.
++		roles[CommitterRole] = exists
++		roles[EndorserRole] = exists
++		roles[ValidatorRole] = exists
+ 	}
+ 
+ 	_, ok := roles[role]
+-- 
+2.20.1 (Apple Git-117)
+
