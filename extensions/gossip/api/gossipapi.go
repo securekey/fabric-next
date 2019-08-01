@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package api
 
 import (
+	"github.com/hyperledger/fabric/core/common/ccprovider"
 	cb "github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
 	pb "github.com/hyperledger/fabric/protos/peer"
@@ -16,16 +17,19 @@ import (
 type ConfigUpdateHandler func(blockNum uint64, configUpdate *cb.ConfigUpdate) error
 
 // WriteHandler handles a KV write
-type WriteHandler func(blockNum uint64, channelID, txID, namespace string, kvWrite *kvrwset.KVWrite) error
+type WriteHandler func(txMetadata TxMetadata, namespace string, kvWrite *kvrwset.KVWrite) error
 
 // ReadHandler handles a KV read
-type ReadHandler func(blockNum uint64, channelID, txID, namespace string, kvRead *kvrwset.KVRead) error
+type ReadHandler func(txMetadata TxMetadata, namespace string, kvRead *kvrwset.KVRead) error
 
 // ChaincodeEventHandler handles a chaincode event
-type ChaincodeEventHandler func(blockNum uint64, channelID, txID string, event *pb.ChaincodeEvent) error
+type ChaincodeEventHandler func(txMetadata TxMetadata, event *pb.ChaincodeEvent) error
 
 // ChaincodeUpgradeHandler handles chaincode upgrade events
-type ChaincodeUpgradeHandler func(blockNum uint64, txID string, chaincodeName string) error
+type ChaincodeUpgradeHandler func(txMetadata TxMetadata, chaincodeName string) error
+
+// LSCCWriteHandler handles chaincode instantiation/upgrade events
+type LSCCWriteHandler func(txMetadata TxMetadata, chaincodeName string, ccData *ccprovider.ChaincodeData, ccp *cb.CollectionConfigPackage) error
 
 // BlockPublisher allows clients to add handlers for various block events
 type BlockPublisher interface {
@@ -37,8 +41,20 @@ type BlockPublisher interface {
 	AddWriteHandler(handler WriteHandler)
 	// AddReadHandler adds a handler for KV reads
 	AddReadHandler(handler ReadHandler)
+	// AddLSCCWriteHandler adds a handler for LSCC writes (for chaincode instantiate/upgrade)
+	AddLSCCWriteHandler(handler LSCCWriteHandler)
 	// AddCCEventHandler adds a handler for chaincode events
 	AddCCEventHandler(handler ChaincodeEventHandler)
 	// Publish traverses the block and invokes all applicable handlers
 	Publish(block *cb.Block)
+	//LedgerHeight returns current in memory ledger height
+	LedgerHeight() uint64
+}
+
+// TxMetadata contain txn metadata
+type TxMetadata struct {
+	BlockNum  uint64
+	TxNum     uint64
+	ChannelID string
+	TxID      string
 }
