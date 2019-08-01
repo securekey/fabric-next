@@ -36,6 +36,7 @@ import (
 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
 	"github.com/hyperledger/fabric/extensions/collections/storeprovider"
 	"github.com/hyperledger/fabric/extensions/gossip/blockpublisher"
+	xstate "github.com/hyperledger/fabric/extensions/gossip/state"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -453,6 +454,8 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
 	}{cs, validationWorkersSemaphore}
 	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm)
 	blockPublisher := BlockPublisher.ForChannel(cid)
+	xstate.ChannelJoined(cid, ledger, blockPublisher)
+
 	c := committer.NewLedgerCommitterReactive(ledger, func(block *common.Block) error {
 		// Updating CSCC with new configuration block
 		if utils.IsConfigBlock(block) {
