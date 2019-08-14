@@ -42,3 +42,5 @@ git am $MY_PATH/../patches/0001-gossip-protos-extensions-refactoring.patch
 git am $MY_PATH/../patches/0002-Backport-Transient-Data.patch
 # step 3 apply transient data fix BLOC-1741 Fix for deadlock
 git am $MY_PATH/../patches/0001-BLOC-1741-Fix-deadlock-when-retrieving-transient-dat.patch
+# step 4 apply transient data fix BLOC-1814 Missing transient data when mutiple keys in write-set
+git am $MY_PATH/../patches/0001-BLOC-1814-Missing-transient-data-if-multiple-keys.patch

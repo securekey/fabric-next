@@ -1,0 +1,517 @@
+From e6b584ece26e15d4bfd68de845f482672c0e8626 Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Wed, 14 Aug 2019 12:48:31 -0400
+Subject: [PATCH] [BLOC-1814] Missing transient data if multiple keys
+
+The dissemination logic was changed in order to ensure that each endorser is disseminated all applicable keys. Initially only one dissemination plan was created for all peers and this was causing some peers to miss data since the MaxPeerCount was reached. This patch creates multiple dissemination plans - one per peer - which includes all keys applicable to the endorser.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: I3f4bd0ee0b0d954e0c421dc69fd97f4480da2219
+---
+ Gopkg.lock                                    |   4 +-
+ Gopkg.toml                                    |   2 +-
+ .../dissemination/disseminationplan.go        | 151 ++++++++++++++++--
+ .../dissemination/disseminator.go             |   8 +-
+ .../storeprovider/store/cache/cache.go        |   4 +-
+ .../storeprovider/store/dbstore/dbstore.go    |  18 ++-
+ .../transientdata/storeprovider/tdstore.go    |  78 +++++++--
+ 7 files changed, 222 insertions(+), 43 deletions(-)
+
+diff --git a/Gopkg.lock b/Gopkg.lock
+index 18d8425f1..91994e633 100644
+--- a/Gopkg.lock
++++ b/Gopkg.lock
+@@ -729,7 +729,7 @@
+   revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
+ 
+ [[projects]]
+-  digest = "1:a9676af4cb03d4dfe8d10d063260d128c63c59a60b4fb9ea327bf25d6bb840ba"
++  digest = "1:126621c677948bc0e18c614d833735980c1a8a725ce848f609375853bd7e6beb"
+   name = "github.com/trustbloc/fabric-peer-ext"
+   packages = [
+     "pkg/blkstorage/cdbblkstorage",
+@@ -777,7 +777,7 @@
+     "pkg/transientstore/common",
+   ]
+   pruneopts = "NUT"
+-  revision = "60e327262316a5654e4078c78e781a7ee743dccc"
++  revision = "1b77710273f1fa80f92d87ff2daa4f161ac81b7b"
+ 
+ [[projects]]
+   digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
+diff --git a/Gopkg.toml b/Gopkg.toml
+index 33d2db627..c8258b399 100644
+--- a/Gopkg.toml
++++ b/Gopkg.toml
+@@ -17,7 +17,7 @@ noverify = [
+ 
+ [[constraint]]
+   name = "github.com/trustbloc/fabric-peer-ext"
+-  revision = "60e327262316a5654e4078c78e781a7ee743dccc"
++  revision = "1b77710273f1fa80f92d87ff2daa4f161ac81b7b"
+ 
+ [[override]]
+   name = "github.com/bluele/gcache"
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminationplan.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminationplan.go
+index 2f11ccc1c..c88981e21 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminationplan.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminationplan.go
+@@ -15,11 +15,13 @@ import (
+ 	gdiscovery "github.com/hyperledger/fabric/gossip/discovery"
+ 	"github.com/hyperledger/fabric/gossip/gossip"
+ 	"github.com/hyperledger/fabric/gossip/protoext"
++	"github.com/hyperledger/fabric/gossip/util"
++	cb "github.com/hyperledger/fabric/protos/common"
++	protosgossip "github.com/hyperledger/fabric/protos/gossip"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+ 	"github.com/pkg/errors"
+ 	"github.com/spf13/viper"
+-	"github.com/trustbloc/fabric-peer-ext/pkg/common/discovery"
+ )
+ 
+ type gossipAdapter interface {
+@@ -44,49 +46,164 @@ func ComputeDisseminationPlan(
+ 		return nil, true, errors.WithMessage(err, "error unmarshalling KV read/write set for transient data")
+ 	}
+ 
+-	var endorsers discovery.PeerGroup
++	keysByEndorser, err := getKeysByEndorser(ns, rwSet.CollectionName, kvRwSet, disseminator)
++	if err != nil {
++		return nil, true, err
++	}
++
++	pvtPayload := pvtDataMsg.Content.(*protosgossip.GossipMessage_PrivateData).PrivateData.Payload
++
++	// Construct one dissemination plan per endorser, which will include all keys that the endorser should store
++	var plans []*dissemination.Plan
++	for e, keys := range keysByEndorser {
++		endpoint := e
++		logger.Debugf("Keys for endorser [%s] in collection [%s:%s]: %s", endpoint, ns, rwSet.CollectionName, keys)
++
++		rwSetForKeys, err := newRWSetForKeys(ns, rwSet, keys)
++		if err != nil {
++			return nil, true, err
++		}
++
++		plan, err := computeDisseminationPlanForEndorser(channelID, e, ns, rwSetForKeys, pvtPayload, keys)
++		if err != nil {
++			return nil, true, err
++		}
++
++		logger.Debugf("Adding dissemination plan for endorser [%s] and keys [%s:%s]-%s", endpoint, ns, rwSet.CollectionName, keys)
++		plans = append(plans, plan)
++	}
++
++	logger.Debugf("Returning [%d] dissemination plan(s) for collection [%s:%s] in Tx [%s]", len(plans), ns, rwSet.CollectionName, pvtPayload.TxId)
++	return plans, true, nil
++}
++
++func getKeysByEndorser(ns, coll string, kvRwSet *kvrwset.KVRWSet, disseminator *Disseminator) (map[string][]string, error) {
++	keysByEndorser := make(map[string][]string)
+ 	for _, kvWrite := range kvRwSet.Writes {
+ 		if kvWrite.IsDelete {
+ 			continue
+ 		}
+ 		endorsersForKey, err := disseminator.ResolveEndorsers(kvWrite.Key)
+ 		if err != nil {
+-			return nil, true, errors.WithMessage(err, "error resolving endorsers for transient data")
++			return nil, errors.WithMessage(err, "error resolving endorsers for transient data")
+ 		}
+ 
+-		logger.Debugf("Endorsers for key [%s:%s:%s]: %s", ns, rwSet.CollectionName, kvWrite.Key, endorsersForKey)
++		logger.Debugf("Endorsers for key [%s:%s:%s]: %s", ns, coll, kvWrite.Key, endorsersForKey)
+ 
+ 		for _, endorser := range endorsersForKey {
+ 			if endorser.Local {
+-				logger.Debugf("Not adding local endorser for key [%s:%s:%s]", ns, rwSet.CollectionName, kvWrite.Key)
++				logger.Debugf("Not adding local endorser for key [%s:%s:%s]", ns, coll, kvWrite.Key)
+ 				continue
+ 			}
+-			endorsers = discovery.Merge(endorsers, endorser)
++			keysByEndorser[endorser.Endpoint] = append(keysByEndorser[endorser.Endpoint], kvWrite.Key)
+ 		}
+ 	}
++	return keysByEndorser, nil
++}
+ 
+-	logger.Debugf("Endorsers for collection [%s:%s]: %s", ns, rwSet.CollectionName, endorsers)
++func computeDisseminationPlanForEndorser(channelID, endpoint, ns string, rwSet *rwset.CollectionPvtReadWriteSet, pvtPayload *protosgossip.PrivatePayload, keys []string) (*dissemination.Plan, error) {
++	msgForKey, err := createPrivateDataMessage(
++		channelID, pvtPayload.TxId, ns, rwSet,
++		pvtPayload.CollectionConfigs, pvtPayload.PrivateSimHeight)
++	if err != nil {
++		return nil, err
++	}
+ 
+ 	routingFilter := func(member gdiscovery.NetworkMember) bool {
+-		if endorsers.ContainsPeer(member.Endpoint) {
+-			logger.Debugf("Peer [%s] is an endorser for [%s:%s]", member.Endpoint, ns, rwSet.CollectionName)
++		if endpoint == member.Endpoint {
++			logger.Debugf("Peer [%s] is an endorser for key(s) [%s:%s]-%s", member.Endpoint, ns, rwSet.CollectionName, keys)
+ 			return true
+ 		}
+-
+-		logger.Debugf("Peer [%s] is NOT an endorser for [%s:%s]", member.Endpoint, ns, rwSet.CollectionName)
++		logger.Debugf("Peer [%s] is NOT an endorser for key(s) [%s:%s]-%s", member.Endpoint, ns, rwSet.CollectionName, keys)
+ 		return false
+ 	}
+ 
++	// Since we are pushing data to each endorser individually, MaxPeers and MinAck are both set to 1
+ 	sc := gossip.SendCriteria{
+ 		Timeout:    viper.GetDuration("peer.gossip.pvtData.pushAckTimeout"),
+ 		Channel:    common.ChainID(channelID),
+-		MaxPeers:   colAP.MaximumPeerCount(),
+-		MinAck:     colAP.RequiredPeerCount(),
++		MaxPeers:   1,
++		MinAck:     1,
+ 		IsEligible: routingFilter,
+ 	}
++	return &dissemination.Plan{Criteria: sc, Msg: msgForKey}, nil
++}
++
++func newRWSetForKeys(ns string, rwSet *rwset.CollectionPvtReadWriteSet, keys []string) (*rwset.CollectionPvtReadWriteSet, error) {
++	logger.Debugf("Creating a new collection Pvt rw-set for keys %s in collection [%s:%s]", keys, ns, rwSet.CollectionName)
++
++	kvRWSet, err := unmarshalKVRWSet(rwSet.Rwset)
++	if err != nil {
++		return nil, err
++	}
+ 
+-	return []*dissemination.Plan{{
+-		Criteria: sc,
+-		Msg:      pvtDataMsg,
+-	}}, true, nil
++	var kvWrites []*kvrwset.KVWrite
++	for _, kvWrite := range kvRWSet.Writes {
++		if containsKey(keys, kvWrite.Key) {
++			logger.Debugf("Adding KV-write for key [%s:%s:%s]", ns, rwSet.CollectionName, kvWrite.Key)
++			kvWrites = append(kvWrites, kvWrite)
++		}
++	}
++
++	rwSetBytes, err := marshalKVRWSet(&kvrwset.KVRWSet{Writes: kvWrites})
++	if err != nil {
++		return nil, err
++	}
++
++	return &rwset.CollectionPvtReadWriteSet{
++		CollectionName: rwSet.CollectionName,
++		Rwset:          rwSetBytes,
++	}, nil
++}
++
++func containsKey(keys []string, key string) bool {
++	for _, k := range keys {
++		if k == key {
++			return true
++		}
++	}
++	return false
++}
++
++// unmarshalKVRWSet unmarshals the given KV rw-set bytes. This variable may be overridden by unit tests.
++var unmarshalKVRWSet = func(bytes []byte) (*kvrwset.KVRWSet, error) {
++	kvRwSet := &kvrwset.KVRWSet{}
++	err := protobuf.Unmarshal(bytes, kvRwSet)
++	if err != nil {
++		return nil, err
++	}
++	return kvRwSet, nil
++}
++
++// marshalKVRWSet marshals the given KV rw-set bytes. This variable may be overridden by unit tests.
++var marshalKVRWSet = func(rwSet *kvrwset.KVRWSet) ([]byte, error) {
++	return protobuf.Marshal(rwSet)
++}
++
++func createPrivateDataMessage(
++	channelID, txID, namespace string,
++	collRWSet *rwset.CollectionPvtReadWriteSet,
++	ccp *cb.CollectionConfigPackage, blkHt uint64) (*protoext.SignedGossipMessage, error) {
++	msg := &protosgossip.GossipMessage{
++		Channel: []byte(channelID),
++		Nonce:   util.RandomUInt64(),
++		Tag:     protosgossip.GossipMessage_CHAN_ONLY,
++		Content: &protosgossip.GossipMessage_PrivateData{
++			PrivateData: &protosgossip.PrivateDataMessage{
++				Payload: &protosgossip.PrivatePayload{
++					Namespace:         namespace,
++					CollectionName:    collRWSet.CollectionName,
++					TxId:              txID,
++					PrivateRwset:      collRWSet.Rwset,
++					PrivateSimHeight:  blkHt,
++					CollectionConfigs: ccp,
++				},
++			},
++		},
++	}
++	pvtDataMsg, err := protoext.NoopSign(msg)
++	if err != nil {
++		return nil, err
++	}
++	return pvtDataMsg, nil
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminator.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminator.go
+index 93f4767ab..f1aec51e8 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminator.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination/disseminator.go
+@@ -46,11 +46,11 @@ func (d *Disseminator) ResolveEndorsers(key string) (discovery.PeerGroup, error)
+ 
+ 	orgs := d.chooseOrgs(h)
+ 
+-	logger.Debugf("[%s] Chosen orgs: %s", d.ChannelID(), orgs)
++	logger.Debugf("[%s] Chosen orgs for key [%s] using hash32 [%d]: %s", d.ChannelID(), key, h, orgs)
+ 
+ 	endorsers := d.chooseEndorsers(h, orgs)
+ 
+-	logger.Debugf("[%s] Chosen endorsers from orgs %s: %s", d.ChannelID(), orgs, endorsers)
++	logger.Debugf("[%s] Chosen endorsers for key [%s] using hash32 [%d] from orgs %s: %s", d.ChannelID(), key, h, orgs, endorsers)
+ 	return endorsers, nil
+ }
+ 
+@@ -71,12 +71,12 @@ func (d *Disseminator) chooseEndorsers(h uint32, orgs []string) discovery.PeerGr
+ 				continue
+ 			}
+ 
+-			logger.Debugf("[%s] Endorsers for [%s]: %s", d.ChannelID(), org, endorsersForOrg)
++			logger.Debugf("[%s] Endorsers for [%s] using hash32 [%d]: %s", d.ChannelID(), org, h, endorsersForOrg)
+ 
+ 			// Deterministically choose an endorser
+ 			endorserForOrg := endorsersForOrg[(int(h)+i)%len(endorsersForOrg)]
+ 			if endorsers.Contains(endorserForOrg) {
+-				logger.Debugf("[%s] Will not add endorser [%s] from org [%s] since it is already added", d.ChannelID(), endorserForOrg, org)
++				logger.Debugf("[%s] Will not add endorser [%s] from org [%s] using hash32 [%d] since it is already added", d.ChannelID(), endorserForOrg, org, h)
+ 				continue
+ 			}
+ 
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/cache/cache.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/cache/cache.go
+index 2e9af2089..344c9de1a 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/cache/cache.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/cache/cache.go
+@@ -16,7 +16,7 @@ import (
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/config"
+ )
+ 
+-var logger = flogging.MustGetLogger("memtransientdatastore")
++var logger = flogging.MustGetLogger("transientdata")
+ 
+ // Cache is an in-memory key-value cache
+ type Cache struct {
+@@ -120,7 +120,7 @@ func (c *Cache) storeToDB(key, value interface{}) {
+ 		if !isExpired {
+ 			dbstoreErr := c.dbstore.AddKey(k, v)
+ 			if dbstoreErr != nil {
+-				logger.Error(dbstoreErr.Error())
++				logger.Errorf("Key [%s] could not be offloaded to DB: %s", key, dbstoreErr.Error())
+ 			} else {
+ 				logger.Debugf("Key [%s] offloaded to DB", key)
+ 			}
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/dbstore/dbstore.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/dbstore/dbstore.go
+index 43a2d348c..fd5c46703 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/dbstore/dbstore.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/dbstore/dbstore.go
+@@ -18,18 +18,26 @@ import (
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/api"
+ )
+ 
+-var logger = flogging.MustGetLogger("transientdb")
++var logger = flogging.MustGetLogger("transientdata")
+ 
+ var compositeKeySep = "!"
+ 
++type dbHandle interface {
++	Get(key []byte) ([]byte, error)
++	Put(key []byte, value []byte, sync bool) error
++	Delete(key []byte, sync bool) error
++	WriteBatch(batch *leveldbhelper.UpdateBatch, sync bool) error
++	GetIterator(startKey []byte, endKey []byte) *leveldbhelper.Iterator
++}
++
+ // DBStore holds the db handle and the db name
+ type DBStore struct {
+-	db     *leveldbhelper.DBHandle
++	db     dbHandle
+ 	dbName string
+ }
+ 
+ // newDBStore constructs an instance of db store
+-func newDBStore(db *leveldbhelper.DBHandle, dbName string) *DBStore {
++func newDBStore(db dbHandle, dbName string) *DBStore {
+ 	return &DBStore{db, dbName}
+ }
+ 
+@@ -111,7 +119,7 @@ func encodeCacheKey(key api.Key, expiryTime time.Time) []byte {
+ 	return compositeKey
+ }
+ 
+-func decodeCacheVal(b []byte) (*api.Value, error) {
++var decodeCacheVal = func(b []byte) (*api.Value, error) {
+ 	decoder := gob.NewDecoder(bytes.NewBuffer(b))
+ 	var v *api.Value
+ 	if err := decoder.Decode(&v); err != nil {
+@@ -120,7 +128,7 @@ func decodeCacheVal(b []byte) (*api.Value, error) {
+ 	return v, nil
+ }
+ 
+-func encodeCacheVal(v *api.Value) ([]byte, error) {
++var encodeCacheVal = func(v *api.Value) ([]byte, error) {
+ 	buf := bytes.NewBuffer(nil)
+ 	encoder := gob.NewEncoder(buf)
+ 	if err := encoder.Encode(v); err != nil {
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go
+index 1f1e406ec..fa91e9ac4 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/tdstore.go
+@@ -10,17 +10,25 @@ import (
+ 	"time"
+ 
+ 	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/core/common/privdata"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+ 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
++	gapi "github.com/hyperledger/fabric/gossip/api"
++	gcommon "github.com/hyperledger/fabric/gossip/common"
++	gdiscovery "github.com/hyperledger/fabric/gossip/discovery"
++	"github.com/hyperledger/fabric/gossip/service"
++	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+ 	pb "github.com/hyperledger/fabric/protos/transientstore"
+ 	"github.com/pkg/errors"
++	"github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination"
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/api"
+ 	"github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/storeprovider/store/cache"
++	"github.com/trustbloc/fabric-peer-ext/pkg/common/discovery"
+ )
+ 
+-var logger = flogging.MustGetLogger("memtransientdatastore")
++var logger = flogging.MustGetLogger("transientdata")
+ 
+ type store struct {
+ 	channelID string
+@@ -91,9 +99,26 @@ func (s *store) persistColl(txID string, ns string, collConfigPkgs map[string]*c
+ 		return errors.Wrapf(err, "error parsing time-to-live for collection [%s]", collRWSet.CollectionName)
+ 	}
+ 
+-	logger.Debugf("[%s] Collection [%s:%s] is a transient data collection", s.channelID, ns, collRWSet.CollectionName)
++	logger.Debugf("[%s] Collection [%s:%s] is a transient data collection. Persisting kv-writes...", s.channelID, ns, collRWSet.CollectionName)
++
++	policy, err := s.loadPolicy(ns, config)
++	if err != nil {
++		return err
++	}
++
++	resolver := getResolver(s.channelID, ns, collRWSet.CollectionName, policy, gossipProvider())
+ 
+ 	for _, wSet := range collRWSet.KvRwSet.Writes {
++		endorsers, err := resolver.ResolveEndorsers(wSet.Key)
++		if err != nil {
++			return err
++		}
++		logger.Debugf("[%s] Endorsers for key [%s:%s:%s]: %s", s.channelID, ns, collRWSet.CollectionName, wSet.Key, endorsers)
++
++		if !endorsers.ContainsLocal() {
++			logger.Debugf("[%s] Not persisting [%s:%s:%s] since local endorser is not part of the endorser group for this key", s.channelID, ns, collRWSet.CollectionName, wSet.Key)
++			continue
++		}
+ 		s.persistKVWrite(txID, ns, collRWSet.CollectionName, wSet, ttl)
+ 	}
+ 
+@@ -102,7 +127,7 @@ func (s *store) persistColl(txID string, ns string, collConfigPkgs map[string]*c
+ 
+ func (s *store) persistKVWrite(txID, ns, coll string, w *kvrwset.KVWrite, ttl time.Duration) {
+ 	if w.IsDelete {
+-		logger.Debugf("[%s] Skipping key [%s] in collection [%s] in private data rw-set since it was deleted", s.channelID, w.Key, coll)
++		logger.Debugf("[%s] Skipping key [%s:%s:%s] in private data rw-set since it was deleted", s.channelID, ns, coll, w.Key)
+ 		return
+ 	}
+ 
+@@ -113,27 +138,29 @@ func (s *store) persistKVWrite(txID, ns, coll string, w *kvrwset.KVWrite, ttl ti
+ 	}
+ 
+ 	if s.cache.Get(key) != nil {
+-		logger.Debugf("[%s] Transient data key [%s] in collection [%s] already exists", s.channelID, w.Key, coll)
++		logger.Debugf("[%s] Transient data key [%s:%s:%s] already exists", s.channelID, ns, coll, w.Key)
+ 		return
+ 	}
+ 
++	logger.Debugf("[%s] Add transient data key [%s]", s.channelID, key)
+ 	s.cache.PutWithExpire(key, w.Value, txID, ttl)
+ }
+ 
+ func (s *store) getTransientData(txID, ns, coll, key string) *storeapi.ExpiringValue {
+-	value := s.cache.Get(api.Key{Namespace: ns, Collection: coll, Key: key})
++	k := api.Key{Namespace: ns, Collection: coll, Key: key}
++	value := s.cache.Get(k)
+ 	if value == nil {
+-		logger.Debugf("[%s] Key [%s] not found in transient store", s.channelID, key)
++		logger.Debugf("[%s] Key [%s] not found in transient store", s.channelID, k)
+ 		return nil
+ 	}
+ 
+ 	// Check if the data was stored in the current transaction. If so, ignore it or else an endorsement mismatch may result.
+ 	if value.TxID == txID {
+-		logger.Debugf("[%s] Key [%s] skipped since it was stored in the current transaction", s.channelID, key)
++		logger.Debugf("[%s] Key [%s] skipped since it was stored in the current transaction", s.channelID, k)
+ 		return nil
+ 	}
+ 
+-	logger.Debugf("[%s] Key [%s] found in transient store", s.channelID, key)
++	logger.Debugf("[%s] Key [%s] found in transient store", s.channelID, k)
+ 
+ 	return &storeapi.ExpiringValue{Value: value.Value, Expiry: value.ExpiryTime}
+ }
+@@ -141,14 +168,23 @@ func (s *store) getTransientData(txID, ns, coll, key string) *storeapi.ExpiringV
+ func (s *store) getTransientDataMultipleKeys(mkey *storeapi.MultiKey) storeapi.ExpiringValues {
+ 	var values storeapi.ExpiringValues
+ 	for _, key := range mkey.Keys {
+-		value := s.getTransientData(mkey.EndorsedAtTxID, mkey.Namespace, mkey.Collection, key)
+-		if value != nil {
+-			values = append(values, value)
+-		}
++		values = append(values, s.getTransientData(mkey.EndorsedAtTxID, mkey.Namespace, mkey.Collection, key))
+ 	}
+ 	return values
+ }
+ 
++func (s *store) loadPolicy(ns string, config *common.StaticCollectionConfig) (privdata.CollectionAccessPolicy, error) {
++	logger.Debugf("[%s] Loading collection policy for [%s:%s]", s.channelID, ns, config.Name)
++
++	colAP := &privdata.SimpleCollection{}
++	err := colAP.Setup(config, mspmgmt.GetIdentityDeserializer(s.channelID))
++	if err != nil {
++		return nil, errors.Wrapf(err, "error setting up collection policy %s", config.Name)
++	}
++
++	return colAP, nil
++}
++
+ func getCollectionConfig(collConfigPkgs map[string]*common.CollectionConfigPackage, namespace, collName string) (*common.StaticCollectionConfig, bool) {
+ 	collConfigPkg, ok := collConfigPkgs[namespace]
+ 	if !ok {
+@@ -164,3 +200,21 @@ func getCollectionConfig(collConfigPkgs map[string]*common.CollectionConfigPacka
+ 
+ 	return nil, false
+ }
++
++type gossipAdapter interface {
++	PeersOfChannel(gcommon.ChainID) []gdiscovery.NetworkMember
++	SelfMembershipInfo() gdiscovery.NetworkMember
++	IdentityInfo() gapi.PeerIdentitySet
++}
++
++var gossipProvider = func() gossipAdapter {
++	return service.GetGossipService()
++}
++
++type endorserResolver interface {
++	ResolveEndorsers(key string) (discovery.PeerGroup, error)
++}
++
++var getResolver = func(channelID, ns, coll string, policy privdata.CollectionAccessPolicy, gossip gossipAdapter) endorserResolver {
++	return dissemination.New(channelID, ns, coll, policy, gossipProvider())
++}
+-- 
+2.20.1 (Apple Git-117)
+
