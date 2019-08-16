@@ -1,0 +1,52 @@
+From bdce322523739985eb65592609ff8385465021b1 Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Fri, 16 Aug 2019 08:45:11 -0400
+Subject: [PATCH] [BLOC-1827] Prevent modification of collection type during
+ upgrade
+
+A hook was missing in the collection config validation logic that validates extended collection. This patch adds a call to validate the extended collections during instantiate and upgrade.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: I335efb723f596650789bc6e89f7690d4db628980
+---
+ .../validation/builtin/v12/validation_logic.go         | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/core/handlers/validation/builtin/v12/validation_logic.go b/core/handlers/validation/builtin/v12/validation_logic.go
+index 2249e0023..d41160df6 100644
+--- a/core/handlers/validation/builtin/v12/validation_logic.go
++++ b/core/handlers/validation/builtin/v12/validation_logic.go
+@@ -29,6 +29,7 @@ import (
+ 	. "github.com/hyperledger/fabric/core/handlers/validation/api/state"
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+ 	"github.com/hyperledger/fabric/core/scc/lscc"
++	"github.com/hyperledger/fabric/extensions/collections/policy"
+ 	"github.com/hyperledger/fabric/protos/common"
+ 	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
+ 	"github.com/hyperledger/fabric/protos/msp"
+@@ -223,6 +224,11 @@ func validateNewCollectionConfigs(newCollectionConfigs []*common.CollectionConfi
+ 		if err != nil {
+ 			return errors.WithMessage(err, fmt.Sprintf("collection-name: %s -- error in member org policy", collectionName))
+ 		}
++
++		err = policy.NewValidator().Validate(newCollectionConfig)
++		if err != nil {
++			return errors.WithMessage(err, fmt.Sprintf("collection-name: %s -- error in member org policy", collectionName))
++		}
+ 	}
+ 	return nil
+ }
+@@ -325,6 +331,10 @@ func validateNewCollectionConfigsAgainstOld(newCollectionConfigs []*common.Colle
+ 		return err
+ 	}
+ 
++	if err := policy.NewValidator().ValidateNewCollectionConfigsAgainstOld(newCollectionConfigs, oldCollectionConfigs); err != nil {
++		return err
++	}
++
+ 	return nil
+ }
+ 
+-- 
+2.20.1 (Apple Git-117)
+

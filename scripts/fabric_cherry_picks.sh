@@ -44,3 +44,5 @@ git am $MY_PATH/../patches/0002-Backport-Transient-Data.patch
 git am $MY_PATH/../patches/0001-BLOC-1741-Fix-deadlock-when-retrieving-transient-dat.patch
 # step 4 apply transient data fix BLOC-1814 Missing transient data when mutiple keys in write-set
 git am $MY_PATH/../patches/0001-BLOC-1814-Missing-transient-data-if-multiple-keys.patch
+# step 5 apply collection validation fix BLOC-1827 Prevent modification of collection type during upgrade
+git am $MY_PATH/../patches/0001-BLOC-1827-Prevent-modification-of-collection-type-du.patch
