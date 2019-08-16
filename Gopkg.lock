@@ -729,7 +729,7 @@
   revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
 
 [[projects]]
-  digest = "1:126621c677948bc0e18c614d833735980c1a8a725ce848f609375853bd7e6beb"
+  digest = "1:5aeab423c785d5ef7f5231d9e1eef3c168b6cbd71c12ec5530b1f02127284197"
   name = "github.com/trustbloc/fabric-peer-ext"
   packages = [
     "pkg/blkstorage/cdbblkstorage",
@@ -777,7 +777,7 @@
     "pkg/transientstore/common",
   ]
   pruneopts = "NUT"
-  revision = "1b77710273f1fa80f92d87ff2daa4f161ac81b7b"
+  revision = "67f4c83e5f4a9c9a99c47b22ab0d1c297a9abae5"
 
 [[projects]]
   digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
