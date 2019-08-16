@@ -46,3 +46,5 @@ git am $MY_PATH/../patches/0001-BLOC-1741-Fix-deadlock-when-retrieving-transient
 git am $MY_PATH/../patches/0001-BLOC-1814-Missing-transient-data-if-multiple-keys.patch
 # step 5 apply collection validation fix BLOC-1827 Prevent modification of collection type during upgrade
 git am $MY_PATH/../patches/0001-BLOC-1827-Prevent-modification-of-collection-type-du.patch
+# step 6 apply concurrent map write fix BLOC-1833 Concurrent writes to roles map
+git am $MY_PATH/../patches/0001-BLOC-1833-Concurrent-writes-to-roles-map.patch

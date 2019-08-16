@@ -1,0 +1,144 @@
+From e13dd84547fe74bd07ed4d6a0a237d8e9fe19c3a Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Fri, 16 Aug 2019 17:17:37 -0400
+Subject: [PATCH] [BLOC-1833] Concurrent writes to roles map
+
+Fix for concurrent map modifications in roles.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: I1c409786726ef0122b473e35ce065d795ccffc8c
+---
+ Gopkg.lock                                    |  4 +--
+ Gopkg.toml                                    |  2 +-
+ .../fabric-peer-ext/pkg/roles/roles.go        | 36 +++++++++----------
+ .../fabric-peer-ext/pkg/roles/test_exports.go |  6 +++-
+ 4 files changed, 26 insertions(+), 22 deletions(-)
+
+diff --git a/Gopkg.lock b/Gopkg.lock
+index 91994e633..bef5e008c 100644
+--- a/Gopkg.lock
++++ b/Gopkg.lock
+@@ -729,7 +729,7 @@
+   revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
+ 
+ [[projects]]
+-  digest = "1:126621c677948bc0e18c614d833735980c1a8a725ce848f609375853bd7e6beb"
++  digest = "1:5aeab423c785d5ef7f5231d9e1eef3c168b6cbd71c12ec5530b1f02127284197"
+   name = "github.com/trustbloc/fabric-peer-ext"
+   packages = [
+     "pkg/blkstorage/cdbblkstorage",
+@@ -777,7 +777,7 @@
+     "pkg/transientstore/common",
+   ]
+   pruneopts = "NUT"
+-  revision = "1b77710273f1fa80f92d87ff2daa4f161ac81b7b"
++  revision = "67f4c83e5f4a9c9a99c47b22ab0d1c297a9abae5"
+ 
+ [[projects]]
+   digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
+diff --git a/Gopkg.toml b/Gopkg.toml
+index c8258b399..015d82ddc 100644
+--- a/Gopkg.toml
++++ b/Gopkg.toml
+@@ -17,7 +17,7 @@ noverify = [
+ 
+ [[constraint]]
+   name = "github.com/trustbloc/fabric-peer-ext"
+-  revision = "1b77710273f1fa80f92d87ff2daa4f161ac81b7b"
++  revision = "67f4c83e5f4a9c9a99c47b22ab0d1c297a9abae5"
+ 
+ [[override]]
+   name = "github.com/bluele/gcache"
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go
+index 56e0942a4..d015f94cb 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/roles.go
+@@ -61,20 +61,7 @@ var roles map[Role]struct{}
+ 
+ // HasRole returns true if the peer has the given role
+ func HasRole(role Role) bool {
+-	initOnce.Do(func() {
+-		roles = getRoles()
+-	})
+-
+-	if len(roles) == 0 {
+-		exists := struct{}{}
+-		roles = make(map[Role]struct{})
+-		// No roles were explicitly set, therefore the peer is assumed to have these roles.
+-		roles[CommitterRole] = exists
+-		roles[EndorserRole] = exists
+-		roles[ValidatorRole] = exists
+-	}
+-
+-	_, ok := roles[role]
++	_, ok := getRoles()[role]
+ 	return ok
+ }
+ 
+@@ -96,7 +83,7 @@ func IsValidator() bool {
+ // GetRoles returns the roles for the peer
+ func GetRoles() []Role {
+ 	var ret []Role
+-	for role := range roles {
++	for role := range getRoles() {
+ 		ret = append(ret, role)
+ 	}
+ 	return ret
+@@ -105,23 +92,36 @@ func GetRoles() []Role {
+ // AsString returns the roles for the peer
+ func AsString() []string {
+ 	var ret []string
+-	for role := range roles {
++	for role := range getRoles() {
+ 		ret = append(ret, string(role))
+ 	}
+ 	return ret
+ }
+ 
+ func getRoles() map[Role]struct{} {
++	initOnce.Do(func() {
++		roles = initRoles()
++	})
++	return roles
++}
++
++func initRoles() map[Role]struct{} {
++	rolesMap := make(map[Role]struct{})
+ 	exists := struct{}{}
+ 	strRoles := config.GetRoles()
++
+ 	if strRoles == "" {
+ 		// The peer has all roles by default
+-		return map[Role]struct{}{}
++		rolesMap[CommitterRole] = exists
++		rolesMap[EndorserRole] = exists
++		rolesMap[ValidatorRole] = exists
++		return rolesMap
+ 	}
+-	rolesMap := make(map[Role]struct{})
++
+ 	for _, r := range strings.Split(strRoles, ",") {
+ 		r = strings.ToLower(strings.TrimSpace(r))
+ 		rolesMap[Role(r)] = exists
+ 	}
++
+ 	return rolesMap
+ }
+diff --git a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/test_exports.go b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/test_exports.go
+index 27057b162..7362bc47e 100644
+--- a/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/test_exports.go
++++ b/vendor/github.com/trustbloc/fabric-peer-ext/pkg/roles/test_exports.go
+@@ -10,5 +10,9 @@ package roles
+ 
+ //SetRoles used for unit test
+ func SetRoles(rolesValue map[Role]struct{}) {
+-	roles = rolesValue
++	if rolesValue == nil {
++		roles = initRoles()
++	} else {
++		roles = rolesValue
++	}
+ }
+-- 
+2.20.1 (Apple Git-117)
+
