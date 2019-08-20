@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/transientstore"
 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	extmocks "github.com/hyperledger/fabric/extensions/mocks"
 	"github.com/hyperledger/fabric/gossip/metrics"
 	gmetricsmocks "github.com/hyperledger/fabric/gossip/metrics/mocks"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
