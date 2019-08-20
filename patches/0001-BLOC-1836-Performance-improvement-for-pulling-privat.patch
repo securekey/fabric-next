@@ -1,0 +1,152 @@
+From f6a445ad203fea541e043f1f402404d7f00433e7 Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Tue, 20 Aug 2019 14:04:07 -0400
+Subject: [PATCH] [BLOC-1836] Performance improvement for pulling private data
+
+When private data is requested (pulled) from another peer, a response is
+expected for every key that it requests or it times out after 5s. The
+remote peer handles the request for each key by checking if it has the
+data locally and if the requesting peer has access to the collection for
+the key. If this criteria is not met then it does not produce a response
+for that key and ends up replying with an empty array of private data.
+This leaves the requesting peer waiting 5s before timing out.
+
+This patch changes the behavior slightly in that the remote peer
+responds to the request with an empty payload if it cannot fulfill the
+request, so that the requesting peer knows immediately that the peer
+does not have the data.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: Ic7c822e3e598fc057fa8c043f0c308a18e5e8eed
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+---
+ gossip/privdata/coordinator_test.go |  1 +
+ gossip/privdata/pull.go             | 82 ++++++++++++++++-------------
+ 2 files changed, 47 insertions(+), 36 deletions(-)
+
+diff --git a/gossip/privdata/coordinator_test.go b/gossip/privdata/coordinator_test.go
+index 05824f16d..1b48eff38 100644
+--- a/gossip/privdata/coordinator_test.go
++++ b/gossip/privdata/coordinator_test.go
+@@ -24,6 +24,7 @@ import (
+ 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
+ 	"github.com/hyperledger/fabric/core/transientstore"
+ 	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
++	extmocks "github.com/hyperledger/fabric/extensions/mocks"
+ 	"github.com/hyperledger/fabric/gossip/metrics"
+ 	gmetricsmocks "github.com/hyperledger/fabric/gossip/metrics/mocks"
+ 	commonmocks "github.com/hyperledger/fabric/gossip/mocks"
+diff --git a/gossip/privdata/pull.go b/gossip/privdata/pull.go
+index cdbe191e8..8a7ac0623 100644
+--- a/gossip/privdata/pull.go
++++ b/gossip/privdata/pull.go
+@@ -292,8 +292,8 @@ func (p *puller) fetchPrivateData(dig2Filter digestToFilterMapping) (*privdataco
+ 				Collection: resp.Digest.Collection,
+ 			})
+ 			itemsLeftToCollect--
++			res.AvailableElements = append(res.AvailableElements, resp)
+ 		}
+-		res.AvailableElements = append(res.AvailableElements, responses...)
+ 	}
+ 	return res, nil
+ }
+@@ -604,51 +604,61 @@ func (p *puller) purgedFilter(dig privdatacommon.DigKey) (filter.RoutingFilter,
+ func (p *puller) filterNotEligible(dig2rwSets Dig2PvtRWSetWithConfig, shouldCheckLatestConfig bool, signedData fcommon.SignedData, endpoint string) []*proto.PvtDataElement {
+ 	var returned []*proto.PvtDataElement
+ 	for d, rwSets := range dig2rwSets {
+-		if rwSets == nil {
+-			logger.Errorf("No private rwset for [%s] channel, chaincode [%s], collection [%s], txID = [%s] is available, skipping...",
+-				p.channel, d.Namespace, d.Collection, d.TxId)
+-			continue
+-		}
+-		logger.Debug("Found", len(rwSets.RWSet), "for TxID", d.TxId, ", collection", d.Collection, "for", endpoint)
+-		if len(rwSets.RWSet) == 0 {
+-			continue
+-		}
+-
+-		eligibleForCollection := shouldCheckLatestConfig && p.isEligibleByLatestConfig(p.channel, d.Collection, d.Namespace, signedData)
+-
+-		if !eligibleForCollection {
+-			colAP, err := p.AccessPolicy(rwSets.CollectionConfig, p.channel)
+-			if err != nil {
+-				logger.Debug("No policy found for channel", p.channel, ", collection", d.Collection, "txID", d.TxId, ":", err, "skipping...")
+-				continue
+-			}
+-			colFilter := colAP.AccessFilter()
+-			if colFilter == nil {
+-				logger.Debug("Collection ", d.Collection, " has no access filter, txID", d.TxId, "skipping...")
+-				continue
+-			}
+-			eligibleForCollection = colFilter(signedData)
++		digest := &proto.PvtDataDigest{
++			TxId:       d.TxId,
++			BlockSeq:   d.BlockSeq,
++			Collection: d.Collection,
++			Namespace:  d.Namespace,
++			SeqInBlock: d.SeqInBlock,
+ 		}
+ 
+-		if !eligibleForCollection {
+-			logger.Debug("Peer", endpoint, "isn't eligible for txID", d.TxId, "at collection", d.Collection)
+-			continue
++		var payload [][]byte
++		if err := p.validatePvtRWSetsForEndpoint(digest, rwSets, shouldCheckLatestConfig, signedData); err != nil {
++			logger.Debugf("Skipping R/W set for channel [%s], chaincode [%s], collection [%s], txID = [%s], endpoint [%s]. Reason: %s",
++				p.channel, d.Namespace, d.Collection, d.TxId, endpoint, err)
++		} else {
++			logger.Debug("Found", len(rwSets.RWSet), "for TxID", d.TxId, ", collection", d.Collection, "for", endpoint)
++			payload = util.PrivateRWSets(rwSets.RWSet...)
+ 		}
+ 
++		// Return a response regardless of whether the payload is empty so that the
++		// endpoint doesn't need to time out waiting
+ 		returned = append(returned, &proto.PvtDataElement{
+-			Digest: &proto.PvtDataDigest{
+-				TxId:       d.TxId,
+-				BlockSeq:   d.BlockSeq,
+-				Collection: d.Collection,
+-				Namespace:  d.Namespace,
+-				SeqInBlock: d.SeqInBlock,
+-			},
+-			Payload: util.PrivateRWSets(rwSets.RWSet...),
++			Digest:  digest,
++			Payload: payload,
+ 		})
+ 	}
+ 	return returned
+ }
+ 
++func (p *puller) validatePvtRWSetsForEndpoint(d *proto.PvtDataDigest, rwSets *util.PrivateRWSetWithConfig, shouldCheckLatestConfig bool, signedData fcommon.SignedData) error {
++	if rwSets == nil {
++		return errors.New("RW sets is nil")
++	}
++	if len(rwSets.RWSet) == 0 {
++		return errors.New("No private rwsets")
++	}
++
++	eligibleForCollection := shouldCheckLatestConfig && p.isEligibleByLatestConfig(p.channel, d.Collection, d.Namespace, signedData)
++	if !eligibleForCollection {
++		colAP, err := p.AccessPolicy(rwSets.CollectionConfig, p.channel)
++		if err != nil {
++			return errors.New("No policy")
++		}
++		colFilter := colAP.AccessFilter()
++		if colFilter == nil {
++			return errors.New("No access filter")
++		}
++		eligibleForCollection = colFilter(signedData)
++	}
++
++	if !eligibleForCollection {
++		return errors.New("Peer isn't eligible for collection")
++	}
++
++	return nil
++}
++
+ func (p *puller) isEligibleByLatestConfig(channel string, collection string, chaincode string, signedData fcommon.SignedData) bool {
+ 	cc := fcommon.CollectionCriteria{
+ 		Channel:    channel,
+-- 
+2.20.1 (Apple Git-117)
+

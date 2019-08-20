@@ -48,3 +48,5 @@ git am $MY_PATH/../patches/0001-BLOC-1814-Missing-transient-data-if-multiple-key
 git am $MY_PATH/../patches/0001-BLOC-1827-Prevent-modification-of-collection-type-du.patch
 # step 6 apply concurrent map write fix BLOC-1833 Concurrent writes to roles map
 git am $MY_PATH/../patches/0001-BLOC-1833-Concurrent-writes-to-roles-map.patch
+# step 6 apply patch for BLOC-1836 Performance improvement for pulling private data
+git am $MY_PATH/../patches/0001-BLOC-1836-Performance-improvement-for-pulling-privat.patch
