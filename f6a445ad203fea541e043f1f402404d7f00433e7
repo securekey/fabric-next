@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "c48d8d34_2a1ea783",
+        "filename": "gossip/privdata/coordinator_test.go",
+        "patchSetId": 1
+      },
+      "lineNbr": 27,
+      "author": {
+        "id": 1000037
+      },
+      "writtenOn": "2019-08-20T18:12:51Z",
+      "side": 1,
+      "message": "there is no code change require this import",
+      "revId": "f6a445ad203fea541e043f1f402404d7f00433e7",
+      "serverId": "391e9dfb-4ca7-4d02-9d3e-c661eec85686",
+      "unresolved": true
+    }
+  ]
+}
