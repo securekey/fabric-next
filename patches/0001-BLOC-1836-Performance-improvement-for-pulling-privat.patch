@@ -1,7 +1,7 @@
-From f6a445ad203fea541e043f1f402404d7f00433e7 Mon Sep 17 00:00:00 2001
+From 0755b90204fc2ad2c97f506a6c838e9acd72dfe1 Mon Sep 17 00:00:00 2001
 From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
 Date: Tue, 20 Aug 2019 14:04:07 -0400
-Subject: [PATCH] [BLOC-1836] Performance improvement for pulling private data
+Subject: [PATCH] Performance improvement for pulling private data
 
 When private data is requested (pulled) from another peer, a response is
 expected for every key that it requests or it times out after 5s. The
@@ -25,7 +25,7 @@ Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
  2 files changed, 47 insertions(+), 36 deletions(-)
 
 diff --git a/gossip/privdata/coordinator_test.go b/gossip/privdata/coordinator_test.go
-index 05824f16d..1b48eff38 100644
+index 0c80cf604..251443b57 100644
 --- a/gossip/privdata/coordinator_test.go
 +++ b/gossip/privdata/coordinator_test.go
 @@ -24,6 +24,7 @@ import (
@@ -35,7 +35,7 @@ index 05824f16d..1b48eff38 100644
 +	extmocks "github.com/hyperledger/fabric/extensions/mocks"
  	"github.com/hyperledger/fabric/gossip/metrics"
  	gmetricsmocks "github.com/hyperledger/fabric/gossip/metrics/mocks"
- 	commonmocks "github.com/hyperledger/fabric/gossip/mocks"
+ 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 diff --git a/gossip/privdata/pull.go b/gossip/privdata/pull.go
 index cdbe191e8..8a7ac0623 100644
 --- a/gossip/privdata/pull.go
@@ -148,5 +148,5 @@ index cdbe191e8..8a7ac0623 100644
  	cc := fcommon.CollectionCriteria{
  		Channel:    channel,
 -- 
-2.20.1 (Apple Git-117)
+2.21.0 (Apple Git-120)
 
