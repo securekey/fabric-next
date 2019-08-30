@@ -13,3 +13,8 @@ LABEL maintainer=sk-dev-team
 
 RUN apt-get update
 RUN apt-get install -y libltdl7
+
+RUN apt-get -y upgrade \
+    && apt-get clean autoclean \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/cache /var/lib/log
