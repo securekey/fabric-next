@@ -15,6 +15,9 @@ source ../.ci-properties
 
 declare -x FABRIC_BASE_OS_IMAGE=hyperledger/fabric-baseos
 declare -x FABRIC_BASE_IMAGE=hyperledger/fabric-baseimage
+declare -x FABRIC_COUCHDB_IMAGE=hyperledger/fabric-couchdb
+declare -x FABRIC_KAFKA_IMAGE=hyperledger/fabric-kafka
+declare -x FABRIC_ZOOKEEPER_IMAGE=hyperledger/fabric-zookeeper
 declare -x BASE_VERSION=0.4.15
 
 declare -x BASE_NAMESPACE=securekey
@@ -29,11 +32,29 @@ docker build -f ./images/fabric-baseos/Dockerfile --no-cache -t ${BASE_NAMESPACE
 --build-arg ARCH=${ARCH} \
 --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
+# building baseimage
 docker build -f ./images/fabric-baseimage/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseimage:${ARCH}-${BASE_OUTPUT_VERSION} \
 --build-arg FABRIC_BASE_IMAGE=${FABRIC_BASE_IMAGE} \
 --build-arg ARCH=${ARCH} \
 --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
+# Updating system packages in couchdb image
+docker build -f ./images/fabric-couchdb/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-couchdb:${ARCH}-${BASE_OUTPUT_VERSION} \
+--build-arg FABRIC_COUCHDB_IMAGE=${FABRIC_COUCHDB_IMAGE} \
+--build-arg ARCH=${ARCH} \
+--build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+
+# Updating system packages in kafka image
+docker build -f ./images/fabric-kafka/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-kafka:${ARCH}-${BASE_OUTPUT_VERSION} \
+--build-arg FABRIC_KAFKA_IMAGE=${FABRIC_KAFKA_IMAGE} \
+--build-arg ARCH=${ARCH} \
+--build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+
+# Updating system packages in zookeeper image
+docker build -f ./images/fabric-zookeeper/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-zookeeper:${ARCH}-${BASE_OUTPUT_VERSION} \
+--build-arg FABRIC_ZOOKEEPER_IMAGE=${FABRIC_ZOOKEEPER_IMAGE} \
+--build-arg ARCH=${ARCH} \
+--build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
 MY_PATH="`dirname \"$0\"`"              # relative
 MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized

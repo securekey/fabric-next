@@ -27,3 +27,10 @@ RUN    set -ex; sed -i "s/deb /deb [arch=amd64] /" /etc/apt/sources.list && \
        apt-get update && \
        # Install essential s390x lib tools
        apt-get install -y libc6-dev:s390x libltdl-dev:s390x gcc-multilib-s390x-linux-gnu
+
+# Updating system packages to the latest
+RUN apt-get update -qq \
+    && apt-get -y dist-upgrade \
+    && apt-get clean autoclean \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/cache /var/lib/log
