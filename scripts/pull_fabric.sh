@@ -99,3 +99,17 @@ if [[ "amd64" = "${ARCH}" ]]; then
   --build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} .
   docker tag ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} ${BASE_NAMESPACE}/fabric-cross-compile:${ARCH}-latest
 fi
+
+####### Building FABRIC-CA
+TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
+echo "Build tmp directory is $TMP ..."
+
+export GOPATH=$TMP
+
+$MY_PATH/fabric_ca.sh
+
+cd $GOPATH/src/github.com/hyperledger/fabric-ca
+make clean
+DOCKER_GO_LDFLAGS="\" -tags \"pkcs11 netgo caclient\" -ldflags \"" FABRIC_CA_DYNAMIC_LINK=true BASE_DOCKER_NS=securekey EXPERIMENTAL=false make docker
+
+rm -Rf $TMP
