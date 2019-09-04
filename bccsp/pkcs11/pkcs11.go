@@ -270,7 +270,6 @@ func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (ski
 		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(keylabel)),
 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, keylabel),
 
-		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
 		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
 	}
 
