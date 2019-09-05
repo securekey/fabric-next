@@ -1,4 +1,4 @@
-From aab7ea153810431952605667cddacf418e4bb13b Mon Sep 17 00:00:00 2001
+From e9761bf94e934fbd1f88c82c0758c5b012ab22af Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Wed, 17 Jul 2019 21:25:14 -0400
 Subject: [PATCH] Backport Transient Data
@@ -38,7 +38,7 @@ Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
  core/ledger/util/couchdb/metrics_test.go      |   2 +-
  core/peer/configtx_test.go                    |   5 +
  core/peer/mock_helpers.go                     |   2 +
- core/peer/peer.go                             |  49 +-
+ core/peer/peer.go                             |  51 +-
  core/peer/peer_impl.go                        |  10 +-
  core/peer/peer_test.go                        |   5 +-
  extensions/blkstorage/store.go                |  27 +
@@ -88,11 +88,11 @@ Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
  gossip/privdata/distributor.go                |  22 +-
  gossip/privdata/distributor_test.go           |   4 +
  gossip/protoext/extensions.go                 |   7 +
- gossip/service/gossip_service.go              |  11 +-
+ gossip/service/gossip_service.go              |  12 +-
  gossip/service/gossip_service_test.go         |  16 +-
  gossip/service/integration_test.go            |   6 +-
  gossip/state/state.go                         |  23 +-
- gossip/state/state_test.go                    |   8 +-
+ gossip/state/state_test.go                    |   9 +-
  peer/chaincode/common.go                      |  58 +-
  peer/chaincode/transientcollconfig_test.go    |  64 ++
  peer/node/start.go                            |  15 +-
@@ -287,7 +287,7 @@ Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
  vendor/google.golang.org/grpc/stream.go       | 518 +++++++++-
  vendor/google.golang.org/grpc/tap/tap.go      |   2 +-
  vendor/google.golang.org/grpc/version.go      |   2 +-
- 281 files changed, 27548 insertions(+), 1888 deletions(-)
+ 281 files changed, 27551 insertions(+), 1889 deletions(-)
  create mode 100644 core/ledger/kvledger/idstore/idstore.go
  create mode 100644 core/ledger/kvledger/idstore/readme.md
  create mode 100644 core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/collection_val_ext.go
@@ -479,7 +479,7 @@ Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
  delete mode 100644 vendor/google.golang.org/grpc/status/go17.go
 
 diff --git a/Gopkg.lock b/Gopkg.lock
-index 55ef18ff4..0ddf08c65 100644
+index 2733e38ce..f52db3264 100644
 --- a/Gopkg.lock
 +++ b/Gopkg.lock
 @@ -93,6 +93,21 @@
@@ -519,7 +519,7 @@ index 55ef18ff4..0ddf08c65 100644
    pruneopts = "NUT"
    revision = "c2353362d570a7bfa228149c62842019201cfb71"
    version = "v1.8.0"
-@@ -535,12 +553,12 @@
+@@ -534,12 +552,12 @@
    version = "v2.0.6"
  
  [[projects]]
@@ -535,7 +535,7 @@ index 55ef18ff4..0ddf08c65 100644
  
  [[projects]]
    digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
-@@ -711,6 +729,57 @@
+@@ -710,6 +728,57 @@
    pruneopts = "NUT"
    revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
  
@@ -593,7 +593,7 @@ index 55ef18ff4..0ddf08c65 100644
  [[projects]]
    digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
    name = "github.com/willf/bitset"
-@@ -892,24 +961,29 @@
+@@ -891,24 +960,29 @@
    revision = "c7e5094acea1ca1b899e2259d80a6b0f882f81f8"
  
  [[projects]]
@@ -624,7 +624,7 @@ index 55ef18ff4..0ddf08c65 100644
      "internal/transport",
      "keepalive",
      "metadata",
-@@ -923,8 +997,8 @@
+@@ -922,8 +996,8 @@
      "tap",
    ]
    pruneopts = "NUT"
@@ -635,7 +635,7 @@ index 55ef18ff4..0ddf08c65 100644
  
  [[projects]]
    digest = "1:22b2dee6f30bc8601f087449a2a819df8388e54e9547349c658f14d8f8c590f2"
-@@ -979,6 +1053,7 @@
+@@ -978,6 +1052,7 @@
      "github.com/hyperledger/fabric-amcl/amcl/FP256BN",
      "github.com/hyperledger/fabric-lib-go/healthz",
      "github.com/kr/pretty",
@@ -643,7 +643,7 @@ index 55ef18ff4..0ddf08c65 100644
      "github.com/miekg/pkcs11",
      "github.com/mitchellh/mapstructure",
      "github.com/onsi/ginkgo",
-@@ -1008,6 +1083,29 @@
+@@ -1007,6 +1082,29 @@
      "github.com/tedsuo/ifrit",
      "github.com/tedsuo/ifrit/ginkgomon",
      "github.com/tedsuo/ifrit/grouper",
@@ -674,7 +674,7 @@ index 55ef18ff4..0ddf08c65 100644
      "go.etcd.io/etcd/etcdserver/api/snap",
      "go.etcd.io/etcd/pkg/fileutil",
 diff --git a/Gopkg.toml b/Gopkg.toml
-index 15318acba..4e83368b4 100644
+index 481e92d0c..fb1c7c3ec 100644
 --- a/Gopkg.toml
 +++ b/Gopkg.toml
 @@ -15,6 +15,14 @@ noverify = [
@@ -855,10 +855,10 @@ index 000000000..8f58e92a2
 +it has been created for trustbloc/fabric-peer-ext dependency
 \ No newline at end of file
 diff --git a/core/ledger/kvledger/kv_ledger.go b/core/ledger/kvledger/kv_ledger.go
-index 85e9964e8..91ac3358d 100644
+index 5f8804392..1d753abfc 100644
 --- a/core/ledger/kvledger/kv_ledger.go
 +++ b/core/ledger/kvledger/kv_ledger.go
-@@ -26,6 +26,7 @@ import (
+@@ -27,6 +27,7 @@ import (
  	"github.com/hyperledger/fabric/core/ledger/ledgerstorage"
  	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
  	lutil "github.com/hyperledger/fabric/core/ledger/util"
@@ -866,7 +866,7 @@ index 85e9964e8..91ac3358d 100644
  	"github.com/hyperledger/fabric/protos/common"
  	"github.com/hyperledger/fabric/protos/peer"
  	"github.com/hyperledger/fabric/protos/utils"
-@@ -58,6 +59,7 @@ func newKVLedger(
+@@ -59,6 +60,7 @@ func newKVLedger(
  	bookkeeperProvider bookkeeping.Provider,
  	ccInfoProvider ledger.DeployedChaincodeInfoProvider,
  	stats *ledgerStats,
@@ -874,7 +874,7 @@ index 85e9964e8..91ac3358d 100644
  ) (*kvLedger, error) {
  	logger.Debugf("Creating KVLedger ledgerID=%s: ", ledgerID)
  	// Create a kvLedger for this chain/ledger, which encasulates the underlying
-@@ -80,7 +82,7 @@ func newKVLedger(
+@@ -81,7 +83,7 @@ func newKVLedger(
  		cceventmgmt.GetMgr().Register(ledgerID, ccEventListener)
  	}
  	btlPolicy := pvtdatapolicy.ConstructBTLPolicy(&collectionInfoRetriever{l, ccInfoProvider})
@@ -883,7 +883,7 @@ index 85e9964e8..91ac3358d 100644
  		return nil, err
  	}
  	l.initBlockStore(btlPolicy)
-@@ -95,9 +97,10 @@ func newKVLedger(
+@@ -96,9 +98,10 @@ func newKVLedger(
  }
  
  func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
@@ -1218,7 +1218,7 @@ index b684c23e8..29b333558 100644
  
  // GetPrivateDataRangeScanIterator implements method in interface `ledger.QueryExecutor`
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index 69c300f5b..0a2ea52d1 100644
+index 2d1bf5f74..53f5af4f0 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -22,6 +22,7 @@ import (
@@ -1859,7 +1859,7 @@ index dfd5695ce..5c44e9f32 100644
  	)
  	chains.list = make(map[string]*chain)
 diff --git a/core/peer/peer.go b/core/peer/peer.go
-index 481d7e90f..7c72e8361 100644
+index e15f01836..33a031d3d 100644
 --- a/core/peer/peer.go
 +++ b/core/peer/peer.go
 @@ -33,6 +33,9 @@ import (
@@ -1917,7 +1917,7 @@ index 481d7e90f..7c72e8361 100644
  	})
  	ledgerIds, err := ledgermgmt.GetLedgerIDs()
  	if err != nil {
-@@ -427,12 +452,19 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
+@@ -430,12 +455,19 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
  		*semaphore.Weighted
  	}{cs, validationWorkersSemaphore}
  	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm)
@@ -1941,25 +1941,27 @@ index 481d7e90f..7c72e8361 100644
  	})
  
  	oc, ok := bundle.OrdererConfig()
-@@ -460,6 +492,10 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
- 	if err != nil {
+@@ -464,6 +496,11 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
  		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
  	}
+ 
 +	collDataStore, err := CollectionDataStoreFactory().OpenStore(bundle.ConfigtxValidator().ChainID())
 +	if err != nil {
 +		return errors.Wrapf(err, "[channel %s] failed opening transient data store", bundle.ConfigtxValidator().ChainID())
 +	}
++
  	csStoreSupport := &CollectionSupport{
  		PeerLedger: ledger,
  	}
-@@ -474,9 +510,12 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
+@@ -478,9 +515,13 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
  		Validator:            validator,
  		Committer:            c,
  		Store:                store,
 +		CollDataStore:        collDataStore,
  		Cs:                   simpleCollectionStore,
  		IdDeserializeFactory: csStoreSupport,
- 		Capabilities:         cs.Application.Capabilities(),
+ 		CapabilityProvider:   cp,
++		Capabilities:         cs.Application.Capabilities(),
 +		Ledger:               ledger,
 +		BlockPublisher:       blockPublisher,
  	})
@@ -4225,10 +4227,10 @@ index 000000000..be4683fcc
 +	require.Empty(t, NewStoreProvider())
 +}
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index 4fd74f361..dc328fc5a 100644
+index b4b46dc91..c4d349fce 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
-@@ -21,6 +21,8 @@ import (
+@@ -22,6 +22,8 @@ import (
  	"github.com/hyperledger/fabric/core/ledger"
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
  	"github.com/hyperledger/fabric/core/transientstore"
@@ -4237,13 +4239,13 @@ index 4fd74f361..dc328fc5a 100644
  	"github.com/hyperledger/fabric/gossip/metrics"
  	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
  	"github.com/hyperledger/fabric/gossip/util"
-@@ -121,16 +123,22 @@ type Support struct {
+@@ -122,16 +124,22 @@ type Support struct {
  	txvalidator.Validator
  	committer.Committer
  	TransientStore
 +	CollDataStore storeapi.Store
  	Fetcher
- 	AppCapabilities
+ 	CapabilityProvider
  }
  
 +type pvtDataStore interface {
@@ -4260,7 +4262,7 @@ index 4fd74f361..dc328fc5a 100644
  	skipPullingInvalidTransactions bool
  }
  
-@@ -140,6 +148,11 @@ type CoordinatorConfig struct {
+@@ -141,6 +149,11 @@ type CoordinatorConfig struct {
  	SkipPullingInvalidTransactions bool
  }
  
@@ -4272,7 +4274,7 @@ index 4fd74f361..dc328fc5a 100644
  // NewCoordinator creates a new instance of coordinator
  func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *metrics.PrivdataMetrics,
  	config CoordinatorConfig) Coordinator {
-@@ -148,12 +161,13 @@ func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *
+@@ -149,12 +162,13 @@ func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *
  		transientBlockRetention:        config.TransientBlockRetention,
  		metrics:                        metrics,
  		pullRetryThreshold:             config.PullRetryThreshold,
@@ -4288,7 +4290,7 @@ index 4fd74f361..dc328fc5a 100644
  
  // StoreBlock stores block with private data into the ledger
 diff --git a/gossip/privdata/coordinator_test.go b/gossip/privdata/coordinator_test.go
-index bbbb2a103..05824f16d 100644
+index 56a4e48b5..0c80cf604 100644
 --- a/gossip/privdata/coordinator_test.go
 +++ b/gossip/privdata/coordinator_test.go
 @@ -23,6 +23,7 @@ import (
@@ -4298,7 +4300,7 @@ index bbbb2a103..05824f16d 100644
 +	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
  	"github.com/hyperledger/fabric/gossip/metrics"
  	gmetricsmocks "github.com/hyperledger/fabric/gossip/metrics/mocks"
- 	commonmocks "github.com/hyperledger/fabric/gossip/mocks"
+ 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
 @@ -35,6 +36,7 @@ import (
  	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
  	"github.com/hyperledger/fabric/protos/msp"
@@ -4323,7 +4325,7 @@ index bbbb2a103..05824f16d 100644
  func TestPvtDataCollections_FailOnEmptyPayload(t *testing.T) {
  	collection := &util.PvtDataCollections{
  		&ledger.TxPvtData{
-@@ -1599,12 +1610,16 @@ func TestPurgeByHeight(t *testing.T) {
+@@ -1624,12 +1635,16 @@ func TestPurgeByHeight(t *testing.T) {
  }
  
  func TestCoordinatorStorePvtData(t *testing.T) {
@@ -4339,14 +4341,14 @@ index bbbb2a103..05824f16d 100644
 +	tdStore := extmocks.NewDataStore()
  	fetcher := &fetcherMock{t: t}
  	committer.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
- 	capability := &commonmocks.AppCapabilities{}
-@@ -1614,6 +1629,7 @@ func TestCoordinatorStorePvtData(t *testing.T) {
- 		Committer:       committer,
- 		Fetcher:         fetcher,
- 		TransientStore:  store,
-+		CollDataStore:   tdStore,
- 		Validator:       &validatorMock{},
- 		AppCapabilities: capability,
+ 
+@@ -1642,6 +1657,7 @@ func TestCoordinatorStorePvtData(t *testing.T) {
+ 		Committer:          committer,
+ 		Fetcher:            fetcher,
+ 		TransientStore:     store,
++		CollDataStore:      tdStore,
+ 		Validator:          &validatorMock{},
+ 		CapabilityProvider: capabilityProvider,
  	}, common.SignedData{}, metrics, testConfig)
 diff --git a/gossip/privdata/dissemination.go b/gossip/privdata/dissemination.go
 new file mode 100644
@@ -4453,7 +4455,7 @@ index 22f660602..8bf1221dd 100644
  	channelID := "test"
  
 diff --git a/gossip/protoext/extensions.go b/gossip/protoext/extensions.go
-index 18ca82089..dc8659a4d 100644
+index d1dd3e225..c56ff4b92 100644
 --- a/gossip/protoext/extensions.go
 +++ b/gossip/protoext/extensions.go
 @@ -298,6 +298,13 @@ func IsTagLegal(m *gossip.GossipMessage) error {
@@ -4471,7 +4473,7 @@ index 18ca82089..dc8659a4d 100644
  }
  
 diff --git a/gossip/service/gossip_service.go b/gossip/service/gossip_service.go
-index 52b83bcce..5b3da2d9e 100644
+index 7ffe61f27..bc3dff1de 100644
 --- a/gossip/service/gossip_service.go
 +++ b/gossip/service/gossip_service.go
 @@ -9,12 +9,17 @@ package service
@@ -4492,25 +4494,26 @@ index 52b83bcce..5b3da2d9e 100644
  	"github.com/hyperledger/fabric/gossip/api"
  	gossipCommon "github.com/hyperledger/fabric/gossip/common"
  	"github.com/hyperledger/fabric/gossip/election"
-@@ -225,6 +230,9 @@ type Support struct {
+@@ -225,6 +230,10 @@ type Support struct {
  	Cs                   privdata.CollectionStore
  	IdDeserializeFactory privdata2.IdentityDeserializerFactory
- 	Capabilities         privdata2.AppCapabilities
+ 	CapabilityProvider   privdata2.CapabilityProvider
++	Capabilities         privdata2.AppCapabilities
 +	CollDataStore        storeapi.Store
 +	Ledger               ledger.PeerLedger
 +	BlockPublisher       extgossipapi.BlockPublisher
  }
  
  // DataStoreSupport aggregates interfaces capable
-@@ -265,6 +273,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
- 		CollectionStore: support.Cs,
- 		Validator:       support.Validator,
- 		TransientStore:  support.Store,
-+		CollDataStore:   support.CollDataStore,
- 		Committer:       support.Committer,
- 		Fetcher:         fetcher,
- 		AppCapabilities: support.Capabilities,
-@@ -290,7 +299,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
+@@ -266,6 +275,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
+ 		CollectionStore:    support.Cs,
+ 		Validator:          support.Validator,
+ 		TransientStore:     support.Store,
++		CollDataStore:      support.CollDataStore,
+ 		Committer:          support.Committer,
+ 		Fetcher:            fetcher,
+ 		CapabilityProvider: support.CapabilityProvider,
+@@ -291,7 +301,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  	g.privateHandlers[chainID].reconciler.Start()
  
  	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
@@ -4668,19 +4671,20 @@ index a905a9dfb..0bf845a2b 100644
  
  }
 diff --git a/gossip/state/state_test.go b/gossip/state/state_test.go
-index 977eb019f..f6a7caea5 100644
+index c9b561d75..b168a2523 100644
 --- a/gossip/state/state_test.go
 +++ b/gossip/state/state_test.go
-@@ -431,7 +431,7 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
- 		Committer:       committer,
- 		AppCapabilities: capability,
+@@ -434,8 +434,7 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
+ 		Committer:          committer,
+ 		CapabilityProvider: capabilityProvider,
  	}, pcomm.SignedData{}, gossipMetrics.PrivdataMetrics, coordConfig)
 -	sp := NewGossipStateProvider(util.GetTestChainID(), servicesAdapater, coord, gossipMetrics.StateMetrics, config)
+-
 +	sp := NewGossipStateProvider(util.GetTestChainID(), servicesAdapater, coord, gossipMetrics.StateMetrics, config, nil)
  	if sp == nil {
  		gRPCServer.Stop()
  		return nil, port
-@@ -1483,7 +1483,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
+@@ -1487,7 +1486,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
  
  	servicesAdapater := &ServicesMediator{GossipAdapter: g, MCSAdapter: &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}}
  	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
@@ -4689,7 +4693,7 @@ index 977eb019f..f6a7caea5 100644
  	defer st.Stop()
  
  	// Mocked state request message
-@@ -1720,11 +1720,11 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
+@@ -1724,11 +1723,11 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
  	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
  
  	mediator := &ServicesMediator{GossipAdapter: peers["peer1"], MCSAdapter: cryptoService}
