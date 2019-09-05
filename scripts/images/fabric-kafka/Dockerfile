@@ -9,6 +9,7 @@ ARG FABRIC_BASE_VERSION=0.4.8
 FROM ${FABRIC_KAFKA_IMAGE}:${ARCH}-${FABRIC_BASE_VERSION}
 LABEL maintainer=sk-dev-team
 
+# System package update
 RUN apt-get update -qq \
     && apt-get -y dist-upgrade \
     && apt-get clean autoclean \

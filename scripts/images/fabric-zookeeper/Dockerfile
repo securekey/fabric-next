@@ -9,6 +9,7 @@ ARG FABRIC_BASE_VERSION=0.4.8
 FROM ${FABRIC_ZOOKEEPER_IMAGE}:${ARCH}-${FABRIC_BASE_VERSION}
 LABEL maintainer=sk-dev-team
 
+# System Package Update
 RUN apt-get update -qq \
     && apt-get -y dist-upgrade \
     && apt-get clean autoclean \
