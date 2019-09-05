@@ -24,13 +24,15 @@ RUN    set -ex; sed -i "s/deb /deb [arch=amd64] /" /etc/apt/sources.list && \
        # Add the s390x architecture
        dpkg --add-architecture s390x && \
        # Update list of packages
-       apt-get update && \
+       apt-get update -qq && \
        # Install essential s390x lib tools
-       apt-get install -y libc6-dev:s390x libltdl-dev:s390x gcc-multilib-s390x-linux-gnu
+       apt-get install -y libc6-dev:s390x libltdl-dev:s390x gcc-multilib-s390x-linux-gnu aria2
 
-# Updating system packages to the latest
-RUN apt-get update -qq \
-    && apt-get -y dist-upgrade \
+#RUN export OS=`awk -F= '/^NAME/{print $2}' /etc/os-release | awk '{print $1}' | tr -d '"' | tr '[[:upper:]]' '[[:lower:]]'` \
+#    && sed -i -e "s/http:\/\/archive/mirror:\/\/mirrors/" -e "s/\/$OS\//\/mirrors.txt/" /etc/apt/sources.list \
+#    && sed -i -e "s/http:\/\/security/mirror:\/\/mirrors/" -e "s/\/$OS\//\/mirrors.txt/" /etc/apt/sources.list
+
+RUN apt-get -y --print-uris dist-upgrade | egrep -o -e "http://[^\']+" | aria2c -c -d /var/cache/apt/archives -i -; apt-get -y dist-upgrade \
     && apt-get clean autoclean \
     && apt-get autoremove -y \
     && rm -rf /var/lib/cache /var/lib/log

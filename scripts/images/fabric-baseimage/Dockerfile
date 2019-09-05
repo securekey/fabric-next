@@ -17,8 +17,13 @@ RUN ["/bin/bash", "-c", "rm -rf /usr/local/{lib/node{,/.npm,_modules},bin,share/
 # https://askubuntu.com/a/185250
 RUN ["/bin/bash", "-c", "dpkg-query -W -f='${binary:Package}\n' | grep -E -e '^(ia32-)?(sun|oracle)-java' -e '^openjdk-' -e '^icedtea' -e '^(default|gcj)-j(re|dk)' -e '^gcj-(.*)-j(re|dk)' -e '^java-common' | xargs apt-get -y purge"]
 
+#RUN export OS=`awk -F= '/^NAME/{print $2}' /etc/os-release | awk '{print $1}' | tr -d '"' | tr '[[:upper:]]' '[[:lower:]]'` \
+#    && sed -i -e "s/http:\/\/archive/mirror:\/\/mirrors/" -e "s/\/$OS\//\/mirrors.txt/" /etc/apt/sources.list \
+#    && sed -i -e "s/http:\/\/security/mirror:\/\/mirrors/" -e "s/\/$OS\//\/mirrors.txt/" /etc/apt/sources.list
+
 RUN apt-get update -qq \
-    && apt-get -y dist-upgrade \
+    && apt-get install -y aria2 \
+    && apt-get -y --print-uris dist-upgrade | egrep -o -e "http://[^\']+" | aria2c -c -d /var/cache/apt/archives -i -; apt-get -y dist-upgrade \
     && apt-get clean autoclean \
     && apt-get autoremove -y \
     && rm -rf /var/lib/cache /var/lib/log
