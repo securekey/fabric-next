@@ -10,7 +10,8 @@ FROM ${FABRIC_ZOOKEEPER_IMAGE}:${ARCH}-${FABRIC_BASE_VERSION}
 LABEL maintainer=sk-dev-team
 
 RUN apt-get update -qq \
-    && apt-get -y dist-upgrade \
+    && apt-get install -y aria2 \
+    && apt-get -y --print-uris dist-upgrade | egrep -o -e "http://[^\']+" | aria2c -c -d /var/cache/apt/archives -i -; apt-get -y dist-upgrade \
     && apt-get clean autoclean \
     && apt-get autoremove -y \
     && rm -rf /var/lib/cache /var/lib/log
