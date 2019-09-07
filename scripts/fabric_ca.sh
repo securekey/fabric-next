@@ -21,7 +21,7 @@ cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric-ca
 cd fabric-ca
 git config advice.detachedHead false
-# https://github.com/hyperledger/fabric/releases/tag/v1.4.2
+# https://github.com/hyperledger/fabric/releases/tag/v1.4.3
 git checkout v1.4.3
 
 cd $GOPATH/src/github.com/hyperledger/fabric-ca
@@ -65,5 +65,3 @@ rm -rf vendor/github.com/golang/protobuf
 git clone https://github.com/golang/protobuf vendor/github.com/golang/protobuf
 cd vendor/github.com/golang/protobuf
 git checkout v1.3.0
-
-cd $GOPATH/src/github.com/hyperledger/fabric-ca
