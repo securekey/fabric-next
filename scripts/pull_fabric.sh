@@ -26,6 +26,14 @@ declare -x BASE_NAMESPACE=securekey
 declare -x BASE_OUTPUT_VERSION=0.4.15
 declare -x ARCH=$(go env GOARCH)
 
+MY_PATH="`dirname \"$0\"`"              # relative
+MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
+if [ -z "$MY_PATH" ] ; then
+  # error; for some reason, the path is not accessible
+  # to the script (e.g. permissions re-evaled after suid)
+  exit 1  # fail
+fi
+
 # Build base images to enable dynamic build
 docker build -f ./images/fabric-baseos/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseos:${ARCH}-${BASE_OUTPUT_VERSION} \
 --build-arg FABRIC_BASE_OS_IMAGE=${FABRIC_BASE_OS_IMAGE} \
@@ -56,13 +64,10 @@ docker build -f ./images/fabric-zookeeper/Dockerfile --no-cache -t ${BASE_NAMESP
 --build-arg ARCH=${ARCH} \
 --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
-MY_PATH="`dirname \"$0\"`"              # relative
-MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
-if [ -z "$MY_PATH" ] ; then
-  # error; for some reason, the path is not accessible
-  # to the script (e.g. permissions re-evaled after suid)
-  exit 1  # fail
-fi
+
+############################################
+#            Fabric Build                  #
+############################################
 
 TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
 echo "Build tmp directory is $TMP ..."
@@ -100,7 +105,10 @@ if [[ "amd64" = "${ARCH}" ]]; then
   docker tag ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} ${BASE_NAMESPACE}/fabric-cross-compile:${ARCH}-latest
 fi
 
-####### Building FABRIC-CA
+############################################
+#            Fabric CA                     #
+############################################
+
 TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
 echo "Build tmp directory is $TMP ..."
 
@@ -110,6 +118,6 @@ $MY_PATH/fabric_ca.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric-ca
 make clean
-DOCKER_GO_LDFLAGS="\" -tags \"pkcs11 netgo caclient\" -ldflags \"" FABRIC_CA_DYNAMIC_LINK=true BASE_DOCKER_NS=securekey EXPERIMENTAL=false make docker
+DOCKER_GO_LDFLAGS="\" -tags \"pkcs11 netgo\" -ldflags \"" FABRIC_CA_DYNAMIC_LINK=true BASE_DOCKER_NS=securekey EXPERIMENTAL=false make docker
 
 rm -Rf $TMP
