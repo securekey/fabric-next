@@ -17,6 +17,9 @@ RUN ["/bin/bash", "-c", "rm -rf /usr/local/{lib/node{,/.npm,_modules},bin,share/
 # https://askubuntu.com/a/185250
 RUN ["/bin/bash", "-c", "dpkg-query -W -f='${binary:Package}\n' | grep -E -e '^(ia32-)?(sun|oracle)-java' -e '^openjdk-' -e '^icedtea' -e '^(default|gcj)-j(re|dk)' -e '^gcj-(.*)-j(re|dk)' -e '^java-common' | xargs apt-get -y purge"]
 
+# Remove python
+RUN apt-get -y purge python
+
 # Faking npm because of this commit
 # https://github.com/hyperledger/fabric/commit/a7ca2fc55ba6b4b6fa9f9a4c591dab2e79366d05
 RUN touch /usr/local/bin/npm \
