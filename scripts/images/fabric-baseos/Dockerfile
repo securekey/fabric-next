@@ -15,4 +15,4 @@ RUN apt-get update \
     && apt-get -y dist-upgrade \
     && apt-get clean autoclean \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/cache /var/lib/log
+    && rm -rf /var/lib/cache /var/lib/log /var/lib/apt/lists/*
