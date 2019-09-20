@@ -78,6 +78,11 @@ $MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 make clean
+
+# Adding GO_TAGS to tools image build
+sed -i 's/RUN make/RUN GO_TAGS=\"pkcs11 pluginsenabled\" make/g' images/tools/Dockerfile.in
+
+# Building all the images
 DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" make docker
 
 rm -Rf $TMP
