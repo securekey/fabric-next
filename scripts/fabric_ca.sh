@@ -29,12 +29,11 @@ cd $GOPATH/src/github.com/hyperledger/fabric-ca
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
-
 #apply patch for GREP11
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
 #apply patch for Thales PKCS11
-git am $MY_PATH/../patches/PKCS11-Thales.patch
+git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/PKCS11-Thales.patch
 
 # fetching and update vendored packages for grep11 patch
 rm -rf vendor/google.golang.org/grpc
