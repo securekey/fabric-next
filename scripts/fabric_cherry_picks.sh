@@ -29,9 +29,12 @@ cd $GOPATH/src/github.com/hyperledger/fabric
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
-
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
+
+#apply patch for PKCS11 Thales
+git am $MY_PATH/../patches/PKCS11-Thales.patch
+
 # [FAB-14646] Update dependency github.com/opencontainers/runc
 git fetch https://gerrit.hyperledger.org/r/fabric refs/changes/94/30094/1 && git cherry-pick FETCH_HEAD
 
