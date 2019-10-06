@@ -18,12 +18,12 @@ declare -x FABRIC_BASE_IMAGE=hyperledger/fabric-baseimage
 declare -x FABRIC_COUCHDB_IMAGE=hyperledger/fabric-couchdb
 declare -x FABRIC_KAFKA_IMAGE=hyperledger/fabric-kafka
 declare -x FABRIC_ZOOKEEPER_IMAGE=hyperledger/fabric-zookeeper
-declare -x BASE_VERSION=0.4.15
+declare -x BASE_VERSION=0.4.16
 
 declare -x BASE_NAMESPACE=securekey
 
 # This must match the version of fabric that is being cherry-picked
-declare -x BASE_OUTPUT_VERSION=0.4.15
+declare -x BASE_OUTPUT_VERSION=0.4.16
 declare -x ARCH=$(go env GOARCH)
 
 MY_PATH="`dirname \"$0\"`"              # relative
