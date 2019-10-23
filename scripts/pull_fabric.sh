@@ -34,6 +34,10 @@ if [ -z "$MY_PATH" ] ; then
   exit 1  # fail
 fi
 
+############################################
+#            Fabric BaseImages             #
+############################################
+
 # Build base images to enable dynamic build
 docker build -f ./images/fabric-baseos/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseos:${ARCH}-${BASE_OUTPUT_VERSION} \
 --build-arg FABRIC_BASE_OS_IMAGE=${FABRIC_BASE_OS_IMAGE} \
@@ -46,24 +50,19 @@ docker build -f ./images/fabric-baseimage/Dockerfile --no-cache -t ${BASE_NAMESP
 --build-arg ARCH=${ARCH} \
 --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
-# Updating system packages in couchdb image
-docker build -f ./images/fabric-couchdb/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-couchdb:${ARCH}-${BASE_OUTPUT_VERSION} \
---build-arg FABRIC_COUCHDB_IMAGE=${FABRIC_COUCHDB_IMAGE} \
---build-arg ARCH=${ARCH} \
---build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
+echo "Build tmp directory is $TMP ..."
 
-# Updating system packages in kafka image
-docker build -f ./images/fabric-kafka/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-kafka:${ARCH}-${BASE_OUTPUT_VERSION} \
---build-arg FABRIC_KAFKA_IMAGE=${FABRIC_KAFKA_IMAGE} \
---build-arg ARCH=${ARCH} \
---build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+export GOPATH=$TMP
 
-# Updating system packages in zookeeper image
-docker build -f ./images/fabric-zookeeper/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-zookeeper:${ARCH}-${BASE_OUTPUT_VERSION} \
---build-arg FABRIC_ZOOKEEPER_IMAGE=${FABRIC_ZOOKEEPER_IMAGE} \
---build-arg ARCH=${ARCH} \
---build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+$MY_PATH/fabric_baseimage.sh
 
+cd $GOPATH/src/github.com/hyperledger/fabric-baseimage
+
+# Building all the images
+make BASE_DOCKER_NS=$BASE_NAMESPACE DOCKER_TAG=${ARCH}-${BASE_VERSION} dependent-images
+
+rm -Rf $TMP
 
 ############################################
 #            Fabric Build                  #
