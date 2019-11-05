@@ -13,10 +13,6 @@ LABEL maintainer=sk-dev-team
 # https://stackoverflow.com/a/11178106
 RUN ["/bin/bash", "-c", "rm -rf /usr/local/{lib/node{,/.npm,_modules},bin,share/man}/{npm*,node*,man1/node*}"]
 
-# Remove java
-# https://askubuntu.com/a/185250
-RUN ["/bin/bash", "-c", "dpkg-query -W -f='${binary:Package}\n' | grep -E -e '^(ia32-)?(sun|oracle)-java' -e '^openjdk-' -e '^icedtea' -e '^(default|gcj)-j(re|dk)' -e '^gcj-(.*)-j(re|dk)' -e '^java-common' | xargs apt-get -y purge"]
-
 # Remove python
 RUN apt-get -y purge python
 
