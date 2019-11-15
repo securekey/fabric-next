@@ -23,8 +23,12 @@ declare -x BASE_VERSION=0.4.15
 declare -x BASE_NAMESPACE=securekey
 
 # This must match the version of fabric that is being cherry-picked
-declare -x BASE_OUTPUT_VERSION=0.4.15
+declare -x BASE_OUTPUT_VERSION=${BASE_VERSION}
 declare -x ARCH=$(go env GOARCH)
+
+# SETTING variables
+declare -x FABRIC_VERSION=1.4.3
+declare -x FABRIC_CA_VERSION=1.4.3
 
 MY_PATH="`dirname \"$0\"`"              # relative
 MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
@@ -55,7 +59,7 @@ echo "Build tmp directory is $TMP ..."
 
 export GOPATH=$TMP
 
-$MY_PATH/fabric_baseimage.sh
+$MY_PATH/fabric_baseimage.sh ${BASE_VERSION}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-baseimage
 
@@ -73,7 +77,7 @@ echo "Build tmp directory is $TMP ..."
 
 export GOPATH=$TMP
 
-$MY_PATH/fabric_cherry_picks.sh
+$MY_PATH/fabric_cherry_picks.sh ${FABRIC_VERSION}
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 make clean
@@ -118,7 +122,7 @@ echo "Build tmp directory is $TMP ..."
 
 export GOPATH=$TMP
 
-$MY_PATH/fabric_ca.sh
+$MY_PATH/fabric_ca.sh ${FABRIC_CA_VERSION}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-ca
 make clean

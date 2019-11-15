@@ -22,7 +22,7 @@ git clone https://gerrit.hyperledger.org/r/fabric-ca
 cd fabric-ca
 git config advice.detachedHead false
 # https://github.com/hyperledger/fabric/releases/tag/v1.4.3
-git checkout v1.4.3
+git checkout v${1}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-ca
 
