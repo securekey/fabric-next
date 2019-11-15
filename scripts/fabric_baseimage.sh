@@ -22,7 +22,7 @@ git clone https://gerrit.hyperledger.org/r/fabric-baseimage
 cd fabric-baseimage
 git config advice.detachedHead false
 # https://github.com/hyperledger/fabric-baseimage/releases/tag/v0.4.5
-git checkout v0.4.15
+git checkout v${1}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-baseimage
 
