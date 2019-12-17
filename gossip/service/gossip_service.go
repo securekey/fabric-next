@@ -30,6 +30,10 @@ import (
 	"github.com/hyperledger/fabric/protos/transientstore"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
+	"github.com/hyperledger/fabric/core/ledger"
+	extgossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
+	"github.com/hyperledger/fabric/extensions/gossip/dispatcher"
 	"google.golang.org/grpc"
 )
 
@@ -258,6 +262,10 @@ type Support struct {
 	Cs                   privdata.CollectionStore
 	IdDeserializeFactory privdata2.IdentityDeserializerFactory
 	CapabilityProvider   privdata2.CapabilityProvider
+	Capabilities         privdata2.AppCapabilities
+	CollDataStore        storeapi.Store
+	Ledger               ledger.PeerLedger
+	BlockPublisher       extgossipapi.BlockPublisher
 }
 
 // DataStoreSupport aggregates interfaces capable
@@ -301,6 +309,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
 		CollectionStore:    support.Cs,
 		Validator:          support.Validator,
 		TransientStore:     support.Store,
+		CollDataStore:      support.CollDataStore,
 		Committer:          support.Committer,
 		Fetcher:            fetcher,
 		CapabilityProvider: support.CapabilityProvider,
@@ -326,7 +335,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
 	g.privateHandlers[chainID].reconciler.Start()
 
 	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
-		g.metrics.StateMetrics, getStateConfiguration())
+		g.metrics.StateMetrics, getStateConfiguration(), dispatcher.New(chainID, support.CollDataStore, servicesAdapter, support.Ledger, support.BlockPublisher))
 	if g.deliveryService[chainID] == nil {
 		var err error
 		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, oac, g.mcs)

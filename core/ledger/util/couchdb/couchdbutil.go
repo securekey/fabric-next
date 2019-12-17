@@ -33,8 +33,13 @@ var chainNameAllowedLength = 50
 var namespaceNameAllowedLength = 50
 var collectionNameAllowedLength = 50
 
-//CreateCouchInstance creates a CouchDB instance
-func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
+//CreateCouchInstance should never be called by Fabric 1.4.1 code. It's added here so that fabric-peer-ext compiles
+func CreateCouchInstance(config *Config, metricsProvider metrics.Provider) (*CouchInstance, error) {
+	panic("not implemented")
+}
+
+//CreateCouchInstance1_4_1 creates a CouchDB instance using Fabric 1.4.1.
+func CreateCouchInstance1_4_1(couchDBConnectURL, id, pw string, maxRetries,
 	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool, metricsProvider metrics.Provider) (*CouchInstance, error) {
 
 	couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
