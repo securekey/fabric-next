@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/filter"
 	"github.com/hyperledger/fabric/gossip/metrics"
 	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	fcommon "github.com/hyperledger/fabric/protos/common"
 	proto "github.com/hyperledger/fabric/protos/gossip"
@@ -62,14 +63,14 @@ type gossip interface {
 	// If passThrough is false, the messages are processed by the gossip layer beforehand.
 	// If passThrough is true, the gossip layer doesn't intervene and the messages
 	// can be used to send a reply back to the sender
-	Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage)
+	Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage)
 }
 
 type puller struct {
 	metrics       *metrics.PrivdataMetrics
 	pubSub        *util.PubSub
 	stopChan      chan struct{}
-	msgChan       <-chan proto.ReceivedMessage
+	msgChan       <-chan protoext.ReceivedMessage
 	channel       string
 	cs            privdata.CollectionStore
 	btlPullMargin uint64
@@ -93,11 +94,11 @@ func NewPuller(metrics *metrics.PrivdataMetrics, cs privdata.CollectionStore, g 
 		CollectionAccessFactory: factory,
 	}
 	_, p.msgChan = p.Accept(func(o interface{}) bool {
-		msg := o.(proto.ReceivedMessage).GetGossipMessage()
+		msg := o.(protoext.ReceivedMessage).GetGossipMessage()
 		if !bytes.Equal(msg.Channel, []byte(p.channel)) {
 			return false
 		}
-		return msg.IsPrivateDataMsg()
+		return protoext.IsPrivateDataMsg(msg.GossipMessage)
 	}, true)
 	go p.listen()
 	return p
@@ -124,7 +125,7 @@ func (p *puller) listen() {
 	}
 }
 
-func (p *puller) handleRequest(message proto.ReceivedMessage) {
+func (p *puller) handleRequest(message protoext.ReceivedMessage) {
 	logger.Debug("Got", message.GetGossipMessage(), "from", message.GetConnectionInfo().Endpoint)
 	message.Respond(&proto.GossipMessage{
 		Channel: []byte(p.channel),
@@ -138,7 +139,7 @@ func (p *puller) handleRequest(message proto.ReceivedMessage) {
 	})
 }
 
-func (p *puller) createResponse(message proto.ReceivedMessage) []*proto.PvtDataElement {
+func (p *puller) createResponse(message protoext.ReceivedMessage) []*proto.PvtDataElement {
 	authInfo := message.GetConnectionInfo().Auth
 	var returned []*proto.PvtDataElement
 	connectionEndpoint := message.GetConnectionInfo().Endpoint
@@ -177,7 +178,7 @@ func groupDigestsByBlockNum(digests []*proto.PvtDataDigest) map[uint64][]*proto.
 	return results
 }
 
-func (p *puller) handleResponse(message proto.ReceivedMessage) {
+func (p *puller) handleResponse(message protoext.ReceivedMessage) {
 	msg := message.GetGossipMessage().GetPrivateRes()
 	logger.Debug("Got", msg, "from", message.GetConnectionInfo().Endpoint)
 	for _, el := range msg.Elements {
@@ -185,7 +186,7 @@ func (p *puller) handleResponse(message proto.ReceivedMessage) {
 			logger.Warning("Got nil digest from", message.GetConnectionInfo().Endpoint, "aborting")
 			return
 		}
-		hash, err := el.Digest.Hash()
+		hash, err := protoext.Hash(el.Digest)
 		if err != nil {
 			logger.Warning("Failed hashing digest from", message.GetConnectionInfo().Endpoint, "aborting")
 			return
@@ -342,7 +343,7 @@ func (p *puller) scatterRequests(peersDigestMapping peer2Digests) []util.Subscri
 
 		// Subscribe to all digests prior to sending them
 		for _, dig := range msg.GetPrivateReq().Digests {
-			hash, err := dig.Hash()
+			hash, err := protoext.Hash(dig)
 			if err != nil {
 				// Shouldn't happen as we just built this message ourselves
 				logger.Warning("Failed creating digest", err)

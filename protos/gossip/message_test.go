@@ -64,7 +64,7 @@ func TestMethods(t *testing.T) {
 
 	}
 
-	contentTypes := []isGossipMessage_Content{
+	contentTypes := []IsGossipMessage_Content{
 		&GossipMessage_AliveMsg{},
 		&GossipMessage_MemReq{},
 		&GossipMessage_MemRes{},
@@ -85,7 +85,7 @@ func TestMethods(t *testing.T) {
 	}
 
 	for _, ct := range contentTypes {
-		ct.isGossipMessage_Content()
+		ct.IsGossipMessage_Content()
 		gMsg := &GossipMessage{
 			Content: ct,
 		}
