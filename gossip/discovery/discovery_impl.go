@@ -18,6 +18,7 @@ import (
 
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/gossip/msgstore"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/pkg/errors"
@@ -56,7 +57,7 @@ type gossipDiscoveryImpl struct {
 	id2Member        map[string]*NetworkMember // all known members
 	aliveMembership  *util.MembershipStore
 	deadMembership   *util.MembershipStore
-	selfAliveMessage *proto.SignedGossipMessage
+	selfAliveMessage *protoext.SignedGossipMessage
 
 	msgStore *aliveMsgStore
 
@@ -169,13 +170,13 @@ func (d *gossipDiscoveryImpl) Connect(member NetworkMember, id identifier) {
 				d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
 				continue
 			}
-			req, err := m.NoopSign()
+			req, err := protoext.NoopSign(m)
 			if err != nil {
 				d.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
 				continue
 			}
 			req.Nonce = util.RandomUInt64()
-			req, err = req.NoopSign()
+			req, err = protoext.NoopSign(req.GossipMessage)
 			if err != nil {
 				d.logger.Warningf("Failed adding NONCE to SignedGossipMessage %+v", errors.WithStack(err))
 				continue
@@ -214,7 +215,7 @@ func (d *gossipDiscoveryImpl) validateSelfConfig() {
 	d.port = int(myPort)
 }
 
-func (d *gossipDiscoveryImpl) sendUntilAcked(peer *NetworkMember, message *proto.SignedGossipMessage) {
+func (d *gossipDiscoveryImpl) sendUntilAcked(peer *NetworkMember, message *protoext.SignedGossipMessage) {
 	nonce := message.Nonce
 	for i := 0; i < maxConnectionAttempts && !d.toDie(); i++ {
 		sub := d.pubsub.Subscribe(fmt.Sprintf("%d", nonce), time.Second*5)
@@ -236,7 +237,7 @@ func (d *gossipDiscoveryImpl) InitiateSync(peerNum int) {
 		d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
 		return
 	}
-	memReq, err := m.NoopSign()
+	memReq, err := protoext.NoopSign(m)
 	if err != nil {
 		d.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
 		return
@@ -254,7 +255,7 @@ func (d *gossipDiscoveryImpl) InitiateSync(peerNum int) {
 		pulledPeer := aliveMembersAsSlice[i].GetAliveMsg().Membership
 		var internalEndpoint string
 		if aliveMembersAsSlice[i].Envelope.SecretEnvelope != nil {
-			internalEndpoint = aliveMembersAsSlice[i].Envelope.SecretEnvelope.InternalEndpoint()
+			internalEndpoint = protoext.InternalEndpoint(aliveMembersAsSlice[i].Envelope.SecretEnvelope)
 		}
 		netMember := &NetworkMember{
 			Endpoint:         pulledPeer.Endpoint,
@@ -313,7 +314,7 @@ func (d *gossipDiscoveryImpl) handleMessages() {
 	}
 }
 
-func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+func (d *gossipDiscoveryImpl) handleMsgFromComm(msg protoext.ReceivedMessage) {
 	if msg == nil {
 		return
 	}
@@ -327,7 +328,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
 	defer d.logger.Debug("Exiting")
 
 	if memReq := m.GetMemReq(); memReq != nil {
-		selfInfoGossipMsg, err := memReq.SelfInformation.ToGossipMessage()
+		selfInfoGossipMsg, err := protoext.EnvelopeToGossipMessage(memReq.SelfInformation)
 		if err != nil {
 			d.logger.Warningf("Failed deserializing GossipMessage from envelope: %+v", errors.WithStack(err))
 			return
@@ -343,7 +344,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
 
 		var internalEndpoint string
 		if m.Envelope.SecretEnvelope != nil {
-			internalEndpoint = m.Envelope.SecretEnvelope.InternalEndpoint()
+			internalEndpoint = protoext.InternalEndpoint(m.Envelope.SecretEnvelope)
 		}
 
 		// Sending a membership response to a peer may block this routine
@@ -353,7 +354,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
 		return
 	}
 
-	if m.IsAliveMsg() {
+	if protoext.IsAliveMsg(m.GossipMessage) {
 		if !d.msgStore.CheckValid(m) || !d.crypt.ValidateAliveMsg(m) {
 			return
 		}
@@ -371,12 +372,12 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
 	if memResp := m.GetMemRes(); memResp != nil {
 		d.pubsub.Publish(fmt.Sprintf("%d", m.Nonce), m.Nonce)
 		for _, env := range memResp.Alive {
-			am, err := env.ToGossipMessage()
+			am, err := protoext.EnvelopeToGossipMessage(env)
 			if err != nil {
 				d.logger.Warningf("Membership response contains an invalid message from an online peer:%+v", errors.WithStack(err))
 				return
 			}
-			if !am.IsAliveMsg() {
+			if !protoext.IsAliveMsg(am.GossipMessage) {
 				d.logger.Warning("Expected alive message, got", am, "instead")
 				return
 			}
@@ -387,7 +388,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
 		}
 
 		for _, env := range memResp.Dead {
-			dm, err := env.ToGossipMessage()
+			dm, err := protoext.EnvelopeToGossipMessage(env)
 			if err != nil {
 				d.logger.Warningf("Membership response contains an invalid message from an offline peer %+v", errors.WithStack(err))
 				return
@@ -398,13 +399,13 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
 				continue
 			}
 
-			newDeadMembers := []*proto.SignedGossipMessage{}
+			newDeadMembers := []*protoext.SignedGossipMessage{}
 			d.lock.RLock()
 			if _, known := d.id2Member[string(dm.GetAliveMsg().Membership.PkiId)]; !known {
 				newDeadMembers = append(newDeadMembers, dm)
 			}
 			d.lock.RUnlock()
-			d.learnNewMembers([]*proto.SignedGossipMessage{}, newDeadMembers)
+			d.learnNewMembers([]*protoext.SignedGossipMessage{}, newDeadMembers)
 		}
 	}
 }
@@ -419,7 +420,7 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
 		InternalEndpoint: internalEndpoint,
 	}
 
-	var aliveMsg *proto.SignedGossipMessage
+	var aliveMsg *protoext.SignedGossipMessage
 	var err error
 	d.lock.RLock()
 	aliveMsg = d.selfAliveMessage
@@ -441,13 +442,13 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
 
 	defer d.logger.Debug("Exiting, replying with", memResp)
 
-	msg, err := (&proto.GossipMessage{
+	msg, err := protoext.NoopSign(&proto.GossipMessage{
 		Tag:   proto.GossipMessage_EMPTY,
 		Nonce: nonce,
 		Content: &proto.GossipMessage_MemRes{
 			MemRes: memResp,
 		},
-	}).NoopSign()
+	})
 	if err != nil {
 		err = errors.WithStack(err)
 		d.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
@@ -456,7 +457,7 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
 	d.comm.SendToPeer(targetPeer, msg)
 }
 
-func (d *gossipDiscoveryImpl) createMembershipResponse(aliveMsg *proto.SignedGossipMessage, targetMember *NetworkMember) *proto.MembershipResponse {
+func (d *gossipDiscoveryImpl) createMembershipResponse(aliveMsg *protoext.SignedGossipMessage, targetMember *NetworkMember) *proto.MembershipResponse {
 	shouldBeDisclosed, omitConcealedFields := d.disclosurePolicy(targetMember)
 
 	if !shouldBeDisclosed(aliveMsg) {
@@ -490,7 +491,7 @@ func (d *gossipDiscoveryImpl) createMembershipResponse(aliveMsg *proto.SignedGos
 	}
 }
 
-func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
+func (d *gossipDiscoveryImpl) handleAliveMessage(m *protoext.SignedGossipMessage) {
 	d.logger.Debug("Entering", m)
 	defer d.logger.Debug("Exiting")
 
@@ -507,7 +508,7 @@ func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
 	d.lock.RUnlock()
 
 	if !known {
-		d.learnNewMembers([]*proto.SignedGossipMessage{m}, []*proto.SignedGossipMessage{})
+		d.learnNewMembers([]*protoext.SignedGossipMessage{m}, []*protoext.SignedGossipMessage{})
 		return
 	}
 
@@ -542,7 +543,7 @@ func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
 
 	if isAlive {
 		if before(lastAliveTS, ts) {
-			d.learnExistingMembers([]*proto.SignedGossipMessage{m})
+			d.learnExistingMembers([]*protoext.SignedGossipMessage{m})
 		} else if !same(lastAliveTS, ts) {
 			d.logger.Debug(m.GetAliveMsg().Membership, "lastAliveTS:", lastAliveTS, "but got ts:", ts)
 		}
@@ -562,7 +563,7 @@ func (d *gossipDiscoveryImpl) purge(id common.PKIidType) {
 	delete(d.aliveLastTS, string(id))
 }
 
-func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
+func (d *gossipDiscoveryImpl) isSentByMe(m *protoext.SignedGossipMessage) bool {
 	pkiID := m.GetAliveMsg().Membership.PkiId
 	if !equalPKIid(pkiID, d.self.PKIid) {
 		return false
@@ -571,8 +572,8 @@ func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
 	diffExternalEndpoint := d.self.Endpoint != m.GetAliveMsg().Membership.Endpoint
 	var diffInternalEndpoint bool
 	secretEnvelope := m.GetSecretEnvelope()
-	if secretEnvelope != nil && secretEnvelope.InternalEndpoint() != "" {
-		diffInternalEndpoint = secretEnvelope.InternalEndpoint() != d.self.InternalEndpoint
+	if secretEnvelope != nil && protoext.InternalEndpoint(secretEnvelope) != "" {
+		diffInternalEndpoint = protoext.InternalEndpoint(secretEnvelope) != d.self.InternalEndpoint
 	}
 	if diffInternalEndpoint || diffExternalEndpoint {
 		d.logger.Error("Bad configuration detected: Received AliveMessage from a peer with the same PKI-ID as myself:", m.GossipMessage)
@@ -580,7 +581,7 @@ func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
 	return true
 }
 
-func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t proto.PeerTime) {
+func (d *gossipDiscoveryImpl) resurrectMember(am *protoext.SignedGossipMessage, t proto.PeerTime) {
 	d.logger.Debug("Entering, AliveMessage:", am, "t:", t)
 	defer d.logger.Debug("Exiting")
 	d.lock.Lock()
@@ -599,7 +600,7 @@ func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t p
 		internalEndpoint = prevNetMem.InternalEndpoint
 	}
 	if am.Envelope.SecretEnvelope != nil {
-		internalEndpoint = am.Envelope.SecretEnvelope.InternalEndpoint()
+		internalEndpoint = protoext.InternalEndpoint(am.Envelope.SecretEnvelope)
 	}
 
 	d.id2Member[string(pkiID)] = &NetworkMember{
@@ -611,7 +612,7 @@ func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t p
 
 	delete(d.deadLastTS, string(pkiID))
 	d.deadMembership.Remove(common.PKIidType(pkiID))
-	d.aliveMembership.Put(common.PKIidType(pkiID), &proto.SignedGossipMessage{GossipMessage: am.GossipMessage, Envelope: am.Envelope})
+	d.aliveMembership.Put(common.PKIidType(pkiID), &protoext.SignedGossipMessage{GossipMessage: am.GossipMessage, Envelope: am.Envelope})
 }
 
 func (d *gossipDiscoveryImpl) periodicalReconnectToDead() {
@@ -645,7 +646,7 @@ func (d *gossipDiscoveryImpl) sendMembershipRequest(member *NetworkMember, inclu
 		d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
 		return
 	}
-	req, err := m.NoopSign()
+	req, err := protoext.NoopSign(m)
 	if err != nil {
 		d.logger.Errorf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
 		return
@@ -793,13 +794,13 @@ func (d *gossipDiscoveryImpl) aliveMsgAndInternalEndpoint() (*proto.GossipMessag
 	return msg, internalEndpoint
 }
 
-func (d *gossipDiscoveryImpl) createSignedAliveMessage(includeInternalEndpoint bool) (*proto.SignedGossipMessage, error) {
+func (d *gossipDiscoveryImpl) createSignedAliveMessage(includeInternalEndpoint bool) (*protoext.SignedGossipMessage, error) {
 	msg, internalEndpoint := d.aliveMsgAndInternalEndpoint()
 	envp := d.crypt.SignMessage(msg, internalEndpoint)
 	if envp == nil {
 		return nil, errors.New("Failed signing message")
 	}
-	signedMsg := &proto.SignedGossipMessage{
+	signedMsg := &protoext.SignedGossipMessage{
 		GossipMessage: msg,
 		Envelope:      envp,
 	}
@@ -811,7 +812,7 @@ func (d *gossipDiscoveryImpl) createSignedAliveMessage(includeInternalEndpoint b
 	return signedMsg, nil
 }
 
-func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossipMessage) {
+func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*protoext.SignedGossipMessage) {
 	d.logger.Debugf("Entering: learnedMembers={%v}", aliveArr)
 	defer d.logger.Debug("Exiting")
 
@@ -831,7 +832,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
 			internalEndpoint = prevNetMem.InternalEndpoint
 		}
 		if m.Envelope.SecretEnvelope != nil {
-			internalEndpoint = m.Envelope.SecretEnvelope.InternalEndpoint()
+			internalEndpoint = protoext.InternalEndpoint(m.Envelope.SecretEnvelope)
 		}
 
 		// update member's data
@@ -858,7 +859,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
 
 			if am := d.aliveMembership.MsgByID(m.GetAliveMsg().Membership.PkiId); am == nil {
 				d.logger.Debug("Adding", am, "to aliveMembership")
-				msg := &proto.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
+				msg := &protoext.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
 				d.aliveMembership.Put(m.GetAliveMsg().Membership.PkiId, msg)
 			} else {
 				d.logger.Debug("Replacing", am, "in aliveMembership")
@@ -869,7 +870,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
 	}
 }
 
-func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossipMessage, deadMembers []*proto.SignedGossipMessage) {
+func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*protoext.SignedGossipMessage, deadMembers []*protoext.SignedGossipMessage) {
 	d.logger.Debugf("Entering: learnedMembers={%v}, deadMembers={%v}", aliveMembers, deadMembers)
 	defer d.logger.Debugf("Exiting")
 
@@ -886,7 +887,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
 			seqNum:   am.GetAliveMsg().Timestamp.SeqNum,
 		}
 
-		d.aliveMembership.Put(am.GetAliveMsg().Membership.PkiId, &proto.SignedGossipMessage{GossipMessage: am.GossipMessage, Envelope: am.Envelope})
+		d.aliveMembership.Put(am.GetAliveMsg().Membership.PkiId, &protoext.SignedGossipMessage{GossipMessage: am.GossipMessage, Envelope: am.Envelope})
 		d.logger.Debugf("Learned about a new alive member: %v", am)
 	}
 
@@ -900,12 +901,12 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
 			seqNum:   dm.GetAliveMsg().Timestamp.SeqNum,
 		}
 
-		d.deadMembership.Put(dm.GetAliveMsg().Membership.PkiId, &proto.SignedGossipMessage{GossipMessage: dm.GossipMessage, Envelope: dm.Envelope})
+		d.deadMembership.Put(dm.GetAliveMsg().Membership.PkiId, &protoext.SignedGossipMessage{GossipMessage: dm.GossipMessage, Envelope: dm.Envelope})
 		d.logger.Debugf("Learned about a new dead member: %v", dm)
 	}
 
 	// update the member in any case
-	for _, a := range [][]*proto.SignedGossipMessage{aliveMembers, deadMembers} {
+	for _, a := range [][]*protoext.SignedGossipMessage{aliveMembers, deadMembers} {
 		for _, m := range a {
 			member := m.GetAliveMsg()
 			if member == nil {
@@ -915,7 +916,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
 
 			var internalEndpoint string
 			if m.Envelope.SecretEnvelope != nil {
-				internalEndpoint = m.Envelope.SecretEnvelope.InternalEndpoint()
+				internalEndpoint = protoext.InternalEndpoint(m.Envelope.SecretEnvelope)
 			}
 
 			if prevNetMem := d.id2Member[string(member.Membership.PkiId)]; prevNetMem != nil {
@@ -974,7 +975,7 @@ func (d *gossipDiscoveryImpl) UpdateEndpoint(endpoint string) {
 func (d *gossipDiscoveryImpl) Self() NetworkMember {
 	var env *proto.Envelope
 	msg, _ := d.aliveMsgAndInternalEndpoint()
-	sMsg, err := msg.NoopSign()
+	sMsg, err := protoext.NoopSign(msg)
 	if err != nil {
 		d.logger.Warning("Failed creating SignedGossipMessage:", err)
 	} else {
@@ -1030,20 +1031,20 @@ type aliveMsgStore struct {
 }
 
 func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
-	policy := proto.NewGossipMessageComparator(0)
+	policy := protoext.NewGossipMessageComparator(0)
 	trigger := func(m interface{}) {}
 	aliveMsgTTL := d.aliveExpirationTimeout * msgExpirationFactor
 	externalLock := func() { d.lock.Lock() }
 	externalUnlock := func() { d.lock.Unlock() }
 	callback := func(m interface{}) {
-		msg := m.(*proto.SignedGossipMessage)
-		if !msg.IsAliveMsg() {
+		msg := m.(*protoext.SignedGossipMessage)
+		if !protoext.IsAliveMsg(msg.GossipMessage) {
 			return
 		}
 		membership := msg.GetAliveMsg().Membership
 		id := membership.PkiId
 		endpoint := membership.Endpoint
-		internalEndpoint := msg.SecretEnvelope.InternalEndpoint()
+		internalEndpoint := protoext.InternalEndpoint(msg.SecretEnvelope)
 		if util.Contains(endpoint, d.bootstrapPeers) || util.Contains(internalEndpoint, d.bootstrapPeers) {
 			// Never remove a bootstrap peer
 			return
@@ -1063,14 +1064,14 @@ func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
 }
 
 func (s *aliveMsgStore) Add(msg interface{}) bool {
-	if !msg.(*proto.SignedGossipMessage).IsAliveMsg() {
+	if !protoext.IsAliveMsg(msg.(*protoext.SignedGossipMessage).GossipMessage) {
 		panic(fmt.Sprint("Msg ", msg, " is not AliveMsg"))
 	}
 	return s.MessageStore.Add(msg)
 }
 
 func (s *aliveMsgStore) CheckValid(msg interface{}) bool {
-	if !msg.(*proto.SignedGossipMessage).IsAliveMsg() {
+	if !protoext.IsAliveMsg(msg.(*protoext.SignedGossipMessage).GossipMessage) {
 		panic(fmt.Sprint("Msg ", msg, " is not AliveMsg"))
 	}
 	return s.MessageStore.CheckValid(msg)
