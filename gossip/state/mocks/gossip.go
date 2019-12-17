@@ -13,6 +13,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/filter"
 	"github.com/hyperledger/fabric/gossip/gossip"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/mock"
 )
@@ -25,7 +26,7 @@ func (g *GossipMock) SelfMembershipInfo() discovery.NetworkMember {
 	panic("implement me")
 }
 
-func (g *GossipMock) SelfChannelInfo(common.ChainID) *proto.SignedGossipMessage {
+func (g *GossipMock) SelfChannelInfo(common.ChainID) *protoext.SignedGossipMessage {
 	panic("implement me")
 }
 
@@ -74,10 +75,10 @@ func (g *GossipMock) Gossip(msg *proto.GossipMessage) {
 	g.Called(msg)
 }
 
-func (g *GossipMock) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan proto.ReceivedMessage) {
+func (g *GossipMock) Accept(acceptor common.MessageAcceptor, passThrough bool) (<-chan *proto.GossipMessage, <-chan protoext.ReceivedMessage) {
 	args := g.Called(acceptor, passThrough)
 	if args.Get(0) == nil {
-		return nil, args.Get(1).(chan proto.ReceivedMessage)
+		return nil, args.Get(1).(chan protoext.ReceivedMessage)
 	}
 	return args.Get(0).(<-chan *proto.GossipMessage), nil
 }
@@ -98,6 +99,6 @@ func (g *GossipMock) Stop() {
 
 }
 
-func (g *GossipMock) SendByCriteria(*proto.SignedGossipMessage, gossip.SendCriteria) error {
+func (g *GossipMock) SendByCriteria(*protoext.SignedGossipMessage, gossip.SendCriteria) error {
 	return nil
 }
