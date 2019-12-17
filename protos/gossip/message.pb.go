@@ -339,7 +339,7 @@ type GossipMessage struct {
 	//	*GossipMessage_PrivateReq
 	//	*GossipMessage_PrivateRes
 	//	*GossipMessage_PrivateData
-	Content              isGossipMessage_Content `protobuf_oneof:"content"`
+	Content              IsGossipMessage_Content `protobuf_oneof:"content"`
 	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
 	XXX_unrecognized     []byte                  `json:"-"`
 	XXX_sizecache        int32                   `json:"-"`
@@ -390,8 +390,8 @@ func (m *GossipMessage) GetTag() GossipMessage_Tag {
 	return GossipMessage_UNDEFINED
 }
 
-type isGossipMessage_Content interface {
-	isGossipMessage_Content()
+type IsGossipMessage_Content interface {
+	IsGossipMessage_Content()
 }
 
 type GossipMessage_AliveMsg struct {
@@ -478,49 +478,49 @@ type GossipMessage_PrivateData struct {
 	PrivateData *PrivateDataMessage `protobuf:"bytes,25,opt,name=private_data,json=privateData,proto3,oneof"`
 }
 
-func (*GossipMessage_AliveMsg) isGossipMessage_Content() {}
+func (*GossipMessage_AliveMsg) IsGossipMessage_Content() {}
 
-func (*GossipMessage_MemReq) isGossipMessage_Content() {}
+func (*GossipMessage_MemReq) IsGossipMessage_Content() {}
 
-func (*GossipMessage_MemRes) isGossipMessage_Content() {}
+func (*GossipMessage_MemRes) IsGossipMessage_Content() {}
 
-func (*GossipMessage_DataMsg) isGossipMessage_Content() {}
+func (*GossipMessage_DataMsg) IsGossipMessage_Content() {}
 
-func (*GossipMessage_Hello) isGossipMessage_Content() {}
+func (*GossipMessage_Hello) IsGossipMessage_Content() {}
 
-func (*GossipMessage_DataDig) isGossipMessage_Content() {}
+func (*GossipMessage_DataDig) IsGossipMessage_Content() {}
 
-func (*GossipMessage_DataReq) isGossipMessage_Content() {}
+func (*GossipMessage_DataReq) IsGossipMessage_Content() {}
 
-func (*GossipMessage_DataUpdate) isGossipMessage_Content() {}
+func (*GossipMessage_DataUpdate) IsGossipMessage_Content() {}
 
-func (*GossipMessage_Empty) isGossipMessage_Content() {}
+func (*GossipMessage_Empty) IsGossipMessage_Content() {}
 
-func (*GossipMessage_Conn) isGossipMessage_Content() {}
+func (*GossipMessage_Conn) IsGossipMessage_Content() {}
 
-func (*GossipMessage_StateInfo) isGossipMessage_Content() {}
+func (*GossipMessage_StateInfo) IsGossipMessage_Content() {}
 
-func (*GossipMessage_StateSnapshot) isGossipMessage_Content() {}
+func (*GossipMessage_StateSnapshot) IsGossipMessage_Content() {}
 
-func (*GossipMessage_StateInfoPullReq) isGossipMessage_Content() {}
+func (*GossipMessage_StateInfoPullReq) IsGossipMessage_Content() {}
 
-func (*GossipMessage_StateRequest) isGossipMessage_Content() {}
+func (*GossipMessage_StateRequest) IsGossipMessage_Content() {}
 
-func (*GossipMessage_StateResponse) isGossipMessage_Content() {}
+func (*GossipMessage_StateResponse) IsGossipMessage_Content() {}
 
-func (*GossipMessage_LeadershipMsg) isGossipMessage_Content() {}
+func (*GossipMessage_LeadershipMsg) IsGossipMessage_Content() {}
 
-func (*GossipMessage_PeerIdentity) isGossipMessage_Content() {}
+func (*GossipMessage_PeerIdentity) IsGossipMessage_Content() {}
 
-func (*GossipMessage_Ack) isGossipMessage_Content() {}
+func (*GossipMessage_Ack) IsGossipMessage_Content() {}
 
-func (*GossipMessage_PrivateReq) isGossipMessage_Content() {}
+func (*GossipMessage_PrivateReq) IsGossipMessage_Content() {}
 
-func (*GossipMessage_PrivateRes) isGossipMessage_Content() {}
+func (*GossipMessage_PrivateRes) IsGossipMessage_Content() {}
 
-func (*GossipMessage_PrivateData) isGossipMessage_Content() {}
+func (*GossipMessage_PrivateData) IsGossipMessage_Content() {}
 
-func (m *GossipMessage) GetContent() isGossipMessage_Content {
+func (m *GossipMessage) GetContent() IsGossipMessage_Content {
 	if m != nil {
 		return m.Content
 	}
