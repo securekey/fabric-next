@@ -101,7 +101,7 @@ docker build -f ./images/fabric-peer-softhsm/Dockerfile \
 # Fabric ccenv image
 declare -x FABRIC_CCENV_IMAGE=hyperledger/fabric-ccenv
 # Use latest tag as that was the image produced by the fabric build above
-declare -x FABRIC_CCENV_TAG=latest
+declare -x FABRIC_CCENV_TAG=${ARCH}-1.4.3
 
 
 # Build cross compile image
