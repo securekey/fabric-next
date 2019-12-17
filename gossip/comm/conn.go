@@ -14,13 +14,14 @@ import (
 
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/metrics"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
-type handler func(message *proto.SignedGossipMessage)
+type handler func(message *protoext.SignedGossipMessage)
 
 type blockingBehavior bool
 
@@ -177,7 +178,7 @@ func (cs *connectionStore) shutdown() {
 }
 
 func (cs *connectionStore) onConnected(serverStream proto.Gossip_GossipStreamServer,
-	connInfo *proto.ConnectionInfo, metrics *metrics.CommMetrics) *connection {
+	connInfo *protoext.ConnectionInfo, metrics *metrics.CommMetrics) *connection {
 	cs.Lock()
 	defer cs.Unlock()
 
@@ -188,7 +189,7 @@ func (cs *connectionStore) onConnected(serverStream proto.Gossip_GossipStreamSer
 	return cs.registerConn(connInfo, serverStream, metrics)
 }
 
-func (cs *connectionStore) registerConn(connInfo *proto.ConnectionInfo,
+func (cs *connectionStore) registerConn(connInfo *protoext.ConnectionInfo,
 	serverStream proto.Gossip_GossipStreamServer, metrics *metrics.CommMetrics) *connection {
 	conn := newConnection(nil, nil, nil, serverStream, metrics, cs.config)
 	conn.pkiID = connInfo.ID
@@ -233,7 +234,7 @@ type connection struct {
 	recvBuffSize int
 	metrics      *metrics.CommMetrics
 	cancel       context.CancelFunc
-	info         *proto.ConnectionInfo
+	info         *protoext.ConnectionInfo
 	outBuff      chan *msgSending
 	logger       util.Logger                     // logger
 	pkiID        common.PKIidType                // pkiID of the remote endpoint
@@ -279,7 +280,7 @@ func (conn *connection) toDie() bool {
 	return atomic.LoadInt32(&(conn.stopFlag)) == int32(1)
 }
 
-func (conn *connection) send(msg *proto.SignedGossipMessage, onErr func(error), shouldBlock blockingBehavior) {
+func (conn *connection) send(msg *protoext.SignedGossipMessage, onErr func(error), shouldBlock blockingBehavior) {
 	if conn.toDie() {
 		conn.logger.Debugf("Aborting send() to %s because connection is closing", conn.info.Endpoint)
 		return
@@ -305,7 +306,7 @@ func (conn *connection) send(msg *proto.SignedGossipMessage, onErr func(error), 
 
 func (conn *connection) serviceConnection() error {
 	errChan := make(chan error, 1)
-	msgChan := make(chan *proto.SignedGossipMessage, conn.recvBuffSize)
+	msgChan := make(chan *protoext.SignedGossipMessage, conn.recvBuffSize)
 	// Call stream.Recv() asynchronously in readFromStream(),
 	// and wait for either the Recv() call to end,
 	// or a signal to close the connection, which exits
@@ -362,7 +363,7 @@ func (conn *connection) drainOutputBuffer() {
 	}
 }
 
-func (conn *connection) readFromStream(errChan chan error, msgChan chan *proto.SignedGossipMessage) {
+func (conn *connection) readFromStream(errChan chan error, msgChan chan *protoext.SignedGossipMessage) {
 	for !conn.toDie() {
 		stream := conn.getStream()
 		if stream == nil {
@@ -381,7 +382,7 @@ func (conn *connection) readFromStream(errChan chan error, msgChan chan *proto.S
 			return
 		}
 		conn.metrics.ReceivedMessages.Add(1)
-		msg, err := envelope.ToGossipMessage()
+		msg, err := protoext.EnvelopeToGossipMessage(envelope)
 		if err != nil {
 			errChan <- err
 			conn.logger.Warningf("Got error, aborting: %v", err)
