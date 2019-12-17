@@ -18,6 +18,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/gossip/algo"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	proto "github.com/hyperledger/fabric/protos/gossip"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,7 @@ func init() {
 
 type pullMsg struct {
 	respondChan chan *pullMsg
-	msg         *proto.SignedGossipMessage
+	msg         *protoext.SignedGossipMessage
 }
 
 // GetSourceMessage Returns the SignedGossipMessage the ReceivedMessage was
@@ -43,18 +44,18 @@ func (pm *pullMsg) GetSourceEnvelope() *proto.Envelope {
 }
 
 func (pm *pullMsg) Respond(msg *proto.GossipMessage) {
-	sMsg, _ := msg.NoopSign()
+	sMsg, _ := protoext.NoopSign(msg)
 	pm.respondChan <- &pullMsg{
 		msg:         sMsg,
 		respondChan: pm.respondChan,
 	}
 }
 
-func (pm *pullMsg) GetGossipMessage() *proto.SignedGossipMessage {
+func (pm *pullMsg) GetGossipMessage() *protoext.SignedGossipMessage {
 	return pm.msg
 }
 
-func (pm *pullMsg) GetConnectionInfo() *proto.ConnectionInfo {
+func (pm *pullMsg) GetConnectionInfo() *protoext.ConnectionInfo {
 	return nil
 }
 
@@ -74,7 +75,7 @@ type pullInstance struct {
 	config        Config
 }
 
-func (p *pullInstance) Send(msg *proto.SignedGossipMessage, peers ...*comm.RemotePeer) {
+func (p *pullInstance) Send(msg *protoext.SignedGossipMessage, peers ...*comm.RemotePeer) {
 	for _, peer := range peers {
 		m := &pullMsg{
 			respondChan: p.msgChan,
@@ -115,7 +116,7 @@ func (p *pullInstance) stop() {
 	p.stopChan <- struct{}{}
 }
 
-func (p *pullInstance) wrapPullMsg(msg *proto.SignedGossipMessage) proto.ReceivedMessage {
+func (p *pullInstance) wrapPullMsg(msg *protoext.SignedGossipMessage) protoext.ReceivedMessage {
 	return &pullMsg{
 		msg:         msg,
 		respondChan: p.msgChan,
@@ -150,7 +151,7 @@ func createPullInstanceWithFilters(endpoint string, peer2PullInst map[string]*pu
 			ResponseWaitTime: time.Duration(300) * time.Millisecond,
 		},
 	}
-	seqNumFromMsg := func(msg *proto.SignedGossipMessage) string {
+	seqNumFromMsg := func(msg *protoext.SignedGossipMessage) string {
 		dataMsg := msg.GetDataMsg()
 		if dataMsg == nil {
 			return ""
@@ -160,7 +161,7 @@ func createPullInstanceWithFilters(endpoint string, peer2PullInst map[string]*pu
 		}
 		return fmt.Sprintf("%d", dataMsg.Payload.SeqNum)
 	}
-	blockConsumer := func(msg *proto.SignedGossipMessage) {
+	blockConsumer := func(msg *protoext.SignedGossipMessage) {
 		inst.items.Add(msg.GetDataMsg().Payload.SeqNum)
 	}
 	inst.pullAdapter = &PullAdapter{
@@ -197,7 +198,7 @@ func TestRegisterMsgHook(t *testing.T) {
 
 	for _, msgType := range []MsgType{HelloMsgType, DigestMsgType, RequestMsgType, ResponseMsgType} {
 		mType := msgType
-		inst1.mediator.RegisterMsgHook(mType, func(_ []string, items []*proto.SignedGossipMessage, _ proto.ReceivedMessage) {
+		inst1.mediator.RegisterMsgHook(mType, func(_ []string, items []*protoext.SignedGossipMessage, _ protoext.ReceivedMessage) {
 			receivedMsgTypes.Add(mType)
 		})
 	}
@@ -217,8 +218,8 @@ func TestFilter(t *testing.T) {
 	eq := func(a interface{}, b interface{}) bool {
 		return a == b
 	}
-	df := func(msg proto.ReceivedMessage) func(string) bool {
-		if msg.GetGossipMessage().IsDataReq() {
+	df := func(msg protoext.ReceivedMessage) func(string) bool {
+		if protoext.IsDataReq(msg.GetGossipMessage().GossipMessage) {
 			req := msg.GetGossipMessage().GetDataReq()
 			return func(item string) bool {
 				return util.IndexInSlice(util.BytesToStrings(req.Digests), item, eq) != -1
@@ -288,22 +289,22 @@ func TestAddAndRemove(t *testing.T) {
 	wg.Add(4)
 
 	// Make sure there is a Hello message
-	inst1.mediator.RegisterMsgHook(HelloMsgType, func(_ []string, items []*proto.SignedGossipMessage, msg proto.ReceivedMessage) {
+	inst1.mediator.RegisterMsgHook(HelloMsgType, func(_ []string, items []*protoext.SignedGossipMessage, msg protoext.ReceivedMessage) {
 		wg.Done()
 	})
 
 	// Instance 1 answering with digest
-	inst2.mediator.RegisterMsgHook(DigestMsgType, func(_ []string, items []*proto.SignedGossipMessage, msg proto.ReceivedMessage) {
+	inst2.mediator.RegisterMsgHook(DigestMsgType, func(_ []string, items []*protoext.SignedGossipMessage, msg protoext.ReceivedMessage) {
 		wg.Done()
 	})
 
 	// Instance 2 requesting missing items
-	inst1.mediator.RegisterMsgHook(RequestMsgType, func(_ []string, items []*proto.SignedGossipMessage, msg proto.ReceivedMessage) {
+	inst1.mediator.RegisterMsgHook(RequestMsgType, func(_ []string, items []*protoext.SignedGossipMessage, msg protoext.ReceivedMessage) {
 		wg.Done()
 	})
 
 	// Instance 1 sends missing item
-	inst2.mediator.RegisterMsgHook(ResponseMsgType, func(_ []string, items []*proto.SignedGossipMessage, msg proto.ReceivedMessage) {
+	inst2.mediator.RegisterMsgHook(ResponseMsgType, func(_ []string, items []*protoext.SignedGossipMessage, msg protoext.ReceivedMessage) {
 		wg.Done()
 	})
 
@@ -329,7 +330,7 @@ func TestDigestsFilters(t *testing.T) {
 	defer inst1.stop()
 	defer inst2.stop()
 
-	inst1.mediator.RegisterMsgHook(DigestMsgType, func(itemIds []string, _ []*proto.SignedGossipMessage, _ proto.ReceivedMessage) {
+	inst1.mediator.RegisterMsgHook(DigestMsgType, func(itemIds []string, _ []*protoext.SignedGossipMessage, _ protoext.ReceivedMessage) {
 		if atomic.LoadInt32(&inst1ReceivedDigest) == int32(1) {
 			return
 		}
@@ -348,7 +349,7 @@ func TestDigestsFilters(t *testing.T) {
 	inst2.mediator.Add(dataMsg(3))
 
 	// inst1 sends hello to inst2
-	sMsg, _ := helloMsg().NoopSign()
+	sMsg, _ := protoext.NoopSign(helloMsg())
 	inst2.mediator.HandleMessage(inst1.wrapPullMsg(sMsg))
 
 	// inst2 is expected to send digest to inst1
@@ -373,7 +374,7 @@ func TestHandleMessage(t *testing.T) {
 	inst1ReceivedDigest := int32(0)
 	inst1ReceivedResponse := int32(0)
 
-	inst1.mediator.RegisterMsgHook(DigestMsgType, func(itemIds []string, _ []*proto.SignedGossipMessage, _ proto.ReceivedMessage) {
+	inst1.mediator.RegisterMsgHook(DigestMsgType, func(itemIds []string, _ []*protoext.SignedGossipMessage, _ protoext.ReceivedMessage) {
 		if atomic.LoadInt32(&inst1ReceivedDigest) == int32(1) {
 			return
 		}
@@ -381,7 +382,7 @@ func TestHandleMessage(t *testing.T) {
 		assert.True(t, len(itemIds) == 3)
 	})
 
-	inst1.mediator.RegisterMsgHook(ResponseMsgType, func(_ []string, items []*proto.SignedGossipMessage, msg proto.ReceivedMessage) {
+	inst1.mediator.RegisterMsgHook(ResponseMsgType, func(_ []string, items []*protoext.SignedGossipMessage, msg protoext.ReceivedMessage) {
 		if atomic.LoadInt32(&inst1ReceivedResponse) == int32(1) {
 			return
 		}
@@ -390,14 +391,14 @@ func TestHandleMessage(t *testing.T) {
 	})
 
 	// inst1 sends hello to inst2
-	sMsg, _ := helloMsg().NoopSign()
+	sMsg, _ := protoext.NoopSign(helloMsg())
 	inst2.mediator.HandleMessage(inst1.wrapPullMsg(sMsg))
 
 	// inst2 is expected to send digest to inst1
 	waitUntilOrFail(t, func() bool { return atomic.LoadInt32(&inst1ReceivedDigest) == int32(1) })
 
 	// inst1 sends request to inst2
-	sMsg, _ = reqMsg("0", "1", "2").NoopSign()
+	sMsg, _ = protoext.NoopSign(reqMsg("0", "1", "2"))
 	inst2.mediator.HandleMessage(inst1.wrapPullMsg(sMsg))
 
 	// inst2 is expected to send response to inst1
@@ -420,8 +421,8 @@ func waitUntilOrFail(t *testing.T, pred func() bool) {
 	assert.Fail(t, "Timeout expired!")
 }
 
-func dataMsg(seqNum int) *proto.SignedGossipMessage {
-	sMsg, _ := (&proto.GossipMessage{
+func dataMsg(seqNum int) *protoext.SignedGossipMessage {
+	sMsg, _ := protoext.NoopSign(&proto.GossipMessage{
 		Nonce: 0,
 		Tag:   proto.GossipMessage_EMPTY,
 		Content: &proto.GossipMessage_DataMsg{
@@ -432,7 +433,7 @@ func dataMsg(seqNum int) *proto.SignedGossipMessage {
 				},
 			},
 		},
-	}).NoopSign()
+	})
 	return sMsg
 }
 

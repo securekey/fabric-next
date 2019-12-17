@@ -10,8 +10,8 @@ import (
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/filter"
 	"github.com/hyperledger/fabric/gossip/gossip"
+	"github.com/hyperledger/fabric/gossip/protoext"
 	gossipa "github.com/hyperledger/fabric/protos/gossip"
-	protoext "github.com/hyperledger/fabric/protos/gossip"
 )
 
 type Gossip struct {
