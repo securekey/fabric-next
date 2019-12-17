@@ -18,10 +18,9 @@ fi
 
 mkdir -p $GOPATH/src/github.com/hyperledger/
 cd $GOPATH/src/github.com/hyperledger/
-git clone https://gerrit.hyperledger.org/r/fabric-ca
+git clone https://github.com/hyperledger/fabric-ca
 cd fabric-ca
 git config advice.detachedHead false
-# https://github.com/hyperledger/fabric/releases/tag/v1.4.3
 git checkout v${1}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-ca
@@ -30,7 +29,7 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 #apply patch for GREP11
-git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
+git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch -3
 
 #apply patch for Thales PKCS11
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/PKCS11-Thales.patch
