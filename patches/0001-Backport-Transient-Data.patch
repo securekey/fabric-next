@@ -1,10 +1,9 @@
-From e9761bf94e934fbd1f88c82c0758c5b012ab22af Mon Sep 17 00:00:00 2001
+From af03f622f008c39c23a173ebfe34b92a165b1b99 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
-Date: Wed, 17 Jul 2019 21:25:14 -0400
+Date: Tue, 17 Dec 2019 11:08:29 -0500
 Subject: [PATCH] Backport Transient Data
 
 Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
-Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
 ---
  Gopkg.lock                                    | 114 ++-
  Gopkg.toml                                    |  12 +-
@@ -88,7 +87,7 @@ Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
  gossip/privdata/distributor.go                |  22 +-
  gossip/privdata/distributor_test.go           |   4 +
  gossip/protoext/extensions.go                 |   7 +
- gossip/service/gossip_service.go              |  12 +-
+ gossip/service/gossip_service.go              |  11 +-
  gossip/service/gossip_service_test.go         |  16 +-
  gossip/service/integration_test.go            |   6 +-
  gossip/state/state.go                         |  23 +-
@@ -287,7 +286,7 @@ Change-Id: I45ba4a20e25bd1d522aac9ca35de9cf9ea70c3fd
  vendor/google.golang.org/grpc/stream.go       | 518 +++++++++-
  vendor/google.golang.org/grpc/tap/tap.go      |   2 +-
  vendor/google.golang.org/grpc/version.go      |   2 +-
- 281 files changed, 27551 insertions(+), 1889 deletions(-)
+ 281 files changed, 27550 insertions(+), 1889 deletions(-)
  create mode 100644 core/ledger/kvledger/idstore/idstore.go
  create mode 100644 core/ledger/kvledger/idstore/readme.md
  create mode 100644 core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/collection_val_ext.go
@@ -724,7 +723,7 @@ index 81b3fd1c9..5ae11dc6e 100644
  		//drop the test database
  		db.DropDatabase()
 diff --git a/core/endorser/endorser.go b/core/endorser/endorser.go
-index 3a8913942..fa6ddb9e4 100644
+index fc9e03cc7..40ae566bb 100644
 --- a/core/endorser/endorser.go
 +++ b/core/endorser/endorser.go
 @@ -23,7 +23,11 @@ import (
@@ -942,7 +941,7 @@ index f33fbe5a1..09417215c 100644
  	if err != nil {
  		return nil, err
 diff --git a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_builder.go b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_builder.go
-index 830419649..b3e7b2ccc 100644
+index d0b1b4e30..6da679fc2 100644
 --- a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_builder.go
 +++ b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_builder.go
 @@ -138,7 +138,7 @@ func (b *RWSetBuilder) GetTxSimulationResults() (*ledger.TxSimulationResults, er
@@ -1218,7 +1217,7 @@ index b684c23e8..29b333558 100644
  
  // GetPrivateDataRangeScanIterator implements method in interface `ledger.QueryExecutor`
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index 2d1bf5f74..53f5af4f0 100644
+index c4cb4aa5e..844a59011 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 @@ -22,6 +22,7 @@ import (
@@ -1266,7 +1265,7 @@ index 2d1bf5f74..53f5af4f0 100644
  	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
  	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
  	txmgr.oldBlockCommit.Lock()
-@@ -168,7 +174,7 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
+@@ -159,7 +165,7 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
  	// interleave and nullify the optimization provided by the bulk read API.
  	// Once the ledger cache (FAB-103) is introduced and existing
  	// LoadCommittedVersions() is refactored to return a map, we can allow
@@ -1275,7 +1274,7 @@ index 2d1bf5f74..53f5af4f0 100644
  	// the lock on oldBlockCommit as it is also used to avoid interleaving
  	// between Commit() and execution of this function for the correctness.
  	logger.Debug("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
-@@ -495,7 +501,7 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+@@ -486,7 +492,7 @@ func (txmgr *LockBasedTxMgr) Commit() error {
  	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
  		return err
  	}
@@ -1378,7 +1377,7 @@ index 000000000..987225ad7
 +	return h.getPrivateDataMultipleKeys(ns, coll, keys)
 +}
 diff --git a/core/ledger/ledger_interface.go b/core/ledger/ledger_interface.go
-index 307a14643..3735bf5af 100644
+index 36bb776d0..5bf878de9 100644
 --- a/core/ledger/ledger_interface.go
 +++ b/core/ledger/ledger_interface.go
 @@ -13,6 +13,7 @@ import (
@@ -1859,7 +1858,7 @@ index dfd5695ce..5c44e9f32 100644
  	)
  	chains.list = make(map[string]*chain)
 diff --git a/core/peer/peer.go b/core/peer/peer.go
-index e15f01836..33a031d3d 100644
+index 4d8659147..147843313 100644
 --- a/core/peer/peer.go
 +++ b/core/peer/peer.go
 @@ -33,6 +33,9 @@ import (
@@ -1917,7 +1916,7 @@ index e15f01836..33a031d3d 100644
  	})
  	ledgerIds, err := ledgermgmt.GetLedgerIDs()
  	if err != nil {
-@@ -430,12 +455,19 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
+@@ -438,12 +463,19 @@ func createChain(
  		*semaphore.Weighted
  	}{cs, validationWorkersSemaphore}
  	validator := txvalidator.NewTxValidator(cid, vcs, sccp, pm)
@@ -1941,7 +1940,7 @@ index e15f01836..33a031d3d 100644
  	})
  
  	oc, ok := bundle.OrdererConfig()
-@@ -464,6 +496,11 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
+@@ -477,6 +509,11 @@ func createChain(
  		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
  	}
  
@@ -1953,7 +1952,7 @@ index e15f01836..33a031d3d 100644
  	csStoreSupport := &CollectionSupport{
  		PeerLedger: ledger,
  	}
-@@ -478,9 +515,13 @@ func createChain(cid string, ledger ledger.PeerLedger, cb *common.Block, ccp ccp
+@@ -492,9 +529,13 @@ func createChain(
  		Validator:            validator,
  		Committer:            c,
  		Store:                store,
@@ -4390,7 +4389,7 @@ index 000000000..f64665513
 +	return dPlan, nil
 +}
 diff --git a/gossip/privdata/distributor.go b/gossip/privdata/distributor.go
-index c68face5b..bbc6085d2 100644
+index 6a7cc1878..9341472a4 100644
 --- a/gossip/privdata/distributor.go
 +++ b/gossip/privdata/distributor.go
 @@ -47,6 +47,9 @@ type gossipAdapter interface {
@@ -4415,15 +4414,14 @@ index c68face5b..bbc6085d2 100644
  }
  
  // NewCollectionAccessFactory
-@@ -169,9 +172,20 @@ func (d *distributorImpl) computeDisseminationPlan(txID string,
- 				return nil, errors.WithStack(err)
+@@ -170,11 +173,22 @@ func (d *distributorImpl) computeDisseminationPlan(txID string,
  			}
  
+ 			logger.Debugf("Computing dissemination plan for collection [%s]", collectionName)
 -			dPlan, err := d.disseminationPlanForMsg(colAP, colFilter, pvtDataMsg)
 -			if err != nil {
 -				return nil, errors.WithStack(err)
 +			collType := colCP.GetStaticCollectionConfig().Type
-+
 +			var dPlan []*dissemination
 +			switch {
 +			case collType == common.CollectionType_COL_PRIVATE || collType == common.CollectionType_COL_UNKNOWN:
@@ -4438,9 +4436,12 @@ index c68face5b..bbc6085d2 100644
 +				}
  			}
  			disseminationPlan = append(disseminationPlan, dPlan...)
++
  		}
+ 	}
+ 	return disseminationPlan, nil
 diff --git a/gossip/privdata/distributor_test.go b/gossip/privdata/distributor_test.go
-index 22f660602..8bf1221dd 100644
+index 121f4f71d..16886a510 100644
 --- a/gossip/privdata/distributor_test.go
 +++ b/gossip/privdata/distributor_test.go
 @@ -105,6 +105,10 @@ func (g *gossipMock) PeerFilter(channel gcommon.ChainID, messagePredicate api.Su
@@ -4473,28 +4474,21 @@ index d1dd3e225..c56ff4b92 100644
  }
  
 diff --git a/gossip/service/gossip_service.go b/gossip/service/gossip_service.go
-index 7ffe61f27..bc3dff1de 100644
+index de68c7d8b..c6311c81c 100644
 --- a/gossip/service/gossip_service.go
 +++ b/gossip/service/gossip_service.go
-@@ -9,12 +9,17 @@ package service
- import (
- 	"sync"
- 
-+	"github.com/hyperledger/fabric/core/ledger"
-+
- 	"github.com/hyperledger/fabric/common/metrics"
- 	"github.com/hyperledger/fabric/core/committer"
- 	"github.com/hyperledger/fabric/core/committer/txvalidator"
- 	"github.com/hyperledger/fabric/core/common/privdata"
- 	deliverclient "github.com/hyperledger/fabric/core/deliverservice"
- 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
+@@ -30,6 +30,10 @@ import (
+ 	"github.com/hyperledger/fabric/protos/transientstore"
+ 	"github.com/pkg/errors"
+ 	"github.com/spf13/viper"
 +	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
++	"github.com/hyperledger/fabric/core/ledger"
 +	extgossipapi "github.com/hyperledger/fabric/extensions/gossip/api"
 +	"github.com/hyperledger/fabric/extensions/gossip/dispatcher"
- 	"github.com/hyperledger/fabric/gossip/api"
- 	gossipCommon "github.com/hyperledger/fabric/gossip/common"
- 	"github.com/hyperledger/fabric/gossip/election"
-@@ -225,6 +230,10 @@ type Support struct {
+ 	"google.golang.org/grpc"
+ )
+ 
+@@ -255,6 +259,10 @@ type Support struct {
  	Cs                   privdata.CollectionStore
  	IdDeserializeFactory privdata2.IdentityDeserializerFactory
  	CapabilityProvider   privdata2.CapabilityProvider
@@ -4505,7 +4499,7 @@ index 7ffe61f27..bc3dff1de 100644
  }
  
  // DataStoreSupport aggregates interfaces capable
-@@ -266,6 +275,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
+@@ -296,6 +304,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  		CollectionStore:    support.Cs,
  		Validator:          support.Validator,
  		TransientStore:     support.Store,
@@ -4513,7 +4507,7 @@ index 7ffe61f27..bc3dff1de 100644
  		Committer:          support.Committer,
  		Fetcher:            fetcher,
  		CapabilityProvider: support.CapabilityProvider,
-@@ -291,7 +301,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
+@@ -321,7 +330,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  	g.privateHandlers[chainID].reconciler.Start()
  
  	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
@@ -4595,7 +4589,7 @@ index fde1db86b..03091f335 100644
  		return gs
  	}
 diff --git a/gossip/state/state.go b/gossip/state/state.go
-index a905a9dfb..0bf845a2b 100644
+index 97d2094c0..2edcce2ab 100644
 --- a/gossip/state/state.go
 +++ b/gossip/state/state.go
 @@ -84,6 +84,12 @@ type GossipAdapter interface {
@@ -4658,7 +4652,7 @@ index a905a9dfb..0bf845a2b 100644
 +		msgDispatcher: msgDispatcher,
  	}
  
- 	logger.Infof("Updating metadata information, "+
+ 	logger.Infof("Updating metadata information for channel %s, "+
 @@ -321,6 +336,10 @@ func (s *GossipStateProviderImpl) dispatch(msg protoext.ReceivedMessage) {
  		logger.Debug("Handling private data collection message")
  		// Handling private data replication message
@@ -4862,10 +4856,10 @@ index 000000000..c16087d13
 +	})
 +}
 diff --git a/peer/node/start.go b/peer/node/start.go
-index 8dd45762a..657586917 100644
+index 961b75a24..6bd77b950 100644
 --- a/peer/node/start.go
 +++ b/peer/node/start.go
-@@ -74,6 +74,8 @@ import (
+@@ -75,6 +75,8 @@ import (
  	ccsupport "github.com/hyperledger/fabric/discovery/support/chaincode"
  	"github.com/hyperledger/fabric/discovery/support/config"
  	"github.com/hyperledger/fabric/discovery/support/gossip"
@@ -4874,7 +4868,7 @@ index 8dd45762a..657586917 100644
  	gossipcommon "github.com/hyperledger/fabric/gossip/common"
  	"github.com/hyperledger/fabric/gossip/service"
  	"github.com/hyperledger/fabric/msp"
-@@ -176,6 +178,16 @@ func serve(args []string) error {
+@@ -177,6 +179,16 @@ func serve(args []string) error {
  	flogging.Global.SetObserver(logObserver)
  
  	membershipInfoProvider := privdata.NewMembershipInfoProvider(createSelfSignedData(), identityDeserializerFactory)
@@ -4891,7 +4885,7 @@ index 8dd45762a..657586917 100644
  	//initialize resource management exit
  	ledgermgmt.Initialize(
  		&ledgermgmt.Initializer{
-@@ -185,6 +197,7 @@ func serve(args []string) error {
+@@ -186,6 +198,7 @@ func serve(args []string) error {
  			MembershipInfoProvider:        membershipInfoProvider,
  			MetricsProvider:               metricsProvider,
  			HealthCheckRegistry:           opsSystem,
@@ -4899,7 +4893,7 @@ index 8dd45762a..657586917 100644
  		},
  	)
  
-@@ -360,7 +373,7 @@ func serve(args []string) error {
+@@ -371,7 +384,7 @@ func serve(args []string) error {
  		}
  		cceventmgmt.GetMgr().Register(cid, sub)
  	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName),
@@ -35529,5 +35523,5 @@ index 8ee619bf6..c30e84c00 100644
 -const Version = "1.15.0"
 +const Version = "1.19.0"
 -- 
-2.21.0 (Apple Git-120)
+2.21.0 (Apple Git-122.2)
 

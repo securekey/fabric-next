@@ -18,10 +18,9 @@ fi
 
 mkdir -p $GOPATH/src/github.com/hyperledger/
 cd $GOPATH/src/github.com/hyperledger/
-git clone https://gerrit.hyperledger.org/r/fabric-ca
+git clone https://github.com/hyperledger/fabric-ca
 cd fabric-ca
 git config advice.detachedHead false
-# https://github.com/hyperledger/fabric/releases/tag/v1.4.3
 git checkout v${1}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-ca
