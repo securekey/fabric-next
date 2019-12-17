@@ -152,6 +152,14 @@ func chaincodeInvokeOrQuery(cmd *cobra.Command, invoke bool, cf *ChaincodeCmdFac
 	return nil
 }
 
+// CollectionType enumerates the various types of private data collections.
+type CollectionType string
+
+const (
+	CollectionType_PRIVATE   CollectionType = "PRIVATE"
+	CollectionType_TRANSIENT CollectionType = "TRANSIENT"
+)
+
 type collectionConfigJson struct {
 	Name           string `json:"name"`
 	Policy         string `json:"policy"`
@@ -159,6 +167,9 @@ type collectionConfigJson struct {
 	MaxPeerCount   int32  `json:"maxPeerCount"`
 	BlockToLive    uint64 `json:"blockToLive"`
 	MemberOnlyRead bool   `json:"memberOnlyRead"`
+
+	Type       CollectionType `json:"type"`
+	TimeToLive string         `json:"timeToLive"`
 }
 
 // getCollectionConfig retrieves the collection configuration
@@ -196,17 +207,44 @@ func getCollectionConfigFromBytes(cconfBytes []byte) ([]byte, error) {
 			},
 		}
 
-		cc := &pcommon.CollectionConfig{
-			Payload: &pcommon.CollectionConfig_StaticCollectionConfig{
-				StaticCollectionConfig: &pcommon.StaticCollectionConfig{
-					Name:              cconfitem.Name,
-					MemberOrgsPolicy:  cpc,
-					RequiredPeerCount: cconfitem.RequiredCount,
-					MaximumPeerCount:  cconfitem.MaxPeerCount,
-					BlockToLive:       cconfitem.BlockToLive,
-					MemberOnlyRead:    cconfitem.MemberOnlyRead,
+		var cc *pcommon.CollectionConfig
+		switch cconfitem.Type {
+		case CollectionType_TRANSIENT:
+			cc = &pcommon.CollectionConfig{
+				Payload: &pcommon.CollectionConfig_StaticCollectionConfig{
+					StaticCollectionConfig: &pcommon.StaticCollectionConfig{
+						Name:              cconfitem.Name,
+						MemberOrgsPolicy:  cpc,
+						RequiredPeerCount: cconfitem.RequiredCount,
+						MaximumPeerCount:  cconfitem.MaxPeerCount,
+						MemberOnlyRead:    cconfitem.MemberOnlyRead,
+						//MemberOnlyWrite is added post Fabric 1.4.1
+						//MemberOnlyWrite:   cconfitem.MemberOnlyWrite,
+
+						Type:       pcommon.CollectionType_COL_TRANSIENT,
+						TimeToLive: cconfitem.TimeToLive,
+					},
 				},
-			},
+			}
+		case CollectionType_PRIVATE:
+			fallthrough
+		case "":
+			cc = &pcommon.CollectionConfig{
+				Payload: &pcommon.CollectionConfig_StaticCollectionConfig{
+					StaticCollectionConfig: &pcommon.StaticCollectionConfig{
+						Name:              cconfitem.Name,
+						MemberOrgsPolicy:  cpc,
+						RequiredPeerCount: cconfitem.RequiredCount,
+						MaximumPeerCount:  cconfitem.MaxPeerCount,
+						BlockToLive:       cconfitem.BlockToLive,
+						MemberOnlyRead:    cconfitem.MemberOnlyRead,
+						//MemberOnlyWrite is added post Fabric 1.4.1
+						//MemberOnlyWrite:   cconfitem.MemberOnlyWrite,
+					},
+				},
+			}
+		default:
+			return nil, errors.Errorf("unsupported collection configuration type [%s]", cconfitem.Type)
 		}
 
 		ccarray = append(ccarray, cc)

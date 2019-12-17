@@ -75,6 +75,8 @@ import (
 	ccsupport "github.com/hyperledger/fabric/discovery/support/chaincode"
 	"github.com/hyperledger/fabric/discovery/support/config"
 	"github.com/hyperledger/fabric/discovery/support/gossip"
+	supportapi "github.com/hyperledger/fabric/extensions/collections/api/support"
+	collretriever "github.com/hyperledger/fabric/extensions/collections/retriever"
 	gossipcommon "github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp"
@@ -177,6 +179,16 @@ func serve(args []string) error {
 	flogging.Global.SetObserver(logObserver)
 
 	membershipInfoProvider := privdata.NewMembershipInfoProvider(createSelfSignedData(), identityDeserializerFactory)
+
+	transientDataProvider := collretriever.NewProvider(
+		peer.CollectionDataStoreFactory().StoreForChannel,
+		peer.GetLedger,
+		func() supportapi.GossipAdapter {
+			return service.GetGossipService()
+		},
+		peer.BlockPublisher.ForChannel,
+	)
+
 	//initialize resource management exit
 	ledgermgmt.Initialize(
 		&ledgermgmt.Initializer{
@@ -186,6 +198,7 @@ func serve(args []string) error {
 			MembershipInfoProvider:        membershipInfoProvider,
 			MetricsProvider:               metricsProvider,
 			HealthCheckRegistry:           opsSystem,
+			CollDataProvider:              transientDataProvider,
 		},
 	)
 
@@ -371,7 +384,7 @@ func serve(args []string) error {
 		}
 		cceventmgmt.GetMgr().Register(cid, sub)
 	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName),
-		pr, deployedCCInfoProvider, membershipInfoProvider, metricsProvider)
+		pr, deployedCCInfoProvider, membershipInfoProvider, metricsProvider, transientDataProvider)
 
 	if viper.GetBool("peer.discovery.enabled") {
 		registerDiscoveryService(peerServer, policyMgr, lifecycle)
