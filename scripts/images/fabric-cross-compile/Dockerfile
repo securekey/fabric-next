@@ -10,16 +10,9 @@ ARG    FABRIC_CCENV_TAG=ARG_REQUIRED
 
 # FROM CONTAINER
 FROM   ${FABRIC_CCENV_IMAGE}:${FABRIC_CCENV_TAG}
-ARG    GO_VERSION
 
 # LABELS
 LABEL  maintainer=sk-dev-team
-
-RUN go version
-RUN mkdir -p ${GOPATH} && \
-    curl -sL -o /tmp/go.tgz https://storage.googleapis.com/golang/go${GO_VERSION}.linux-amd64.tar.gz && \
-    tar -xf /tmp/go.tgz -C /opt/ && \
-    rm -rf /tmp/go.tgz
 
 # Mark current sources for amd64 arch
 RUN    set -ex; sed -i "s/deb /deb [arch=amd64] /" /etc/apt/sources.list && \
