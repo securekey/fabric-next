@@ -109,7 +109,8 @@ declare -x FABRIC_CCENV_TAG=${ARCH}-1.4.3
 if [[ "amd64" = "${ARCH}" ]]; then
   docker build -f ./images/fabric-cross-compile/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} \
   --build-arg FABRIC_CCENV_IMAGE=${FABRIC_CCENV_IMAGE} \
-  --build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} .
+  --build-arg FABRIC_CCENV_TAG=${FABRIC_CCENV_TAG} \
+  --build-arg GO_VERSION=1.12.12 .
   docker tag ${BASE_NAMESPACE}/fabric-cross-compile:${FABRIC_NEXT_IMAGE_TAG} ${BASE_NAMESPACE}/fabric-cross-compile:${ARCH}-latest
 fi
 
