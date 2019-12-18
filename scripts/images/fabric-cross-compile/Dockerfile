@@ -24,10 +24,10 @@ RUN mkdir -p ${GOPATH} && \
 # Mark current sources for amd64 arch
 RUN    set -ex; sed -i "s/deb /deb [arch=amd64] /" /etc/apt/sources.list && \
        # Add the ubuntu ports source for the s390x architecture
-       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports xenial main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
-       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports xenial-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
-       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports xenial-security main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
-       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports xenial-backports main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
+       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports bionic main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
+       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports bionic-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
+       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports bionic-security main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
+       echo "deb [arch=s390x] http://ports.ubuntu.com/ubuntu-ports bionic-backports main restricted universe multiverse" >> /etc/apt/sources.list.d/s390x.list && \
        # Add the s390x architecture
        dpkg --add-architecture s390x && \
        # Update list of packages
