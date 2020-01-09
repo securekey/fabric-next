@@ -26,5 +26,8 @@ git checkout v${1}
 
 cd $GOPATH/src/github.com/hyperledger/fabric-baseimage
 
+#apply patch for CouchDB
+git am $MY_PATH/../patches/0001-VMEENG-1622-change-couchdb-build.patch
+
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
