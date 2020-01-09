@@ -54,12 +54,6 @@ docker build -f ./images/fabric-baseimage/Dockerfile --no-cache -t ${BASE_NAMESP
 --build-arg ARCH=${ARCH} \
 --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
 
-# Updating system packages in couchdb image
-docker build -f ./images/fabric-couchdb/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-couchdb:${FABRIC_NEXT_IMAGE_TAG} \
---build-arg FABRIC_COUCHDB_IMAGE=${FABRIC_COUCHDB_IMAGE} \
---build-arg ARCH=${ARCH} \
---build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
-
 # Updating system packages in kafka image
 docker build -f ./images/fabric-kafka/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-kafka:${FABRIC_NEXT_IMAGE_TAG} \
 --build-arg FABRIC_KAFKA_IMAGE=${FABRIC_KAFKA_IMAGE} \
@@ -71,6 +65,21 @@ docker build -f ./images/fabric-zookeeper/Dockerfile --no-cache -t ${BASE_NAMESP
 --build-arg FABRIC_ZOOKEEPER_IMAGE=${FABRIC_ZOOKEEPER_IMAGE} \
 --build-arg ARCH=${ARCH} \
 --build-arg FABRIC_BASE_VERSION=${BASE_VERSION} .
+
+# custom build CouchDB image
+TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
+echo "Build tmp directory is $TMP ..."
+
+export GOPATH=$TMP
+
+$MY_PATH/fabric_baseimage.sh ${BASE_VERSION}
+
+cd $GOPATH/src/github.com/hyperledger/fabric-baseimage
+
+# Building couchdb image
+make BASE_DOCKER_NS=$BASE_NAMESPACE DOCKER_TAG=${ARCH}-${BASE_VERSION} couchdb
+
+rm -Rf $TMP
 
 ############################################
 #            Fabric Build                  #
