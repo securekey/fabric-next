@@ -1,0 +1,106 @@
+From 996c326db52be60b2f05f1d5af1edda0d61e2dcb Mon Sep 17 00:00:00 2001
+From: Ali AlKhalidi <ali.alkhalidi@securekey.com>
+Date: Thu, 9 Jan 2020 20:15:49 +0000
+Subject: [PATCH] VMEENG-1622: change couchdb build
+
+---
+ images/couchdb/Dockerfile           | 14 ++++++++++++--
+ images/couchdb/docker-entrypoint.sh | 14 +++++++-------
+ 2 files changed, 19 insertions(+), 9 deletions(-)
+
+diff --git a/images/couchdb/Dockerfile b/images/couchdb/Dockerfile
+index b973759..649ea19 100644
+--- a/images/couchdb/Dockerfile
++++ b/images/couchdb/Dockerfile
+@@ -118,7 +118,8 @@ RUN buildDeps=' \
+  && apt-get purge -y --auto-remove $buildDeps \
+  && rm -rf /var/lib/apt/lists/* /usr/src/couchdb* \
+  && mkdir /opt/couchdb/data \
+- && chown -R couchdb:couchdb /opt/couchdb
++ && chown -R couchdb:0 /opt/couchdb \
++ && chmod -R g=u /opt/couchdb
+ 
+ # Add configuration
+ COPY ./vm.args /opt/couchdb/etc/
+@@ -129,17 +130,26 @@ COPY ./docker-entrypoint.sh /
+ 
+ # Setup directories and permissions
+ RUN chmod +x /docker-entrypoint.sh \
+- && chown -R couchdb:couchdb /opt/couchdb/etc/default.d/ /opt/couchdb/etc/vm.args \
++ && chown -R couchdb:0 /opt/couchdb/etc/default.d/ /opt/couchdb/etc/vm.args \
+  && chmod -R 0770 /opt/couchdb/data \
+  && chmod 664 /opt/couchdb/etc/*.ini \
+  && chmod 664 /opt/couchdb/etc/default.d/*.ini \
+  && chmod 775 /opt/couchdb/etc/*.d
+ 
++# System package upgrade
++RUN apt-get update -qq \
++ && apt-get -y dist-upgrade \
++ && apt-get clean autoclean \
++ && apt-get autoremove -y \
++ && rm -rf /var/lib/cache /var/lib/log /var/lib/apt/lists/*
++
+ WORKDIR /opt/couchdb
+ EXPOSE 5984 4369 9100
+ 
+ VOLUME ["/opt/couchdb/data"]
+ VOLUME ["/opt/couchdb/etc/local.d"]
+ 
++USER couchdb:0
++
+ ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+ CMD ["/opt/couchdb/bin/couchdb"]
+diff --git a/images/couchdb/docker-entrypoint.sh b/images/couchdb/docker-entrypoint.sh
+index 7fdb04b..e73c10b 100755
+--- a/images/couchdb/docker-entrypoint.sh
++++ b/images/couchdb/docker-entrypoint.sh
+@@ -30,7 +30,7 @@ if [ "$1" = '/opt/couchdb/bin/couchdb' ]; then
+ 	# cases where some of these ownership and permissions issues are non-fatal
+ 	# (e.g. a config file owned by root with o+r is actually fine), and we don't
+ 	# to be too aggressive about crashing here ...
+-	find /opt/couchdb \! \( -user couchdb -group couchdb \) -exec chown -f couchdb:couchdb '{}' +
++	#find /opt/couchdb \! \( -user couchdb -group couchdb \) -exec chown -f couchdb:couchdb '{}' +
+ 
+ 	# Ensure that data files have the correct permissions. We were previously
+ 	# preventing any access to these files outside of couchdb:couchdb, but it
+@@ -38,15 +38,15 @@ if [ "$1" = '/opt/couchdb/bin/couchdb' ]; then
+ 	# when it creates the files. The approach taken here ensures that the
+ 	# contents of the datadir have the same permissions as they had when they
+ 	# were initially created. This should minimize any startup delay.
+-	find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 '{}' +
+-	find /opt/couchdb/data -type f ! -perm 0644 -exec chmod -f 0644 '{}' +
++	#find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 '{}' +
++	#find /opt/couchdb/data -type f ! -perm 0644 -exec chmod -f 0644 '{}' +
+ 
+ 	# Do the same thing for configuration files and directories. Technically
+ 	# CouchDB only needs read access to the configuration files as all online
+ 	# changes will be applied to the "docker.ini" file below, but we set 644
+ 	# for the sake of consistency.
+-	find /opt/couchdb/etc -type d ! -perm 0755 -exec chmod -f 0755 '{}' +
+-	find /opt/couchdb/etc -type f ! -perm 0644 -exec chmod -f 0644 '{}' +
++	#find /opt/couchdb/etc -type d ! -perm 0755 -exec chmod -f 0755 '{}' +
++	#find /opt/couchdb/etc -type f ! -perm 0644 -exec chmod -f 0644 '{}' +
+ 
+ 	if [ ! -z "$NODENAME" ] && ! grep "couchdb@" /opt/couchdb/etc/vm.args; then
+ 		echo "-name couchdb@$NODENAME" >> /opt/couchdb/etc/vm.args
+@@ -69,7 +69,7 @@ if [ "$1" = '/opt/couchdb/bin/couchdb' ]; then
+ 		fi
+ 	fi
+ 
+-	chown -f couchdb:couchdb /opt/couchdb/etc/local.d/docker.ini || true
++	#chown -f couchdb:couchdb /opt/couchdb/etc/local.d/docker.ini || true
+ 
+ 	# if we don't find an [admins] section followed by a non-comment, display a warning
+         if ! grep -Pzoqr '\[admins\]\n[^;]\w+' /opt/couchdb/etc/default.d/*.ini /opt/couchdb/etc/local.d/*.ini; then
+@@ -89,7 +89,7 @@ if [ "$1" = '/opt/couchdb/bin/couchdb' ]; then
+ 	fi
+ 
+ 
+-	exec gosu couchdb "$@"
++	exec "$@"
+ fi
+ 
+ exec "$@"
+-- 
+2.17.1
+
