@@ -18,7 +18,7 @@ fi
 
 mkdir -p $GOPATH/src/github.com/hyperledger/
 cd $GOPATH/src/github.com/hyperledger/
-git clone https://gerrit.hyperledger.org/r/fabric-baseimage
+git clone https://github.com/hyperledger/fabric-baseimage
 cd fabric-baseimage
 git config advice.detachedHead false
 # https://github.com/hyperledger/fabric-baseimage/releases/tag/v0.4.5

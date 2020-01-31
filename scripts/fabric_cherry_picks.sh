@@ -18,7 +18,7 @@ fi
 
 mkdir -p $GOPATH/src/github.com/hyperledger/
 cd $GOPATH/src/github.com/hyperledger/
-git clone https://gerrit.hyperledger.org/r/fabric
+git clone https://github.com/hyperledger/fabric
 cd fabric
 git config advice.detachedHead false
 git checkout v${1}
