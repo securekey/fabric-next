@@ -90,7 +90,7 @@ make clean
 sed -i 's/RUN make/RUN GO_TAGS=\"pkcs11 pluginsenabled\" make/g' images/tools/Dockerfile.in
 
 # Building all the images
-DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" make docker
+DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" CHAINTOOL_URL=https://hyperledger.jfrog.io/hyperledger/fabric-maven/org/hyperledger/fabric-chaintool/$(CHAINTOOL_RELEASE)/fabric-chaintool-$(CHAINTOOL_RELEASE).jar make docker
 
 rm -Rf $TMP
 
