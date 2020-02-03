@@ -516,12 +516,12 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:918dbd46ad099418ce9760291bb156ebf23d441aad4cb682dd9bf09e2d3c0c7b"
+  digest = "1:6677d48b94a68d0e2b9c2231c40f038a847cdf4b26a8eea65357cd70a58ef957"
   name = "github.com/opencontainers/runc"
   packages = ["libcontainer/user"]
   pruneopts = "NUT"
-  revision = "baf6536d6259209c3edfa2b22237af82942d3dfa"
-  version = "v0.1.1"
+  revision = "425e105d5a03fabd737a126ad93d62a9eeede87f"
+  version = "v1.0.0-rc8"
 
 [[projects]]
   digest = "1:a5e7d4191d0ff352792f9250b9bf4f1ce673915bb5c5830afa0b18700da53dda"
