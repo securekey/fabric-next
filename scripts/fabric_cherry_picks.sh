@@ -15,18 +15,23 @@ if [ -z "$MY_PATH" ] ; then
   exit 1  # fail
 fi
 
-
+# git clone and checkout Hyperledger Fabric source code
 mkdir -p $GOPATH/src/github.com/hyperledger/
-cd $GOPATH/src/github.com/hyperledger/
-git clone https://github.com/hyperledger/fabric
-cd fabric
-git config advice.detachedHead false
-git checkout v${1}
-
+git clone https://github.com/hyperledger/fabric $GOPATH/src/github.com/hyperledger/fabric
 cd $GOPATH/src/github.com/hyperledger/fabric
 
+git config advice.detachedHead false
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
+
+if [ "x${1}" == "x" ]; then
+
+  echo "FATAL: please specify fabric version as the 1st parameter of the script!"
+  echo ""
+  exit 1
+fi
+
+git checkout ${1}
 
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
