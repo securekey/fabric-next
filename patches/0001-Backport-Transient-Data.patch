@@ -484,7 +484,7 @@ index 2733e38ce..f52db3264 100644
 @@ -93,6 +93,21 @@
    pruneopts = "NUT"
    revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
- 
+
 +[[projects]]
 +  digest = "1:b870f4fc8ac5a04b3dbb6540e81a4c16da874e9f922dbe8762a90d9bcc294910"
 +  name = "github.com/bluele/gcache"
@@ -505,7 +505,7 @@ index 2733e38ce..f52db3264 100644
    digest = "1:4a029051269e04c040c092eb4ddd92732f8f3a3921a8b43b82b30804e00f3357"
 @@ -398,9 +413,12 @@
    version = "v0.1.0"
- 
+
  [[projects]]
 -  digest = "1:d244f8666a838fe6ad70ec8fe77f50ebc29fdc3331a2729ba5886bef8435d10d"
 +  digest = "1:4244266b65ea535b8ebd109a327720821707b59f9a37bda738946d52ec69442d"
@@ -520,7 +520,7 @@ index 2733e38ce..f52db3264 100644
    version = "v1.8.0"
 @@ -534,12 +552,12 @@
    version = "v2.0.6"
- 
+
  [[projects]]
 -  digest = "1:5cf3f025cbee5951a4ee961de067c8a89fc95a5adabead774f82822efabab121"
 +  digest = "1:14715f705ff5dfe0ffd6571d7d201dd8e921030f8070321a79380d8ca4ec1a24"
@@ -531,13 +531,13 @@ index 2733e38ce..f52db3264 100644
 -  version = "v0.8.0"
 +  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
 +  version = "v0.8.1"
- 
+
  [[projects]]
    digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
 @@ -710,6 +728,57 @@
    pruneopts = "NUT"
    revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
- 
+
 +[[projects]]
 +  digest = "1:2af3aeb5d098d72b09e268dfb269f99383d724344676b74c0f5f072b99850cee"
 +  name = "github.com/trustbloc/fabric-peer-ext"
@@ -594,7 +594,7 @@ index 2733e38ce..f52db3264 100644
    name = "github.com/willf/bitset"
 @@ -891,24 +960,29 @@
    revision = "c7e5094acea1ca1b899e2259d80a6b0f882f81f8"
- 
+
  [[projects]]
 -  digest = "1:5b805b8e03b29399b344655cac16873f026e54dc0a7c17b381f6f4d4c7b6d741"
 +  digest = "1:f2df7088cd31687fdce0f2eee853682416bf1e70baa487094913e3881f1f12f8"
@@ -631,7 +631,7 @@ index 2733e38ce..f52db3264 100644
 -  version = "v1.15.0"
 +  revision = "2fdaae294f38ed9a121193c51ec99fecd3b13eb7"
 +  version = "v1.19.0"
- 
+
  [[projects]]
    digest = "1:22b2dee6f30bc8601f087449a2a819df8388e54e9547349c658f14d8f8c590f2"
 @@ -978,6 +1052,7 @@
@@ -679,7 +679,7 @@ index 481e92d0c..fb1c7c3ec 100644
 @@ -15,6 +15,14 @@ noverify = [
      "github.com/grpc-ecosystem/go-grpc-middleware"
  ]
- 
+
 +[[constraint]]
 +  name = "github.com/trustbloc/fabric-peer-ext"
 +  revision = "9b20d84ee0a4b89039086a3a2da103584e7ed1d8"
@@ -692,21 +692,21 @@ index 481e92d0c..fb1c7c3ec 100644
    name = "github.com/Knetic/govaluate"
    version = "3.0.0"
 @@ -79,7 +87,7 @@ noverify = [
- 
+
  [[constraint]]
    name = "github.com/pkg/errors"
 -  version = "0.8.0"
 +  version = "0.8.1"
- 
+
  [[constraint]]
    name = "github.com/spf13/cobra"
 @@ -123,7 +131,7 @@ noverify = [
- 
+
  [[constraint]]
    name = "google.golang.org/grpc"
 -  version = "=1.15.0"
 +  version = "=1.19.0"
- 
+
  [[constraint]]
    name = "gopkg.in/alecthomas/kingpin.v2"
 diff --git a/core/chaincode/exectransaction_test.go b/core/chaincode/exectransaction_test.go
@@ -716,7 +716,7 @@ index 81b3fd1c9..5ae11dc6e 100644
 @@ -198,7 +198,7 @@ func finitPeer(lis net.Listener, chainIDs ...string) {
  		requestTimeout := viper.GetDuration("ledger.state.couchDBConfig.requestTimeout")
  		createGlobalChangesDB := viper.GetBool("ledger.state.couchDBConfig.createGlobalChangesDB")
- 
+
 -		couchInstance, _ := couchdb.CreateCouchInstance(connectURL, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB, &disabled.Provider{})
 +		couchInstance, _ := couchdb.CreateCouchInstance1_4_1(connectURL, username, password, maxRetries, maxRetriesOnStartup, requestTimeout, createGlobalChangesDB, &disabled.Provider{})
  		db := couchdb.CouchDatabase{CouchInstance: couchInstance, DBName: chainID}
@@ -741,7 +741,7 @@ index fc9e03cc7..40ae566bb 100644
 @@ -99,13 +103,18 @@ type Support interface {
  	GetLedgerHeight(channelID string) (uint64, error)
  }
- 
+
 +type rwSetFilter interface {
 +	Filter(channelID string, pubSimulationResults *rwset.TxReadWriteSet) (*rwset.TxReadWriteSet, error)
 +}
@@ -756,12 +756,12 @@ index fc9e03cc7..40ae566bb 100644
 +	Metrics     *EndorserMetrics
 +	rwSetFilter rwSetFilter
  }
- 
+
  // validateResult provides the result of endorseProposal verification
 @@ -117,6 +126,16 @@ type validateResult struct {
  	resp    *pb.ProposalResponse
  }
- 
+
 +type ledgerProvider func(cid string) ledger.PeerLedger
 +
 +type qeProviderFactory struct {
@@ -789,7 +789,7 @@ index fc9e03cc7..40ae566bb 100644
  }
 @@ -286,7 +310,11 @@ func (e *Endorser) SimulateProposal(txParams *ccprovider.TransactionParams, cid
  		}
- 
+
  		txParams.TXSimulator.Done()
 -		if pubSimResBytes, err = simResult.GetPubSimulationBytes(); err != nil {
 +		pubSimRes, err := e.rwSetFilter.Filter(txParams.ChannelID, simResult.PubSimulationResults)
@@ -807,7 +807,7 @@ index beede3736..4b5a5c5b4 100644
 @@ -61,7 +61,7 @@ func newTestHistoryEnv(t *testing.T) *levelDBLockBasedHistoryEnv {
  	testDB := testDBEnv.GetDBHandle(testLedgerID)
  	testBookkeepingEnv := bookkeeping.NewTestEnv(t)
- 
+
 -	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider, &mock.DeployedChaincodeInfoProvider{})
 +	txMgr, err := lockbasedtxmgr.NewLockBasedTxMgr(testLedgerID, testDB, nil, nil, testBookkeepingEnv.TestProvider, &mock.DeployedChaincodeInfoProvider{}, nil)
  	assert.NoError(t, err)
@@ -884,7 +884,7 @@ index 5f8804392..1d753abfc 100644
  	l.initBlockStore(btlPolicy)
 @@ -96,9 +98,10 @@ func newKVLedger(
  }
- 
+
  func (l *kvLedger) initTxMgr(versionedDB privacyenabledstate.DB, stateListeners []ledger.StateListener,
 -	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider) error {
 +	btlPolicy pvtdatapolicy.BTLPolicy, bookkeeperProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider,
@@ -894,7 +894,7 @@ index 5f8804392..1d753abfc 100644
 +	l.txtmgmt, err = lockbasedtxmgr.NewLockBasedTxMgr(l.ledgerID, versionedDB, stateListeners, btlPolicy, bookkeeperProvider, ccInfoProvider, collDataProvider)
  	return err
  }
- 
+
 diff --git a/core/ledger/kvledger/kv_ledger_provider.go b/core/ledger/kvledger/kv_ledger_provider.go
 index f33fbe5a1..09417215c 100644
 --- a/core/ledger/kvledger/kv_ledger_provider.go
@@ -913,17 +913,17 @@ index f33fbe5a1..09417215c 100644
  	fileLock            *leveldbhelper.FileLock
 +	collDataProvider    storeapi.Provider
  }
- 
+
  // NewProvider instantiates a new Provider.
 @@ -70,7 +72,7 @@ func NewProvider() (ledger.PeerLedgerProvider, error) {
- 
+
  	logger.Info("ledger provider Initialized")
  	provider := &Provider{idStore, nil,
 -		nil, historydbProvider, nil, nil, nil, nil, nil, nil, fileLock}
 +		nil, historydbProvider, nil, nil, nil, nil, nil, nil, fileLock, nil}
  	return provider, nil
  }
- 
+
 @@ -99,6 +101,7 @@ func (provider *Provider) Initialize(initializer *ledger.Initializer) error {
  	}
  	provider.stats = newStats(initializer.MetricsProvider)
@@ -931,7 +931,7 @@ index f33fbe5a1..09417215c 100644
 +	provider.collDataProvider = initializer.CollDataProvider
  	return nil
  }
- 
+
 @@ -178,6 +181,7 @@ func (provider *Provider) openInternal(ledgerID string) (ledger.PeerLedger, erro
  		provider.stateListeners, provider.bookkeepingProvider,
  		provider.initializer.DeployedChaincodeInfoProvider,
@@ -945,7 +945,7 @@ index d0b1b4e30..6da679fc2 100644
 --- a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_builder.go
 +++ b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_builder.go
 @@ -138,7 +138,7 @@ func (b *RWSetBuilder) GetTxSimulationResults() (*ledger.TxSimulationResults, er
- 
+
  	// Populate the collection-level hashes into pub rwset and compute the proto bytes for pvt rwset
  	if pvtData != nil {
 -		if pvtDataProto, err = pvtData.toProtoMsg(); err != nil {
@@ -969,7 +969,7 @@ index 0851b1ab4..c48fb86bd 100644
 @@ -249,7 +249,8 @@ func (txRwSet *TxRwSet) NumCollections() int {
  // functions for private read-write set
  ///////////////////////////////////////////////////////////////////////////////
- 
+
 -func (txPvtRwSet *TxPvtRwSet) toProtoMsg() (*rwset.TxPvtReadWriteSet, error) {
 +// ToProtoMsg returns a TxPvtReadWriteSet from the current TxPvtRwSet
 +func (txPvtRwSet *TxPvtRwSet) ToProtoMsg() (*rwset.TxPvtReadWriteSet, error) {
@@ -981,7 +981,7 @@ index c7baf57da..2a5922ac1 100644
 --- a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util_test.go
 +++ b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util_test.go
 @@ -193,7 +193,7 @@ func sampleCollHashedRwSet(collectionName string) *CollHashedRwSet {
- 
+
  func TestTxPvtRwSetConversion(t *testing.T) {
  	txPvtRwSet := sampleTxPvtRwSet()
 -	protoMsg, err := txPvtRwSet.toProtoMsg()
@@ -1009,10 +1009,10 @@ index cc1d0acf9..95a60fad7 100644
 @@ -53,7 +53,7 @@ func (v *collNameValidator) retrieveCollConfigFromStateDB(ns string) (*common.Co
  	return confPkg, nil
  }
- 
+
 -type collConfigCache map[collConfigkey]bool
 +type collConfigCache map[collConfigkey]*common.CollectionConfig
- 
+
  type collConfigkey struct {
  	ns, coll string
 @@ -62,20 +62,23 @@ type collConfigkey struct {
@@ -1031,13 +1031,13 @@ index cc1d0acf9..95a60fad7 100644
 +		c[collConfigkey{ns, sConfig.Name}] = config
  	}
  }
- 
+
  func (c collConfigCache) isPopulatedFor(ns string) bool {
 -	return c[collConfigkey{ns, ""}]
 +	_, ok := c[collConfigkey{ns, ""}]
 +	return ok
  }
- 
+
  func (c collConfigCache) containsCollName(ns, coll string) bool {
 -	return c[collConfigkey{ns, coll}]
 +	_, ok := c[collConfigkey{ns, coll}]
@@ -1170,7 +1170,7 @@ index 4533e4c33..2fe7b8842 100644
  	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
  	"github.com/pkg/errors"
  )
- 
+
 +type pvtDataHandler interface {
 +	HandleGetPrivateData(txID, ns string, config *common.StaticCollectionConfig, key string) ([]byte, bool, error)
 +	HandleGetPrivateDataMultipleKeys(txID, ns string, config *common.StaticCollectionConfig, keys []string) ([][]byte, bool, error)
@@ -1185,7 +1185,7 @@ index 4533e4c33..2fe7b8842 100644
  	doneInvoked       bool
 +	pvtDataHandler    pvtDataHandler
  }
- 
+
  func newQueryHelper(txmgr *LockBasedTxMgr, rwsetBuilder *rwsetutil.RWSetBuilder) *queryHelper {
  	helper := &queryHelper{txmgr: txmgr, rwsetBuilder: rwsetBuilder}
  	validator := newCollNameValidator(txmgr.ccInfoProvider, &lockBasedQueryExecutor{helper: helper})
@@ -1193,28 +1193,28 @@ index 4533e4c33..2fe7b8842 100644
 +	helper.pvtDataHandler = pvtdatahandler.New(txmgr.ledgerid, txmgr.collDataProvider)
  	return helper
  }
- 
+
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_query_executer.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_query_executer.go
 index b684c23e8..29b333558 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_query_executer.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_query_executer.go
 @@ -67,7 +67,7 @@ func (q *lockBasedQueryExecutor) ExecuteQueryWithMetadata(namespace, query strin
- 
+
  // GetPrivateData implements method in interface `ledger.QueryExecutor`
  func (q *lockBasedQueryExecutor) GetPrivateData(namespace, collection, key string) ([]byte, error) {
 -	return q.helper.getPrivateData(namespace, collection, key)
 +	return q.helper.handleGetPrivateData(q.txid, namespace, collection, key)
  }
- 
+
  func (q *lockBasedQueryExecutor) GetPrivateDataHash(namespace, collection, key string) ([]byte, error) {
 @@ -87,7 +87,7 @@ func (q *lockBasedQueryExecutor) GetPrivateDataMetadataByHash(namespace, collect
- 
+
  // GetPrivateDataMultipleKeys implements method in interface `ledger.QueryExecutor`
  func (q *lockBasedQueryExecutor) GetPrivateDataMultipleKeys(namespace, collection string, keys []string) ([][]byte, error) {
 -	return q.helper.getPrivateDataMultipleKeys(namespace, collection, keys)
 +	return q.helper.handleGetPrivateDataMultipleKeys(q.txid, namespace, collection, keys)
  }
- 
+
  // GetPrivateDataRangeScanIterator implements method in interface `ledger.QueryExecutor`
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 index c4cb4aa5e..844a59011 100644
@@ -1235,10 +1235,10 @@ index c4cb4aa5e..844a59011 100644
 +
 +	collDataProvider storeapi.Provider
  }
- 
+
  type current struct {
 @@ -59,7 +62,8 @@ func (c *current) maxTxNumber() uint64 {
- 
+
  // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
  func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
 -	btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider, ccInfoProvider ledger.DeployedChaincodeInfoProvider) (*LockBasedTxMgr, error) {
@@ -1303,7 +1303,7 @@ index 24f6a3d83..57f85d11f 100644
 +		&mock.DeployedChaincodeInfoProvider{},
 +		&mocks.DataProvider{})
  	assert.NoError(t, err)
- 
+
  }
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/pvtdatahandler.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/pvtdatahandler.go
 new file mode 100644
@@ -1394,7 +1394,7 @@ index 36bb776d0..5bf878de9 100644
  	HealthCheckRegistry           HealthCheckRegistry
 +	CollDataProvider              storeapi.Provider
  }
- 
+
  // PeerLedgerProvider provides handle to ledger instances
 diff --git a/core/ledger/ledgermgmt/ledger_mgmt.go b/core/ledger/ledgermgmt/ledger_mgmt.go
 index eb92047ff..bfb0ac6e3 100644
@@ -1414,7 +1414,7 @@ index eb92047ff..bfb0ac6e3 100644
  	HealthCheckRegistry           ledger.HealthCheckRegistry
 +	CollDataProvider              storeapi.Provider
  }
- 
+
  // Initialize initializes ledgermgmt
 @@ -76,6 +78,7 @@ func initialize(initializer *Initializer) {
  		MembershipInfoProvider:        initializer.MembershipInfoProvider,
@@ -1425,25 +1425,25 @@ index eb92047ff..bfb0ac6e3 100644
  	if err != nil {
  		panic(errors.WithMessage(err, "Error initializing ledger provider"))
 diff --git a/core/ledger/pvtdatastorage/store.go b/core/ledger/pvtdatastorage/store.go
-index 62ea1070b..8d06fc7b3 100644
+index afd476352..b9a36089d 100644
 --- a/core/ledger/pvtdatastorage/store.go
 +++ b/core/ledger/pvtdatastorage/store.go
-@@ -86,6 +86,11 @@ type Store interface {
+@@ -79,6 +79,11 @@ type Store interface {
  	Shutdown()
  }
- 
+
 +// NewErrIllegalCall creates an illegal call error
 +func NewErrIllegalCall(msg string) *ErrIllegalCall {
 +	return &ErrIllegalCall{msg: msg}
 +}
 +
- // ErrIllegalCall is to be thrown by a store impl if the store does not expect a call to Prepare/Commit/Rollback/InitLastCommittedBlock
+ // ErrIllegalCall is to be thrown by a store impl if the store does not expect a call to Prepare/Commit/InitLastCommittedBlock
  type ErrIllegalCall struct {
  	msg string
-@@ -104,6 +109,11 @@ func (err *ErrIllegalArgs) Error() string {
+@@ -97,6 +102,11 @@ func (err *ErrIllegalArgs) Error() string {
  	return err.msg
  }
- 
+
 +// NewErrOutOfRange creates an out of range error
 +func NewErrOutOfRange(msg string) *ErrOutOfRange {
 +	return &ErrOutOfRange{msg: msg}
@@ -1459,7 +1459,7 @@ index e12239e21..7a896258f 100644
 @@ -116,6 +116,40 @@ type QueryResult struct {
  	Attachments []*AttachmentInfo
  }
- 
+
 +// Config is a structure used to configure a CouchInstance.
 +// NOTE: This struct is added in order to satisfy the compilation of fabric-peer-ext.
 +type Config struct {
@@ -1520,7 +1520,7 @@ index 52edac4be..4deb08ef4 100644
 --- a/core/ledger/util/couchdb/couchdb_test.go
 +++ b/core/ledger/util/couchdb/couchdb_test.go
 @@ -35,7 +35,7 @@ var couchDBDef *CouchDBDef
- 
+
  func cleanup(database string) error {
  	//create a new connection
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1530,7 +1530,7 @@ index 52edac4be..4deb08ef4 100644
  		fmt.Println("Unexpected error", err)
 @@ -258,7 +258,7 @@ func TestDBCreateSaveWithoutRevision(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1539,7 +1539,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -281,7 +281,7 @@ func TestDBCreateEnsureFullCommit(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1548,7 +1548,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -302,28 +302,28 @@ func TestDBCreateEnsureFullCommit(t *testing.T) {
  func TestDBBadDatabaseName(t *testing.T) {
- 
+
  	//create a new instance and database object using a valid database name mixed case
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1556,7 +1556,7 @@ index 52edac4be..4deb08ef4 100644
  	assert.NoError(t, err, "Error when trying to create couch instance")
  	_, dberr := CreateCouchDatabase(couchInstance, "testDB")
  	assert.Error(t, dberr, "Error should have been thrown for an invalid db name")
- 
+
  	//create a new instance and database object using a valid database name letters and numbers
 -	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err = CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1564,7 +1564,7 @@ index 52edac4be..4deb08ef4 100644
  	assert.NoError(t, err, "Error when trying to create couch instance")
  	_, dberr = CreateCouchDatabase(couchInstance, "test132")
  	assert.NoError(t, dberr, "Error when testing a valid database name")
- 
+
  	//create a new instance and database object using a valid database name - special characters
 -	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err = CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1572,7 +1572,7 @@ index 52edac4be..4deb08ef4 100644
  	assert.NoError(t, err, "Error when trying to create couch instance")
  	_, dberr = CreateCouchDatabase(couchInstance, "test1234~!@#$%^&*()[]{}.")
  	assert.Error(t, dberr, "Error should have been thrown for an invalid db name")
- 
+
  	//create a new instance and database object using a invalid database name - too long	/*
 -	couchInstance, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err = CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1580,7 +1580,7 @@ index 52edac4be..4deb08ef4 100644
  	assert.NoError(t, err, "Error when trying to create couch instance")
  	_, dberr = CreateCouchDatabase(couchInstance, "a12345678901234567890123456789012345678901234"+
 @@ -338,7 +338,7 @@ func TestDBBadConnection(t *testing.T) {
- 
+
  	//create a new instance and database object
  	//Limit the maxRetriesOnStartup to 3 in order to reduce time for the failure
 -	_, err := CreateCouchInstance(badConnectURL, couchDBDef.Username, couchDBDef.Password,
@@ -1590,16 +1590,16 @@ index 52edac4be..4deb08ef4 100644
  }
 @@ -351,7 +351,7 @@ func TestBadDBCredentials(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	_, err = CreateCouchInstance(couchDBDef.URL, "fred", "fred",
 +	_, err = CreateCouchInstance1_4_1(couchDBDef.URL, "fred", "fred",
  		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
  	assert.Error(t, err, "Error should have been thrown for bad credentials")
- 
+
 @@ -381,7 +381,7 @@ func testDBCreateDatabaseAndPersist(t *testing.T, maxRetries int) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1607,23 +1607,23 @@ index 52edac4be..4deb08ef4 100644
  	assert.NoError(t, err, "Error when trying to create couch instance")
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -600,12 +600,12 @@ func TestDBRequestTimeout(t *testing.T) {
- 
+
  	//create a new instance and database object with a timeout that will fail
  	//Also use a maxRetriesOnStartup=3 to reduce the number of retries
 -	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	_, err = CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
  		couchDBDef.MaxRetries, 3, impossibleTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
  	assert.Error(t, err, "Error should have been thown while trying to create a couchdb instance with a connection timeout")
- 
+
  	//create a new instance and database object
 -	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	_, err = CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
  		-1, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
  	assert.Error(t, err, "Error should have been thrown while attempting to create a database")
- 
+
 @@ -619,7 +619,7 @@ func TestDBTimeoutConflictRetry(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1632,16 +1632,16 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -659,7 +659,7 @@ func TestDBBadNumberOfRetries(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	_, err = CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	_, err = CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
  		-1, 3, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
  	assert.Error(t, err, "Error should have been thrown while attempting to create a database")
- 
+
 @@ -673,7 +673,7 @@ func TestDBBadJSON(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1650,7 +1650,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -703,7 +703,7 @@ func TestPrefixScan(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1659,7 +1659,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -773,7 +773,7 @@ func TestDBSaveAttachment(t *testing.T) {
  	attachments = append(attachments, attachment)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1668,7 +1668,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -803,7 +803,7 @@ func TestDBDeleteDocument(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1677,7 +1677,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -838,7 +838,7 @@ func TestDBDeleteNonExistingDocument(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1686,7 +1686,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -887,7 +887,7 @@ func TestIndexOperations(t *testing.T) {
  	byteJSON10 := []byte(`{"_id":"10", "asset_name":"marble10","color":"white","size":10,"owner":"tom"}`)
- 
+
  	//create a new instance and database object   --------------------------------------------------------
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1695,7 +1695,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -1146,7 +1146,7 @@ func TestRichQuery(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object   --------------------------------------------------------
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1704,7 +1704,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -1387,7 +1387,7 @@ func testBatchBatchOperations(t *testing.T, maxRetries int) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object   --------------------------------------------------------
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1713,7 +1713,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -1588,7 +1588,7 @@ func TestDatabaseSecuritySettings(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new instance and database object   --------------------------------------------------------
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1722,7 +1722,7 @@ index 52edac4be..4deb08ef4 100644
  	db := CouchDatabase{CouchInstance: couchInstance, DBName: database}
 @@ -1651,7 +1651,7 @@ func TestURLWithSpecialCharacters(t *testing.T) {
  	assert.Equal(t, "http://127.0.0.1:5984/testdb%2Bwith%2Bplus_sign/_index/designdoc/json/indexname", couchdbURL.String())
- 
+
  	//create a new instance and database object   --------------------------------------------------------
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
@@ -1736,7 +1736,7 @@ index 9fef90fb6..2d42b06a5 100644
 @@ -32,8 +32,13 @@ var chainNameAllowedLength = 50
  var namespaceNameAllowedLength = 50
  var collectionNameAllowedLength = 50
- 
+
 -//CreateCouchInstance creates a CouchDB instance
 -func CreateCouchInstance(couchDBConnectURL, id, pw string, maxRetries,
 +//CreateCouchInstance should never be called by Fabric 1.4.1 code. It's added here so that fabric-peer-ext compiles
@@ -1747,7 +1747,7 @@ index 9fef90fb6..2d42b06a5 100644
 +//CreateCouchInstance1_4_1 creates a CouchDB instance using Fabric 1.4.1.
 +func CreateCouchInstance1_4_1(couchDBConnectURL, id, pw string, maxRetries,
  	maxRetriesOnStartup int, connectionTimeout time.Duration, createGlobalChangesDB bool, metricsProvider metrics.Provider) (*CouchInstance, error) {
- 
+
  	couchConf, err := CreateConnectionDefinition(couchDBConnectURL,
 diff --git a/core/ledger/util/couchdb/couchdbutil_test.go b/core/ledger/util/couchdb/couchdbutil_test.go
 index 5d1a97540..c1ccf0077 100644
@@ -1761,24 +1761,24 @@ index 5d1a97540..c1ccf0077 100644
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
  		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
  	assert.NoError(t, err, "Error when trying to CreateCouchInstance")
- 
+
 @@ -40,7 +40,7 @@ func TestNotCreateCouchGlobalChangesDB(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new connection
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
  		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
  	assert.NoError(t, err, "Error when trying to CreateCouchInstance")
- 
+
 @@ -63,7 +63,7 @@ func TestCreateCouchDBSystemDBs(t *testing.T) {
  	defer cleanup(database)
- 
+
  	//create a new connection
 -	couchInstance, err := CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 +	couchInstance, err := CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
  		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, &disabled.Provider{})
- 
+
  	assert.NoError(t, err, "Error when trying to CreateCouchInstance")
 diff --git a/core/ledger/util/couchdb/metrics_test.go b/core/ledger/util/couchdb/metrics_test.go
 index 59c8c25d8..d5962e78f 100644
@@ -1786,7 +1786,7 @@ index 59c8c25d8..d5962e78f 100644
 +++ b/core/ledger/util/couchdb/metrics_test.go
 @@ -22,7 +22,7 @@ func TestAPIProcessTimeMetric(t *testing.T) {
  	fakeHistogram.WithReturns(fakeHistogram)
- 
+
  	// create a new couch instance
 -	couchInstance, err := CreateCouchInstance(
 +	couchInstance, err := CreateCouchInstance1_4_1(
@@ -1812,7 +1812,7 @@ index c36a596ca..928da35dc 100644
 +			CollDataProvider:   &mocks.DataProvider{},
  		},
  	)
- 
+
 @@ -76,6 +78,7 @@ func TestConfigTxUpdateChanConfig(t *testing.T) {
  	ledgermgmt.InitializeTestEnvWithInitializer(
  		&ledgermgmt.Initializer{
@@ -1820,7 +1820,7 @@ index c36a596ca..928da35dc 100644
 +			CollDataProvider:   &mocks.DataProvider{},
  		},
  	)
- 
+
 @@ -118,6 +121,7 @@ func TestGenesisBlockCreateLedger(t *testing.T) {
  	ledgermgmt.InitializeTestEnvWithInitializer(
  		&ledgermgmt.Initializer{
@@ -1828,15 +1828,15 @@ index c36a596ca..928da35dc 100644
 +			CollDataProvider:   &mocks.DataProvider{},
  		},
  	)
- 
+
 @@ -137,6 +141,7 @@ func TestCustomTxProcessors(t *testing.T) {
- 
+
  	ledgermgmt.InitializeExistingTestEnvWithInitializer(&ledgermgmt.Initializer{
  		CustomTxProcessors: ConfigTxProcessors,
 +		CollDataProvider:   &mocks.DataProvider{},
  	})
  	defer ledgermgmt.CleanupTestEnv()
- 
+
 diff --git a/core/peer/mock_helpers.go b/core/peer/mock_helpers.go
 index dfd5695ce..5c44e9f32 100644
 --- a/core/peer/mock_helpers.go
@@ -1847,7 +1847,7 @@ index dfd5695ce..5c44e9f32 100644
  	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 +	"github.com/hyperledger/fabric/extensions/mocks"
  )
- 
+
  //MockInitialize resets chains for test env
 @@ -20,6 +21,7 @@ func MockInitialize() {
  	ledgermgmt.InitializeTestEnvWithInitializer(
@@ -1872,9 +1872,9 @@ index 4d8659147..147843313 100644
  	"github.com/hyperledger/fabric/gossip/service"
  	"github.com/hyperledger/fabric/msp"
 @@ -112,6 +115,26 @@ type chainSupport struct {
- 
+
  var TransientStoreFactory = &storeProvider{stores: make(map[string]transientstore.Store)}
- 
+
 +var collectionDataStoreFactory CollStoreProvider
 +var initCollDataStoreFactoryOnce sync.Once
 +
@@ -1938,12 +1938,12 @@ index 4d8659147..147843313 100644
 +		blockPublisher.Publish(block)
 +		return nil
  	})
- 
+
  	oc, ok := bundle.OrdererConfig()
 @@ -477,6 +509,11 @@ func createChain(
  		return errors.Wrapf(err, "[channel %s] failed opening transient store", bundle.ConfigtxValidator().ChainID())
  	}
- 
+
 +	collDataStore, err := CollectionDataStoreFactory().OpenStore(bundle.ConfigtxValidator().ChainID())
 +	if err != nil {
 +		return errors.Wrapf(err, "[channel %s] failed opening transient data store", bundle.ConfigtxValidator().ChainID())
@@ -1964,7 +1964,7 @@ index 4d8659147..147843313 100644
 +		Ledger:               ledger,
 +		BlockPublisher:       blockPublisher,
  	})
- 
+
  	chains.Lock()
 diff --git a/core/peer/peer_impl.go b/core/peer/peer_impl.go
 index 7e33563df..8665c0407 100644
@@ -1985,7 +1985,7 @@ index 7e33563df..8665c0407 100644
 -	Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, pm txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider)
 +	Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, pm txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider, collDataProvider storeapi.Provider)
  }
- 
+
  type peerImpl struct {
 @@ -43,7 +44,8 @@ type peerImpl struct {
  	getMSPIDs            func(cid string) []string
@@ -1995,7 +1995,7 @@ index 7e33563df..8665c0407 100644
 +	initialize           func(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, mapper txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider,
 +		collDataProvider storeapi.Provider)
  }
- 
+
  // Default provides in implementation of the Peer interface that provides
 @@ -74,6 +76,6 @@ func (p *peerImpl) GetLedger(cid string) ledger.PeerLedger       { return p.getL
  func (p *peerImpl) GetMSPIDs(cid string) []string                { return p.getMSPIDs(cid) }
@@ -2021,15 +2021,15 @@ index a2b7cd7b8..bce36c0b6 100644
 @@ -90,14 +91,14 @@ func TestInitialize(t *testing.T) {
  	cleanup := setupPeerFS(t)
  	defer cleanup()
- 
+
 -	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), nil, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{})
 +	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), nil, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{}, &storemocks.DataProvider{})
  }
- 
+
  func TestCreateChainFromBlock(t *testing.T) {
  	cleanup := setupPeerFS(t)
  	defer cleanup()
- 
+
 -	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), &platforms.Registry{}, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{})
 +	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), &platforms.Registry{}, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{}, &storemocks.DataProvider{})
  	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
@@ -4226,7 +4226,7 @@ index 000000000..be4683fcc
 +	require.Empty(t, NewStoreProvider())
 +}
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
-index b4b46dc91..c4d349fce 100644
+index fe840a2a8..0eeacefa2 100644
 --- a/gossip/privdata/coordinator.go
 +++ b/gossip/privdata/coordinator.go
 @@ -22,6 +22,8 @@ import (
@@ -4238,7 +4238,7 @@ index b4b46dc91..c4d349fce 100644
  	"github.com/hyperledger/fabric/gossip/metrics"
  	privdatacommon "github.com/hyperledger/fabric/gossip/privdata/common"
  	"github.com/hyperledger/fabric/gossip/util"
-@@ -122,16 +124,22 @@ type Support struct {
+@@ -122,10 +124,15 @@ type Support struct {
  	txvalidator.Validator
  	committer.Committer
  	TransientStore
@@ -4246,47 +4246,48 @@ index b4b46dc91..c4d349fce 100644
  	Fetcher
  	CapabilityProvider
  }
- 
+
 +type pvtDataStore interface {
 +	StorePvtData(txID string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error
 +}
 +
  type coordinator struct {
+ 	mspID          string
  	selfSignedData common.SignedData
- 	Support
+@@ -133,6 +140,7 @@ type coordinator struct {
  	transientBlockRetention        uint64
  	metrics                        *metrics.PrivdataMetrics
  	pullRetryThreshold             time.Duration
 +	pvtDataStore                   pvtDataStore
  	skipPullingInvalidTransactions bool
  }
- 
-@@ -141,6 +149,11 @@ type CoordinatorConfig struct {
+
+@@ -142,6 +150,11 @@ type CoordinatorConfig struct {
  	SkipPullingInvalidTransactions bool
  }
- 
+
 +// getPvtDataStore may be overridden by unit tests
 +var getPvtDataStore = func(channelID string, transientStore TransientStore, collDataStore storeapi.Store) pvtDataStore {
 +	return extcoord.New(channelID, transientStore, collDataStore)
 +}
 +
  // NewCoordinator creates a new instance of coordinator
- func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *metrics.PrivdataMetrics,
+ func NewCoordinator(mspID string, support Support, selfSignedData common.SignedData, metrics *metrics.PrivdataMetrics,
  	config CoordinatorConfig) Coordinator {
-@@ -149,12 +162,13 @@ func NewCoordinator(support Support, selfSignedData common.SignedData, metrics *
+@@ -151,12 +164,13 @@ func NewCoordinator(mspID string, support Support, selfSignedData common.SignedD
  		transientBlockRetention:        config.TransientBlockRetention,
  		metrics:                        metrics,
  		pullRetryThreshold:             config.PullRetryThreshold,
 +		pvtDataStore:                   getPvtDataStore(support.ChainID, support.TransientStore, support.CollDataStore),
  		skipPullingInvalidTransactions: config.SkipPullingInvalidTransactions}
  }
- 
+
  // StorePvtData used to persist private date into transient store
  func (c *coordinator) StorePvtData(txID string, privData *transientstore2.TxPvtReadWriteSetWithConfigInfo, blkHeight uint64) error {
 -	return c.TransientStore.PersistWithConfig(txID, blkHeight, privData)
 +	return c.pvtDataStore.StorePvtData(txID, privData, blkHeight)
  }
- 
+
  // StoreBlock stores block with private data into the ledger
 diff --git a/gossip/privdata/coordinator_test.go b/gossip/privdata/coordinator_test.go
 index 56a4e48b5..0c80cf604 100644
@@ -4311,7 +4312,7 @@ index 56a4e48b5..0c80cf604 100644
 @@ -418,6 +420,15 @@ func (cap *collectionAccessPolicy) AccessFilter() privdata.Filter {
  	}
  }
- 
+
 +type mockPvtDataStore struct {
 +	transientStore TransientStore
 +}
@@ -4326,7 +4327,7 @@ index 56a4e48b5..0c80cf604 100644
  		&ledger.TxPvtData{
 @@ -1624,12 +1635,16 @@ func TestPurgeByHeight(t *testing.T) {
  }
- 
+
  func TestCoordinatorStorePvtData(t *testing.T) {
 +	getPvtDataStore = func(channelID string, transientStore TransientStore, collDataStore storeapi.Store) pvtDataStore {
 +		return &mockPvtDataStore{transientStore: transientStore}
@@ -4340,7 +4341,7 @@ index 56a4e48b5..0c80cf604 100644
 +	tdStore := extmocks.NewDataStore()
  	fetcher := &fetcherMock{t: t}
  	committer.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
- 
+
 @@ -1642,6 +1657,7 @@ func TestCoordinatorStorePvtData(t *testing.T) {
  		Committer:          committer,
  		Fetcher:            fetcher,
@@ -4400,7 +4401,7 @@ index 6a7cc1878..9341472a4 100644
 +	// SelfMembershipInfo returns the peer's membership information
 +	SelfMembershipInfo() discovery.NetworkMember
  }
- 
+
  // PvtDataDistributor interface to defines API of distributing private data
 @@ -91,10 +94,10 @@ func (p *policyAccessFactory) AccessPolicy(config *common.CollectionConfig, chai
  		if err != nil {
@@ -4412,11 +4413,11 @@ index 6a7cc1878..9341472a4 100644
  	}
 -	return colAP, nil
  }
- 
+
  // NewCollectionAccessFactory
 @@ -170,11 +173,22 @@ func (d *distributorImpl) computeDisseminationPlan(txID string,
  			}
- 
+
  			logger.Debugf("Computing dissemination plan for collection [%s]", collectionName)
 -			dPlan, err := d.disseminationPlanForMsg(colAP, colFilter, pvtDataMsg)
 -			if err != nil {
@@ -4447,14 +4448,14 @@ index 121f4f71d..16886a510 100644
 @@ -105,6 +105,10 @@ func (g *gossipMock) PeerFilter(channel gcommon.ChainID, messagePredicate api.Su
  	}, nil
  }
- 
+
 +func (g *gossipMock) SelfMembershipInfo() discovery.NetworkMember {
 +	panic("not implemented")
 +}
 +
  func TestDistributor(t *testing.T) {
  	channelID := "test"
- 
+
 diff --git a/gossip/protoext/extensions.go b/gossip/protoext/extensions.go
 index d1dd3e225..c56ff4b92 100644
 --- a/gossip/protoext/extensions.go
@@ -4462,7 +4463,7 @@ index d1dd3e225..c56ff4b92 100644
 @@ -298,6 +298,13 @@ func IsTagLegal(m *gossip.GossipMessage) error {
  		return nil
  	}
- 
+
 +	if m.GetCollDataReq() != nil || m.GetCollDataRes() != nil {
 +		if m.Tag != gossip.GossipMessage_CHAN_ONLY {
 +			return fmt.Errorf("Tag should be %s", gossip.GossipMessage_Tag_name[int32(gossip.GossipMessage_CHAN_ONLY)])
@@ -4472,7 +4473,7 @@ index d1dd3e225..c56ff4b92 100644
 +
  	return fmt.Errorf("Unknown message type: %v", m)
  }
- 
+
 diff --git a/gossip/service/gossip_service.go b/gossip/service/gossip_service.go
 index de68c7d8b..c6311c81c 100644
 --- a/gossip/service/gossip_service.go
@@ -4487,7 +4488,7 @@ index de68c7d8b..c6311c81c 100644
 +	"github.com/hyperledger/fabric/extensions/gossip/dispatcher"
  	"google.golang.org/grpc"
  )
- 
+
 @@ -255,6 +259,10 @@ type Support struct {
  	Cs                   privdata.CollectionStore
  	IdDeserializeFactory privdata2.IdentityDeserializerFactory
@@ -4497,7 +4498,7 @@ index de68c7d8b..c6311c81c 100644
 +	Ledger               ledger.PeerLedger
 +	BlockPublisher       extgossipapi.BlockPublisher
  }
- 
+
  // DataStoreSupport aggregates interfaces capable
 @@ -296,6 +304,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  		CollectionStore:    support.Cs,
@@ -4509,7 +4510,7 @@ index de68c7d8b..c6311c81c 100644
  		CapabilityProvider: support.CapabilityProvider,
 @@ -321,7 +330,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  	g.privateHandlers[chainID].reconciler.Start()
- 
+
  	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
 -		g.metrics.StateMetrics, getStateConfiguration())
 +		g.metrics.StateMetrics, getStateConfiguration(), dispatcher.New(chainID, support.CollDataStore, servicesAdapter, support.Ledger, support.BlockPublisher))
@@ -4530,7 +4531,7 @@ index 115ad759e..245c0fd1e 100644
  	gossipCommon "github.com/hyperledger/fabric/gossip/common"
 @@ -152,8 +153,9 @@ func TestLeaderElectionWithDeliverClient(t *testing.T) {
  		deliverServiceFactory.service.running[channelName] = false
- 
+
  		gossips[i].InitializeChannel(channelName, endpointConfig, Support{
 -			Store:     &mockTransientStore{},
 -			Committer: &mockLedgerInfo{1},
@@ -4551,7 +4552,7 @@ index 115ad759e..245c0fd1e 100644
 +			BlockPublisher: kmocks.NewBlockPublisher(),
  		})
  	}
- 
+
 @@ -224,8 +227,9 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
  	for i := 0; i < n; i++ {
  		deliverServiceFactory.service.running[channelName] = false
@@ -4563,7 +4564,7 @@ index 115ad759e..245c0fd1e 100644
 +			BlockPublisher: kmocks.NewBlockPublisher(),
  		})
  	}
- 
+
 diff --git a/gossip/service/integration_test.go b/gossip/service/integration_test.go
 index fde1db86b..03091f335 100644
 --- a/gossip/service/integration_test.go
@@ -4603,12 +4604,12 @@ index 97d2094c0..2edcce2ab 100644
 +	// IdentityInfo returns information known peer identities
 +	IdentityInfo() api.PeerIdentitySet
  }
- 
+
  // MCSAdapter adapter of message crypto service interface to bound
 @@ -130,6 +136,10 @@ type ServicesMediator struct {
  	MCSAdapter
  }
- 
+
 +type messageDispatcher interface {
 +	Dispatch(msg protoext.ReceivedMessage) bool
 +}
@@ -4618,20 +4619,20 @@ index 97d2094c0..2edcce2ab 100644
  // new ledger block to be acquired by hyper ledger
 @@ -166,6 +176,8 @@ type GossipStateProviderImpl struct {
  	config *Configuration
- 
+
  	stateMetrics *metrics.StateMetrics
 +
 +	msgDispatcher messageDispatcher
  }
- 
+
  var logger = util.GetLogger(util.StateLogger, "")
 @@ -189,7 +201,7 @@ func (v *stateRequestValidator) validate(request *proto.RemoteStateRequest, batc
- 
+
  // NewGossipStateProvider creates state provider with coordinator instance
  // to orchestrate arrival of private rwsets and blocks before committing them into the ledger.
 -func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, stateMetrics *metrics.StateMetrics, config *Configuration) GossipStateProvider {
 +func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger ledgerResources, stateMetrics *metrics.StateMetrics, config *Configuration, msgDispatcher messageDispatcher) GossipStateProvider {
- 
+
  	gossipChan, _ := services.Accept(func(message interface{}) bool {
  		// Get only data messages
 @@ -200,7 +212,8 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
@@ -4646,12 +4647,12 @@ index 97d2094c0..2edcce2ab 100644
  		// Ensure we deal only with messages that belong to this channel
 @@ -270,6 +283,8 @@ func NewGossipStateProvider(chainID string, services *ServicesMediator, ledger l
  		config: config,
- 
+
  		stateMetrics: stateMetrics,
 +
 +		msgDispatcher: msgDispatcher,
  	}
- 
+
  	logger.Infof("Updating metadata information for channel %s, "+
 @@ -321,6 +336,10 @@ func (s *GossipStateProviderImpl) dispatch(msg protoext.ReceivedMessage) {
  		logger.Debug("Handling private data collection message")
@@ -4662,7 +4663,7 @@ index 97d2094c0..2edcce2ab 100644
 +			logger.Debug("Handled Extensions message")
 +		}
  	}
- 
+
  }
 diff --git a/gossip/state/state_test.go b/gossip/state/state_test.go
 index c9b561d75..b168a2523 100644
@@ -4679,27 +4680,27 @@ index c9b561d75..b168a2523 100644
  		gRPCServer.Stop()
  		return nil, port
 @@ -1487,7 +1486,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
- 
+
  	servicesAdapater := &ServicesMediator{GossipAdapter: g, MCSAdapter: &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}}
  	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
 -	st := NewGossipStateProvider(chainID, servicesAdapater, coord1, stateMetrics, config)
 +	st := NewGossipStateProvider(chainID, servicesAdapater, coord1, stateMetrics, config, nil)
  	defer st.Stop()
- 
+
  	// Mocked state request message
 @@ -1724,11 +1723,11 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
  	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
- 
+
  	mediator := &ServicesMediator{GossipAdapter: peers["peer1"], MCSAdapter: cryptoService}
 -	peer1State := NewGossipStateProvider(chainID, mediator, peers["peer1"].coord, stateMetrics, config)
 +	peer1State := NewGossipStateProvider(chainID, mediator, peers["peer1"].coord, stateMetrics, config, nil)
  	defer peer1State.Stop()
- 
+
  	mediator = &ServicesMediator{GossipAdapter: peers["peer2"], MCSAdapter: cryptoService}
 -	peer2State := NewGossipStateProvider(chainID, mediator, peers["peer2"].coord, stateMetrics, config)
 +	peer2State := NewGossipStateProvider(chainID, mediator, peers["peer2"].coord, stateMetrics, config, nil)
  	defer peer2State.Stop()
- 
+
  	// Make sure state was replicated
 diff --git a/peer/chaincode/common.go b/peer/chaincode/common.go
 index d259a2259..b6c26d259 100644
@@ -4708,7 +4709,7 @@ index d259a2259..b6c26d259 100644
 @@ -152,6 +152,14 @@ func chaincodeInvokeOrQuery(cmd *cobra.Command, invoke bool, cf *ChaincodeCmdFac
  	return nil
  }
- 
+
 +// CollectionType enumerates the various types of private data collections.
 +type CollectionType string
 +
@@ -4728,12 +4729,12 @@ index d259a2259..b6c26d259 100644
 +	Type       CollectionType `json:"type"`
 +	TimeToLive string         `json:"timeToLive"`
  }
- 
+
  // getCollectionConfig retrieves the collection configuration
 @@ -196,17 +207,44 @@ func getCollectionConfigFromBytes(cconfBytes []byte) ([]byte, error) {
  			},
  		}
- 
+
 -		cc := &pcommon.CollectionConfig{
 -			Payload: &pcommon.CollectionConfig_StaticCollectionConfig{
 -				StaticCollectionConfig: &pcommon.StaticCollectionConfig{
@@ -4783,7 +4784,7 @@ index d259a2259..b6c26d259 100644
 +		default:
 +			return nil, errors.Errorf("unsupported collection configuration type [%s]", cconfitem.Type)
  		}
- 
+
  		ccarray = append(ccarray, cc)
 diff --git a/peer/chaincode/transientcollconfig_test.go b/peer/chaincode/transientcollconfig_test.go
 new file mode 100644
@@ -4870,7 +4871,7 @@ index 961b75a24..6bd77b950 100644
  	"github.com/hyperledger/fabric/msp"
 @@ -177,6 +179,16 @@ func serve(args []string) error {
  	flogging.Global.SetObserver(logObserver)
- 
+
  	membershipInfoProvider := privdata.NewMembershipInfoProvider(createSelfSignedData(), identityDeserializerFactory)
 +
 +	transientDataProvider := collretriever.NewProvider(
@@ -4892,14 +4893,14 @@ index 961b75a24..6bd77b950 100644
 +			CollDataProvider:              transientDataProvider,
  		},
  	)
- 
+
 @@ -371,7 +384,7 @@ func serve(args []string) error {
  		}
  		cceventmgmt.GetMgr().Register(cid, sub)
  	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName),
 -		pr, deployedCCInfoProvider, membershipInfoProvider, metricsProvider)
 +		pr, deployedCCInfoProvider, membershipInfoProvider, metricsProvider, transientDataProvider)
- 
+
  	if viper.GetBool("peer.discovery.enabled") {
  		registerDiscoveryService(peerServer, policyMgr, lifecycle)
 diff --git a/protos/common/collection.pb.go b/protos/common/collection.pb.go
@@ -4909,7 +4910,7 @@ index e4d936342..237f41418 100644
 @@ -18,6 +18,39 @@ var _ = math.Inf
  // proto package needs to be updated.
  const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
- 
+
 +// CollectionType enumerates the various types of private data collections.
 +type CollectionType int32
 +
@@ -4993,7 +4994,7 @@ index e4d936342..237f41418 100644
 @@ -271,6 +312,20 @@ func (m *StaticCollectionConfig) GetMemberOnlyRead() bool {
  	return false
  }
- 
+
 +func (m *StaticCollectionConfig) GetType() CollectionType {
 +	if m != nil {
 +		return m.Type
@@ -5119,9 +5120,9 @@ index 321bfd72c..dbd575c98 100644
 --- a/protos/common/collection.proto
 +++ b/protos/common/collection.proto
 @@ -13,6 +13,15 @@ option java_package = "org.hyperledger.fabric.protos.common";
- 
+
  package common;
- 
+
 +// CollectionType enumerates the various types of private data collections.
 +enum CollectionType {
 +    COL_UNKNOWN = 0;    // Unspecified type - will use PRIVATE as default.
@@ -5147,8 +5148,8 @@ index 321bfd72c..dbd575c98 100644
 +    // The format of this string must be parseable by time.ParseDuration
 +    string time_to_live = 9901;
  }
- 
- 
+
+
 @@ -70,7 +87,7 @@ message CollectionPolicyConfig {
          // Later, the SignaturePolicy will be replaced by a Policy.
          //        Policy policy = 1;
@@ -5157,7 +5158,7 @@ index 321bfd72c..dbd575c98 100644
 +        //        string reference = 2;
      }
  }
- 
+
 diff --git a/protos/gossip/message.pb.go b/protos/gossip/message.pb.go
 index 3d2c7a1b2..4db4f85c7 100644
 --- a/protos/gossip/message.pb.go
@@ -5168,7 +5169,7 @@ index 3d2c7a1b2..4db4f85c7 100644
  import math "math"
 +import timestamp "github.com/golang/protobuf/ptypes/timestamp"
  import common "github.com/hyperledger/fabric/protos/common"
- 
+
  import (
 @@ -47,7 +48,7 @@ func (x PullMsgType) String() string {
  	return proto.EnumName(PullMsgType_name, int32(x))
@@ -5177,7 +5178,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 -	return fileDescriptor_message_7c42328ef5ef9997, []int{0}
 +	return fileDescriptor_message_563b77f4f682605d, []int{0}
  }
- 
+
  type GossipMessage_Tag int32
 @@ -82,7 +83,7 @@ func (x GossipMessage_Tag) String() string {
  	return proto.EnumName(GossipMessage_Tag_name, int32(x))
@@ -5186,7 +5187,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 -	return fileDescriptor_message_7c42328ef5ef9997, []int{3, 0}
 +	return fileDescriptor_message_563b77f4f682605d, []int{3, 0}
  }
- 
+
  // Envelope contains a marshalled
 @@ -102,7 +103,7 @@ func (m *Envelope) Reset()         { *m = Envelope{} }
  func (m *Envelope) String() string { return proto.CompactTextString(m) }
@@ -5238,18 +5239,18 @@ index 3d2c7a1b2..4db4f85c7 100644
 @@ -390,8 +393,8 @@ func (m *GossipMessage) GetTag() GossipMessage_Tag {
  	return GossipMessage_UNDEFINED
  }
- 
+
 -type IsGossipMessage_Content interface {
 -	IsGossipMessage_Content()
 +type isGossipMessage_Content interface {
 +	isGossipMessage_Content()
  }
- 
+
  type GossipMessage_AliveMsg struct {
 @@ -478,49 +481,61 @@ type GossipMessage_PrivateData struct {
  	PrivateData *PrivateDataMessage `protobuf:"bytes,25,opt,name=private_data,json=privateData,proto3,oneof"`
  }
- 
+
 -func (*GossipMessage_AliveMsg) IsGossipMessage_Content() {}
 +type GossipMessage_CollDataReq struct {
 +	CollDataReq *RemoteCollDataRequest `protobuf:"bytes,90,opt,name=collDataReq,proto3,oneof"`
@@ -5264,67 +5265,67 @@ index 3d2c7a1b2..4db4f85c7 100644
 +func (*GossipMessage_MemReq) isGossipMessage_Content() {}
 +
 +func (*GossipMessage_MemRes) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_MemReq) IsGossipMessage_Content() {}
 +func (*GossipMessage_DataMsg) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_MemRes) IsGossipMessage_Content() {}
 +func (*GossipMessage_Hello) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_DataMsg) IsGossipMessage_Content() {}
 +func (*GossipMessage_DataDig) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_Hello) IsGossipMessage_Content() {}
 +func (*GossipMessage_DataReq) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_DataDig) IsGossipMessage_Content() {}
 +func (*GossipMessage_DataUpdate) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_DataReq) IsGossipMessage_Content() {}
 +func (*GossipMessage_Empty) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_DataUpdate) IsGossipMessage_Content() {}
 +func (*GossipMessage_Conn) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_Empty) IsGossipMessage_Content() {}
 +func (*GossipMessage_StateInfo) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_Conn) IsGossipMessage_Content() {}
 +func (*GossipMessage_StateSnapshot) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_StateInfo) IsGossipMessage_Content() {}
 +func (*GossipMessage_StateInfoPullReq) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_StateSnapshot) IsGossipMessage_Content() {}
 +func (*GossipMessage_StateRequest) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_StateInfoPullReq) IsGossipMessage_Content() {}
 +func (*GossipMessage_StateResponse) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_StateRequest) IsGossipMessage_Content() {}
 +func (*GossipMessage_LeadershipMsg) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_StateResponse) IsGossipMessage_Content() {}
 +func (*GossipMessage_PeerIdentity) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_LeadershipMsg) IsGossipMessage_Content() {}
 +func (*GossipMessage_Ack) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_PeerIdentity) IsGossipMessage_Content() {}
 +func (*GossipMessage_PrivateReq) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_Ack) IsGossipMessage_Content() {}
 +func (*GossipMessage_PrivateRes) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_PrivateReq) IsGossipMessage_Content() {}
 +func (*GossipMessage_PrivateData) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_PrivateRes) IsGossipMessage_Content() {}
 +func (*GossipMessage_CollDataReq) isGossipMessage_Content() {}
- 
+
 -func (*GossipMessage_PrivateData) IsGossipMessage_Content() {}
 +func (*GossipMessage_CollDataRes) isGossipMessage_Content() {}
- 
+
 -func (m *GossipMessage) GetContent() IsGossipMessage_Content {
 +func (m *GossipMessage) GetContent() isGossipMessage_Content {
  	if m != nil {
@@ -5333,7 +5334,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 @@ -674,6 +689,20 @@ func (m *GossipMessage) GetPrivateData() *PrivateDataMessage {
  	return nil
  }
- 
+
 +func (m *GossipMessage) GetCollDataReq() *RemoteCollDataRequest {
 +	if x, ok := m.GetContent().(*GossipMessage_CollDataReq); ok {
 +		return x.CollDataReq
@@ -5359,7 +5360,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 +		(*GossipMessage_CollDataRes)(nil),
  	}
  }
- 
+
 @@ -810,6 +841,16 @@ func _GossipMessage_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
  		if err := b.EncodeMessage(x.PrivateData); err != nil {
  			return err
@@ -5446,7 +5447,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 @@ -1230,6 +1298,13 @@ func (m *Properties) GetChaincodes() []*Chaincode {
  	return nil
  }
- 
+
 +func (m *Properties) GetRoles() []string {
 +	if m != nil {
 +		return m.Roles
@@ -5712,7 +5713,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 @@ -2637,6 +2712,283 @@ func (m *Chaincode) GetMetadata() []byte {
  	return nil
  }
- 
+
 +// ValidationResultsMessage is the message containing block validation results
 +type ValidationResultsMessage struct {
 +	SeqNum               uint64   `protobuf:"varint,1,opt,name=seq_num,json=seqNum,proto3" json:"seq_num,omitempty"`
@@ -6008,7 +6009,7 @@ index 3d2c7a1b2..4db4f85c7 100644
 @@ -2818,126 +3175,141 @@ var _Gossip_serviceDesc = grpc.ServiceDesc{
  	Metadata: "gossip/message.proto",
  }
- 
+
 -func init() { proto.RegisterFile("gossip/message.proto", fileDescriptor_message_7c42328ef5ef9997) }
 -
 -var fileDescriptor_message_7c42328ef5ef9997 = []byte{
@@ -6275,10 +6276,10 @@ index 56cb0cd0c..09c4104ff 100644
 +++ b/protos/gossip/message.proto
 @@ -9,6 +9,7 @@ option go_package = "github.com/hyperledger/fabric/protos/gossip" ;
  package gossip;
- 
+
  import "common/collection.proto";
 +import "google/protobuf/timestamp.proto";
- 
+
  // Gossip
  service Gossip {
 @@ -130,6 +131,12 @@ message GossipMessage {
@@ -6293,14 +6294,14 @@ index 56cb0cd0c..09c4104ff 100644
 +        RemoteCollDataResponse collDataRes = 91;
      }
  }
- 
+
 @@ -151,6 +158,7 @@ message Properties {
      uint64 ledger_height = 1;
      bool left_channel = 2;
      repeated Chaincode chaincodes = 3;
 +    repeated string roles = 99; // NOT USED by Fabric 1.4.1 but added here for fabric-peer-ext dependency
  }
- 
+
  // StateInfoSnapshot is an aggregation of StateInfo messages
 @@ -369,4 +377,41 @@ message Chaincode {
      string name = 1;
@@ -8823,7 +8824,7 @@ index 000000000..b6ce68e1f
 --- /dev/null
 +++ b/protoutil/readme.md
 @@ -0,0 +1,3 @@
-+this package is an exact copy of protos/util 
++this package is an exact copy of protos/util
 +
 +it is copied here to fix the dependency of trustbloc/fabric-peer-ext during the peer docker image build
 \ No newline at end of file
@@ -12206,7 +12207,7 @@ index 842ee8045..7421f326f 100644
  package errors
 @@ -192,7 +193,7 @@ func Wrap(err error, message string) error {
  }
- 
+
  // Wrapf returns an error annotating err with a stack trace
 -// at the point Wrapf is call, and the format specifier.
 +// at the point Wrapf is called, and the format specifier.
@@ -12216,7 +12217,7 @@ index 842ee8045..7421f326f 100644
 @@ -220,6 +221,18 @@ func WithMessage(err error, message string) error {
  	}
  }
- 
+
 +// WithMessagef annotates err with the format specifier.
 +// If err is nil, WithMessagef returns nil.
 +func WithMessagef(err error, format string, args ...interface{}) error {
@@ -12249,7 +12250,7 @@ index 6b1f2891a..2874a048c 100644
 @@ -79,6 +80,14 @@ func (f Frame) Format(s fmt.State, verb rune) {
  // StackTrace is stack of Frames from innermost (newest) to outermost (oldest).
  type StackTrace []Frame
- 
+
 +// Format formats the stack of Frames according to the fmt.Formatter interface.
 +//
 +//    %s	lists source files for each Frame in the stack
@@ -26507,25 +26508,25 @@ index fa31565fd..97c6e2568 100644
 +++ b/vendor/google.golang.org/grpc/backoff.go
 @@ -17,7 +17,7 @@
   */
- 
+
  // See internal/backoff package for the backoff implementation. This file is
 -// kept for the exported types and API backward compatility.
 +// kept for the exported types and API backward compatibility.
- 
+
  package grpc
- 
+
 diff --git a/vendor/google.golang.org/grpc/balancer.go b/vendor/google.golang.org/grpc/balancer.go
 index 5aeb646d1..a78e702ba 100644
 --- a/vendor/google.golang.org/grpc/balancer.go
 +++ b/vendor/google.golang.org/grpc/balancer.go
 @@ -19,10 +19,10 @@
  package grpc
- 
+
  import (
 +	"context"
  	"net"
  	"sync"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/codes"
  	"google.golang.org/grpc/credentials"
@@ -26536,13 +26537,13 @@ index 069feb1e7..67518de9a 100644
 +++ b/vendor/google.golang.org/grpc/balancer/balancer.go
 @@ -21,13 +21,15 @@
  package balancer
- 
+
  import (
 +	"context"
  	"errors"
  	"net"
  	"strings"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/connectivity"
  	"google.golang.org/grpc/credentials"
@@ -26550,11 +26551,11 @@ index 069feb1e7..67518de9a 100644
 +	"google.golang.org/grpc/metadata"
  	"google.golang.org/grpc/resolver"
  )
- 
+
 @@ -46,8 +48,20 @@ func Register(b Builder) {
  	m[strings.ToLower(b.Name())] = b
  }
- 
+
 +// unregisterForTesting deletes the balancer with the given name from the
 +// balancer map.
 +//
@@ -26575,7 +26576,7 @@ index 069feb1e7..67518de9a 100644
  	if b, ok := m[strings.ToLower(name)]; ok {
 @@ -88,7 +102,15 @@ type SubConn interface {
  }
- 
+
  // NewSubConnOptions contains options to create new SubConn.
 -type NewSubConnOptions struct{}
 +type NewSubConnOptions struct {
@@ -26587,13 +26588,13 @@ index 069feb1e7..67518de9a 100644
 +	// enabled on this SubConn
 +	HealthCheckEnabled bool
 +}
- 
+
  // ClientConn represents a gRPC ClientConn.
  //
 @@ -105,7 +127,7 @@ type ClientConn interface {
  	// The SubConn will be shutdown.
  	RemoveSubConn(SubConn)
- 
+
 -	// UpdateBalancerState is called by balancer to nofity gRPC that some internal
 +	// UpdateBalancerState is called by balancer to notify gRPC that some internal
  	// state in balancer has changed.
@@ -26616,7 +26617,7 @@ index 069feb1e7..67518de9a 100644
 +	// should not be modified; make a copy first if needed.
 +	Header metadata.MD
  }
- 
+
  // DoneInfo contains additional information for done.
  type DoneInfo struct {
  	// Err is the rpc error the RPC finished with. It could be nil.
@@ -26639,14 +26640,14 @@ index 069feb1e7..67518de9a 100644
 +	// doesn't care about the RPC status.
  	Pick(ctx context.Context, opts PickOptions) (conn SubConn, done func(DoneInfo), err error)
  }
- 
+
 diff --git a/vendor/google.golang.org/grpc/balancer/base/balancer.go b/vendor/google.golang.org/grpc/balancer/base/balancer.go
 index 23d13511b..245785e7a 100644
 --- a/vendor/google.golang.org/grpc/balancer/base/balancer.go
 +++ b/vendor/google.golang.org/grpc/balancer/base/balancer.go
 @@ -19,7 +19,8 @@
  package base
- 
+
  import (
 -	"golang.org/x/net/context"
 +	"context"
@@ -26660,10 +26661,10 @@ index 23d13511b..245785e7a 100644
  	pickerBuilder PickerBuilder
 +	config        Config
  }
- 
+
  func (bb *baseBuilder) Build(cc balancer.ClientConn, opt balancer.BuildOptions) balancer.Balancer {
 @@ -38,11 +40,12 @@ func (bb *baseBuilder) Build(cc balancer.ClientConn, opt balancer.BuildOptions)
- 
+
  		subConns: make(map[resolver.Address]balancer.SubConn),
  		scStates: make(map[balancer.SubConn]connectivity.State),
 -		csEvltr:  &connectivityStateEvaluator{},
@@ -26675,21 +26676,21 @@ index 23d13511b..245785e7a 100644
 +		config: bb.config,
  	}
  }
- 
+
 @@ -54,12 +57,13 @@ type baseBalancer struct {
  	cc            balancer.ClientConn
  	pickerBuilder PickerBuilder
- 
+
 -	csEvltr *connectivityStateEvaluator
 +	csEvltr *balancer.ConnectivityStateEvaluator
  	state   connectivity.State
- 
+
  	subConns map[resolver.Address]balancer.SubConn
  	scStates map[balancer.SubConn]connectivity.State
  	picker   balancer.Picker
 +	config   Config
  }
- 
+
  func (b *baseBalancer) HandleResolvedAddrs(addrs []resolver.Address, err error) {
 @@ -74,7 +78,7 @@ func (b *baseBalancer) HandleResolvedAddrs(addrs []resolver.Address, err error)
  		addrsSet[a] = struct{}{}
@@ -26702,11 +26703,11 @@ index 23d13511b..245785e7a 100644
  				continue
 @@ -133,7 +137,7 @@ func (b *baseBalancer) HandleSubConnStateChange(sc balancer.SubConn, s connectiv
  	}
- 
+
  	oldAggrState := b.state
 -	b.state = b.csEvltr.recordTransition(oldS, s)
 +	b.state = b.csEvltr.RecordTransition(oldS, s)
- 
+
  	// Regenerate picker when one of the following happens:
  	//  - this sc became ready from not-ready
 @@ -165,44 +169,3 @@ type errPicker struct {
@@ -26785,11 +26786,11 @@ index 2eda0a1c2..29f7a4ddd 100644
 +++ b/vendor/google.golang.org/grpc/balancer/roundrobin/roundrobin.go
 @@ -22,12 +22,13 @@
  package roundrobin
- 
+
  import (
 +	"context"
  	"sync"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/balancer"
  	"google.golang.org/grpc/balancer/base"
@@ -26797,18 +26798,18 @@ index 2eda0a1c2..29f7a4ddd 100644
 +	"google.golang.org/grpc/internal/grpcrand"
  	"google.golang.org/grpc/resolver"
  )
- 
+
 @@ -36,7 +37,7 @@ const Name = "round_robin"
- 
+
  // newBuilder creates a new roundrobin balancer builder.
  func newBuilder() balancer.Builder {
 -	return base.NewBalancerBuilder(Name, &rrPickerBuilder{})
 +	return base.NewBalancerBuilderWithConfig(Name, &rrPickerBuilder{}, base.Config{HealthCheck: true})
  }
- 
+
  func init() {
 @@ -47,12 +48,19 @@ type rrPickerBuilder struct{}
- 
+
  func (*rrPickerBuilder) Build(readySCs map[resolver.Address]balancer.SubConn) balancer.Picker {
  	grpclog.Infof("roundrobinPicker: newPicker called with readySCs: %v", readySCs)
 +	if len(readySCs) == 0 {
@@ -26826,10 +26827,10 @@ index 2eda0a1c2..29f7a4ddd 100644
 +		next: grpcrand.Intn(len(scs)),
  	}
  }
- 
+
 @@ -67,10 +75,6 @@ type rrPicker struct {
  }
- 
+
  func (p *rrPicker) Pick(ctx context.Context, opts balancer.PickOptions) (balancer.SubConn, func(balancer.DoneInfo), error) {
 -	if len(p.subConns) <= 0 {
 -		return nil, nil, balancer.ErrNoSubConnAvailable
@@ -26844,7 +26845,7 @@ index c23f81706..7233ade29 100644
 +++ b/vendor/google.golang.org/grpc/balancer_conn_wrappers.go
 @@ -178,6 +178,28 @@ func (ccb *ccBalancerWrapper) handleSubConnStateChange(sc balancer.SubConn, s co
  }
- 
+
  func (ccb *ccBalancerWrapper) handleResolvedAddrs(addrs []resolver.Address, err error) {
 +	if ccb.cc.curBalancerName != grpclbName {
 +		var containsGRPCLB bool
@@ -26893,7 +26894,7 @@ index c23f81706..7233ade29 100644
  	ccb.cc.blockingpicker.updatePicker(p)
 +	ccb.cc.csMgr.updateState(s)
  }
- 
+
  func (ccb *ccBalancerWrapper) ResolveNow(o resolver.ResolveNowOption) {
 @@ -257,6 +284,7 @@ func (acbw *acBalancerWrapper) UpdateAddresses(addrs []resolver.Address) {
  	}
@@ -26906,7 +26907,7 @@ index c23f81706..7233ade29 100644
 @@ -272,7 +300,7 @@ func (acbw *acBalancerWrapper) UpdateAddresses(addrs []resolver.Address) {
  			return
  		}
- 
+
 -		ac, err := cc.newAddrConn(addrs)
 +		ac, err := cc.newAddrConn(addrs, opts)
  		if err != nil {
@@ -26918,12 +26919,12 @@ index e0ce32cfb..29bda6353 100644
 +++ b/vendor/google.golang.org/grpc/balancer_v1_wrapper.go
 @@ -19,16 +19,14 @@
  package grpc
- 
+
  import (
 +	"context"
  	"strings"
  	"sync"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/balancer"
 -	"google.golang.org/grpc/codes"
@@ -26932,11 +26933,11 @@ index e0ce32cfb..29bda6353 100644
  	"google.golang.org/grpc/resolver"
 -	"google.golang.org/grpc/status"
  )
- 
+
  type balancerWrapperBuilder struct {
 @@ -283,9 +281,8 @@ func (bw *balancerWrapper) Close() {
  }
- 
+
  // The picker is the balancerWrapper itself.
 -// Pick should never return ErrNoSubConnAvailable.
  // It either blocks or returns error, consistent with v1 balancer Get().
@@ -27932,12 +27933,12 @@ index 180d79d06..9e20e4d38 100644
 +++ b/vendor/google.golang.org/grpc/call.go
 @@ -19,7 +19,7 @@
  package grpc
- 
+
  import (
 -	"golang.org/x/net/context"
 +	"context"
  )
- 
+
  // Invoke sends the RPC request on the wire and returns after response is
 @@ -40,7 +40,7 @@ func (cc *ClientConn) Invoke(ctx context.Context, method string, args, reply int
  func combine(o1 []CallOption, o2 []CallOption) []CallOption {
@@ -27954,7 +27955,7 @@ index 318ac4073..edbed8762 100644
 +++ b/vendor/google.golang.org/grpc/clientconn.go
 @@ -19,6 +19,7 @@
  package grpc
- 
+
  import (
 +	"context"
  	"errors"
@@ -27963,7 +27964,7 @@ index 318ac4073..edbed8762 100644
 @@ -29,8 +30,6 @@ import (
  	"sync/atomic"
  	"time"
- 
+
 -	"golang.org/x/net/context"
 -	"golang.org/x/net/trace"
  	"google.golang.org/grpc/balancer"
@@ -28035,7 +28036,7 @@ index 318ac4073..edbed8762 100644
  		}
 +		cc.csMgr.channelzID = cc.channelzID
  	}
- 
+
  	if !cc.dopts.insecure {
 -		if cc.dopts.copts.TransportCredentials == nil {
 +		if cc.dopts.copts.TransportCredentials == nil && cc.dopts.copts.CredsBundle == nil {
@@ -28079,7 +28080,7 @@ index 318ac4073..edbed8762 100644
  		Dialer:           cc.dopts.copts.Dialer,
  		ChannelzParentID: cc.channelzID,
  	}
- 
+
  	// Build the resolver.
 -	cc.resolverWrapper, err = newCCResolverWrapper(cc)
 +	rWrapper, err := newCCResolverWrapper(cc)
@@ -28094,7 +28095,7 @@ index 318ac4073..edbed8762 100644
 -	// connect, and calls resolveNow(). resolveNow() tries to use the non-ready
 -	// resolverWrapper.
 -	cc.resolverWrapper.start()
- 
+
 +	cc.mu.Lock()
 +	cc.resolverWrapper = rWrapper
 +	cc.mu.Unlock()
@@ -28118,7 +28119,7 @@ index 318ac4073..edbed8762 100644
  	notifyChan chan struct{}
 +	channelzID int64
  }
- 
+
  // updateState updates the connectivity.State of ClientConn.
 @@ -323,6 +344,12 @@ func (csm *connectivityStateManager) updateState(state connectivity.State) {
  		return
@@ -28135,11 +28136,11 @@ index 318ac4073..edbed8762 100644
  		close(csm.notifyChan)
 @@ -357,13 +384,13 @@ type ClientConn struct {
  	csMgr        *connectivityStateManager
- 
+
  	balancerBuildOpts balancer.BuildOptions
 -	resolverWrapper   *ccResolverWrapper
  	blockingpicker    *pickerWrapper
- 
+
 -	mu    sync.RWMutex
 -	sc    ServiceConfig
 -	scRaw string
@@ -28155,7 +28156,7 @@ index 318ac4073..edbed8762 100644
 @@ -372,6 +399,8 @@ type ClientConn struct {
  	balancerWrapper *ccBalancerWrapper
  	retryThrottler  atomic.Value
- 
+
 +	firstResolveEvent *grpcsync.Event
 +
  	channelzID int64 // channelz unique identification number
@@ -28173,7 +28174,7 @@ index 318ac4073..edbed8762 100644
 @@ -417,6 +446,25 @@ func (cc *ClientConn) scWatcher() {
  	}
  }
- 
+
 +// waitForResolvedAddrs blocks until the resolver has provided addresses or the
 +// context expires.  Returns nil unless the context expires first; otherwise
 +// returns a status error based on the context.
@@ -28198,15 +28199,15 @@ index 318ac4073..edbed8762 100644
  	defer cc.mu.Unlock()
 @@ -430,6 +478,7 @@ func (cc *ClientConn) handleResolvedAddrs(addrs []resolver.Address, err error) {
  	}
- 
+
  	cc.curAddresses = addrs
 +	cc.firstResolveEvent.Fire()
- 
+
  	if cc.dopts.balancerBuilder == nil {
  		// Only look at balancer types and switch balancer if balancer dial
 @@ -500,10 +549,26 @@ func (cc *ClientConn) switchBalancer(name string) {
  	}
- 
+
  	builder := balancer.Get(name)
 +	// TODO(yuxuanli): If user send a service config that does not contain a valid balancer name, should
 +	// we reuse previous one?
@@ -28262,7 +28263,7 @@ index 318ac4073..edbed8762 100644
 @@ -590,11 +664,9 @@ func (cc *ClientConn) incrCallsFailed() {
  	atomic.AddInt64(&cc.czData.callsFailed, 1)
  }
- 
+
 -// connect starts to creating transport and also starts the transport monitor
 -// goroutine for this ac.
 +// connect starts creating a transport.
@@ -28280,7 +28281,7 @@ index 318ac4073..edbed8762 100644
 -	ac.cc.handleSubConnStateChange(ac.acbw, ac.state)
 +	ac.updateConnectivityState(connectivity.Connecting)
  	ac.mu.Unlock()
- 
+
  	// Start a goroutine connecting to the server asynchronously.
 -	go func() {
 -		if err := ac.resetTransport(); err != nil {
@@ -28296,11 +28297,11 @@ index 318ac4073..edbed8762 100644
 +	go ac.resetTransport()
  	return nil
  }
- 
+
 @@ -639,6 +700,12 @@ func (ac *addrConn) tryUpdateAddrs(addrs []resolver.Address) bool {
  		return true
  	}
- 
+
 +	// Unless we're busy reconnecting already, let's reconnect from the top of
 +	// the list.
 +	if ac.state != connectivity.Ready {
@@ -28316,12 +28317,12 @@ index 318ac4073..edbed8762 100644
  		ac.addrs = addrs
 -		ac.reconnectIdx = 0 // Start reconnecting from beginning in the new list.
  	}
- 
+
  	return curAddrFound
 @@ -674,9 +740,17 @@ func (cc *ClientConn) GetMethodConfig(method string) MethodConfig {
  	return m
  }
- 
+
 +func (cc *ClientConn) healthCheckConfig() *healthCheckConfig {
 +	cc.mu.RLock()
 +	defer cc.mu.RUnlock()
@@ -28365,7 +28366,7 @@ index 318ac4073..edbed8762 100644
 +	}
  	cc.scRaw = js
  	cc.sc = sc
- 
+
 @@ -788,6 +880,19 @@ func (cc *ClientConn) Close() error {
  		ac.tearDown(ErrClientConnClosing)
  	}
@@ -28388,7 +28389,7 @@ index 318ac4073..edbed8762 100644
  	return nil
 @@ -799,37 +904,49 @@ type addrConn struct {
  	cancel context.CancelFunc
- 
+
  	cc     *ClientConn
 -	addrs  []resolver.Address
  	dopts  dialOptions
@@ -28401,7 +28402,7 @@ index 318ac4073..edbed8762 100644
 +	// to nil when the current transport should no longer be used to create a stream (e.g. after GoAway
 +	// is received, transport is closed, ac has been torn down).
 +	transport transport.ClientTransport // The current transport.
- 
+
 -	mu           sync.Mutex
 -	curAddr      resolver.Address
 -	reconnectIdx int // The index in addrs list to start reconnecting from.
@@ -28424,7 +28425,7 @@ index 318ac4073..edbed8762 100644
 +	mu      sync.Mutex
 +	curAddr resolver.Address   // The current address.
 +	addrs   []resolver.Address // All addresses that the resolver resolved to.
- 
+
 +	// Use updateConnectivityState for updating addrConn's connectivity state.
 +	state connectivity.State
 +
@@ -28432,12 +28433,12 @@ index 318ac4073..edbed8762 100644
 +
 +	backoffIdx   int // Needs to be stateful for resetConnectBackoff.
  	resetBackoff chan struct{}
- 
+
 -	channelzID int64 // channelz unique identification number
 +	channelzID int64 // channelz unique identification number.
  	czData     *channelzData
  }
- 
+
 +// Note: this requires a lock on ac.mu.
 +func (ac *addrConn) updateConnectivityState(s connectivity.State) {
 +	if ac.state == s {
@@ -28461,7 +28462,7 @@ index 318ac4073..edbed8762 100644
 @@ -844,301 +961,343 @@ func (ac *addrConn) adjustParams(r transport.GoAwayReason) {
  	}
  }
- 
+
 -// printf records an event in ac's event log, unless ac has been closed.
 -// REQUIRES ac.mu is held.
 -func (ac *addrConn) printf(format string, a ...interface{}) {
@@ -28472,7 +28473,7 @@ index 318ac4073..edbed8762 100644
 +func (ac *addrConn) resetTransport() {
 +	for i := 0; ; i++ {
 +		tryNextAddrFromStart := grpcsync.NewEvent()
- 
+
 -// resetTransport recreates a transport to the address for ac.  The old
 -// transport will close itself on error or when the clientconn is closed.
 -// The created transport must receive initial settings frame from the server.
@@ -28565,7 +28566,7 @@ index 318ac4073..edbed8762 100644
 -		}
 -	}
 -}
- 
+
 -// createTransport creates a connection to one of the backends in addrs.
 -// It returns true if a connection was established.
 -func (ac *addrConn) createTransport(connectRetryNum, ridx int, backoffDeadline, connectDeadline time.Time, addrs []resolver.Address, copts transport.ConnectOptions, resetBackoff chan struct{}) (bool, error) {
@@ -28905,7 +28906,7 @@ index 318ac4073..edbed8762 100644
 -	}
 -	return false, nil
 -}
- 
+
 -func (ac *addrConn) resetConnectBackoff() {
 +	// Now there is a viable transport to be use, so set ac.transport to reflect the new viable transport.
  	ac.mu.Lock()
@@ -28921,7 +28922,7 @@ index 318ac4073..edbed8762 100644
 +
 +	return newTr, nil
  }
- 
+
 -// Run in a goroutine to track the error in transport and create the
 -// new transport if an error happens. It returns when the channel is closing.
 -func (ac *addrConn) transportMonitor() {
@@ -29030,7 +29031,7 @@ index 318ac4073..edbed8762 100644
  		}
  	}
  }
- 
+
 +func (ac *addrConn) resetConnectBackoff() {
 +	ac.mu.Lock()
 +	close(ac.resetBackoff)
@@ -29106,7 +29107,7 @@ index 318ac4073..edbed8762 100644
  	}
 +	ac.mu.Unlock()
  }
- 
+
  func (ac *addrConn) getState() connectivity.State {
 diff --git a/vendor/google.golang.org/grpc/connectivity/connectivity.go b/vendor/google.golang.org/grpc/connectivity/connectivity.go
 index 568ef5dc6..34ec36fbf 100644
@@ -29114,14 +29115,14 @@ index 568ef5dc6..34ec36fbf 100644
 +++ b/vendor/google.golang.org/grpc/connectivity/connectivity.go
 @@ -22,7 +22,8 @@
  package connectivity
- 
+
  import (
 -	"golang.org/x/net/context"
 +	"context"
 +
  	"google.golang.org/grpc/grpclog"
  )
- 
+
 @@ -51,7 +52,7 @@ func (s State) String() string {
  const (
  	// Idle indicates the ClientConn is idle.
@@ -29137,7 +29138,7 @@ index 1dae57ab1..a85156045 100644
 +++ b/vendor/google.golang.org/grpc/credentials/credentials.go
 @@ -23,6 +23,7 @@
  package credentials // import "google.golang.org/grpc/credentials"
- 
+
  import (
 +	"context"
  	"crypto/tls"
@@ -29145,17 +29146,17 @@ index 1dae57ab1..a85156045 100644
  	"errors"
 @@ -32,7 +33,7 @@ import (
  	"strings"
- 
+
  	"github.com/golang/protobuf/proto"
 -	"golang.org/x/net/context"
 +	"google.golang.org/grpc/credentials/internal"
  )
- 
+
  // alpnProtoStr are the specified application level protocols for gRPC.
 @@ -108,6 +109,25 @@ type TransportCredentials interface {
  	OverrideServerName(string) error
  }
- 
+
 +// Bundle is a combination of TransportCredentials and PerRPCCredentials.
 +//
 +// It also contains a mode switching method, so it can be used as a combination
@@ -29181,7 +29182,7 @@ index 1dae57ab1..a85156045 100644
 @@ -119,8 +139,8 @@ func (t TLSInfo) AuthType() string {
  	return "tls"
  }
- 
+
 -// GetChannelzSecurityValue returns security info requested by channelz.
 -func (t TLSInfo) GetChannelzSecurityValue() ChannelzSecurityValue {
 +// GetSecurityValue returns security info requested by channelz.
@@ -29196,7 +29197,7 @@ index 1dae57ab1..a85156045 100644
 -	return tlsConn{Conn: conn, rawConn: rawConn}, TLSInfo{conn.ConnectionState()}, nil
 +	return internal.WrapSyscallConn(rawConn, conn), TLSInfo{conn.ConnectionState()}, nil
  }
- 
+
  func (c *tlsCreds) ServerHandshake(rawConn net.Conn) (net.Conn, AuthInfo, error) {
 @@ -176,7 +196,7 @@ func (c *tlsCreds) ServerHandshake(rawConn net.Conn) (net.Conn, AuthInfo, error)
  	if err := conn.Handshake(); err != nil {
@@ -29205,12 +29206,12 @@ index 1dae57ab1..a85156045 100644
 -	return tlsConn{Conn: conn, rawConn: rawConn}, TLSInfo{conn.ConnectionState()}, nil
 +	return internal.WrapSyscallConn(rawConn, conn), TLSInfo{conn.ConnectionState()}, nil
  }
- 
+
  func (c *tlsCreds) Clone() TransportCredentials {
 @@ -266,11 +286,6 @@ type OtherChannelzSecurityValue struct {
- 
+
  func (*OtherChannelzSecurityValue) isChannelzSecurityValue() {}
- 
+
 -type tlsConn struct {
 -	*tls.Conn
 -	rawConn net.Conn
@@ -29501,7 +29502,7 @@ index b5a0f8427..d4346e9ea 100644
 @@ -1,8 +1,8 @@
 -// +build go1.8
 +// +build appengine
- 
+
  /*
   *
 - * Copyright 2017 gRPC authors.
@@ -29512,10 +29513,10 @@ index b5a0f8427..d4346e9ea 100644
 @@ -18,11 +18,13 @@
   *
   */
- 
+
 -package naming
 +package internal
- 
+
 -import "net"
 -
 -var (
@@ -29539,7 +29540,7 @@ index 2a4ca1a57..ccbf35b33 100644
 @@ -1,8 +1,8 @@
 -// +build go1.9,!appengine
 +// +build go1.12
- 
+
  /*
   *
 - * Copyright 2018 gRPC authors.
@@ -29548,15 +29549,15 @@ index 2a4ca1a57..ccbf35b33 100644
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
 @@ -20,16 +20,11 @@
- 
+
  package credentials
- 
+
 -import (
 -	"errors"
 -	"syscall"
 -)
 +import "crypto/tls"
- 
+
 -// implements the syscall.Conn interface
 -func (c tlsConn) SyscallConn() (syscall.RawConn, error) {
 -	conn, ok := c.rawConn.(syscall.Conn)
@@ -29576,13 +29577,13 @@ index 3d3c9e231..537b25860 100644
 +++ b/vendor/google.golang.org/grpc/dialoptions.go
 @@ -19,13 +19,14 @@
  package grpc
- 
+
  import (
 +	"context"
  	"fmt"
  	"net"
  	"time"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/balancer"
  	"google.golang.org/grpc/credentials"
@@ -29602,11 +29603,11 @@ index 3d3c9e231..537b25860 100644
 +	disableHealthCheck   bool
 +	healthCheckFunc      internal.HealthChecker
  }
- 
+
  // DialOption configures how we set up the connection.
 @@ -91,10 +94,13 @@ func newFuncDialOption(f func(*dialOptions)) *funcDialOption {
  }
- 
+
  // WithWaitForHandshake blocks until the initial settings frame is received from
 -// the server before assigning RPCs to the connection. Experimental API.
 +// the server before assigning RPCs to the connection.
@@ -29619,7 +29620,7 @@ index 3d3c9e231..537b25860 100644
 +		o.reqHandshake = envconfig.RequireHandshakeOn
  	})
  }
- 
+
 @@ -159,7 +165,7 @@ func WithDefaultCallOptions(cos ...CallOption) DialOption {
  // WithCodec returns a DialOption which sets a codec for message marshaling and
  // unmarshaling.
@@ -29631,7 +29632,7 @@ index 3d3c9e231..537b25860 100644
  }
 @@ -286,7 +292,8 @@ func WithInsecure() DialOption {
  }
- 
+
  // WithTransportCredentials returns a DialOption which configures a connection
 -// level security credentials (e.g., TLS/SSL).
 +// level security credentials (e.g., TLS/SSL). This should not be used together
@@ -29642,7 +29643,7 @@ index 3d3c9e231..537b25860 100644
 @@ -301,6 +308,17 @@ func WithPerRPCCredentials(creds credentials.PerRPCCredentials) DialOption {
  	})
  }
- 
+
 +// WithCredentialsBundle returns a DialOption to set a credentials bundle for
 +// the ClientConn.WithCreds. This should not be used together with
 +// WithTransportCredentials.
@@ -29660,7 +29661,7 @@ index 3d3c9e231..537b25860 100644
 @@ -311,26 +329,32 @@ func WithTimeout(d time.Duration) DialOption {
  	})
  }
- 
+
 -func withContextDialer(f func(context.Context, string) (net.Conn, error)) DialOption {
 +// WithContextDialer returns a DialOption that sets a dialer to create
 +// connections. If FailOnNonTempDialError() is set to true, and an error is
@@ -29671,13 +29672,13 @@ index 3d3c9e231..537b25860 100644
  		o.copts.Dialer = f
  	})
  }
- 
+
  func init() {
 -	internal.WithContextDialer = withContextDialer
  	internal.WithResolverBuilder = withResolverBuilder
 +	internal.WithHealthCheckFunc = withHealthCheckFunc
  }
- 
+
  // WithDialer returns a DialOption that specifies a function to use for dialing
  // network addresses. If FailOnNonTempDialError() is set to true, and an error
  // is returned by f, gRPC checks the error's Temporary() method to decide if it
@@ -29708,7 +29709,7 @@ index 3d3c9e231..537b25860 100644
 @@ -442,9 +470,30 @@ func WithMaxHeaderListSize(s uint32) DialOption {
  	})
  }
- 
+
 +// WithDisableHealthCheck disables the LB channel health checking for all SubConns of this ClientConn.
 +//
 +// This API is EXPERIMENTAL.
@@ -29898,12 +29899,12 @@ index 1f6ef6780..8b7350022 100644
 +++ b/vendor/google.golang.org/grpc/interceptor.go
 @@ -19,7 +19,7 @@
  package grpc
- 
+
  import (
 -	"golang.org/x/net/context"
 +	"context"
  )
- 
+
  // UnaryInvoker is called by UnaryClientInterceptor to complete RPCs.
 diff --git a/vendor/google.golang.org/grpc/internal/binarylog/binarylog.go b/vendor/google.golang.org/grpc/internal/binarylog/binarylog.go
 new file mode 100644
@@ -30955,17 +30956,17 @@ index e59b53e82..15dc7803d 100644
 @@ -18,25 +16,26 @@
   *
   */
- 
+
 -package status
 +package binarylog
- 
+
  import (
 -	"golang.org/x/net/context"
 -	"google.golang.org/grpc/codes"
 +	"errors"
 +	"strings"
  )
- 
+
 -// FromContextError converts a context error into a Status.  It returns a
 -// Status with codes.OK if err is nil, or a Status with codes.Unknown if err is
 -// non-nil and not a context error.
@@ -31004,10 +31005,10 @@ index 586a0336b..041520d35 100644
  	"sync"
  	"sync/atomic"
 +	"time"
- 
+
  	"google.golang.org/grpc/grpclog"
  )
- 
+
 +const (
 +	defaultMaxTraceEntry int32 = 30
 +)
@@ -31022,12 +31023,12 @@ index 586a0336b..041520d35 100644
 +	curState      int32
 +	maxTraceEntry = defaultMaxTraceEntry
  )
- 
+
  // TurnOn turns on channelz data collection.
 @@ -52,6 +58,22 @@ func IsOn() bool {
  	return atomic.CompareAndSwapInt32(&curState, 1, 1)
  }
- 
+
 +// SetMaxTraceEntry sets maximum number of trace entry per entity (i.e. channel/subchannel).
 +// Setting it to 0 will disable channel tracing.
 +func SetMaxTraceEntry(i int32) {
@@ -31060,7 +31061,7 @@ index 586a0336b..041520d35 100644
 +func GetTopChannels(id int64, maxResults int64) ([]*ChannelMetric, bool) {
 +	return db.get().GetTopChannels(id, maxResults)
  }
- 
+
  // GetServers returns a slice of server's ServerMetric, along with a
  // boolean indicating whether there's more servers to be queried for.
  //
@@ -31074,7 +31075,7 @@ index 586a0336b..041520d35 100644
 +func GetServers(id int64, maxResults int64) ([]*ServerMetric, bool) {
 +	return db.get().GetServers(id, maxResults)
  }
- 
+
  // GetServerSockets returns a slice of server's (identified by id) normal socket's
 @@ -112,10 +134,10 @@ func GetServers(id int64) ([]*ServerMetric, bool) {
  // be queried for.
@@ -31089,12 +31090,12 @@ index 586a0336b..041520d35 100644
 +func GetServerSockets(id int64, startID int64, maxResults int64) ([]*SocketMetric, bool) {
 +	return db.get().GetServerSockets(id, startID, maxResults)
  }
- 
+
  // GetChannel returns the ChannelMetric for the channel (identified by id).
 @@ -133,6 +155,11 @@ func GetSocket(id int64) *SocketMetric {
  	return db.get().GetSocket(id)
  }
- 
+
 +// GetServer returns the ServerMetric for the server (identified by id).
 +func GetServer(id int64) *ServerMetric {
 +	return db.get().GetServer(id)
@@ -31122,7 +31123,7 @@ index 586a0336b..041520d35 100644
 @@ -226,6 +255,24 @@ func RemoveEntry(id int64) {
  	db.get().removeEntry(id)
  }
- 
+
 +// TraceEventDesc is what the caller of AddTraceEvent should provide to describe the event to be added
 +// to the channel trace.
 +// The Parent field is optional. It is used for event that will be recorded in the entity's parent
@@ -31163,7 +31164,7 @@ index 586a0336b..041520d35 100644
 @@ -284,16 +333,25 @@ func (c *channelMap) addNormalSocket(id int64, ns *normalSocket, pid int64, ref
  	c.mu.Unlock()
  }
- 
+
 -// removeEntry triggers the removal of an entry, which may not indeed delete the
 -// entry, if it has to wait on the deletion of its children, or may lead to a chain
 -// of entry deletion. For example, deleting the last socket of a gracefully shutting
@@ -31177,7 +31178,7 @@ index 586a0336b..041520d35 100644
  	c.findEntry(id).triggerDelete()
  	c.mu.Unlock()
  }
- 
+
 +// c.mu must be held by the caller
 +func (c *channelMap) decrTraceRefCount(id int64) {
 +	e := c.findEntry(id)
@@ -31193,7 +31194,7 @@ index 586a0336b..041520d35 100644
 @@ -347,6 +405,39 @@ func (c *channelMap) deleteEntry(id int64) {
  	}
  }
- 
+
 +func (c *channelMap) traceEvent(id int64, desc *TraceEventDesc) {
 +	c.mu.Lock()
 +	child := c.findEntry(id)
@@ -31228,12 +31229,12 @@ index 586a0336b..041520d35 100644
 +}
 +
  type int64Slice []int64
- 
+
  func (s int64Slice) Len() int           { return len(s) }
 @@ -361,29 +452,32 @@ func copyMap(m map[int64]string) map[int64]string {
  	return n
  }
- 
+
 -func min(a, b int) int {
 +func min(a, b int64) int64 {
  	if a < b {
@@ -31241,7 +31242,7 @@ index 586a0336b..041520d35 100644
  	}
  	return b
  }
- 
+
 -func (c *channelMap) GetTopChannels(id int64) ([]*ChannelMetric, bool) {
 +func (c *channelMap) GetTopChannels(id int64, maxResults int64) ([]*ChannelMetric, bool) {
 +	if maxResults <= 0 {
@@ -31253,7 +31254,7 @@ index 586a0336b..041520d35 100644
  	ids := make([]int64, 0, l)
 -	cns := make([]*channel, 0, min(l, EntryPerPage))
 +	cns := make([]*channel, 0, min(l, maxResults))
- 
+
  	for k := range c.topLevelChannels {
  		ids = append(ids, k)
  	}
@@ -31277,7 +31278,7 @@ index 586a0336b..041520d35 100644
  	}
  	return t, end
  }
- 
+
 -func (c *channelMap) GetServers(id int64) ([]*ServerMetric, bool) {
 +func (c *channelMap) GetServers(id, maxResults int64) ([]*ServerMetric, bool) {
 +	if maxResults <= 0 {
@@ -31307,7 +31308,7 @@ index 586a0336b..041520d35 100644
 @@ -454,7 +552,10 @@ func (c *channelMap) GetServers(id int64) ([]*ServerMetric, bool) {
  	return s, end
  }
- 
+
 -func (c *channelMap) GetServerSockets(id int64, startID int64) ([]*SocketMetric, bool) {
 +func (c *channelMap) GetServerSockets(id int64, startID int64, maxResults int64) ([]*SocketMetric, bool) {
 +	if maxResults <= 0 {
@@ -31356,7 +31357,7 @@ index 586a0336b..041520d35 100644
 +	cm.Trace = cn.trace.dumpData()
  	return cm
  }
- 
+
 @@ -532,10 +637,14 @@ func (c *channelMap) GetSubChannel(id int64) *SubChannelMetric {
  		return nil
  	}
@@ -31372,11 +31373,11 @@ index 586a0336b..041520d35 100644
 +	cm.Trace = sc.trace.dumpData()
  	return cm
  }
- 
+
 @@ -560,6 +669,23 @@ func (c *channelMap) GetSocket(id int64) *SocketMetric {
  	return nil
  }
- 
+
 +func (c *channelMap) GetServer(id int64) *ServerMetric {
 +	sm := &ServerMetric{}
 +	var svr *server
@@ -31402,13 +31403,13 @@ index 6fd6bb388..17c2274cb 100644
 --- a/vendor/google.golang.org/grpc/internal/channelz/types.go
 +++ b/vendor/google.golang.org/grpc/internal/channelz/types.go
 @@ -20,6 +20,8 @@ package channelz
- 
+
  import (
  	"net"
 +	"sync"
 +	"sync/atomic"
  	"time"
- 
+
  	"google.golang.org/grpc/connectivity"
 @@ -40,6 +42,8 @@ type entry interface {
  	// deleteSelfIfReady check whether triggerDelete() has been called before, and whether child
@@ -31417,12 +31418,12 @@ index 6fd6bb388..17c2274cb 100644
 +	// getParentID returns parent ID of the entry. 0 value parent ID means no parent.
 +	getParentID() int64
  }
- 
+
  // dummyEntry is a fake entry to handle entry not found case.
 @@ -73,6 +77,10 @@ func (*dummyEntry) deleteSelfIfReady() {
  	// code should not reach here. deleteSelfIfReady is always called on an existing entry.
  }
- 
+
 +func (*dummyEntry) getParentID() int64 {
 +	return 0
 +}
@@ -31437,7 +31438,7 @@ index 6fd6bb388..17c2274cb 100644
 +	// Trace contains the most recent traced events.
 +	Trace *ChannelTrace
  }
- 
+
  // SubChannelMetric defines the info channelz provides for a specific SubChannel,
 @@ -121,6 +131,8 @@ type SubChannelMetric struct {
  	// Sockets tracks the socket type children of this subchannel in the format of a map
@@ -31446,7 +31447,7 @@ index 6fd6bb388..17c2274cb 100644
 +	// Trace contains the most recent traced events.
 +	Trace *ChannelTrace
  }
- 
+
  // ChannelInternalMetric defines the struct that the implementor of Channel interface
 @@ -138,7 +150,35 @@ type ChannelInternalMetric struct {
  	CallsFailed int64
@@ -31483,12 +31484,12 @@ index 6fd6bb388..17c2274cb 100644
 +	// RefType indicates the referenced entity type, i.e Channel or SubChannel.
 +	RefType RefChannelType
  }
- 
+
  // Channel is the interface that should be satisfied in order to be tracked by
 @@ -147,6 +187,12 @@ type Channel interface {
  	ChannelzMetric() *ChannelInternalMetric
  }
- 
+
 +type dummyChannel struct{}
 +
 +func (d *dummyChannel) ChannelzMetric() *ChannelInternalMetric {
@@ -31507,12 +31508,12 @@ index 6fd6bb388..17c2274cb 100644
 +	// Non-zero traceRefCount means the trace of this channel cannot be deleted.
 +	traceRefCount int32
  }
- 
+
  func (c *channel) addChild(id int64, e entry) {
 @@ -180,25 +230,96 @@ func (c *channel) triggerDelete() {
  	c.deleteSelfIfReady()
  }
- 
+
 -func (c *channel) deleteSelfIfReady() {
 +func (c *channel) getParentID() int64 {
 +	return c.pid
@@ -31595,7 +31596,7 @@ index 6fd6bb388..17c2274cb 100644
 +func (c *channel) getRefName() string {
 +	return c.refName
  }
- 
+
  type subChannel struct {
 -	refName     string
 -	c           Channel
@@ -31614,12 +31615,12 @@ index 6fd6bb388..17c2274cb 100644
 +	trace         *channelTrace
 +	traceRefCount int32
  }
- 
+
  func (sc *subChannel) addChild(id int64, e entry) {
 @@ -219,12 +340,82 @@ func (sc *subChannel) triggerDelete() {
  	sc.deleteSelfIfReady()
  }
- 
+
 -func (sc *subChannel) deleteSelfIfReady() {
 +func (sc *subChannel) getParentID() int64 {
 +	return sc.pid
@@ -31699,12 +31700,12 @@ index 6fd6bb388..17c2274cb 100644
 +func (sc *subChannel) getRefName() string {
 +	return sc.refName
  }
- 
+
  // SocketMetric defines the info channelz provides for a specific Socket, which
 @@ -318,6 +509,10 @@ func (ls *listenSocket) deleteSelfIfReady() {
  	grpclog.Errorf("cannot call deleteSelfIfReady on a listen socket")
  }
- 
+
 +func (ls *listenSocket) getParentID() int64 {
 +	return ls.pid
 +}
@@ -31715,7 +31716,7 @@ index 6fd6bb388..17c2274cb 100644
 @@ -343,6 +538,10 @@ func (ns *normalSocket) deleteSelfIfReady() {
  	grpclog.Errorf("cannot call deleteSelfIfReady on a normal socket")
  }
- 
+
 +func (ns *normalSocket) getParentID() int64 {
 +	return ns.pid
 +}
@@ -31729,7 +31730,7 @@ index 6fd6bb388..17c2274cb 100644
  	LastCallStartedTimestamp time.Time
 -	//TODO: trace
  }
- 
+
  // Server is the interface to be satisfied in order to be tracked by channelz as
 @@ -417,3 +615,88 @@ func (s *server) deleteSelfIfReady() {
  	}
@@ -31827,7 +31828,7 @@ index 07215396d..692dd6181 100644
 @@ -1,4 +1,4 @@
 -// +build !appengine,go1.7
 +// +build !appengine
- 
+
  /*
   *
 diff --git a/vendor/google.golang.org/grpc/internal/channelz/types_nonlinux.go b/vendor/google.golang.org/grpc/internal/channelz/types_nonlinux.go
@@ -31837,17 +31838,17 @@ index 884910c4e..79edbefc4 100644
 @@ -1,4 +1,4 @@
 -// +build !linux appengine !go1.7
 +// +build !linux appengine
- 
+
  /*
   *
 @@ -20,11 +20,13 @@
- 
+
  package channelz
- 
+
 -import "google.golang.org/grpc/grpclog"
 +import (
 +	"sync"
- 
+
 -func init() {
 -	grpclog.Infof("Channelz: socket options are not supported on non-linux os and appengine.")
 -}
@@ -31855,7 +31856,7 @@ index 884910c4e..79edbefc4 100644
 +)
 +
 +var once sync.Once
- 
+
  // SocketOptionData defines the struct to hold socket option data, and related
  // getter function to obtain info from fd.
 @@ -35,4 +37,8 @@ type SocketOptionData struct {
@@ -31878,7 +31879,7 @@ index e1e9e32d7..fdf409d55 100644
 @@ -1,4 +1,4 @@
 -// +build linux,go1.9,!appengine
 +// +build linux,!appengine
- 
+
  /*
   *
 diff --git a/vendor/google.golang.org/grpc/internal/channelz/util_nonlinux_pre_go19.go b/vendor/google.golang.org/grpc/internal/channelz/util_nonlinux.go
@@ -31891,7 +31892,7 @@ index 1d4da952d..8864a0811 100644
 @@ -1,4 +1,4 @@
 -// +build !linux !go1.9 appengine
 +// +build !linux appengine
- 
+
  /*
   *
 diff --git a/vendor/google.golang.org/grpc/internal/envconfig/envconfig.go b/vendor/google.golang.org/grpc/internal/envconfig/envconfig.go
@@ -31900,7 +31901,7 @@ index 3ee8740f1..62ed0f2f1 100644
 +++ b/vendor/google.golang.org/grpc/internal/envconfig/envconfig.go
 @@ -25,11 +25,47 @@ import (
  )
- 
+
  const (
 -	prefix   = "GRPC_GO_"
 -	retryStr = prefix + "RETRY"
@@ -31924,7 +31925,7 @@ index 3ee8740f1..62ed0f2f1 100644
 +	// considering a connection ready/successful.
 +	RequireHandshakeOff
  )
- 
+
  var (
  	// Retry is set if retry is explicitly enabled via "GRPC_GO_RETRY=on".
  	Retry = strings.EqualFold(os.Getenv(retryStr), "on")
@@ -32022,7 +32023,7 @@ index c35afb05e..c1d2c690c 100644
 @@ -20,9 +20,35 @@
  // symbols to avoid circular dependencies.
  package internal
- 
+
 +import (
 +	"context"
 +	"time"
@@ -32253,7 +32254,7 @@ index 63cd2627c..070680edb 100644
 +++ b/vendor/google.golang.org/grpc/internal/transport/bdp_estimator.go
 @@ -24,9 +24,10 @@ import (
  )
- 
+
  const (
 -	// bdpLimit is the maximum value the flow control windows
 -	// will be increased to.
@@ -32388,7 +32389,7 @@ index c6fb4b9c1..73b41ea7e 100644
 +++ b/vendor/google.golang.org/grpc/internal/transport/handler_server.go
 @@ -24,6 +24,7 @@
  package transport
- 
+
  import (
 +	"context"
  	"errors"
@@ -32396,7 +32397,7 @@ index c6fb4b9c1..73b41ea7e 100644
  	"io"
 @@ -34,7 +35,6 @@ import (
  	"time"
- 
+
  	"github.com/golang/protobuf/proto"
 -	"golang.org/x/net/context"
  	"golang.org/x/net/http2"
@@ -32405,7 +32406,7 @@ index c6fb4b9c1..73b41ea7e 100644
 @@ -307,7 +307,7 @@ func (ht *serverHandlerTransport) WriteHeader(s *Stream, md metadata.MD) error {
  func (ht *serverHandlerTransport) HandleStreams(startStream func(*Stream), traceCtx func(context.Context, string) context.Context) {
  	// With this transport type there will be exactly 1 stream: this HTTP request.
- 
+
 -	ctx := contextFromRequest(ht.req)
 +	ctx := ht.req.Context()
  	var cancel context.CancelFunc
@@ -32417,7 +32418,7 @@ index 904e790c4..ff8f4db08 100644
 +++ b/vendor/google.golang.org/grpc/internal/transport/http2_client.go
 @@ -19,6 +19,8 @@
  package transport
- 
+
  import (
 +	"context"
 +	"fmt"
@@ -32427,11 +32428,11 @@ index 904e790c4..ff8f4db08 100644
 @@ -28,13 +30,13 @@ import (
  	"sync/atomic"
  	"time"
- 
+
 -	"golang.org/x/net/context"
  	"golang.org/x/net/http2"
  	"golang.org/x/net/http2/hpack"
- 
+
  	"google.golang.org/grpc/codes"
  	"google.golang.org/grpc/credentials"
  	"google.golang.org/grpc/internal/channelz"
@@ -32440,17 +32441,17 @@ index 904e790c4..ff8f4db08 100644
  	"google.golang.org/grpc/metadata"
  	"google.golang.org/grpc/peer"
 @@ -73,7 +75,7 @@ type http2Client struct {
- 
+
  	isSecure bool
- 
+
 -	creds []credentials.PerRPCCredentials
 +	perRPCCreds []credentials.PerRPCCredentials
- 
+
  	// Boolean to keep track of reading activity on transport.
  	// 1 is true and 0 is false.
 @@ -89,10 +91,10 @@ type http2Client struct {
  	maxSendHeaderListSize *uint32
- 
+
  	bdpEst *bdpEstimator
 -	// onSuccess is a callback that client transport calls upon
 +	// onPrefaceReceipt is a callback that client transport calls upon
@@ -32458,7 +32459,7 @@ index 904e790c4..ff8f4db08 100644
  	// connection was established.
 -	onSuccess func()
 +	onPrefaceReceipt func()
- 
+
  	maxConcurrentStreams  uint32
  	streamQuota           int64
 @@ -112,13 +114,16 @@ type http2Client struct {
@@ -32469,7 +32470,7 @@ index 904e790c4..ff8f4db08 100644
 +	onGoAway func(GoAwayReason)
 +	onClose  func()
  }
- 
+
  func dial(ctx context.Context, fn func(context.Context, string) (net.Conn, error), addr string) (net.Conn, error) {
  	if fn != nil {
  		return fn(ctx, addr)
@@ -32477,7 +32478,7 @@ index 904e790c4..ff8f4db08 100644
 -	return dialContext(ctx, "tcp", addr)
 +	return (&net.Dialer{}).DialContext(ctx, "tcp", addr)
  }
- 
+
  func isTemporary(err error) bool {
 @@ -140,7 +145,7 @@ func isTemporary(err error) bool {
  // newHTTP2Client constructs a connected ClientTransport to addr based on HTTP2
@@ -32617,7 +32618,7 @@ index 904e790c4..ff8f4db08 100644
  	}
  	for k, v := range authData {
 @@ -443,7 +475,7 @@ func (t *http2Client) createHeaderFields(ctx context.Context, callHdr *CallHdr)
- 
+
  func (t *http2Client) createAudience(callHdr *CallHdr) string {
  	// Create an audience string only if needed.
 -	if len(t.creds) == 0 && callHdr.Creds == nil {
@@ -32626,7 +32627,7 @@ index 904e790c4..ff8f4db08 100644
  	}
  	// Construct URI required to get auth request metadata.
 @@ -458,7 +490,7 @@ func (t *http2Client) createAudience(callHdr *CallHdr) string {
- 
+
  func (t *http2Client) getTrAuthData(ctx context.Context, audience string) (map[string]string, error) {
  	authData := map[string]string{}
 -	for _, c := range t.creds {
@@ -32661,7 +32662,7 @@ index 904e790c4..ff8f4db08 100644
 +	// This will unblock write.
 +	close(s.done)
  }
- 
+
  // Close kicks off the shutdown process of the transport. This should be called
  // only once on a transport. Once it is called, the transport should not be
  // accessed any more.
@@ -32679,7 +32680,7 @@ index 904e790c4..ff8f4db08 100644
 +	t.onClose()
  	return err
  }
- 
+
 @@ -1043,6 +1082,9 @@ func (t *http2Client) handleGoAway(f *http2.GoAwayFrame) {
  		close(t.goAway)
  		t.state = draining
@@ -32699,7 +32700,7 @@ index 904e790c4..ff8f4db08 100644
 +	rst := s.getState() == streamActive
 +	t.closeStream(s, io.EOF, rst, http2.ErrCodeNo, state.status(), state.mdata, true)
  }
- 
+
  // reader runs as a separate goroutine in charge of reading data from network
 @@ -1159,18 +1203,19 @@ func (t *http2Client) reader() {
  	// Check the validity of server preface.
@@ -32722,14 +32723,14 @@ index 904e790c4..ff8f4db08 100644
 -	t.onSuccess()
 +	t.onPrefaceReceipt()
  	t.handleSettings(sf, true)
- 
+
  	// loop to keep reading incoming messages on this transport.
 diff --git a/vendor/google.golang.org/grpc/internal/transport/http2_server.go b/vendor/google.golang.org/grpc/internal/transport/http2_server.go
 index efb7f53ff..d038b2dfe 100644
 --- a/vendor/google.golang.org/grpc/internal/transport/http2_server.go
 +++ b/vendor/google.golang.org/grpc/internal/transport/http2_server.go
 @@ -20,6 +20,7 @@ package transport
- 
+
  import (
  	"bytes"
 +	"context"
@@ -32738,12 +32739,12 @@ index efb7f53ff..d038b2dfe 100644
  	"io"
 @@ -31,7 +32,6 @@ import (
  	"time"
- 
+
  	"github.com/golang/protobuf/proto"
 -	"golang.org/x/net/context"
  	"golang.org/x/net/http2"
  	"golang.org/x/net/http2/hpack"
- 
+
 @@ -237,7 +237,7 @@ func newHTTP2Server(conn net.Conn, config *ServerConfig) (_ ServerTransport, err
  		t.stats.HandleConn(t.ctx, connBegin)
  	}
@@ -32752,11 +32753,11 @@ index efb7f53ff..d038b2dfe 100644
 +		t.channelzID = channelz.RegisterNormalSocket(t, config.ChannelzParentID, fmt.Sprintf("%s -> %s", t.remoteAddr, t.localAddr))
  	}
  	t.framer.writer.Flush()
- 
+
 @@ -1004,45 +1004,74 @@ func (t *http2Server) Close() error {
  	return err
  }
- 
+
 +// deleteStream deletes the stream s from transport's active streams.
 +func (t *http2Server) deleteStream(s *Stream, eosReceived bool) {
 +	t.mu.Lock()
@@ -32851,11 +32852,11 @@ index efb7f53ff..d038b2dfe 100644
 +	hdr.cleanup = cleanup
 +	t.controlBuf.put(hdr)
  }
- 
+
  func (t *http2Server) RemoteAddr() net.Addr {
 @@ -1155,7 +1184,7 @@ func (t *http2Server) IncrMsgRecv() {
  }
- 
+
  func (t *http2Server) getOutFlowWindow() int64 {
 -	resp := make(chan uint32)
 +	resp := make(chan uint32, 1)
@@ -32896,14 +32897,14 @@ index 21da6e80b..77a2cfaae 100644
 +	}
  	return d * time.Duration(t), nil
  }
- 
+
 diff --git a/vendor/google.golang.org/grpc/internal/transport/transport.go b/vendor/google.golang.org/grpc/internal/transport/transport.go
 index fdf8ad684..2580aa7d3 100644
 --- a/vendor/google.golang.org/grpc/internal/transport/transport.go
 +++ b/vendor/google.golang.org/grpc/internal/transport/transport.go
 @@ -22,6 +22,7 @@
  package transport
- 
+
  import (
 +	"context"
  	"errors"
@@ -32912,7 +32913,7 @@ index fdf8ad684..2580aa7d3 100644
 @@ -29,7 +30,6 @@ import (
  	"sync"
  	"sync/atomic"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/codes"
  	"google.golang.org/grpc/credentials"
@@ -32920,7 +32921,7 @@ index fdf8ad684..2580aa7d3 100644
 @@ -110,15 +110,15 @@ func (b *recvBuffer) get() <-chan recvMsg {
  	return b.c
  }
- 
+
 -//
  // recvBufferReader implements io.Reader interface to read the data from
  // recvBuffer.
@@ -32937,7 +32938,7 @@ index fdf8ad684..2580aa7d3 100644
 +	last        []byte // Stores the remaining data in the previous calls.
 +	err         error
  }
- 
+
  // Read reads the next len(p) bytes from last. If last is drained, it tries to
 @@ -128,31 +128,53 @@ func (r *recvBufferReader) Read(p []byte) (n int, err error) {
  	if r.err != nil {
@@ -32977,7 +32978,7 @@ index fdf8ad684..2580aa7d3 100644
 +		return r.readAdditional(m, p)
  	}
  }
- 
+
 +func (r *recvBufferReader) readClient(p []byte) (n int, err error) {
 +	// If the context is canceled, then closes the stream with nil metadata.
 +	// closeStream writes its error parameter to r.recv as a recvMsg.
@@ -33003,11 +33004,11 @@ index fdf8ad684..2580aa7d3 100644
 +}
 +
  type streamState uint32
- 
+
  const (
 @@ -186,8 +208,12 @@ type Stream struct {
  	headerDone uint32        // set when headerChan is closed. Used to avoid closing headerChan multiple times.
- 
+
  	// hdrMu protects header and trailer metadata on the server-side.
 -	hdrMu   sync.Mutex
 -	header  metadata.MD // the received header metadata.
@@ -33018,12 +33019,12 @@ index fdf8ad684..2580aa7d3 100644
 +	// header will merged into this after t.WriteHeader() is called.
 +	header  metadata.MD
  	trailer metadata.MD // the key-value map of trailer metadata.
- 
+
  	noHeaders bool // set if the client never received headers (set only after the stream is done).
 @@ -266,10 +292,19 @@ func (s *Stream) Done() <-chan struct{} {
  	return s.done
  }
- 
+
 -// Header acquires the key-value pairs of header metadata once it
 -// is available. It blocks until i) the metadata is ready or ii) there is no
 -// header metadata or iii) the stream is canceled/expired.
@@ -33058,7 +33059,7 @@ index fdf8ad684..2580aa7d3 100644
  	KeepaliveParams keepalive.ClientParameters
  	// StatsHandler stores the handler for stats.
 @@ -494,8 +533,8 @@ type TargetInfo struct {
- 
+
  // NewClientTransport establishes the transport with the required ConnectOptions
  // and returns it to the caller.
 -func NewClientTransport(connectCtx, ctx context.Context, target TargetInfo, opts ConnectOptions, onSuccess func()) (ClientTransport, error) {
@@ -33066,7 +33067,7 @@ index fdf8ad684..2580aa7d3 100644
 +func NewClientTransport(connectCtx, ctx context.Context, target TargetInfo, opts ConnectOptions, onPrefaceReceipt func(), onGoAway func(GoAwayReason), onClose func()) (ClientTransport, error) {
 +	return newHTTP2Client(connectCtx, ctx, target, opts, onPrefaceReceipt, onGoAway, onClose)
  }
- 
+
  // Options provides additional hints and information for message
 @@ -706,3 +745,14 @@ type channelzData struct {
  	lastMsgSentTime       int64
@@ -33090,16 +33091,16 @@ index f8adc7e6d..34d31b5e7 100644
 @@ -16,7 +16,8 @@
   *
   */
- 
+
 -// Package keepalive defines configurable parameters for point-to-point healthcheck.
 +// Package keepalive defines configurable parameters for point-to-point
 +// healthcheck.
  package keepalive
- 
+
  import (
 @@ -24,42 +25,61 @@ import (
  )
- 
+
  // ClientParameters is used to set keepalive parameters on the client-side.
 -// These configure how the client will actively probe to notice when a connection is broken
 -// and send pings so intermediaries will be aware of the liveness of the connection.
@@ -33128,7 +33129,7 @@ index f8adc7e6d..34d31b5e7 100644
 +	// keepalive pings will be sent.
  	PermitWithoutStream bool // false by default.
  }
- 
+
 -// ServerParameters is used to set keepalive and max-age parameters on the server-side.
 +// ServerParameters is used to set keepalive and max-age parameters on the
 +// server-side.
@@ -33163,7 +33164,7 @@ index f8adc7e6d..34d31b5e7 100644
 +	// closed.
  	Timeout time.Duration // The current default value is 20 seconds.
  }
- 
+
 -// EnforcementPolicy is used to set keepalive enforcement policy on the server-side.
 -// Server will close connection with a client that violates this policy.
 +// EnforcementPolicy is used to set keepalive enforcement policy on the
@@ -33186,7 +33187,7 @@ index bd2eaf408..cf6d1b947 100644
 +++ b/vendor/google.golang.org/grpc/metadata/metadata.go
 @@ -22,10 +22,9 @@
  package metadata // import "google.golang.org/grpc/metadata"
- 
+
  import (
 +	"context"
  	"fmt"
@@ -33194,7 +33195,7 @@ index bd2eaf408..cf6d1b947 100644
 -
 -	"golang.org/x/net/context"
  )
- 
+
  // DecodeKeyValue returns k, v, nil.
 diff --git a/vendor/google.golang.org/grpc/naming/dns_resolver.go b/vendor/google.golang.org/grpc/naming/dns_resolver.go
 index 0f8a908ea..c9f79dc53 100644
@@ -33202,7 +33203,7 @@ index 0f8a908ea..c9f79dc53 100644
 +++ b/vendor/google.golang.org/grpc/naming/dns_resolver.go
 @@ -19,13 +19,13 @@
  package naming
- 
+
  import (
 +	"context"
  	"errors"
@@ -33210,11 +33211,11 @@ index 0f8a908ea..c9f79dc53 100644
  	"net"
  	"strconv"
  	"time"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/grpclog"
  )
- 
+
 @@ -37,6 +37,9 @@ const (
  var (
  	errMissingAddr  = errors.New("missing address")
@@ -33223,10 +33224,10 @@ index 0f8a908ea..c9f79dc53 100644
 +	lookupHost = net.DefaultResolver.LookupHost
 +	lookupSRV  = net.DefaultResolver.LookupSRV
  )
- 
+
  // NewDNSResolverWithFreq creates a DNS Resolver that can resolve DNS names, and
 @@ -73,8 +76,8 @@ func formatIP(addr string) (addrIP string, ok bool) {
- 
+
  // parseTarget takes the user input target string, returns formatted host and port info.
  // If target doesn't specify a port, set the port to be the defaultPort.
 -// If target is in IPv6 format and host-name is enclosed in sqarue brackets, brackets
@@ -33291,7 +33292,7 @@ index 8cc39e937..c99fdbef4 100644
 +++ b/vendor/google.golang.org/grpc/naming/naming.go
 @@ -17,7 +17,7 @@
   */
- 
+
  // Package naming defines the naming API and related data structures for gRPC.
 -// The interface is EXPERIMENTAL and may be suject to change.
 +// The interface is EXPERIMENTAL and may be subject to change.
@@ -33304,27 +33305,27 @@ index 317b8b9d0..e01d219ff 100644
 +++ b/vendor/google.golang.org/grpc/peer/peer.go
 @@ -21,9 +21,9 @@
  package peer
- 
+
  import (
 +	"context"
  	"net"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/credentials"
  )
- 
+
 diff --git a/vendor/google.golang.org/grpc/picker_wrapper.go b/vendor/google.golang.org/grpc/picker_wrapper.go
 index 76cc456aa..a2575c963 100644
 --- a/vendor/google.golang.org/grpc/picker_wrapper.go
 +++ b/vendor/google.golang.org/grpc/picker_wrapper.go
 @@ -19,10 +19,10 @@
  package grpc
- 
+
  import (
 +	"context"
  	"io"
  	"sync"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/balancer"
  	"google.golang.org/grpc/codes"
@@ -33338,17 +33339,17 @@ index 76cc456aa..a2575c963 100644
 -		ch chan struct{}
 -	)
 +	var ch chan struct{}
- 
+
  	for {
  		bp.mu.Lock()
 @@ -130,7 +127,7 @@ func (bp *pickerWrapper) pick(ctx context.Context, failfast bool, opts balancer.
  		}
- 
+
  		ch = bp.blockingCh
 -		p = bp.picker
 +		p := bp.picker
  		bp.mu.Unlock()
- 
+
  		subConn, done, err := p.Pick(ctx, opts)
 @@ -144,15 +141,22 @@ func (bp *pickerWrapper) pick(ctx context.Context, failfast bool, opts balancer.
  					continue
@@ -33367,7 +33368,7 @@ index 76cc456aa..a2575c963 100644
 +				return nil, nil, status.Error(codes.Unknown, err.Error())
  			}
  		}
- 
+
  		acw, ok := subConn.(*acBalancerWrapper)
  		if !ok {
 -			grpclog.Infof("subconn returned from pick is not *acBalancerWrapper")
@@ -33381,7 +33382,7 @@ index bf659d49d..d1e38aad7 100644
 +++ b/vendor/google.golang.org/grpc/pickfirst.go
 @@ -19,7 +19,8 @@
  package grpc
- 
+
  import (
 -	"golang.org/x/net/context"
 +	"context"
@@ -33402,7 +33403,7 @@ index 2d40236e2..f8f69bfb7 100644
 --- a/vendor/google.golang.org/grpc/proxy.go
 +++ b/vendor/google.golang.org/grpc/proxy.go
 @@ -20,6 +20,8 @@ package grpc
- 
+
  import (
  	"bufio"
 +	"context"
@@ -33417,7 +33418,7 @@ index 2d40236e2..f8f69bfb7 100644
 -
 -	"golang.org/x/net/context"
  )
- 
+
 +const proxyAuthHeaderKey = "Proxy-Authorization"
 +
  var (
@@ -33426,7 +33427,7 @@ index 2d40236e2..f8f69bfb7 100644
 @@ -38,7 +40,7 @@ var (
  	httpProxyFromEnvironment = http.ProxyFromEnvironment
  )
- 
+
 -func mapAddress(ctx context.Context, address string) (string, error) {
 +func mapAddress(ctx context.Context, address string) (*url.URL, error) {
  	req := &http.Request{
@@ -33446,12 +33447,12 @@ index 2d40236e2..f8f69bfb7 100644
 -	return url.Host, nil
 +	return url, nil
  }
- 
+
  // To read a response from a net.Conn, http.ReadResponse() takes a bufio.Reader.
 @@ -69,18 +71,28 @@ func (c *bufConn) Read(b []byte) (int, error) {
  	return c.r.Read(b)
  }
- 
+
 -func doHTTPConnectHandshake(ctx context.Context, conn net.Conn, addr string) (_ net.Conn, err error) {
 +func basicAuth(username, password string) string {
 +	auth := username + ":" + password
@@ -33464,7 +33465,7 @@ index 2d40236e2..f8f69bfb7 100644
  			conn.Close()
  		}
  	}()
- 
+
 -	req := (&http.Request{
 +	req := &http.Request{
  		Method: http.MethodConnect,
@@ -33478,7 +33479,7 @@ index 2d40236e2..f8f69bfb7 100644
 +		p, _ := t.Password()
 +		req.Header.Add(proxyAuthHeaderKey, "Basic "+basicAuth(u, p))
 +	}
- 
+
  	if err := sendHTTPRequest(ctx, req, conn); err != nil {
  		return nil, fmt.Errorf("failed to write the HTTP request: %v", err)
 @@ -108,23 +120,33 @@ func doHTTPConnectHandshake(ctx context.Context, conn net.Conn, addr string) (_
@@ -33498,7 +33499,7 @@ index 2d40236e2..f8f69bfb7 100644
 +		} else {
 +			newAddr = proxyURL.Host
  		}
- 
+
  		conn, err = dialer(ctx, newAddr)
  		if err != nil {
  			return
@@ -33534,7 +33535,7 @@ index 4ce81671d..2d8da331d 100644
   * you may not use this file except in compliance with the License.
 @@ -21,6 +21,7 @@
  package dns
- 
+
  import (
 +	"context"
  	"encoding/json"
@@ -33543,14 +33544,14 @@ index 4ce81671d..2d8da331d 100644
 @@ -31,7 +32,6 @@ import (
  	"sync"
  	"time"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/grpclog"
  	"google.golang.org/grpc/internal/backoff"
  	"google.golang.org/grpc/internal/grpcrand"
 @@ -43,9 +43,10 @@ func init() {
  }
- 
+
  const (
 -	defaultPort = "443"
 -	defaultFreq = time.Minute * 30
@@ -33565,7 +33566,7 @@ index 4ce81671d..2d8da331d 100644
 @@ -61,6 +62,31 @@ var (
  	errEndsWithColon = errors.New("dns resolver: missing port after port-separator colon")
  )
- 
+
 +var (
 +	defaultResolver netResolver = net.DefaultResolver
 +)
@@ -33595,7 +33596,7 @@ index 4ce81671d..2d8da331d 100644
  func NewBuilder() resolver.Builder {
  	return &dnsBuilder{minFreq: defaultFreq}
 @@ -73,10 +99,7 @@ type dnsBuilder struct {
- 
+
  // Build creates and starts a DNS resolver that watches the name resolution of the target.
  func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
 -	if target.Authority != "" {
@@ -33609,7 +33610,7 @@ index 4ce81671d..2d8da331d 100644
 @@ -111,6 +134,15 @@ func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts
  		disableServiceConfig: opts.DisableServiceConfig,
  	}
- 
+
 +	if target.Authority == "" {
 +		d.resolver = defaultResolver
 +	} else {
@@ -33625,7 +33626,7 @@ index 4ce81671d..2d8da331d 100644
 @@ -121,6 +153,12 @@ func (b *dnsBuilder) Scheme() string {
  	return "dns"
  }
- 
+
 +type netResolver interface {
 +	LookupHost(ctx context.Context, host string) (addrs []string, err error)
 +	LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error)
@@ -33644,7 +33645,7 @@ index 4ce81671d..2d8da331d 100644
  	cancel     context.CancelFunc
  	cc         resolver.ClientConn
 @@ -218,13 +257,13 @@ func (d *dnsResolver) watcher() {
- 
+
  func (d *dnsResolver) lookupSRV() []resolver.Address {
  	var newAddrs []resolver.Address
 -	_, srvs, err := lookupSRV(d.ctx, "grpclb", "tcp", d.host)
@@ -33661,7 +33662,7 @@ index 4ce81671d..2d8da331d 100644
  			continue
 @@ -243,7 +282,7 @@ func (d *dnsResolver) lookupSRV() []resolver.Address {
  }
- 
+
  func (d *dnsResolver) lookupTXT() string {
 -	ss, err := lookupTXT(d.ctx, d.host)
 +	ss, err := d.resolver.LookupTXT(d.ctx, d.host)
@@ -33669,7 +33670,7 @@ index 4ce81671d..2d8da331d 100644
  		grpclog.Infof("grpc: failed dns TXT record lookup due to %v.\n", err)
  		return ""
 @@ -263,7 +302,7 @@ func (d *dnsResolver) lookupTXT() string {
- 
+
  func (d *dnsResolver) lookupHost() []resolver.Address {
  	var newAddrs []resolver.Address
 -	addrs, err := lookupHost(d.ctx, d.host)
@@ -33680,7 +33681,7 @@ index 4ce81671d..2d8da331d 100644
 @@ -305,16 +344,16 @@ func formatIP(addr string) (addrIP string, ok bool) {
  	return "[" + addr + "]", true
  }
- 
+
 -// parseTarget takes the user input target string, returns formatted host and port info.
 +// parseTarget takes the user input target string and default port, returns formatted host and port info.
  // If target doesn't specify a port, set the port to be the defaultPort.
@@ -33784,12 +33785,12 @@ index 494d6931e..50991eafb 100644
 +++ b/vendor/google.golang.org/grpc/resolver_conn_wrapper.go
 @@ -23,21 +23,23 @@ import (
  	"strings"
- 
+
  	"google.golang.org/grpc/grpclog"
 +	"google.golang.org/grpc/internal/channelz"
  	"google.golang.org/grpc/resolver"
  )
- 
+
  // ccResolverWrapper is a wrapper on top of cc for resolvers.
  // It implements resolver.ClientConnection interface.
  type ccResolverWrapper struct {
@@ -33805,7 +33806,7 @@ index 494d6931e..50991eafb 100644
 +	done               chan struct{}
 +	lastAddressesCount int
  }
- 
+
  // split2 returns the values from strings.SplitN(s, sep, 2).
 -// If sep is not found, it returns ("", s, false) instead.
 +// If sep is not found, it returns ("", "", false) instead.
@@ -33815,7 +33816,7 @@ index 494d6931e..50991eafb 100644
 @@ -91,44 +93,6 @@ func newCCResolverWrapper(cc *ClientConn) (*ccResolverWrapper, error) {
  	return ccr, nil
  }
- 
+
 -func (ccr *ccResolverWrapper) start() {
 -	go ccr.watcher()
 -}
@@ -33873,7 +33874,7 @@ index 494d6931e..50991eafb 100644
 +	}
 +	ccr.cc.handleResolvedAddrs(addrs, nil)
  }
- 
+
  // NewServiceConfig is called by the resolver implemenetion to send service
  // configs to gRPC.
  func (ccr *ccResolverWrapper) NewServiceConfig(sc string) {
@@ -33928,7 +33929,7 @@ index fa0568302..2a595622d 100644
 @@ -31,7 +32,6 @@ import (
  	"sync"
  	"time"
- 
+
 -	"golang.org/x/net/context"
  	"google.golang.org/grpc/codes"
  	"google.golang.org/grpc/credentials"
@@ -33945,7 +33946,7 @@ index fa0568302..2a595622d 100644
 @@ -253,8 +253,8 @@ func (o PeerCallOption) after(c *callInfo) {
  	}
  }
- 
+
 -// FailFast configures the action to take when an RPC is attempted on broken
 -// connections or unreachable servers.  If failFast is true, the RPC will fail
 +// WaitForReady configures the action to take when an RPC is attempted on broken
@@ -33991,7 +33992,7 @@ index fa0568302..2a595622d 100644
 @@ -389,7 +396,7 @@ func (o ContentSubtypeCallOption) before(c *callInfo) error {
  }
  func (o ContentSubtypeCallOption) after(c *callInfo) {}
- 
+
 -// CallCustomCodec returns a CallOption that will set the given Codec to be
 +// ForceCodec returns a CallOption that will set the given Codec to be
  // used for all request and response messages for a call. The result of calling
@@ -34028,7 +34029,7 @@ index fa0568302..2a595622d 100644
  func CallCustomCodec(codec Codec) CallOption {
  	return CustomCodecCallOption{Codec: codec}
  }
- 
+
  // CustomCodecCallOption is a CallOption that indicates the codec used for
  // marshaling messages.
 +//
@@ -34050,7 +34051,7 @@ index fa0568302..2a595622d 100644
 @@ -595,20 +630,22 @@ func checkRecvPayload(pf payloadFormat, recvCompress string, haveCompressor bool
  	return nil
  }
- 
+
 -// For the two compressor parameters, both should not be set, but if they are,
 -// dc takes precedence over compressor.
 -// TODO(dfawley): wrap the old compressor/decompressor using the new API?
@@ -34071,12 +34072,12 @@ index fa0568302..2a595622d 100644
 +	if payInfo != nil {
 +		payInfo.wireLength = len(d)
  	}
- 
+
  	if st := checkRecvPayload(pf, s.RecvCompress(), compressor != nil || dc != nil); st != nil {
 -		return st.Err()
 +		return nil, st.Err()
  	}
- 
+
  	if pf == compressionMade {
 @@ -617,33 +654,42 @@ func recv(p *parser, c baseCodec, s *transport.Stream, dc Decompressor, m interf
  		if dc != nil {
@@ -34145,7 +34146,7 @@ index fa0568302..2a595622d 100644
 -	return codes.Unknown
 +	return status.Code(err)
  }
- 
+
  // ErrorDesc returns the error description of err if it was produced by the rpc system.
  // Otherwise, it returns err.Error() or empty string when err is nil.
  //
@@ -34158,12 +34159,12 @@ index fa0568302..2a595622d 100644
 -	return err.Error()
 +	return status.Convert(err).Message()
  }
- 
+
  // Errorf returns an error containing an error code and a description;
 @@ -693,6 +733,31 @@ func Errorf(c codes.Code, format string, a ...interface{}) error {
  	return status.Errorf(c, format, a...)
  }
- 
+
 +// toRPCErr converts an error into an error from the status package.
 +func toRPCErr(err error) error {
 +	if err == nil || err == io.EOF {
@@ -34198,7 +34199,7 @@ index 5c7d5b635..33272a47a 100644
 +++ b/vendor/google.golang.org/grpc/server.go
 @@ -19,7 +19,7 @@
  package grpc
- 
+
  import (
 -	"bytes"
 +	"context"
@@ -34208,12 +34209,12 @@ index 5c7d5b635..33272a47a 100644
 @@ -33,9 +33,6 @@ import (
  	"sync/atomic"
  	"time"
- 
+
 -	"io/ioutil"
 -
 -	"golang.org/x/net/context"
  	"golang.org/x/net/trace"
- 
+
  	"google.golang.org/grpc/codes"
 @@ -43,10 +40,12 @@ import (
  	"google.golang.org/grpc/encoding"
@@ -34229,7 +34230,7 @@ index 5c7d5b635..33272a47a 100644
  	"google.golang.org/grpc/status"
  	"google.golang.org/grpc/tap"
 @@ -183,6 +182,11 @@ func InitialConnWindowSize(s int32) ServerOption {
- 
+
  // KeepaliveParams returns a ServerOption that sets keepalive and max-age parameters for the server.
  func KeepaliveParams(kp keepalive.ServerParameters) ServerOption {
 +	if kp.Time > 0 && kp.Time < time.Second {
@@ -34242,7 +34243,7 @@ index 5c7d5b635..33272a47a 100644
  	}
 @@ -245,7 +249,7 @@ func MaxRecvMsgSize(m int) ServerOption {
  }
- 
+
  // MaxSendMsgSize returns a ServerOption to set the max message size in bytes the server can send.
 -// If this is not set, gRPC uses the default 4MB.
 +// If this is not set, gRPC uses the default `math.MaxInt32`.
@@ -34251,16 +34252,16 @@ index 5c7d5b635..33272a47a 100644
  		o.maxSendMessageSize = m
 @@ -538,7 +542,7 @@ func (s *Server) Serve(lis net.Listener) error {
  	s.lis[ls] = true
- 
+
  	if channelz.IsOn() {
 -		ls.channelzID = channelz.RegisterListenSocket(ls, s.channelzID, "")
 +		ls.channelzID = channelz.RegisterListenSocket(ls, s.channelzID, lis.Addr().String())
  	}
  	s.mu.Unlock()
- 
+
 @@ -749,7 +753,7 @@ func (s *Server) traceInfo(st transport.ServerTransport, stream *transport.Strea
  	trInfo.firstLine.remoteAddr = st.RemoteAddr()
- 
+
  	if dl, ok := stream.Context().Deadline(); ok {
 -		trInfo.firstLine.deadline = dl.Sub(time.Now())
 +		trInfo.firstLine.deadline = time.Until(dl)
@@ -34270,7 +34271,7 @@ index 5c7d5b635..33272a47a 100644
 @@ -865,6 +869,30 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
  		}()
  	}
- 
+
 +	binlog := binarylog.GetMethodLogger(stream.Method())
 +	if binlog != nil {
 +		ctx := stream.Context()
@@ -34301,7 +34302,7 @@ index 5c7d5b635..33272a47a 100644
 @@ -901,77 +929,38 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
  		}
  	}
- 
+
 -	p := &parser{r: stream}
 -	pf, req, err := p.recvMsg(s.opts.maxReceiveMessageSize)
 -	if err == io.EOF {
@@ -34455,12 +34456,12 @@ index 5c7d5b635..33272a47a 100644
 +	}
 +	return err
  }
- 
+
  func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transport.Stream, srv *service, sd *StreamDesc, trInfo *traceInfo) (err error) {
 @@ -1074,6 +1102,29 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
  		statsHandler:          sh,
  	}
- 
+
 +	ss.binlog = binarylog.GetMethodLogger(stream.Method())
 +	if ss.binlog != nil {
 +		md, _ := metadata.FromIncomingContext(ctx)
@@ -34514,7 +34515,7 @@ index 5c7d5b635..33272a47a 100644
 +	}
 +	return err
  }
- 
+
  func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Stream, trInfo *traceInfo) {
 @@ -1180,47 +1244,27 @@ func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Str
  	}
@@ -34594,7 +34595,7 @@ index e0d735265..162857e20 100644
 +	// serviceName is the service name to use in the health-checking request.
 +	ServiceName string
  }
- 
+
  // retryPolicy defines the go-native version of the retry policy defined by the
 @@ -226,9 +235,13 @@ type jsonSC struct {
  	LoadBalancingPolicy *string
@@ -34602,7 +34603,7 @@ index e0d735265..162857e20 100644
  	RetryThrottling     *retryThrottlingPolicy
 +	HealthCheckConfig   *healthCheckConfig
  }
- 
+
  func parseServiceConfig(js string) (ServiceConfig, error) {
 +	if len(js) == 0 {
 +		return ServiceConfig{}, fmt.Errorf("no JSON service config provided")
@@ -34630,14 +34631,14 @@ index 05b384c69..dc03731e4 100644
 +++ b/vendor/google.golang.org/grpc/stats/handlers.go
 @@ -19,9 +19,8 @@
  package stats
- 
+
  import (
 +	"context"
  	"net"
 -
 -	"golang.org/x/net/context"
  )
- 
+
  // ConnTagInfo defines the relevant information needed by connection context tagger.
 diff --git a/vendor/google.golang.org/grpc/stats/stats.go b/vendor/google.golang.org/grpc/stats/stats.go
 index 3f13190a0..84f77dafa 100644
@@ -34645,7 +34646,7 @@ index 3f13190a0..84f77dafa 100644
 +++ b/vendor/google.golang.org/grpc/stats/stats.go
 @@ -24,10 +24,9 @@
  package stats // import "google.golang.org/grpc/stats"
- 
+
  import (
 +	"context"
  	"net"
@@ -34653,7 +34654,7 @@ index 3f13190a0..84f77dafa 100644
 -
 -	"golang.org/x/net/context"
  )
- 
+
  // RPCStats contains stats information about RPCs.
 diff --git a/vendor/google.golang.org/grpc/status/go17.go b/vendor/google.golang.org/grpc/status/go17.go
 deleted file mode 100644
@@ -34711,12 +34712,12 @@ index 9c61b0945..ed36681bb 100644
 +++ b/vendor/google.golang.org/grpc/status/status.go
 @@ -28,6 +28,7 @@
  package status
- 
+
  import (
 +	"context"
  	"errors"
  	"fmt"
- 
+
 @@ -126,7 +127,9 @@ func FromError(err error) (s *Status, ok bool) {
  	if err == nil {
  		return &Status{s: &spb.Status{Code: int32(codes.OK)}}, true
@@ -34762,7 +34763,7 @@ index 65d45a1d9..ccf996b4b 100644
 +++ b/vendor/google.golang.org/grpc/stream.go
 @@ -19,6 +19,7 @@
  package grpc
- 
+
  import (
 +	"context"
  	"errors"
@@ -34771,7 +34772,7 @@ index 65d45a1d9..ccf996b4b 100644
 @@ -26,16 +27,18 @@ import (
  	"sync"
  	"time"
- 
+
 -	"golang.org/x/net/context"
  	"golang.org/x/net/trace"
  	"google.golang.org/grpc/balancer"
@@ -34834,13 +34835,13 @@ index 65d45a1d9..ccf996b4b 100644
  		cs.retryThrottler = cc.retryThrottler.Load().(*retryThrottler)
  	}
 +	cs.binlog = binarylog.GetMethodLogger(method)
- 
+
  	cs.callInfo.stream = cs
  	// Only this initial attempt has stats/tracing.
 @@ -277,6 +288,23 @@ func newClientStream(ctx context.Context, desc *StreamDesc, cc *ClientConn, meth
  		return nil, err
  	}
- 
+
 +	if cs.binlog != nil {
 +		md, _ := metadata.FromOutgoingContext(ctx)
 +		logEntry := &binarylog.ClientHeader{
@@ -34862,9 +34863,9 @@ index 65d45a1d9..ccf996b4b 100644
  		// Listen on cc and stream contexts to cleanup when the user closes the
  		// ClientConn or cancels the stream context.  In all other cases, an error
 @@ -350,6 +378,15 @@ type clientStream struct {
- 
+
  	retryThrottler *retryThrottler // The throttler active when the RPC began.
- 
+
 +	binlog *binarylog.MethodLogger // Binary logger, can be nil.
 +	// serverHeaderBinlogged is a boolean for whether server header has been
 +	// logged. Server header will be logged when the first time one of those
@@ -34888,7 +34889,7 @@ index 65d45a1d9..ccf996b4b 100644
 +		if to, toErr := cs.attempt.s.TrailersOnly(); toErr != nil || !to {
  			return err
  		}
- 
+
 @@ -561,6 +595,20 @@ func (cs *clientStream) Header() (metadata.MD, error) {
  	}, cs.commitAttemptLocked)
  	if err != nil {
@@ -34932,7 +34933,7 @@ index 65d45a1d9..ccf996b4b 100644
 +	}
 +	return
  }
- 
+
  func (cs *clientStream) RecvMsg(m interface{}) error {
 +	if cs.binlog != nil && !cs.serverHeaderBinlogged {
 +		// Call Header() to binary log header if it's not already logged.
@@ -35016,7 +35017,7 @@ index 65d45a1d9..ccf996b4b 100644
 @@ -728,14 +836,12 @@ func (a *csAttempt) sendMsg(m interface{}, hdr, payld, data []byte) error {
  	return nil
  }
- 
+
 -func (a *csAttempt) recvMsg(m interface{}) (err error) {
 +func (a *csAttempt) recvMsg(m interface{}, payInfo *payloadInfo) (err error) {
  	cs := a.cs
@@ -35068,7 +35069,7 @@ index 65d45a1d9..ccf996b4b 100644
  	// This recv expects EOF or errors, so we don't collect inPayload.
  	err = recv(a.p, cs.codec, a.s, a.dc, m, *cs.callInfo.maxReceiveMessageSize, nil, a.decomp)
 @@ -809,11 +921,14 @@ func (a *csAttempt) finish(err error) {
- 
+
  	if a.done != nil {
  		br := false
 +		var tr metadata.MD
@@ -35085,7 +35086,7 @@ index 65d45a1d9..ccf996b4b 100644
 @@ -840,6 +955,298 @@ func (a *csAttempt) finish(err error) {
  	a.mu.Unlock()
  }
- 
+
 +func (ac *addrConn) newClientStream(ctx context.Context, desc *StreamDesc, method string, t transport.ClientTransport, opts ...CallOption) (_ ClientStream, err error) {
 +	ac.mu.Lock()
 +	if ac.transport != t {
@@ -35382,9 +35383,9 @@ index 65d45a1d9..ccf996b4b 100644
  //
  // All errors returned from ServerStream methods are compatible with the
 @@ -906,6 +1313,15 @@ type serverStream struct {
- 
+
  	statsHandler stats.Handler
- 
+
 +	binlog *binarylog.MethodLogger
 +	// serverHeaderBinlogged indicates whether server header has been logged. It
 +	// will happen when one of the following two happens: stream.SendHeader(),
@@ -35396,10 +35397,10 @@ index 65d45a1d9..ccf996b4b 100644
 +
  	mu sync.Mutex // protects trInfo.tr after the service handler runs.
  }
- 
+
 @@ -921,7 +1337,15 @@ func (ss *serverStream) SetHeader(md metadata.MD) error {
  }
- 
+
  func (ss *serverStream) SendHeader(md metadata.MD) error {
 -	return ss.t.WriteHeader(ss.s, md)
 +	err := ss.t.WriteHeader(ss.s, md)
@@ -35412,7 +35413,7 @@ index 65d45a1d9..ccf996b4b 100644
 +	}
 +	return err
  }
- 
+
  func (ss *serverStream) SetTrailer(md metadata.MD) {
 @@ -948,6 +1372,12 @@ func (ss *serverStream) SendMsg(m interface{}) (err error) {
  		if err != nil && err != io.EOF {
@@ -35505,12 +35506,12 @@ index 22b8fb50d..584360f68 100644
 +++ b/vendor/google.golang.org/grpc/tap/tap.go
 @@ -21,7 +21,7 @@
  package tap
- 
+
  import (
 -	"golang.org/x/net/context"
 +	"context"
  )
- 
+
  // Info defines the relevant information needed by the handles.
 diff --git a/vendor/google.golang.org/grpc/version.go b/vendor/google.golang.org/grpc/version.go
 index 8ee619bf6..c30e84c00 100644
@@ -35518,10 +35519,10 @@ index 8ee619bf6..c30e84c00 100644
 +++ b/vendor/google.golang.org/grpc/version.go
 @@ -19,4 +19,4 @@
  package grpc
- 
+
  // Version is the current grpc version.
 -const Version = "1.15.0"
 +const Version = "1.19.0"
--- 
+--
 2.21.0 (Apple Git-122.2)
 
