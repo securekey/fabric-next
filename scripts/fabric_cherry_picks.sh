@@ -15,40 +15,45 @@ if [ -z "$MY_PATH" ] ; then
   exit 1  # fail
 fi
 
-
+# git clone and checkout Hyperledger Fabric source code
 mkdir -p $GOPATH/src/github.com/hyperledger/
-cd $GOPATH/src/github.com/hyperledger/
-git clone https://github.com/hyperledger/fabric
-cd fabric
-git config advice.detachedHead false
-git checkout v${1}
-
+git clone https://github.com/hyperledger/fabric $GOPATH/src/github.com/hyperledger/fabric
 cd $GOPATH/src/github.com/hyperledger/fabric
 
+git config advice.detachedHead false
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
+
+if [ "x${1}" == "x" ]; then
+
+  echo "FATAL: please specify fabric version as the 1st parameter of the script!"
+  echo ""
+  exit 1
+fi
+
+git checkout ${1}
 
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
 #apply patch for PKCS11 Thales
-git am $MY_PATH/../patches/PKCS11-Thales.patch
+git am < $MY_PATH/../patches/PKCS11-Thales.patch
 
 # [FAB-14646] Update dependency github.com/opencontainers/runc
-git am $MY_PATH/../patches/runc.patch
+git am < $MY_PATH/../patches/runc.patch
 
 
 # step 1 apply gossip protos extensions to match trustbloc/fabric-peer-ext package names dependencies
-git am $MY_PATH/../patches/0001-gossip-protos-extensions-refactoring.patch
+patch -p1 < $MY_PATH/../patches/0001-gossip-protos-extensions-refactoring.patch
 # step 2 apply transient data changes from trustbloc version of Fabric
-git am $MY_PATH/../patches/0001-Backport-Transient-Data.patch
+patch -p1 < $MY_PATH/../patches/0001-Backport-Transient-Data.patch
 # step 3 apply transient data fix BLOC-1741 Fix for deadlock
-git am $MY_PATH/../patches/0001-BLOC-1741-Fix-deadlock-when-retrieving-transient-dat.patch
+patch -p1 < $MY_PATH/../patches/0001-BLOC-1741-Fix-deadlock-when-retrieving-transient-dat.patch
 # step 4 apply transient data fix BLOC-1814 Missing transient data when mutiple keys in write-set
-git am $MY_PATH/../patches/0001-BLOC-1814-Missing-transient-data-if-multiple-keys.patch
+patch -p1 < $MY_PATH/../patches/0001-BLOC-1814-Missing-transient-data-if-multiple-keys.patch
 # step 5 apply collection validation fix BLOC-1827 Prevent modification of collection type during upgrade
-git am $MY_PATH/../patches/0001-BLOC-1827-Prevent-modification-of-collection-type-du.patch
+patch -p1 < $MY_PATH/../patches/0001-BLOC-1827-Prevent-modification-of-collection-type-du.patch
 # step 6 apply concurrent map write fix BLOC-1833 Concurrent writes to roles map
-git am $MY_PATH/../patches/0001-BLOC-1833-Concurrent-writes-to-roles-map.patch
+patch -p1 < $MY_PATH/../patches/0001-BLOC-1833-Concurrent-writes-to-roles-map.patch
 # step 7 apply patch for BLOC-1836 Performance improvement for pulling private data
-git am $MY_PATH/../patches/0001-BLOC-1836-Performance-improvement-for-pulling-privat.patch
+patch -p1 < $MY_PATH/../patches/0001-BLOC-1836-Performance-improvement-for-pulling-privat.patch
