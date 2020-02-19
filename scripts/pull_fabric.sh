@@ -27,8 +27,7 @@ declare -x BASE_OUTPUT_VERSION=${BASE_VERSION}
 declare -x ARCH=$(go env GOARCH)
 
 # SETTING variables
-declare -x FABRIC_VERSION=1893808704b077f92eefe83b739f4f56840476c2
-declare -x FABRIC_CA_VERSION=1.4.4
+declare -x FABRIC_CA_VERSION=1.4.5
 
 MY_PATH="`dirname \"$0\"`"              # relative
 MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
@@ -81,7 +80,7 @@ echo "Build tmp directory is $TMP ..."
 
 export GOPATH=$TMP
 
-$MY_PATH/fabric_cherry_picks.sh ${FABRIC_VERSION}
+$MY_PATH/fabric_cherry_picks.sh
 
 cd $GOPATH/src/github.com/hyperledger/fabric
 make clean
