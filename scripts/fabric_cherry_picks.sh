@@ -24,14 +24,8 @@ git config advice.detachedHead false
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
-if [ "x${1}" == "x" ]; then
 
-  echo "FATAL: please specify fabric version as the 1st parameter of the script!"
-  echo ""
-  exit 1
-fi
-
-git checkout ${1}
+git checkout v1.4.5
 
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
