@@ -51,3 +51,5 @@ git am $MY_PATH/../patches/0001-BLOC-1827-Prevent-modification-of-collection-typ
 git am $MY_PATH/../patches/0001-BLOC-1833-Concurrent-writes-to-roles-map.patch
 # step 7 apply patch for BLOC-1836 Performance improvement for pulling private data
 git am $MY_PATH/../patches/0001-BLOC-1836-Performance-improvement-for-pulling-privat.patch
+# step 8 apply patch for DEV-16266 Remove throttle
+git am $MY_PATH/../patches/0001-DEV-16266-Remove-throttle.patch

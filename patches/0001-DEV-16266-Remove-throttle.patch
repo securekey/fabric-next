@@ -1,0 +1,49 @@
+From eba9ec43d18147a421bbf773a985a08bc132ec37 Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Fri, 21 Feb 2020 12:02:41 -0500
+Subject: [PATCH] [DEV-16266] Remove throttle
+
+Applying a change from Fabric 2.0 (https://github.com/hyperledger/fabric/commit/f506b919ba80f00a4b7c0023cf69eea26a2cd940) to remove the throttle.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: Ie4c7412c315914c05b7af2f0d189e06bad72b905
+---
+ peer/node/start.go | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/peer/node/start.go b/peer/node/start.go
+index 58e9ad49e..5dbad6485 100644
+--- a/peer/node/start.go
++++ b/peer/node/start.go
+@@ -101,7 +101,6 @@ const (
+ 	chaincodeAddrKey       = "peer.chaincodeAddress"
+ 	chaincodeListenAddrKey = "peer.chaincodeListenAddress"
+ 	defaultChaincodePort   = 7052
+-	grpcMaxConcurrency     = 2500
+ )
+ 
+ var chaincodeDevMode bool
+@@ -234,20 +233,17 @@ func serve(args []string) error {
+ 		logger.Fatalf("Error loading secure config for peer (%s)", err)
+ 	}
+ 
+-	throttle := comm.NewThrottle(grpcMaxConcurrency)
+ 	serverConfig.Logger = flogging.MustGetLogger("core.comm").With("server", "PeerServer")
+ 	serverConfig.ServerStatsHandler = comm.NewServerStatsHandler(metricsProvider)
+ 	serverConfig.UnaryInterceptors = append(
+ 		serverConfig.UnaryInterceptors,
+ 		grpcmetrics.UnaryServerInterceptor(grpcmetrics.NewUnaryMetrics(metricsProvider)),
+ 		grpclogging.UnaryServerInterceptor(flogging.MustGetLogger("comm.grpc.server").Zap()),
+-		throttle.UnaryServerIntercptor,
+ 	)
+ 	serverConfig.StreamInterceptors = append(
+ 		serverConfig.StreamInterceptors,
+ 		grpcmetrics.StreamServerInterceptor(grpcmetrics.NewStreamMetrics(metricsProvider)),
+ 		grpclogging.StreamServerInterceptor(flogging.MustGetLogger("comm.grpc.server").Zap()),
+-		throttle.StreamServerInterceptor,
+ 	)
+ 
+ 	peerServer, err := peer.NewPeerServer(listenAddr, serverConfig)
+-- 
+2.21.1 (Apple Git-122.3)
+
