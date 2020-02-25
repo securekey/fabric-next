@@ -27,6 +27,7 @@ import (
 	ledgermocks "github.com/hyperledger/fabric/core/ledger/mock"
 	"github.com/hyperledger/fabric/core/mocks/ccprovider"
 	fakeconfig "github.com/hyperledger/fabric/core/peer/mocks"
+	storemocks "github.com/hyperledger/fabric/extensions/mocks"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/service"
 	"github.com/hyperledger/fabric/msp/mgmt"
@@ -90,14 +91,14 @@ func TestInitialize(t *testing.T) {
 	cleanup := setupPeerFS(t)
 	defer cleanup()
 
-	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), nil, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{})
+	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), nil, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{}, &storemocks.DataProvider{})
 }
 
 func TestCreateChainFromBlock(t *testing.T) {
 	cleanup := setupPeerFS(t)
 	defer cleanup()
 
-	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), &platforms.Registry{}, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{})
+	Initialize(nil, &ccprovider.MockCcProviderImpl{}, (&mscc.MocksccProviderFactory{}).NewSystemChaincodeProvider(), txvalidator.MapBasedPluginMapper(map[string]validation.PluginFactory{}), &platforms.Registry{}, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, &disabled.Provider{}, &storemocks.DataProvider{})
 	testChainID := fmt.Sprintf("mytestchainid-%d", rand.Int())
 	block, err := configtxtest.MakeGenesisBlock(testChainID)
 	if err != nil {
