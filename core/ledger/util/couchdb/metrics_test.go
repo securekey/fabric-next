@@ -22,7 +22,7 @@ func TestAPIProcessTimeMetric(t *testing.T) {
 	fakeHistogram.WithReturns(fakeHistogram)
 
 	// create a new couch instance
-	couchInstance, err := CreateCouchInstance(
+	couchInstance, err := CreateCouchInstance1_4_1(
 		couchDBDef.URL,
 		couchDBDef.Username,
 		couchDBDef.Password,
