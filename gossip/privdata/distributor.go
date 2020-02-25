@@ -47,6 +47,9 @@ type gossipAdapter interface {
 	// PeersOfChannel returns the NetworkMembers considered alive
 	// and also subscribed to the channel given
 	PeersOfChannel(gossipCommon.ChainID) []discovery.NetworkMember
+
+	// SelfMembershipInfo returns the peer's membership information
+	SelfMembershipInfo() discovery.NetworkMember
 }
 
 // PvtDataDistributor interface to defines API of distributing private data
@@ -91,10 +94,10 @@ func (p *policyAccessFactory) AccessPolicy(config *common.CollectionConfig, chai
 		if err != nil {
 			return nil, errors.WithMessage(err, fmt.Sprintf("error setting up collection  %#v", cconf.StaticCollectionConfig.Name))
 		}
+		return colAP, nil
 	default:
 		return nil, errors.New("unexpected collection type")
 	}
-	return colAP, nil
 }
 
 // NewCollectionAccessFactory
@@ -170,9 +173,19 @@ func (d *distributorImpl) computeDisseminationPlan(txID string,
 			}
 
 			logger.Debugf("Computing dissemination plan for collection [%s]", collectionName)
-			dPlan, err := d.disseminationPlanForMsg(colAP, colFilter, pvtDataMsg)
-			if err != nil {
-				return nil, errors.WithMessage(err, fmt.Sprint("could not build private data dissemination plan for chaincode ", namespace, " and collection ", collectionName))
+			collType := colCP.GetStaticCollectionConfig().Type
+			var dPlan []*dissemination
+			switch {
+			case collType == common.CollectionType_COL_PRIVATE || collType == common.CollectionType_COL_UNKNOWN:
+				dPlan, err = d.disseminationPlanForMsg(colAP, colFilter, pvtDataMsg)
+				if err != nil {
+					return nil, errors.WithStack(err)
+				}
+			default:
+				dPlan, err = d.disseminationPlanForExt(namespace, collection, colCP, colAP, pvtDataMsg)
+				if err != nil {
+					return nil, errors.WithStack(err)
+				}
 			}
 			disseminationPlan = append(disseminationPlan, dPlan...)
 		}

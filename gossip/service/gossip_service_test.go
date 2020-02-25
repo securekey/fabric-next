@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/fabric/core/deliverservice/blocksprovider"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/transientstore"
+	kmocks "github.com/hyperledger/fabric/extensions/gossip/mocks"
 	"github.com/hyperledger/fabric/gossip/api"
 	gcomm "github.com/hyperledger/fabric/gossip/comm"
 	gossipCommon "github.com/hyperledger/fabric/gossip/common"
@@ -152,8 +153,9 @@ func TestLeaderElectionWithDeliverClient(t *testing.T) {
 		deliverServiceFactory.service.running[channelName] = false
 
 		gossips[i].InitializeChannel(channelName, endpointConfig, Support{
-			Store:     &mockTransientStore{},
-			Committer: &mockLedgerInfo{1},
+			Store:          &mockTransientStore{},
+			Committer:      &mockLedgerInfo{1},
+			BlockPublisher: kmocks.NewBlockPublisher(),
 		})
 		service, exist := gossips[i].(*gossipGRPC).gossipServiceImpl.leaderElection[channelName]
 		assert.True(t, exist, "Leader election service should be created for peer %d and channel %s", i, channelName)
@@ -210,8 +212,9 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
 		gossips[i].(*gossipGRPC).gossipServiceImpl.deliveryFactory = deliverServiceFactory
 		deliverServiceFactory.service.running[channelName] = false
 		gossips[i].InitializeChannel(channelName, endpointConfig, Support{
-			Committer: &mockLedgerInfo{1},
-			Store:     &mockTransientStore{},
+			Committer:      &mockLedgerInfo{1},
+			Store:          &mockTransientStore{},
+			BlockPublisher: kmocks.NewBlockPublisher(),
 		})
 	}
 
@@ -224,8 +227,9 @@ func TestWithStaticDeliverClientLeader(t *testing.T) {
 	for i := 0; i < n; i++ {
 		deliverServiceFactory.service.running[channelName] = false
 		gossips[i].InitializeChannel(channelName, endpointConfig, Support{
-			Committer: &mockLedgerInfo{1},
-			Store:     &mockTransientStore{},
+			Committer:      &mockLedgerInfo{1},
+			Store:          &mockTransientStore{},
+			BlockPublisher: kmocks.NewBlockPublisher(),
 		})
 	}
 

@@ -94,6 +94,21 @@
   revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
 
 [[projects]]
+  digest = "1:b870f4fc8ac5a04b3dbb6540e81a4c16da874e9f922dbe8762a90d9bcc294910"
+  name = "github.com/bluele/gcache"
+  packages = ["."]
+  pruneopts = "NUT"
+  revision = "79ae3b2d8680cbc7ad3dba9db66b8a648575221c"
+
+[[projects]]
+  branch = "master"
+  digest = "1:9af5b27cadd7fefde7d20dfc72470d39679337e972460a251c129062a70f8518"
+  name = "github.com/btcsuite/btcutil"
+  packages = ["base58"]
+  pruneopts = "NUT"
+  revision = "9e5f4b9a998d263e3ce9c56664a7816001ac8000"
+
+[[projects]]
   branch = "master"
   digest = "1:4a029051269e04c040c092eb4ddd92732f8f3a3921a8b43b82b30804e00f3357"
   name = "github.com/containerd/continuity"
@@ -398,9 +413,12 @@
   version = "v0.1.0"
 
 [[projects]]
-  digest = "1:d244f8666a838fe6ad70ec8fe77f50ebc29fdc3331a2729ba5886bef8435d10d"
+  digest = "1:4244266b65ea535b8ebd109a327720821707b59f9a37bda738946d52ec69442d"
   name = "github.com/magiconair/properties"
-  packages = ["."]
+  packages = [
+    ".",
+    "assert",
+  ]
   pruneopts = "NUT"
   revision = "c2353362d570a7bfa228149c62842019201cfb71"
   version = "v1.8.0"
@@ -535,12 +553,12 @@
   version = "v2.0.6"
 
 [[projects]]
-  digest = "1:5cf3f025cbee5951a4ee961de067c8a89fc95a5adabead774f82822efabab121"
+  digest = "1:14715f705ff5dfe0ffd6571d7d201dd8e921030f8070321a79380d8ca4ec1a24"
   name = "github.com/pkg/errors"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
-  version = "v0.8.0"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
@@ -710,6 +728,57 @@
   ]
   pruneopts = "NUT"
   revision = "bea94bb476ccecfbd31b12ed493a971bdb8c904b"
+
+[[projects]]
+  digest = "1:2af3aeb5d098d72b09e268dfb269f99383d724344676b74c0f5f072b99850cee"
+  name = "github.com/trustbloc/fabric-peer-ext"
+  packages = [
+    "pkg/blkstorage/cdbblkstorage",
+    "pkg/collections/offledger/api",
+    "pkg/collections/offledger/dcas",
+    "pkg/collections/offledger/dissemination",
+    "pkg/collections/offledger/mocks",
+    "pkg/collections/offledger/policy",
+    "pkg/collections/offledger/retriever",
+    "pkg/collections/offledger/storeprovider",
+    "pkg/collections/offledger/storeprovider/store/api",
+    "pkg/collections/offledger/storeprovider/store/cache",
+    "pkg/collections/offledger/storeprovider/store/couchdbstore",
+    "pkg/collections/pvtdatahandler",
+    "pkg/collections/pvtdatastore",
+    "pkg/collections/retriever",
+    "pkg/collections/storeprovider",
+    "pkg/collections/transientdata/api",
+    "pkg/collections/transientdata/dissemination",
+    "pkg/collections/transientdata/mocks",
+    "pkg/collections/transientdata/policy",
+    "pkg/collections/transientdata/retriever",
+    "pkg/collections/transientdata/storeprovider",
+    "pkg/collections/transientdata/storeprovider/store/api",
+    "pkg/collections/transientdata/storeprovider/store/cache",
+    "pkg/collections/transientdata/storeprovider/store/dbstore",
+    "pkg/common",
+    "pkg/common/discovery",
+    "pkg/common/multirequest",
+    "pkg/common/requestmgr",
+    "pkg/common/support",
+    "pkg/config",
+    "pkg/endorser",
+    "pkg/gossip/blockpublisher",
+    "pkg/gossip/dispatcher",
+    "pkg/idstore",
+    "pkg/mocks",
+    "pkg/pvtdatastorage",
+    "pkg/pvtdatastorage/cachedpvtdatastore",
+    "pkg/pvtdatastorage/cdbpvtdatastore",
+    "pkg/pvtdatastorage/common",
+    "pkg/roles",
+    "pkg/testutil",
+    "pkg/transientstore",
+    "pkg/transientstore/common",
+  ]
+  pruneopts = "NUT"
+  revision = "9b20d84ee0a4b89039086a3a2da103584e7ed1d8"
 
 [[projects]]
   digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
@@ -892,24 +961,29 @@
   revision = "c7e5094acea1ca1b899e2259d80a6b0f882f81f8"
 
 [[projects]]
-  digest = "1:5b805b8e03b29399b344655cac16873f026e54dc0a7c17b381f6f4d4c7b6d741"
+  digest = "1:f2df7088cd31687fdce0f2eee853682416bf1e70baa487094913e3881f1f12f8"
   name = "google.golang.org/grpc"
   packages = [
     ".",
     "balancer",
     "balancer/base",
     "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
     "codes",
     "connectivity",
     "credentials",
+    "credentials/internal",
     "encoding",
     "encoding/proto",
     "grpclog",
     "internal",
     "internal/backoff",
+    "internal/binarylog",
     "internal/channelz",
     "internal/envconfig",
     "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/syscall",
     "internal/transport",
     "keepalive",
     "metadata",
@@ -923,8 +997,8 @@
     "tap",
   ]
   pruneopts = "NUT"
-  revision = "8dea3dc473e90c8179e519d91302d0597c0ca1d1"
-  version = "v1.15.0"
+  revision = "2fdaae294f38ed9a121193c51ec99fecd3b13eb7"
+  version = "v1.19.0"
 
 [[projects]]
   digest = "1:22b2dee6f30bc8601f087449a2a819df8388e54e9547349c658f14d8f8c590f2"
@@ -979,6 +1053,7 @@
     "github.com/hyperledger/fabric-amcl/amcl/FP256BN",
     "github.com/hyperledger/fabric-lib-go/healthz",
     "github.com/kr/pretty",
+    "github.com/magiconair/properties/assert",
     "github.com/miekg/pkcs11",
     "github.com/mitchellh/mapstructure",
     "github.com/onsi/ginkgo",
@@ -1008,6 +1083,29 @@
     "github.com/tedsuo/ifrit",
     "github.com/tedsuo/ifrit/ginkgomon",
     "github.com/tedsuo/ifrit/grouper",
+    "github.com/trustbloc/fabric-peer-ext/pkg/blkstorage/cdbblkstorage",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/api",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/dissemination",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/mocks",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/offledger/policy",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/pvtdatahandler",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/pvtdatastore",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/retriever",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/storeprovider",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/api",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/dissemination",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/mocks",
+    "github.com/trustbloc/fabric-peer-ext/pkg/collections/transientdata/policy",
+    "github.com/trustbloc/fabric-peer-ext/pkg/common",
+    "github.com/trustbloc/fabric-peer-ext/pkg/endorser",
+    "github.com/trustbloc/fabric-peer-ext/pkg/gossip/blockpublisher",
+    "github.com/trustbloc/fabric-peer-ext/pkg/gossip/dispatcher",
+    "github.com/trustbloc/fabric-peer-ext/pkg/idstore",
+    "github.com/trustbloc/fabric-peer-ext/pkg/mocks",
+    "github.com/trustbloc/fabric-peer-ext/pkg/pvtdatastorage",
+    "github.com/trustbloc/fabric-peer-ext/pkg/roles",
+    "github.com/trustbloc/fabric-peer-ext/pkg/testutil",
+    "github.com/trustbloc/fabric-peer-ext/pkg/transientstore",
     "github.com/willf/bitset",
     "go.etcd.io/etcd/etcdserver/api/snap",
     "go.etcd.io/etcd/pkg/fileutil",
