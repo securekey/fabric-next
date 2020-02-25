@@ -43,7 +43,7 @@ type VersionedDBProvider struct {
 func NewVersionedDBProvider(metricsProvider metrics.Provider) (*VersionedDBProvider, error) {
 	logger.Debugf("constructing CouchDB VersionedDBProvider")
 	couchDBDef := couchdb.GetCouchDBDefinition()
-	couchInstance, err := couchdb.CreateCouchInstance(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
+	couchInstance, err := couchdb.CreateCouchInstance1_4_1(couchDBDef.URL, couchDBDef.Username, couchDBDef.Password,
 		couchDBDef.MaxRetries, couchDBDef.MaxRetriesOnStartup, couchDBDef.RequestTimeout, couchDBDef.CreateGlobalChangesDB, metricsProvider)
 	if err != nil {
 		return nil, err
