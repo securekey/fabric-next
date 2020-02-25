@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/sysccprovider"
 	"github.com/hyperledger/fabric/core/ledger"
+	storeapi "github.com/hyperledger/fabric/extensions/collections/api/store"
 	"github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric/protos/peer"
 )
@@ -31,7 +32,7 @@ type Operations interface {
 	GetMSPIDs(cid string) []string
 	GetPolicyManager(cid string) policies.Manager
 	InitChain(cid string)
-	Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, pm txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider)
+	Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, pm txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider, collDataProvider storeapi.Provider)
 }
 
 type peerImpl struct {
@@ -43,7 +44,8 @@ type peerImpl struct {
 	getMSPIDs            func(cid string) []string
 	getPolicyManager     func(cid string) policies.Manager
 	initChain            func(cid string)
-	initialize           func(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, mapper txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider)
+	initialize           func(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, mapper txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider,
+		collDataProvider storeapi.Provider)
 }
 
 // Default provides in implementation of the Peer interface that provides
@@ -74,6 +76,6 @@ func (p *peerImpl) GetLedger(cid string) ledger.PeerLedger       { return p.getL
 func (p *peerImpl) GetMSPIDs(cid string) []string                { return p.getMSPIDs(cid) }
 func (p *peerImpl) GetPolicyManager(cid string) policies.Manager { return p.getPolicyManager(cid) }
 func (p *peerImpl) InitChain(cid string)                         { p.initChain(cid) }
-func (p *peerImpl) Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, mapper txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider) {
-	p.initialize(init, ccp, sccp, mapper, pr, deployedCCInfoProvider, membershipProvider, metricsProvider)
+func (p *peerImpl) Initialize(init func(string), ccp ccprovider.ChaincodeProvider, sccp sysccprovider.SystemChaincodeProvider, mapper txvalidator.PluginMapper, pr *platforms.Registry, deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider, membershipProvider ledger.MembershipInfoProvider, metricsProvider metrics.Provider, tdp storeapi.Provider) {
+	p.initialize(init, ccp, sccp, mapper, pr, deployedCCInfoProvider, membershipProvider, metricsProvider, tdp)
 }
