@@ -27,7 +27,7 @@ declare -x BASE_OUTPUT_VERSION=${BASE_VERSION}
 declare -x ARCH=$(go env GOARCH)
 
 # SETTING variables
-declare -x FABRIC_CA_VERSION=1.4.5
+declare -x FABRIC_CA_VERSION=1.4.6
 
 MY_PATH="`dirname \"$0\"`"              # relative
 MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
