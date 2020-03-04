@@ -34,6 +34,9 @@ git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/000
 #apply patch for Thales PKCS11
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/PKCS11-Thales.patch
 
+# apply FAB-17517
+git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/FAB-17517-Only-Initialize-specified-BCCSP-provider.patch
+
 # fetching and update vendored packages for grep11 patch
 rm -rf vendor/google.golang.org/grpc
 git clone https://github.com/grpc/grpc-go/ vendor/google.golang.org/grpc/
