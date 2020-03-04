@@ -1,0 +1,266 @@
+From 9084ec4040918491dc5773d00c79e913a98bc7b4 Mon Sep 17 00:00:00 2001
+From: Ahmed Sajid <ahmed.sajid@securekey.com>
+Date: Fri, 28 Feb 2020 15:35:12 -0500
+Subject: [PATCH] [FAB-17517] Only Initialize specified provider
+
+Code currently tries to initialize multiple providers based on
+provided config Opts being nil or not.
+
+This update ensures that only specified provider is initialized
+based on ProviderName.
+
+This fixes "Failed initializing PKCS11.BCCSP %!s(<nil>)" error
+when the code complied with PKCS11 or PLUGINS enabled expect
+configuration to not be nil even when Provider is set to SW.
+
+Also adding unit tests.
+
+Signed-off-by: Ahmed Sajid <ahmed.sajid@securekey.com>
+---
+ bccsp/factory/nopkcs11.go      | 71 ++++++++++++++++++----------------
+ bccsp/factory/nopkcs11_test.go | 51 ++++++++++++++++++++++++
+ bccsp/factory/pkcs11.go        |  8 ++--
+ bccsp/factory/pkcs11_test.go   | 45 +++++++++++++++++++++
+ 4 files changed, 138 insertions(+), 37 deletions(-)
+ create mode 100644 bccsp/factory/nopkcs11_test.go
+
+diff --git a/bccsp/factory/nopkcs11.go b/bccsp/factory/nopkcs11.go
+index a83695fa6a..a4c79288fa 100644
+--- a/bccsp/factory/nopkcs11.go
++++ b/bccsp/factory/nopkcs11.go
+@@ -35,48 +35,53 @@ type FactoryOpts struct {
+ // Error is returned only if defaultBCCSP cannot be found
+ func InitFactories(config *FactoryOpts) error {
+ 	factoriesInitOnce.Do(func() {
+-		// Take some precautions on default opts
+-		if config == nil {
+-			config = GetDefaultOpts()
+-		}
++		factoriesInitError = initFactories(config)
++	})
+ 
+-		if config.ProviderName == "" {
+-			config.ProviderName = "SW"
+-		}
++	return factoriesInitError
++}
+ 
+-		if config.SwOpts == nil {
+-			config.SwOpts = GetDefaultOpts().SwOpts
+-		}
++func initFactories(config *FactoryOpts) error {
++	// Take some precautions on default opts
++	if config == nil {
++		config = GetDefaultOpts()
++	}
++
++	if config.ProviderName == "" {
++		config.ProviderName = "SW"
++	}
+ 
+-		// Initialize factories map
+-		bccspMap = make(map[string]bccsp.BCCSP)
++	if config.SwOpts == nil {
++		config.SwOpts = GetDefaultOpts().SwOpts
++	}
+ 
+-		// Software-Based BCCSP
+-		if config.SwOpts != nil {
+-			f := &SWFactory{}
+-			err := initBCCSP(f, config)
+-			if err != nil {
+-				factoriesInitError = errors.Wrapf(err, "Failed initializing BCCSP.")
+-			}
+-		}
++	// Initialize factories map
++	bccspMap = make(map[string]bccsp.BCCSP)
+ 
+-		// BCCSP Plugin
+-		if config.PluginOpts != nil {
+-			f := &PluginFactory{}
+-			err := initBCCSP(f, config)
+-			if err != nil {
+-				factoriesInitError = errors.Wrapf(err, "Failed initializing PKCS11.BCCSP %s", factoriesInitError)
+-			}
++	// Software-Based BCCSP
++	if config.ProviderName == "SW" && config.SwOpts != nil {
++		f := &SWFactory{}
++		err := initBCCSP(f, config)
++		if err != nil {
++			return errors.Wrapf(err, "Failed initializing BCCSP.")
+ 		}
++	}
+ 
+-		var ok bool
+-		defaultBCCSP, ok = bccspMap[config.ProviderName]
+-		if !ok {
+-			factoriesInitError = errors.Errorf("%s\nCould not find default `%s` BCCSP", factoriesInitError, config.ProviderName)
++	// BCCSP Plugin
++	if config.ProviderName == "PLUGIN" && config.PluginOpts != nil {
++		f := &PluginFactory{}
++		err := initBCCSP(f, config)
++		if err != nil {
++			return errors.Wrapf(err, "Failed initializing PLUGIN.BCCSP %s", factoriesInitError)
+ 		}
+-	})
++	}
+ 
+-	return factoriesInitError
++	var ok bool
++	defaultBCCSP, ok = bccspMap[config.ProviderName]
++	if !ok {
++		return errors.Errorf("%s\nCould not find default `%s` BCCSP", factoriesInitError, config.ProviderName)
++	}
++	return nil
+ }
+ 
+ // GetBCCSPFromOpts returns a BCCSP created according to the options passed in input.
+diff --git a/bccsp/factory/nopkcs11_test.go b/bccsp/factory/nopkcs11_test.go
+new file mode 100644
+index 0000000000..8bcc4700eb
+--- /dev/null
++++ b/bccsp/factory/nopkcs11_test.go
+@@ -0,0 +1,51 @@
++// +build !pkcs11
++
++/*
++Copyright IBM Corp. 2016 All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++		 http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++package factory
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++)
++
++func TestInitFactoriesWithMultipleProviders(t *testing.T) {
++	// testing SW Provider and ensuring other providers are not initialized
++	factoriesInitError = nil
++
++	err := initFactories(&FactoryOpts{
++		ProviderName: "SW",
++		SwOpts:       &SwOpts{},
++		PluginOpts:   &PluginOpts{},
++	})
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "Failed initializing BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing PLUGIN.BCCSP")
++
++	// testing PLUGIN Provider and ensuring other providers are not initialized
++	factoriesInitError = nil
++
++	err = initFactories(&FactoryOpts{
++		ProviderName: "PLUGIN",
++		SwOpts:       &SwOpts{},
++		PluginOpts:   &PluginOpts{},
++	})
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "Failed initializing PLUGIN.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing BCCSP")
++
++}
+diff --git a/bccsp/factory/pkcs11.go b/bccsp/factory/pkcs11.go
+index 4456d70eb6..8269135050 100644
+--- a/bccsp/factory/pkcs11.go
++++ b/bccsp/factory/pkcs11.go
+@@ -61,7 +61,7 @@ func setFactories(config *FactoryOpts) error {
+ 	bccspMap = make(map[string]bccsp.BCCSP)
+ 
+ 	// Software-Based BCCSP
+-	if config.SwOpts != nil {
++	if config.ProviderName == "SW" && config.SwOpts != nil {
+ 		f := &SWFactory{}
+ 		err := initBCCSP(f, config)
+ 		if err != nil {
+@@ -70,7 +70,7 @@ func setFactories(config *FactoryOpts) error {
+ 	}
+ 
+ 	// PKCS11-Based BCCSP
+-	if config.Pkcs11Opts != nil {
++	if config.ProviderName == "PKCS11" && config.Pkcs11Opts != nil {
+ 		f := &PKCS11Factory{}
+ 		err := initBCCSP(f, config)
+ 		if err != nil {
+@@ -79,11 +79,11 @@ func setFactories(config *FactoryOpts) error {
+ 	}
+ 
+ 	// BCCSP Plugin
+-	if config.PluginOpts != nil {
++	if config.ProviderName == "PLUGIN" && config.PluginOpts != nil {
+ 		f := &PluginFactory{}
+ 		err := initBCCSP(f, config)
+ 		if err != nil {
+-			factoriesInitError = errors.Wrapf(err, "Failed initializing PKCS11.BCCSP %s", factoriesInitError)
++			factoriesInitError = errors.Wrapf(err, "Failed initializing PLUGIN.BCCSP %s", factoriesInitError)
+ 		}
+ 	}
+ 
+diff --git a/bccsp/factory/pkcs11_test.go b/bccsp/factory/pkcs11_test.go
+index 3506cff65e..3a4b43b0fa 100644
+--- a/bccsp/factory/pkcs11_test.go
++++ b/bccsp/factory/pkcs11_test.go
+@@ -41,6 +41,51 @@ func TestSetFactories(t *testing.T) {
+ 	assert.NoError(t, err)
+ }
+ 
++func TestSetFactoriesWithMultipleProviders(t *testing.T) {
++	// testing SW Provider and ensuring other providers are not initialized
++	factoriesInitError = nil
++
++	err := setFactories(&FactoryOpts{
++		ProviderName: "SW",
++		SwOpts:       &SwOpts{},
++		Pkcs11Opts:   &pkcs11.PKCS11Opts{},
++		PluginOpts:   &PluginOpts{},
++	})
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "Failed initializing SW.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing PKCS11.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing PLUGIN.BCCSP")
++
++	// testing PKCS11 Provider and ensuring other providers are not initialized
++	factoriesInitError = nil
++
++	err = setFactories(&FactoryOpts{
++		ProviderName: "PKCS11",
++		SwOpts:       &SwOpts{},
++		Pkcs11Opts:   &pkcs11.PKCS11Opts{},
++		PluginOpts:   &PluginOpts{},
++	})
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "Failed initializing PKCS11.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing SW.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing PLUGIN.BCCSP")
++
++	// testing PLUGIN Provider and ensuring other providers are not initialized
++	factoriesInitError = nil
++
++	err = setFactories(&FactoryOpts{
++		ProviderName: "PLUGIN",
++		SwOpts:       &SwOpts{},
++		Pkcs11Opts:   &pkcs11.PKCS11Opts{},
++		PluginOpts:   &PluginOpts{},
++	})
++	assert.Error(t, err)
++	assert.Contains(t, err.Error(), "Failed initializing PLUGIN.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing SW.BCCSP")
++	assert.NotContains(t, err.Error(), "Failed initializing PKCS11.BCCSP")
++
++}
++
+ func TestSetFactoriesInvalidArgs(t *testing.T) {
+ 	err := setFactories(&FactoryOpts{
+ 		ProviderName: "SW",
