@@ -6,8 +6,7 @@
 ARG FABRIC_BASE_IMAGE=hyperledger/fabric-baseimage
 ARG ARCH=amd64
 ARG FABRIC_BASE_VERSION=0.4.8
-FROM ${FABRIC_BASE_IMAGE}:${ARCH}-${FABRIC_BASE_VERSION}
-LABEL maintainer=sk-dev-team
+FROM ${FABRIC_BASE_IMAGE}:${ARCH}-${FABRIC_BASE_VERSION} as base
 
 # Remove node npm
 # https://stackoverflow.com/a/11178106
@@ -27,3 +26,14 @@ RUN apt-get update -qq \
     && apt-get clean autoclean \
     && apt-get autoremove -y \
     && rm -rf /var/lib/cache /var/lib/log /var/lib/apt/lists/*
+
+
+#
+#  FINAL CONTAINER
+#
+
+FROM    scratch
+
+COPY    --from=base / /
+
+LABEL maintainer=sk-dev-team
