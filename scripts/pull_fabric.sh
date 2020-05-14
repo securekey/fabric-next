@@ -41,6 +41,25 @@ fi
 #            Fabric BaseImages             #
 ############################################
 
+if [ "${ARCH}" = "s390x" ]; then
+
+    TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`
+    echo "Build tmp directory is $TMP ..."
+
+    export GOPATH=$TMP
+
+    $MY_PATH/fabric_baseimage.sh ${BASE_VERSION}
+
+    cd $GOPATH/src/github.com/hyperledger/fabric-baseimage
+    # Building all the images
+    make BASE_DOCKER_NS=$BASE_NAMESPACE DOCKER_TAG=${ARCH}-${BASE_VERSION} all
+
+    rm -Rf $TMP
+
+fi
+
+cd $MY_PATH
+
 # Build base images to enable dynamic build
 docker build -f ./images/fabric-baseos/Dockerfile --no-cache -t ${BASE_NAMESPACE}/fabric-baseos:${ARCH}-${BASE_OUTPUT_VERSION} \
 --build-arg FABRIC_BASE_OS_IMAGE=${FABRIC_BASE_OS_IMAGE} \
@@ -89,7 +108,7 @@ make clean
 sed -i 's/RUN make/RUN GO_TAGS=\"pkcs11 pluginsenabled\" make/g' images/tools/Dockerfile.in
 
 # Building all the images
-DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" CHAINTOOL_URL=https://hyperledger.jfrog.io/hyperledger/fabric-maven/org/hyperledger/fabric-chaintool/1.1.3/fabric-chaintool-1.1.3.jar make docker
+DOCKER_DYNAMIC_LINK=true BASE_DOCKER_NS=$BASE_NAMESPACE EXPERIMENTAL=false GO_TAGS="pkcs11 pluginsenabled" make docker
 
 rm -Rf $TMP
 
