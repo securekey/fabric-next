@@ -18,7 +18,7 @@ declare -x FABRIC_BASE_IMAGE=hyperledger/fabric-baseimage
 declare -x FABRIC_COUCHDB_IMAGE=hyperledger/fabric-couchdb
 declare -x FABRIC_KAFKA_IMAGE=hyperledger/fabric-kafka
 declare -x FABRIC_ZOOKEEPER_IMAGE=hyperledger/fabric-zookeeper
-declare -x BASE_VERSION=0.4.18
+declare -x BASE_VERSION=0.4.20
 
 declare -x BASE_NAMESPACE=securekey
 
@@ -27,7 +27,7 @@ declare -x BASE_OUTPUT_VERSION=${BASE_VERSION}
 declare -x ARCH=$(go env GOARCH)
 
 # SETTING variables
-declare -x FABRIC_CA_VERSION=1.4.6
+declare -x FABRIC_CA_VERSION=1.4.7
 
 MY_PATH="`dirname \"$0\"`"              # relative
 MY_PATH="`( cd \"$MY_PATH\" && pwd )`"  # absolutized and normalized
