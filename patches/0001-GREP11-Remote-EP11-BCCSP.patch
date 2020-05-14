@@ -1,7 +1,7 @@
-From 88e23db1586f0db5674d41a57b36da783e401fd7 Mon Sep 17 00:00:00 2001
+From 0ec6e85b34c474ad0f4ecdee0ce442a4bbe5e20f Mon Sep 17 00:00:00 2001
 From: Sudesh Shetty <sudesh.shetty@securekey.com>
 Date: Tue, 12 Jun 2018 11:40:15 -0400
-Subject: [PATCH] [DRAFT] Remote EP11 BCCSP
+Subject: [PATCH] Remote EP11 BCCSP
 
 This new provider connects directly to EP11 library. This library
 is much closer to the device driver for the IBM Crypto Cards.
@@ -9,17 +9,17 @@ is much closer to the device driver for the IBM Crypto Cards.
 Change-Id: I1d8646edce441dd03af72263fd410df89dfbf553
 Signed-off-by: Volodymyr Paprotski <vpaprots@ca.ibm.com>
 ---
- bccsp/factory/grep11factory.go   |  53 +++++
- bccsp/factory/pkcs11.go          |  29 +--
- bccsp/grep11/client.go           | 185 +++++++++++++++
- bccsp/grep11/conf.go             | 110 +++++++++
- bccsp/grep11/ecdsa.go            | 121 ++++++++++
- bccsp/grep11/ecdsakey.go         |  99 ++++++++
- bccsp/grep11/hsmks.go            | 394 +++++++++++++++++++++++++++++++
- bccsp/grep11/impl.go             | 345 +++++++++++++++++++++++++++
- bccsp/grep11/protos/grep11.pb.go | 491 +++++++++++++++++++++++++++++++++++++++
- bccsp/grep11/protos/grep11.proto |  70 ++++++
- 10 files changed, 1884 insertions(+), 13 deletions(-)
+ bccsp/factory/grep11factory.go   |  53 ++++
+ bccsp/factory/pkcs11.go          |  13 +
+ bccsp/grep11/client.go           | 185 ++++++++++++
+ bccsp/grep11/conf.go             | 110 +++++++
+ bccsp/grep11/ecdsa.go            | 121 ++++++++
+ bccsp/grep11/ecdsakey.go         |  99 +++++++
+ bccsp/grep11/hsmks.go            | 394 +++++++++++++++++++++++++
+ bccsp/grep11/impl.go             | 345 ++++++++++++++++++++++
+ bccsp/grep11/protos/grep11.pb.go | 491 +++++++++++++++++++++++++++++++
+ bccsp/grep11/protos/grep11.proto |  70 +++++
+ 10 files changed, 1881 insertions(+)
  create mode 100644 bccsp/factory/grep11factory.go
  create mode 100644 bccsp/grep11/client.go
  create mode 100644 bccsp/grep11/conf.go
@@ -32,7 +32,7 @@ Signed-off-by: Volodymyr Paprotski <vpaprots@ca.ibm.com>
 
 diff --git a/bccsp/factory/grep11factory.go b/bccsp/factory/grep11factory.go
 new file mode 100644
-index 0000000..83f27db
+index 000000000..83f27db5e
 --- /dev/null
 +++ b/bccsp/factory/grep11factory.go
 @@ -0,0 +1,53 @@
@@ -90,52 +90,29 @@ index 0000000..83f27db
 +	return grep11.New(*p11Opts, ks)
 +}
 diff --git a/bccsp/factory/pkcs11.go b/bccsp/factory/pkcs11.go
-index 4456d70..6ea7548 100644
+index efef9d2d8..42426a717 100644
 --- a/bccsp/factory/pkcs11.go
 +++ b/bccsp/factory/pkcs11.go
-@@ -1,26 +1,17 @@
- // +build pkcs11
-
- /*
--Copyright IBM Corp. 2017 All Rights Reserved.
--
--Licensed under the Apache License, Version 2.0 (the "License");
--you may not use this file except in compliance with the License.
--You may obtain a copy of the License at
--
--		 http://www.apache.org/licenses/LICENSE-2.0
--
--Unless required by applicable law or agreed to in writing, software
--distributed under the License is distributed on an "AS IS" BASIS,
--WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--See the License for the specific language governing permissions and
--limitations under the License.
-+Copyright IBM Corp. All Rights Reserved.
-+SPDX-License-Identifier: Apache-2.0
- */
-+
- package factory
-
+@@ -10,6 +10,7 @@ package factory
+ 
  import (
  	"github.com/hyperledger/fabric/bccsp"
++	"github.com/hyperledger/fabric/bccsp/grep11"
  	"github.com/hyperledger/fabric/bccsp/pkcs11"
  	"github.com/pkg/errors"
-+	"github.com/hyperledger/fabric/bccsp/grep11"
  )
-
- // FactoryOpts holds configuration information used to initialize factory implementations
-@@ -29,6 +20,7 @@ type FactoryOpts struct {
+@@ -22,6 +23,7 @@ type FactoryOpts struct {
  	SwOpts       *SwOpts            `mapstructure:"SW,omitempty" json:"SW,omitempty" yaml:"SwOpts"`
  	PluginOpts   *PluginOpts        `mapstructure:"PLUGIN,omitempty" json:"PLUGIN,omitempty" yaml:"PluginOpts"`
  	Pkcs11Opts   *pkcs11.PKCS11Opts `mapstructure:"PKCS11,omitempty" json:"PKCS11,omitempty" yaml:"PKCS11"`
 +	Grep11Opts   *grep11.GREP11Opts `mapstructure:"GREP11,omitempty" json:"GREP11,omitempty" yaml:"GREP11"`
  }
-
+ 
  // InitFactories must be called before using factory interfaces
-@@ -87,6 +79,15 @@ func setFactories(config *FactoryOpts) error {
+@@ -80,6 +82,15 @@ func initFactories(config *FactoryOpts) error {
  		}
  	}
-
+ 
 +	// GREP11-Based BCCSP
 +	if config.Grep11Opts != nil {
 +		f := &GREP11Factory{}
@@ -148,7 +125,7 @@ index 4456d70..6ea7548 100644
  	var ok bool
  	defaultBCCSP, ok = bccspMap[config.ProviderName]
  	if !ok {
-@@ -106,6 +107,8 @@ func GetBCCSPFromOpts(config *FactoryOpts) (bccsp.BCCSP, error) {
+@@ -99,6 +110,8 @@ func GetBCCSPFromOpts(config *FactoryOpts) (bccsp.BCCSP, error) {
  		f = &PKCS11Factory{}
  	case "PLUGIN":
  		f = &PluginFactory{}
@@ -159,7 +136,7 @@ index 4456d70..6ea7548 100644
  	}
 diff --git a/bccsp/grep11/client.go b/bccsp/grep11/client.go
 new file mode 100644
-index 0000000..ec9499d
+index 000000000..ec9499ded
 --- /dev/null
 +++ b/bccsp/grep11/client.go
 @@ -0,0 +1,185 @@
@@ -350,7 +327,7 @@ index 0000000..ec9499d
 +}
 diff --git a/bccsp/grep11/conf.go b/bccsp/grep11/conf.go
 new file mode 100644
-index 0000000..acb7403
+index 000000000..acb740378
 --- /dev/null
 +++ b/bccsp/grep11/conf.go
 @@ -0,0 +1,110 @@
@@ -466,7 +443,7 @@ index 0000000..acb7403
 +}
 diff --git a/bccsp/grep11/ecdsa.go b/bccsp/grep11/ecdsa.go
 new file mode 100644
-index 0000000..aaeb43d
+index 000000000..aaeb43d28
 --- /dev/null
 +++ b/bccsp/grep11/ecdsa.go
 @@ -0,0 +1,121 @@
@@ -593,7 +570,7 @@ index 0000000..aaeb43d
 +}
 diff --git a/bccsp/grep11/ecdsakey.go b/bccsp/grep11/ecdsakey.go
 new file mode 100644
-index 0000000..21cbcac
+index 000000000..21cbcac0a
 --- /dev/null
 +++ b/bccsp/grep11/ecdsakey.go
 @@ -0,0 +1,99 @@
@@ -698,7 +675,7 @@ index 0000000..21cbcac
 +}
 diff --git a/bccsp/grep11/hsmks.go b/bccsp/grep11/hsmks.go
 new file mode 100644
-index 0000000..19c5031
+index 000000000..19c503113
 --- /dev/null
 +++ b/bccsp/grep11/hsmks.go
 @@ -0,0 +1,394 @@
@@ -1098,7 +1075,7 @@ index 0000000..19c5031
 +}
 diff --git a/bccsp/grep11/impl.go b/bccsp/grep11/impl.go
 new file mode 100644
-index 0000000..bd3d24c
+index 000000000..bd3d24c17
 --- /dev/null
 +++ b/bccsp/grep11/impl.go
 @@ -0,0 +1,345 @@
@@ -1449,7 +1426,7 @@ index 0000000..bd3d24c
 +}
 diff --git a/bccsp/grep11/protos/grep11.pb.go b/bccsp/grep11/protos/grep11.pb.go
 new file mode 100644
-index 0000000..158608f
+index 000000000..158608f8a
 --- /dev/null
 +++ b/bccsp/grep11/protos/grep11.pb.go
 @@ -0,0 +1,491 @@
@@ -1946,7 +1923,7 @@ index 0000000..158608f
 +}
 diff --git a/bccsp/grep11/protos/grep11.proto b/bccsp/grep11/protos/grep11.proto
 new file mode 100644
-index 0000000..5dde39c
+index 000000000..5dde39cb7
 --- /dev/null
 +++ b/bccsp/grep11/protos/grep11.proto
 @@ -0,0 +1,70 @@
@@ -2020,5 +1997,6 @@ index 0000000..5dde39c
 +	bool valid = 1;
 +	string error = 2;
 +}
---
-2.7.4
+-- 
+2.21.0 (Apple Git-122.2)
+
