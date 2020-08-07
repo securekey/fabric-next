@@ -8,6 +8,8 @@ package roles
 
 import "github.com/trustbloc/fabric-peer-ext/pkg/roles"
 
+const Standby roles.Role = "standby"
+
 // IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
 func IsCommitter() bool {
 	return roles.IsCommitter()
@@ -21,6 +23,11 @@ func IsEndorser() bool {
 // IsValidator returns true if the peer is a validator
 func IsValidator() bool {
 	return roles.IsValidator()
+}
+
+// IsStandby returns true if the peer has the 'standby' role
+func IsStandby() bool {
+	return roles.HasRole(Standby)
 }
 
 // RolesAsString returns the roles for the peer
