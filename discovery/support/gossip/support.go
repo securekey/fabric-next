@@ -7,11 +7,15 @@ SPDX-License-Identifier: Apache-2.0
 package gossip
 
 import (
+	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/extensions/roles"
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
 	"github.com/hyperledger/fabric/protos/gossip"
 )
+
+var	logger = flogging.MustGetLogger("discovery")
 
 // DiscoverySupport implements support that is used for service discovery
 // that is obtained from gossip
@@ -32,6 +36,11 @@ func (s *DiscoverySupport) ChannelExists(channel string) bool {
 // PeersOfChannel returns the NetworkMembers considered alive
 // and also subscribed to the channel given
 func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Members {
+	if roles.IsStandby() {
+		logger.Debugf("[%s] Not including myself in PeersOfChannel since I'm a standby peer", chain)
+		return s.Gossip.PeersOfChannel(chain)
+	}
+
 	msg := s.SelfChannelInfo(chain)
 	if msg == nil {
 		return nil

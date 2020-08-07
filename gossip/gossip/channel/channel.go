@@ -16,6 +16,7 @@ import (
 	"time"
 
 	common_utils "github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/extensions/roles"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/common"
@@ -395,6 +396,12 @@ func (gc *gossipChannel) publishStateInfo() {
 	if atomic.LoadInt32(&gc.shouldGossipStateInfo) == int32(0) {
 		return
 	}
+
+	if roles.IsStandby() {
+		gc.logger.Debugf("[%s] Not publishing my state since I'm a standby peer", gc.chainID)
+		return
+	}
+
 	gc.RLock()
 	stateInfoMsg := gc.stateInfoMsg
 	gc.RUnlock()
@@ -901,7 +908,12 @@ func (gc *gossipChannel) UpdateChaincodes(chaincodes []*proto.Chaincode) {
 // UpdateStateInfo updates this channel's StateInfo message
 // that is periodically published
 func (gc *gossipChannel) updateStateInfo(msg *protoext.SignedGossipMessage) {
-	gc.stateInfoMsgStore.Add(msg)
+	if roles.IsStandby() {
+		gc.logger.Debugf("[%s] Not adding self to state info store since I'm a standby peer", gc.chainID)
+	} else {
+		gc.stateInfoMsgStore.Add(msg)
+	}
+
 	gc.ledgerHeight = msg.GetStateInfo().Properties.LedgerHeight
 	gc.stateInfoMsg = msg
 	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
