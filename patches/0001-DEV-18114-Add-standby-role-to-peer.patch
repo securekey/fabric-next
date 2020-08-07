@@ -1,4 +1,4 @@
-From ccb0cce87aea5aa5f7b7c1b7cef1f8bb5da3ac5f Mon Sep 17 00:00:00 2001
+From 62689ff5d8d00e5fb192ed400724972340fe2b46 Mon Sep 17 00:00:00 2001
 From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
 Date: Fri, 7 Aug 2020 09:02:04 -0400
 Subject: [PATCH] [DEV-18114] Add standby role to peer
@@ -11,7 +11,8 @@ Change-Id: I9f52c61300d6dba203853b78efdc72de1eaefcb2
  discovery/support/gossip/support.go     |  9 +++++++++
  extensions/roles/ledger_roles_config.go |  7 +++++++
  gossip/gossip/channel/channel.go        | 14 +++++++++++++-
- 3 files changed, 29 insertions(+), 1 deletion(-)
+ gotools.mk                              |  2 +-
+ 4 files changed, 30 insertions(+), 2 deletions(-)
 
 diff --git a/discovery/support/gossip/support.go b/discovery/support/gossip/support.go
 index 2b436ed27..8f12236f4 100644
@@ -110,6 +111,19 @@ index 21dd4d0e2..7551705cf 100644
  	gc.ledgerHeight = msg.GetStateInfo().Properties.LedgerHeight
  	gc.stateInfoMsg = msg
  	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
+diff --git a/gotools.mk b/gotools.mk
+index 7aefeef75..4bf16cb3d 100644
+--- a/gotools.mk
++++ b/gotools.mk
+@@ -3,7 +3,7 @@
+ #
+ # SPDX-License-Identifier: Apache-2.0
+ 
+-GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell mockery manifest-tool
++GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell manifest-tool
+ BUILD_DIR ?= .build
+ GOTOOLS_GOPATH ?= $(BUILD_DIR)/gotools
+ GOTOOLS_BINDIR ?= $(GOPATH)/bin
 -- 
 2.21.1 (Apple Git-122.3)
 
