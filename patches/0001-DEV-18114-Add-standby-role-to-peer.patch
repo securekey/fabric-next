@@ -1,0 +1,115 @@
+From ccb0cce87aea5aa5f7b7c1b7cef1f8bb5da3ac5f Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Fri, 7 Aug 2020 09:02:04 -0400
+Subject: [PATCH] [DEV-18114] Add standby role to peer
+
+Added a role 'standby' which, if set, prevents the peer from publishing it's channel membership. This allows the peer to be invisible to clients so that it doesn't get selected for endorsements, but at the same time allow it to commit blocks.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: I9f52c61300d6dba203853b78efdc72de1eaefcb2
+---
+ discovery/support/gossip/support.go     |  9 +++++++++
+ extensions/roles/ledger_roles_config.go |  7 +++++++
+ gossip/gossip/channel/channel.go        | 14 +++++++++++++-
+ 3 files changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/discovery/support/gossip/support.go b/discovery/support/gossip/support.go
+index 2b436ed27..8f12236f4 100644
+--- a/discovery/support/gossip/support.go
++++ b/discovery/support/gossip/support.go
+@@ -7,12 +7,16 @@ SPDX-License-Identifier: Apache-2.0
+ package gossip
+ 
+ import (
++	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/extensions/roles"
+ 	"github.com/hyperledger/fabric/gossip/common"
+ 	"github.com/hyperledger/fabric/gossip/discovery"
+ 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
+ 	"github.com/hyperledger/fabric/protos/gossip"
+ )
+ 
++var	logger = flogging.MustGetLogger("discovery")
++
+ // DiscoverySupport implements support that is used for service discovery
+ // that is obtained from gossip
+ type DiscoverySupport struct {
+@@ -32,6 +36,11 @@ func (s *DiscoverySupport) ChannelExists(channel string) bool {
+ // PeersOfChannel returns the NetworkMembers considered alive
+ // and also subscribed to the channel given
+ func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Members {
++	if roles.IsStandby() {
++		logger.Debugf("[%s] Not including myself in PeersOfChannel since I'm a standby peer", chain)
++		return s.Gossip.PeersOfChannel(chain)
++	}
++
+ 	msg := s.SelfChannelInfo(chain)
+ 	if msg == nil {
+ 		return nil
+diff --git a/extensions/roles/ledger_roles_config.go b/extensions/roles/ledger_roles_config.go
+index 1acf7c6e6..57f4348f1 100644
+--- a/extensions/roles/ledger_roles_config.go
++++ b/extensions/roles/ledger_roles_config.go
+@@ -8,6 +8,8 @@ package roles
+ 
+ import "github.com/trustbloc/fabric-peer-ext/pkg/roles"
+ 
++const Standby roles.Role = "standby"
++
+ // IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
+ func IsCommitter() bool {
+ 	return roles.IsCommitter()
+@@ -23,6 +25,11 @@ func IsValidator() bool {
+ 	return roles.IsValidator()
+ }
+ 
++// IsStandby returns true if the peer has the 'standby' role
++func IsStandby() bool {
++	return roles.HasRole(Standby)
++}
++
+ // RolesAsString returns the roles for the peer
+ // nolint - this is an exported function (Renaming function name will break in other projects)
+ func RolesAsString() []string {
+diff --git a/gossip/gossip/channel/channel.go b/gossip/gossip/channel/channel.go
+index 21dd4d0e2..7551705cf 100644
+--- a/gossip/gossip/channel/channel.go
++++ b/gossip/gossip/channel/channel.go
+@@ -16,6 +16,7 @@ import (
+ 	"time"
+ 
+ 	common_utils "github.com/hyperledger/fabric/common/util"
++	"github.com/hyperledger/fabric/extensions/roles"
+ 	"github.com/hyperledger/fabric/gossip/api"
+ 	"github.com/hyperledger/fabric/gossip/comm"
+ 	"github.com/hyperledger/fabric/gossip/common"
+@@ -395,6 +396,12 @@ func (gc *gossipChannel) publishStateInfo() {
+ 	if atomic.LoadInt32(&gc.shouldGossipStateInfo) == int32(0) {
+ 		return
+ 	}
++
++	if roles.IsStandby() {
++		gc.logger.Debugf("[%s] Not publishing my state since I'm a standby peer", gc.chainID)
++		return
++	}
++
+ 	gc.RLock()
+ 	stateInfoMsg := gc.stateInfoMsg
+ 	gc.RUnlock()
+@@ -901,7 +908,12 @@ func (gc *gossipChannel) UpdateChaincodes(chaincodes []*proto.Chaincode) {
+ // UpdateStateInfo updates this channel's StateInfo message
+ // that is periodically published
+ func (gc *gossipChannel) updateStateInfo(msg *protoext.SignedGossipMessage) {
+-	gc.stateInfoMsgStore.Add(msg)
++	if roles.IsStandby() {
++		gc.logger.Debugf("[%s] Not adding self to state info store since I'm a standby peer", gc.chainID)
++	} else {
++		gc.stateInfoMsgStore.Add(msg)
++	}
++
+ 	gc.ledgerHeight = msg.GetStateInfo().Properties.LedgerHeight
+ 	gc.stateInfoMsg = msg
+ 	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
+-- 
+2.21.1 (Apple Git-122.3)
+
