@@ -55,3 +55,5 @@ git am $MY_PATH/../patches/0001-BLOC-1836-Performance-improvement-for-pulling-pr
 git am $MY_PATH/../patches/0001-DEV-16266-Remove-throttle.patch
 # step 9 apply FAB-17517
 git am $MY_PATH/../patches/FAB-17517-Only-Initialize-specified-BCCSP-provider.patch
+# step 10 apply patch for DEV-18114 Add standby role to peer
+git am $MY_PATH/../patches/0001-DEV-18114-Add-standby-role-to-peer.patch
