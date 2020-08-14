@@ -1,0 +1,25 @@
+From 2fd2edeb3e41ea76d0407e9dc1560ba410d68b72 Mon Sep 17 00:00:00 2001
+From: Ahmed Sajid <ahmed.sajid@securekey.com>
+Date: Fri, 14 Aug 2020 12:16:32 -0400
+Subject: [PATCH] Doing fix for Thales PKCS11
+
+Signed-off-by: Ahmed Sajid <ahmed.sajid@securekey.com>
+---
+ bccsp/pkcs11/pkcs11.go | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/bccsp/pkcs11/pkcs11.go b/bccsp/pkcs11/pkcs11.go
+index 07ea1f0d7..463147846 100644
+--- a/bccsp/pkcs11/pkcs11.go
++++ b/bccsp/pkcs11/pkcs11.go
+@@ -258,7 +258,6 @@ func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (ski
+ 		pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(keylabel)),
+ 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, keylabel),
+ 
+-		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
+ 		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
+ 	}
+ 
+-- 
+2.20.1
+
