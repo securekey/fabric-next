@@ -6,6 +6,7 @@
 #
 
 echo "Checking Go version"
+which go
 go version
 
 GO_VER=`grep GO_VER ../.ci-properties | awk -F "=" '{print $2}'`
