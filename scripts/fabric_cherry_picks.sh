@@ -30,9 +30,6 @@ git checkout v1.4.6
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
-#apply patch for PKCS11 Thales
-git am $MY_PATH/../patches/PKCS11-Thales.patch
-
 # [FAB-14646] Update dependency github.com/opencontainers/runc
 git am $MY_PATH/../patches/runc.patch
 
@@ -57,3 +54,8 @@ git am $MY_PATH/../patches/0001-DEV-16266-Remove-throttle.patch
 git am $MY_PATH/../patches/FAB-17517-Only-Initialize-specified-BCCSP-provider.patch
 # step 10 apply patch for DEV-18114 Add standby role to peer
 git am $MY_PATH/../patches/0001-DEV-18114-Add-standby-role-to-peer.patch
+# step 11 apply patch for FAB-16951
+git am $MY_PATH/../patches/Alternative-mechanisms-to-find-pkcs11-key.patch
+
+#apply patch for PKCS11 Thales
+git am $MY_PATH/../patches/0001-Doing-fix-for-Thales-PKCS11.patch

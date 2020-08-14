@@ -32,7 +32,7 @@ git config user.email jenkins@jenkins.com
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch -3
 
 #apply patch for Thales PKCS11
-git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/PKCS11-Thales.patch
+git am --directory vendor/github.com/hyperledger/fabric/ MY_PATH/../patches/PKCS11-Thales-CA.patch
 
 # apply FAB-17517
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/0001-FAB-17517-Only-Initialize-specified-provider-fabric-ca.patch
