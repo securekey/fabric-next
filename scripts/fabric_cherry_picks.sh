@@ -57,3 +57,5 @@ git am $MY_PATH/../patches/0001-DEV-16266-Remove-throttle.patch
 git am $MY_PATH/../patches/FAB-17517-Only-Initialize-specified-BCCSP-provider.patch
 # step 10 apply patch for DEV-18114 Add standby role to peer
 git am $MY_PATH/../patches/0001-DEV-18114-Add-standby-role-to-peer.patch
+# step 11 apply patch for FAB-16951
+git am $MY_PATH/../patches/Alternative-mechanisms-to-find-pkcs11-key.patch
