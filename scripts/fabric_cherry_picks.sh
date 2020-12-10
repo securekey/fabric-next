@@ -25,7 +25,7 @@ git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
 
-git checkout v1.4.7
+git checkout v1.4.9
 
 #apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
@@ -53,3 +53,7 @@ git am $MY_PATH/../patches/0001-BLOC-1833-Concurrent-writes-to-roles-map.patch
 git am $MY_PATH/../patches/0001-BLOC-1836-Performance-improvement-for-pulling-privat.patch
 # step 8 apply patch for DEV-16266 Remove throttle
 git am $MY_PATH/../patches/0001-DEV-16266-Remove-throttle.patch
+# step 9 apply patch for DEV-18114 Add standby role to peer
+git am $MY_PATH/../patches/0001-DEV-18114-Add-standby-role-to-peer.patch
+# step 10 apply patch for gotools make target to fix manifest-tool build
+git am $MY_PATH/../patches/0001-Override-for-manifest-tool.patch
