@@ -1,4 +1,4 @@
-From 56cb12081313a74279eb8308feb31517660b6a84 Mon Sep 17 00:00:00 2001
+From e8c8b229c7770f8d942a4a5ac571297e92308fe6 Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Tue, 17 Dec 2019 10:51:10 -0500
 Subject: [PATCH] gossip protos extensions refactoring
@@ -27,14 +27,14 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/comm/msg.go                            |  11 +-
  gossip/discovery/discovery.go                 |  15 +-
  gossip/discovery/discovery_impl.go            |  93 +-
- gossip/discovery/discovery_test.go            | 147 +--
+ gossip/discovery/discovery_test.go            | 157 ++--
  gossip/election/adapter.go                    |   5 +-
  gossip/election/adapter_test.go               |   7 +-
  gossip/gossip/anchor_test.go                  |  39 +-
  gossip/gossip/certstore.go                    |  15 +-
  gossip/gossip/certstore_test.go               |  61 +-
  gossip/gossip/channel/channel.go              |  99 +-
- gossip/gossip/channel/channel_test.go         | 183 ++--
+ gossip/gossip/channel/channel_test.go         | 187 ++--
  gossip/gossip/chanstate.go                    |  21 +-
  gossip/gossip/gossip.go                       |   9 +-
  gossip/gossip/gossip_impl.go                  | 131 ++-
@@ -62,7 +62,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  protos/gossip/message.pb.go                   |  50 +-
  protos/gossip/message_ext.go                  |  25 +
  protos/gossip/message_test.go                 |   4 +-
- 57 files changed, 2136 insertions(+), 1733 deletions(-)
+ 57 files changed, 2143 insertions(+), 1740 deletions(-)
  rename {protos/gossip => gossip/protoext}/compatibility_test.go (73%)
  rename {protos/gossip => gossip/protoext}/extensions.go (67%)
  create mode 100644 gossip/protoext/extensions_test.go
@@ -1263,7 +1263,7 @@ index 283a528b1..2f29a5b31 100644
  }
  
 diff --git a/gossip/discovery/discovery.go b/gossip/discovery/discovery.go
-index 7f4faff49..c2bfc1a7f 100644
+index 9e977e6c8..c1eaf4793 100644
 --- a/gossip/discovery/discovery.go
 +++ b/gossip/discovery/discovery.go
 @@ -10,13 +10,14 @@ import (
@@ -1328,7 +1328,7 @@ index 7f4faff49..c2bfc1a7f 100644
  	// IdentitySwitch returns a read-only channel about identity change events
  	IdentitySwitch() <-chan common.PKIidType
 diff --git a/gossip/discovery/discovery_impl.go b/gossip/discovery/discovery_impl.go
-index d4f4c721c..8fdcd8555 100644
+index 163d4cec5..a15c6110f 100644
 --- a/gossip/discovery/discovery_impl.go
 +++ b/gossip/discovery/discovery_impl.go
 @@ -18,6 +18,7 @@ import (
@@ -1339,7 +1339,7 @@ index d4f4c721c..8fdcd8555 100644
  	"github.com/hyperledger/fabric/gossip/util"
  	proto "github.com/hyperledger/fabric/protos/gossip"
  	"github.com/pkg/errors"
-@@ -56,7 +57,7 @@ type gossipDiscoveryImpl struct {
+@@ -49,7 +50,7 @@ type gossipDiscoveryImpl struct {
  	id2Member        map[string]*NetworkMember // all known members
  	aliveMembership  *util.MembershipStore
  	deadMembership   *util.MembershipStore
@@ -1348,7 +1348,7 @@ index d4f4c721c..8fdcd8555 100644
  
  	msgStore *aliveMsgStore
  
-@@ -169,13 +170,13 @@ func (d *gossipDiscoveryImpl) Connect(member NetworkMember, id identifier) {
+@@ -170,13 +171,13 @@ func (d *gossipDiscoveryImpl) Connect(member NetworkMember, id identifier) {
  				d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
  				continue
  			}
@@ -1364,25 +1364,16 @@ index d4f4c721c..8fdcd8555 100644
  			if err != nil {
  				d.logger.Warningf("Failed adding NONCE to SignedGossipMessage %+v", errors.WithStack(err))
  				continue
-@@ -214,7 +215,7 @@ func (d *gossipDiscoveryImpl) validateSelfConfig() {
+@@ -215,7 +216,7 @@ func (d *gossipDiscoveryImpl) validateSelfConfig() {
  	d.port = int(myPort)
  }
  
 -func (d *gossipDiscoveryImpl) sendUntilAcked(peer *NetworkMember, message *proto.SignedGossipMessage) {
 +func (d *gossipDiscoveryImpl) sendUntilAcked(peer *NetworkMember, message *protoext.SignedGossipMessage) {
  	nonce := message.Nonce
- 	for i := 0; i < maxConnectionAttempts && !d.toDie(); i++ {
+ 	for i := 0; i < d.maxConnectionAttempts && !d.toDie(); i++ {
  		sub := d.pubsub.Subscribe(fmt.Sprintf("%d", nonce), time.Second*5)
-@@ -236,7 +237,7 @@ func (d *gossipDiscoveryImpl) InitiateSync(peerNum int) {
- 		d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
- 		return
- 	}
--	memReq, err := m.NoopSign()
-+	memReq, err := protoext.NoopSign(m)
- 	if err != nil {
- 		d.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
- 		return
-@@ -254,7 +255,7 @@ func (d *gossipDiscoveryImpl) InitiateSync(peerNum int) {
+@@ -246,7 +247,7 @@ func (d *gossipDiscoveryImpl) InitiateSync(peerNum int) {
  		pulledPeer := aliveMembersAsSlice[i].GetAliveMsg().Membership
  		var internalEndpoint string
  		if aliveMembersAsSlice[i].Envelope.SecretEnvelope != nil {
@@ -1391,7 +1382,16 @@ index d4f4c721c..8fdcd8555 100644
  		}
  		netMember := &NetworkMember{
  			Endpoint:         pulledPeer.Endpoint,
-@@ -313,7 +314,7 @@ func (d *gossipDiscoveryImpl) handleMessages() {
+@@ -269,7 +270,7 @@ func (d *gossipDiscoveryImpl) InitiateSync(peerNum int) {
+ 		d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
+ 		return
+ 	}
+-	memReq, err := m.NoopSign()
++	memReq, err := protoext.NoopSign(m)
+ 	if err != nil {
+ 		d.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
+ 		return
+@@ -321,7 +322,7 @@ func (d *gossipDiscoveryImpl) handleMessages() {
  	}
  }
  
@@ -1400,7 +1400,7 @@ index d4f4c721c..8fdcd8555 100644
  	if msg == nil {
  		return
  	}
-@@ -327,7 +328,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+@@ -335,7 +336,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
  	defer d.logger.Debug("Exiting")
  
  	if memReq := m.GetMemReq(); memReq != nil {
@@ -1409,16 +1409,16 @@ index d4f4c721c..8fdcd8555 100644
  		if err != nil {
  			d.logger.Warningf("Failed deserializing GossipMessage from envelope: %+v", errors.WithStack(err))
  			return
-@@ -343,7 +344,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+@@ -351,7 +352,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
  
  		var internalEndpoint string
- 		if m.Envelope.SecretEnvelope != nil {
--			internalEndpoint = m.Envelope.SecretEnvelope.InternalEndpoint()
-+			internalEndpoint = protoext.InternalEndpoint(m.Envelope.SecretEnvelope)
+ 		if memReq.SelfInformation.SecretEnvelope != nil {
+-			internalEndpoint = memReq.SelfInformation.SecretEnvelope.InternalEndpoint()
++			internalEndpoint = protoext.InternalEndpoint(memReq.SelfInformation.SecretEnvelope)
  		}
  
  		// Sending a membership response to a peer may block this routine
-@@ -353,7 +354,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+@@ -361,7 +362,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
  		return
  	}
  
@@ -1427,7 +1427,7 @@ index d4f4c721c..8fdcd8555 100644
  		if !d.msgStore.CheckValid(m) || !d.crypt.ValidateAliveMsg(m) {
  			return
  		}
-@@ -371,12 +372,12 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+@@ -379,12 +380,12 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
  	if memResp := m.GetMemRes(); memResp != nil {
  		d.pubsub.Publish(fmt.Sprintf("%d", m.Nonce), m.Nonce)
  		for _, env := range memResp.Alive {
@@ -1442,7 +1442,7 @@ index d4f4c721c..8fdcd8555 100644
  				d.logger.Warning("Expected alive message, got", am, "instead")
  				return
  			}
-@@ -387,7 +388,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+@@ -395,7 +396,7 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
  		}
  
  		for _, env := range memResp.Dead {
@@ -1451,7 +1451,7 @@ index d4f4c721c..8fdcd8555 100644
  			if err != nil {
  				d.logger.Warningf("Membership response contains an invalid message from an offline peer %+v", errors.WithStack(err))
  				return
-@@ -398,13 +399,13 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
+@@ -406,13 +407,13 @@ func (d *gossipDiscoveryImpl) handleMsgFromComm(msg proto.ReceivedMessage) {
  				continue
  			}
  
@@ -1467,7 +1467,7 @@ index d4f4c721c..8fdcd8555 100644
  		}
  	}
  }
-@@ -419,7 +420,7 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
+@@ -427,7 +428,7 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
  		InternalEndpoint: internalEndpoint,
  	}
  
@@ -1476,7 +1476,7 @@ index d4f4c721c..8fdcd8555 100644
  	var err error
  	d.lock.RLock()
  	aliveMsg = d.selfAliveMessage
-@@ -441,13 +442,13 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
+@@ -449,13 +450,13 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
  
  	defer d.logger.Debug("Exiting, replying with", memResp)
  
@@ -1492,7 +1492,7 @@ index d4f4c721c..8fdcd8555 100644
  	if err != nil {
  		err = errors.WithStack(err)
  		d.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
-@@ -456,7 +457,7 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
+@@ -464,7 +465,7 @@ func (d *gossipDiscoveryImpl) sendMemResponse(targetMember *proto.Member, intern
  	d.comm.SendToPeer(targetPeer, msg)
  }
  
@@ -1501,7 +1501,7 @@ index d4f4c721c..8fdcd8555 100644
  	shouldBeDisclosed, omitConcealedFields := d.disclosurePolicy(targetMember)
  
  	if !shouldBeDisclosed(aliveMsg) {
-@@ -490,7 +491,7 @@ func (d *gossipDiscoveryImpl) createMembershipResponse(aliveMsg *proto.SignedGos
+@@ -498,7 +499,7 @@ func (d *gossipDiscoveryImpl) createMembershipResponse(aliveMsg *proto.SignedGos
  	}
  }
  
@@ -1510,7 +1510,7 @@ index d4f4c721c..8fdcd8555 100644
  	d.logger.Debug("Entering", m)
  	defer d.logger.Debug("Exiting")
  
-@@ -507,7 +508,7 @@ func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
+@@ -515,7 +516,7 @@ func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
  	d.lock.RUnlock()
  
  	if !known {
@@ -1519,7 +1519,7 @@ index d4f4c721c..8fdcd8555 100644
  		return
  	}
  
-@@ -542,7 +543,7 @@ func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
+@@ -550,7 +551,7 @@ func (d *gossipDiscoveryImpl) handleAliveMessage(m *proto.SignedGossipMessage) {
  
  	if isAlive {
  		if before(lastAliveTS, ts) {
@@ -1528,7 +1528,7 @@ index d4f4c721c..8fdcd8555 100644
  		} else if !same(lastAliveTS, ts) {
  			d.logger.Debug(m.GetAliveMsg().Membership, "lastAliveTS:", lastAliveTS, "but got ts:", ts)
  		}
-@@ -562,7 +563,7 @@ func (d *gossipDiscoveryImpl) purge(id common.PKIidType) {
+@@ -570,7 +571,7 @@ func (d *gossipDiscoveryImpl) purge(id common.PKIidType) {
  	delete(d.aliveLastTS, string(id))
  }
  
@@ -1537,7 +1537,7 @@ index d4f4c721c..8fdcd8555 100644
  	pkiID := m.GetAliveMsg().Membership.PkiId
  	if !equalPKIid(pkiID, d.self.PKIid) {
  		return false
-@@ -571,8 +572,8 @@ func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
+@@ -579,8 +580,8 @@ func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
  	diffExternalEndpoint := d.self.Endpoint != m.GetAliveMsg().Membership.Endpoint
  	var diffInternalEndpoint bool
  	secretEnvelope := m.GetSecretEnvelope()
@@ -1548,7 +1548,7 @@ index d4f4c721c..8fdcd8555 100644
  	}
  	if diffInternalEndpoint || diffExternalEndpoint {
  		d.logger.Error("Bad configuration detected: Received AliveMessage from a peer with the same PKI-ID as myself:", m.GossipMessage)
-@@ -580,7 +581,7 @@ func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
+@@ -588,7 +589,7 @@ func (d *gossipDiscoveryImpl) isSentByMe(m *proto.SignedGossipMessage) bool {
  	return true
  }
  
@@ -1557,7 +1557,7 @@ index d4f4c721c..8fdcd8555 100644
  	d.logger.Debug("Entering, AliveMessage:", am, "t:", t)
  	defer d.logger.Debug("Exiting")
  	d.lock.Lock()
-@@ -599,7 +600,7 @@ func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t p
+@@ -607,7 +608,7 @@ func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t p
  		internalEndpoint = prevNetMem.InternalEndpoint
  	}
  	if am.Envelope.SecretEnvelope != nil {
@@ -1566,7 +1566,7 @@ index d4f4c721c..8fdcd8555 100644
  	}
  
  	d.id2Member[string(pkiID)] = &NetworkMember{
-@@ -611,7 +612,7 @@ func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t p
+@@ -619,7 +620,7 @@ func (d *gossipDiscoveryImpl) resurrectMember(am *proto.SignedGossipMessage, t p
  
  	delete(d.deadLastTS, string(pkiID))
  	d.deadMembership.Remove(common.PKIidType(pkiID))
@@ -1575,7 +1575,7 @@ index d4f4c721c..8fdcd8555 100644
  }
  
  func (d *gossipDiscoveryImpl) periodicalReconnectToDead() {
-@@ -645,7 +646,7 @@ func (d *gossipDiscoveryImpl) sendMembershipRequest(member *NetworkMember, inclu
+@@ -653,7 +654,7 @@ func (d *gossipDiscoveryImpl) sendMembershipRequest(member *NetworkMember, inclu
  		d.logger.Warningf("Failed creating membership request: %+v", errors.WithStack(err))
  		return
  	}
@@ -1584,7 +1584,7 @@ index d4f4c721c..8fdcd8555 100644
  	if err != nil {
  		d.logger.Errorf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
  		return
-@@ -793,13 +794,13 @@ func (d *gossipDiscoveryImpl) aliveMsgAndInternalEndpoint() (*proto.GossipMessag
+@@ -805,13 +806,13 @@ func (d *gossipDiscoveryImpl) aliveMsgAndInternalEndpoint() (*proto.GossipMessag
  	return msg, internalEndpoint
  }
  
@@ -1600,7 +1600,7 @@ index d4f4c721c..8fdcd8555 100644
  		GossipMessage: msg,
  		Envelope:      envp,
  	}
-@@ -811,7 +812,7 @@ func (d *gossipDiscoveryImpl) createSignedAliveMessage(includeInternalEndpoint b
+@@ -823,7 +824,7 @@ func (d *gossipDiscoveryImpl) createSignedAliveMessage(includeInternalEndpoint b
  	return signedMsg, nil
  }
  
@@ -1609,7 +1609,7 @@ index d4f4c721c..8fdcd8555 100644
  	d.logger.Debugf("Entering: learnedMembers={%v}", aliveArr)
  	defer d.logger.Debug("Exiting")
  
-@@ -831,7 +832,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
+@@ -843,7 +844,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
  			internalEndpoint = prevNetMem.InternalEndpoint
  		}
  		if m.Envelope.SecretEnvelope != nil {
@@ -1618,7 +1618,7 @@ index d4f4c721c..8fdcd8555 100644
  		}
  
  		// update member's data
-@@ -858,7 +859,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
+@@ -870,7 +871,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
  
  			if am := d.aliveMembership.MsgByID(m.GetAliveMsg().Membership.PkiId); am == nil {
  				d.logger.Debug("Adding", am, "to aliveMembership")
@@ -1627,7 +1627,7 @@ index d4f4c721c..8fdcd8555 100644
  				d.aliveMembership.Put(m.GetAliveMsg().Membership.PkiId, msg)
  			} else {
  				d.logger.Debug("Replacing", am, "in aliveMembership")
-@@ -869,7 +870,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
+@@ -881,7 +882,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
  	}
  }
  
@@ -1636,7 +1636,7 @@ index d4f4c721c..8fdcd8555 100644
  	d.logger.Debugf("Entering: learnedMembers={%v}, deadMembers={%v}", aliveMembers, deadMembers)
  	defer d.logger.Debugf("Exiting")
  
-@@ -886,7 +887,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
+@@ -898,7 +899,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
  			seqNum:   am.GetAliveMsg().Timestamp.SeqNum,
  		}
  
@@ -1645,7 +1645,7 @@ index d4f4c721c..8fdcd8555 100644
  		d.logger.Debugf("Learned about a new alive member: %v", am)
  	}
  
-@@ -900,12 +901,12 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
+@@ -912,12 +913,12 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
  			seqNum:   dm.GetAliveMsg().Timestamp.SeqNum,
  		}
  
@@ -1660,7 +1660,7 @@ index d4f4c721c..8fdcd8555 100644
  		for _, m := range a {
  			member := m.GetAliveMsg()
  			if member == nil {
-@@ -915,7 +916,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
+@@ -927,7 +928,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
  
  			var internalEndpoint string
  			if m.Envelope.SecretEnvelope != nil {
@@ -1669,7 +1669,7 @@ index d4f4c721c..8fdcd8555 100644
  			}
  
  			if prevNetMem := d.id2Member[string(member.Membership.PkiId)]; prevNetMem != nil {
-@@ -974,7 +975,7 @@ func (d *gossipDiscoveryImpl) UpdateEndpoint(endpoint string) {
+@@ -986,7 +987,7 @@ func (d *gossipDiscoveryImpl) UpdateEndpoint(endpoint string) {
  func (d *gossipDiscoveryImpl) Self() NetworkMember {
  	var env *proto.Envelope
  	msg, _ := d.aliveMsgAndInternalEndpoint()
@@ -1678,14 +1678,14 @@ index d4f4c721c..8fdcd8555 100644
  	if err != nil {
  		d.logger.Warning("Failed creating SignedGossipMessage:", err)
  	} else {
-@@ -1030,20 +1031,20 @@ type aliveMsgStore struct {
+@@ -1042,20 +1043,20 @@ type aliveMsgStore struct {
  }
  
  func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
 -	policy := proto.NewGossipMessageComparator(0)
 +	policy := protoext.NewGossipMessageComparator(0)
  	trigger := func(m interface{}) {}
- 	aliveMsgTTL := d.aliveExpirationTimeout * msgExpirationFactor
+ 	aliveMsgTTL := d.aliveExpirationTimeout * time.Duration(d.msgExpirationFactor)
  	externalLock := func() { d.lock.Lock() }
  	externalUnlock := func() { d.lock.Unlock() }
  	callback := func(m interface{}) {
@@ -1700,10 +1700,10 @@ index d4f4c721c..8fdcd8555 100644
  		endpoint := membership.Endpoint
 -		internalEndpoint := msg.SecretEnvelope.InternalEndpoint()
 +		internalEndpoint := protoext.InternalEndpoint(msg.SecretEnvelope)
- 		if util.Contains(endpoint, d.bootstrapPeers) || util.Contains(internalEndpoint, d.bootstrapPeers) {
- 			// Never remove a bootstrap peer
- 			return
-@@ -1063,14 +1064,14 @@ func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
+ 		if util.Contains(endpoint, d.bootstrapPeers) || util.Contains(internalEndpoint, d.bootstrapPeers) ||
+ 			d.anchorPeerTracker.IsAnchorPeer(endpoint) || d.anchorPeerTracker.IsAnchorPeer(internalEndpoint) {
+ 			// Never remove a bootstrap peer or an anchor peer
+@@ -1077,14 +1078,14 @@ func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
  }
  
  func (s *aliveMsgStore) Add(msg interface{}) bool {
@@ -1721,7 +1721,7 @@ index d4f4c721c..8fdcd8555 100644
  	}
  	return s.MessageStore.CheckValid(msg)
 diff --git a/gossip/discovery/discovery_test.go b/gossip/discovery/discovery_test.go
-index ad0d3a1d2..f5343747c 100644
+index 0f5da9470..a0f3f3715 100644
 --- a/gossip/discovery/discovery_test.go
 +++ b/gossip/discovery/discovery_test.go
 @@ -25,6 +25,7 @@ import (
@@ -1732,7 +1732,7 @@ index ad0d3a1d2..f5343747c 100644
  	"github.com/hyperledger/fabric/gossip/util"
  	proto "github.com/hyperledger/fabric/protos/gossip"
  	"github.com/stretchr/testify/assert"
-@@ -51,15 +52,15 @@ func init() {
+@@ -53,15 +54,15 @@ func init() {
  }
  
  type dummyReceivedMessage struct {
@@ -1751,7 +1751,7 @@ index ad0d3a1d2..f5343747c 100644
  	return rm.msg
  }
  
-@@ -67,7 +68,7 @@ func (*dummyReceivedMessage) GetSourceEnvelope() *proto.Envelope {
+@@ -69,7 +70,7 @@ func (*dummyReceivedMessage) GetSourceEnvelope() *proto.Envelope {
  	panic("implement me")
  }
  
@@ -1760,7 +1760,7 @@ index ad0d3a1d2..f5343747c 100644
  	return rm.info
  }
  
-@@ -76,7 +77,7 @@ func (*dummyReceivedMessage) Ack(err error) {
+@@ -87,7 +88,7 @@ func (m *mockAnchorPeerTracker) IsAnchorPeer(endpoint string) bool {
  }
  
  type dummyCommModule struct {
@@ -1769,7 +1769,7 @@ index ad0d3a1d2..f5343747c 100644
  	msgsReceived      uint32
  	msgsSent          uint32
  	id                string
-@@ -86,7 +87,7 @@ type dummyCommModule struct {
+@@ -97,7 +98,7 @@ type dummyCommModule struct {
  	streams           map[string]proto.Gossip_GossipStreamClient
  	conns             map[string]*grpc.ClientConn
  	lock              *sync.RWMutex
@@ -1778,7 +1778,7 @@ index ad0d3a1d2..f5343747c 100644
  	lastSeqs          map[string]uint64
  	shouldGossip      bool
  	disableComm       bool
-@@ -94,7 +95,7 @@ type dummyCommModule struct {
+@@ -106,7 +107,7 @@ type dummyCommModule struct {
  }
  
  type gossipInstance struct {
@@ -1787,7 +1787,7 @@ index ad0d3a1d2..f5343747c 100644
  	comm           *dummyCommModule
  	Discovery
  	gRGCserv      *grpc.Server
-@@ -105,7 +106,7 @@ type gossipInstance struct {
+@@ -117,7 +118,7 @@ type gossipInstance struct {
  	port          int
  }
  
@@ -1796,7 +1796,7 @@ index ad0d3a1d2..f5343747c 100644
  	comm.lock.RLock()
  	c := comm.validatedMessages
  	comm.lock.RUnlock()
-@@ -120,14 +121,14 @@ func (comm *dummyCommModule) IdentitySwitch() <-chan common.PKIidType {
+@@ -132,7 +133,7 @@ func (comm *dummyCommModule) IdentitySwitch() <-chan common.PKIidType {
  	return comm.identitySwitch
  }
  
@@ -1805,15 +1805,16 @@ index ad0d3a1d2..f5343747c 100644
  	comm.lock.Lock()
  	defer comm.lock.Unlock()
  	comm.validatedMessages = validatedMessages
- }
+@@ -140,7 +141,7 @@ func (comm *dummyCommModule) recordValidation(validatedMessages chan *proto.Sign
  
  func (comm *dummyCommModule) SignMessage(am *proto.GossipMessage, internalEndpoint string) *proto.Envelope {
+ 	atomic.AddUint32(&comm.signCount, 1)
 -	am.NoopSign()
 +	protoext.NoopSign(am)
  
  	secret := &proto.Secret{
  		Content: &proto.Secret_InternalEndpoint{
-@@ -137,13 +138,13 @@ func (comm *dummyCommModule) SignMessage(am *proto.GossipMessage, internalEndpoi
+@@ -150,13 +151,13 @@ func (comm *dummyCommModule) SignMessage(am *proto.GossipMessage, internalEndpoi
  	signer := func(msg []byte) ([]byte, error) {
  		return nil, nil
  	}
@@ -1830,7 +1831,7 @@ index ad0d3a1d2..f5343747c 100644
  	if !comm.shouldGossip || comm.disableComm {
  		return
  	}
-@@ -154,7 +155,7 @@ func (comm *dummyCommModule) Gossip(msg *proto.SignedGossipMessage) {
+@@ -167,7 +168,7 @@ func (comm *dummyCommModule) Gossip(msg *proto.SignedGossipMessage) {
  	}
  }
  
@@ -1839,7 +1840,7 @@ index ad0d3a1d2..f5343747c 100644
  	if !comm.shouldGossip || comm.disableComm {
  		return
  	}
-@@ -165,7 +166,7 @@ func (comm *dummyCommModule) Forward(msg proto.ReceivedMessage) {
+@@ -178,7 +179,7 @@ func (comm *dummyCommModule) Forward(msg proto.ReceivedMessage) {
  	}
  }
  
@@ -1848,7 +1849,7 @@ index ad0d3a1d2..f5343747c 100644
  	if comm.disableComm {
  		return
  	}
-@@ -185,7 +186,7 @@ func (comm *dummyCommModule) SendToPeer(peer *NetworkMember, msg *proto.SignedGo
+@@ -198,7 +199,7 @@ func (comm *dummyCommModule) SendToPeer(peer *NetworkMember, msg *proto.SignedGo
  		}
  	}
  	comm.lock.Lock()
@@ -1857,7 +1858,7 @@ index ad0d3a1d2..f5343747c 100644
  	comm.streams[peer.Endpoint].Send(s.Envelope)
  	comm.lock.Unlock()
  	atomic.AddUint32(&comm.msgsSent, 1)
-@@ -222,7 +223,7 @@ func (comm *dummyCommModule) Ping(peer *NetworkMember) bool {
+@@ -235,7 +236,7 @@ func (comm *dummyCommModule) Ping(peer *NetworkMember) bool {
  	return true
  }
  
@@ -1866,7 +1867,7 @@ index ad0d3a1d2..f5343747c 100644
  	return comm.incMsgs
  }
  
-@@ -280,7 +281,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
+@@ -293,7 +294,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
  			return err
  		}
  		lgr := g.Discovery.(*gossipDiscoveryImpl).logger
@@ -1875,7 +1876,7 @@ index ad0d3a1d2..f5343747c 100644
  		if err != nil {
  			lgr.Warning("Failed deserializing GossipMessage from envelope:", err)
  			continue
-@@ -290,7 +291,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
+@@ -303,7 +304,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
  		lgr.Debug(g.Discovery.Self().Endpoint, "Got message:", gMsg)
  		g.comm.incMsgs <- &dummyReceivedMessage{
  			msg: gMsg,
@@ -1884,7 +1885,7 @@ index ad0d3a1d2..f5343747c 100644
  				ID: common.PKIidType("testID"),
  			},
  		}
-@@ -302,7 +303,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
+@@ -315,7 +316,7 @@ func (g *gossipInstance) GossipStream(stream proto.Gossip_GossipStreamServer) er
  	}
  }
  
@@ -1893,7 +1894,7 @@ index ad0d3a1d2..f5343747c 100644
  	g.comm.lock.Lock()
  
  	aliveMsg := msg.GetAliveMsg()
-@@ -349,9 +350,9 @@ func (g *gossipInstance) Ping(context.Context, *proto.Empty) (*proto.Empty, erro
+@@ -362,9 +363,9 @@ func (g *gossipInstance) Ping(context.Context, *proto.Empty) (*proto.Empty, erro
  }
  
  var noopPolicy = func(remotePeer *NetworkMember) (Sieve, EnvelopeFilter) {
@@ -1905,7 +1906,7 @@ index ad0d3a1d2..f5343747c 100644
  			return message.Envelope
  		}
  }
-@@ -373,14 +374,14 @@ func createDiscoveryInstanceWithNoGossipWithDisclosurePolicy(port int, id string
+@@ -386,20 +387,20 @@ func createDiscoveryInstanceWithNoGossipWithDisclosurePolicy(port int, id string
  }
  
  func createDiscoveryInstanceThatGossips(port int, id string, bootstrapPeers []string, shouldGossip bool, pol DisclosurePolicy, config DiscoveryConfig) *gossipInstance {
@@ -1915,6 +1916,13 @@ index ad0d3a1d2..f5343747c 100644
  
 -func createDiscoveryInstanceThatGossipsWithInterceptors(port int, id string, bootstrapPeers []string, shouldGossip bool, pol DisclosurePolicy, f func(*proto.SignedGossipMessage), config DiscoveryConfig) *gossipInstance {
 +func createDiscoveryInstanceThatGossipsWithInterceptors(port int, id string, bootstrapPeers []string, shouldGossip bool, pol DisclosurePolicy, f func(*protoext.SignedGossipMessage), config DiscoveryConfig) *gossipInstance {
+ 	mockTracker := &mockAnchorPeerTracker{}
+ 	return createDiscoveryInstanceWithAnchorPeerTracker(port, id, bootstrapPeers, shouldGossip, pol, f, config, mockTracker, nil)
+ }
+ 
+ func createDiscoveryInstanceWithAnchorPeerTracker(port int, id string, bootstrapPeers []string, shouldGossip bool, pol DisclosurePolicy,
+-	f func(*proto.SignedGossipMessage), config DiscoveryConfig, anchorPeerTracker AnchorPeerTracker, logger util.Logger) *gossipInstance {
++	f func(*protoext.SignedGossipMessage), config DiscoveryConfig, anchorPeerTracker AnchorPeerTracker, logger util.Logger) *gossipInstance {
  	comm := &dummyCommModule{
  		conns:          make(map[string]*grpc.ClientConn),
  		streams:        make(map[string]proto.Gossip_GossipStreamClient),
@@ -1923,7 +1931,7 @@ index ad0d3a1d2..f5343747c 100644
  		presumeDead:    make(chan common.PKIidType, 10000),
  		id:             id,
  		detectedDead:   make(chan string, 10000),
-@@ -476,14 +477,14 @@ func TestNetworkMemberString(t *testing.T) {
+@@ -499,14 +500,14 @@ func TestNetworkMemberString(t *testing.T) {
  func TestBadInput(t *testing.T) {
  	inst := createDiscoveryInstance(2048, fmt.Sprintf("d%d", 0), []string{})
  	inst.Discovery.(*gossipDiscoveryImpl).handleMsgFromComm(nil)
@@ -1941,7 +1949,7 @@ index ad0d3a1d2..f5343747c 100644
  			ID: common.PKIidType("testID"),
  		},
  	})
-@@ -493,7 +494,7 @@ func TestConnect(t *testing.T) {
+@@ -516,7 +517,7 @@ func TestConnect(t *testing.T) {
  	t.Parallel()
  	nodeNum := 10
  	instances := []*gossipInstance{}
@@ -1950,7 +1958,7 @@ index ad0d3a1d2..f5343747c 100644
  	for i := 0; i < nodeNum; i++ {
  		inst := createDiscoveryInstance(7611+i, fmt.Sprintf("d%d", i), []string{})
  
-@@ -501,9 +502,9 @@ func TestConnect(t *testing.T) {
+@@ -524,9 +525,9 @@ func TestConnect(t *testing.T) {
  		inst.comm.mock = &mock.Mock{}
  		inst.comm.mock.On("SendToPeer", mock.Anything, mock.Anything).Run(func(arguments mock.Arguments) {
  			inst := inst
@@ -1962,7 +1970,7 @@ index ad0d3a1d2..f5343747c 100644
  				firstSentMemReqMsgs <- selfMsg
  				inst.comm.lock.Lock()
  				inst.comm.mock = nil
-@@ -529,10 +530,10 @@ func TestConnect(t *testing.T) {
+@@ -552,10 +553,10 @@ func TestConnect(t *testing.T) {
  
  	discInst := instances[rand.Intn(len(instances))].Discovery.(*gossipDiscoveryImpl)
  	mr, _ := discInst.createMembershipRequest(true)
@@ -1975,7 +1983,7 @@ index ad0d3a1d2..f5343747c 100644
  	assert.Nil(t, am.SecretEnvelope)
  	stopInstances(t, instances)
  	assert.Len(t, firstSentMemReqMsgs, 10)
-@@ -552,30 +553,30 @@ func TestValidation(t *testing.T) {
+@@ -587,30 +588,30 @@ func TestValidation(t *testing.T) {
  	//   2.2) once alive messages enter the message store, reception of them via membership responses
  	//        doesn't trigger validation, but via membership requests - do.
  
@@ -2014,7 +2022,7 @@ index ad0d3a1d2..f5343747c 100644
  		memRes := res.GetMemRes()
  		if len(memRes.GetAlive()) > 0 {
  			membershipResponseWithAlivePeers.Store(res)
-@@ -586,7 +587,7 @@ func TestValidation(t *testing.T) {
+@@ -621,7 +622,7 @@ func TestValidation(t *testing.T) {
  		responseMessagesReceived <- res
  	}
  
@@ -2023,7 +2031,7 @@ index ad0d3a1d2..f5343747c 100644
  		if memReq := msg.GetMemReq(); memReq != nil {
  			recordMembershipRequest(msg)
  			return
-@@ -642,9 +643,9 @@ func TestValidation(t *testing.T) {
+@@ -677,9 +678,9 @@ func TestValidation(t *testing.T) {
  		p4 := createDiscoveryInstance(4678, "p1", nil)
  		defer p4.Stop()
  		// Record messages validated
@@ -2035,7 +2043,7 @@ index ad0d3a1d2..f5343747c 100644
  		// Replay the messages sent to p1 into p4, and also save them into a temporary channel
  		for msg := range aliveMessagesReceived {
  			p4.comm.incMsgs <- wrapReceivedMessage(msg)
-@@ -652,7 +653,7 @@ func TestValidation(t *testing.T) {
+@@ -687,7 +688,7 @@ func TestValidation(t *testing.T) {
  		}
  
  		// Simulate the messages received by p4 into the message store
@@ -2044,7 +2052,7 @@ index ad0d3a1d2..f5343747c 100644
  		msgStore := msgstore.NewMessageStore(policy, func(_ interface{}) {})
  		close(tmpMsgs)
  		for msg := range tmpMsgs {
-@@ -666,8 +667,8 @@ func TestValidation(t *testing.T) {
+@@ -701,8 +702,8 @@ func TestValidation(t *testing.T) {
  		assert.Empty(t, validatedMessages)
  	})
  
@@ -2055,7 +2063,7 @@ index ad0d3a1d2..f5343747c 100644
  	// Ensure the membership response contains both alive and dead peers
  	assert.Len(t, res.GetMemRes().GetAlive(), 2)
  	assert.Len(t, res.GetMemRes().GetDead(), 1)
-@@ -676,7 +677,7 @@ func TestValidation(t *testing.T) {
+@@ -711,7 +712,7 @@ func TestValidation(t *testing.T) {
  		name                  string
  		expectedAliveMessages int
  		port                  int
@@ -2064,7 +2072,7 @@ index ad0d3a1d2..f5343747c 100644
  		shouldBeReValidated   bool
  	}{
  		{
-@@ -699,7 +700,7 @@ func TestValidation(t *testing.T) {
+@@ -734,7 +735,7 @@ func TestValidation(t *testing.T) {
  			p := createDiscoveryInstance(testCase.port, "p", nil)
  			defer p.Stop()
  			// Record messages validated
@@ -2073,7 +2081,7 @@ index ad0d3a1d2..f5343747c 100644
  			p.comm.recordValidation(validatedMessages)
  
  			p.comm.incMsgs <- wrapReceivedMessage(testCase.message)
-@@ -814,7 +815,7 @@ func TestSelf(t *testing.T) {
+@@ -849,7 +850,7 @@ func TestSelf(t *testing.T) {
  	inst := createDiscoveryInstance(13463, "d1", []string{})
  	defer inst.Stop()
  	env := inst.Self().Envelope
@@ -2082,7 +2090,7 @@ index ad0d3a1d2..f5343747c 100644
  	assert.NoError(t, err)
  	member := sMsg.GetAliveMsg().Membership
  	assert.Equal(t, "localhost:13463", member.Endpoint)
-@@ -1079,7 +1080,7 @@ func discPolForPeer(selfPort int) DisclosurePolicy {
+@@ -1114,7 +1115,7 @@ func discPolForPeer(selfPort int) DisclosurePolicy {
  	return func(remotePeer *NetworkMember) (Sieve, EnvelopeFilter) {
  		targetPortStr := strings.Split(remotePeer.Endpoint, ":")[1]
  		targetPort, _ := strconv.ParseInt(targetPortStr, 10, 64)
@@ -2091,7 +2099,7 @@ index ad0d3a1d2..f5343747c 100644
  				portOfAliveMsgStr := strings.Split(msg.GetAliveMsg().Membership.Endpoint, ":")[1]
  				portOfAliveMsg, _ := strconv.ParseInt(portOfAliveMsgStr, 10, 64)
  
-@@ -1092,7 +1093,7 @@ func discPolForPeer(selfPort int) DisclosurePolicy {
+@@ -1127,7 +1128,7 @@ func discPolForPeer(selfPort int) DisclosurePolicy {
  
  				// Else, expose peers with even ids to other peers with even ids
  				return portOfAliveMsg%2 == 0 && targetPort%2 == 0
@@ -2100,7 +2108,7 @@ index ad0d3a1d2..f5343747c 100644
  				envelope := protoG.Clone(msg.Envelope).(*proto.Envelope)
  				if selfPort < 8615 && targetPort >= 8615 {
  					envelope.SecretEnvelope = nil
-@@ -1137,7 +1138,7 @@ func TestExpirationNoSecretEnvelope(t *testing.T) {
+@@ -1173,7 +1174,7 @@ func TestExpirationNoSecretEnvelope(t *testing.T) {
  		},
  	}
  
@@ -2109,7 +2117,7 @@ index ad0d3a1d2..f5343747c 100644
  	assert.NoError(t, err)
  
  	msgStore.Add(sMsg)
-@@ -1269,7 +1270,7 @@ func TestMsgStoreExpiration(t *testing.T) {
+@@ -1305,7 +1306,7 @@ func TestMsgStoreExpiration(t *testing.T) {
  					return false
  				}
  				for _, am := range downCastInst.msgStore.Get() {
@@ -2118,7 +2126,7 @@ index ad0d3a1d2..f5343747c 100644
  					if bytes.Equal(m.Membership.PkiId, downInst.discoveryImpl().self.PKIid) {
  						downCastInst.lock.RUnlock()
  						return false
-@@ -1305,9 +1306,9 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1341,9 +1342,9 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  	bootPeers := []string{}
  	peersNum := 3
  	instances := []*gossipInstance{}
@@ -2131,7 +2139,7 @@ index ad0d3a1d2..f5343747c 100644
  	memRespMsgs := make(map[int][]*proto.MembershipResponse)
  
  	for i := 0; i < peersNum; i++ {
-@@ -1320,7 +1321,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1356,7 +1357,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  	// Creating MembershipRequest messages
  	for i := 0; i < peersNum; i++ {
  		memReqMsg, _ := instances[i].discoveryImpl().createMembershipRequest(true)
@@ -2140,7 +2148,7 @@ index ad0d3a1d2..f5343747c 100644
  		memReqMsgs = append(memReqMsgs, sMsg)
  	}
  	// Creating Alive messages
-@@ -1343,14 +1344,14 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1379,14 +1380,14 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  		for k := 0; k < peersNum; k++ {
  			instances[i].discoveryImpl().handleMsgFromComm(&dummyReceivedMessage{
  				msg: aliveMsgs[k],
@@ -2157,7 +2165,7 @@ index ad0d3a1d2..f5343747c 100644
  		_, exist := instances[index].discoveryImpl().aliveLastTS[string(instances[i].discoveryImpl().self.PKIid)]
  		assert.True(t, exist, fmt.Sprint(step, " Data from alive msg ", i, " doesn't exist in aliveLastTS of discovery inst ", index))
  
-@@ -1362,7 +1363,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1398,7 +1399,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  		assert.Contains(t, instances[index].discoveryImpl().msgStore.Get(), msgs[i], fmt.Sprint(step, " Alive msg ", i, "not stored in store of discovery inst ", index))
  	}
  
@@ -2166,7 +2174,7 @@ index ad0d3a1d2..f5343747c 100644
  		instances[index].discoveryImpl().lock.RLock()
  		defer instances[index].discoveryImpl().lock.RUnlock()
  		repeatForFiltered(peersNum,
-@@ -1410,7 +1411,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1446,7 +1447,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  		for k := 0; k < peersNum; k++ {
  			instances[i].discoveryImpl().handleMsgFromComm(&dummyReceivedMessage{
  				msg: newAliveMsgs[k],
@@ -2175,7 +2183,7 @@ index ad0d3a1d2..f5343747c 100644
  					ID: common.PKIidType(fmt.Sprintf("d%d", i)),
  				},
  			})
-@@ -1422,7 +1423,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1458,7 +1459,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  		checkAliveMsgExist(instances, newAliveMsgs, i, "[Step 2 - proccesing aliveMsg]")
  	}
  
@@ -2184,7 +2192,7 @@ index ad0d3a1d2..f5343747c 100644
  		instances[index].discoveryImpl().lock.RLock()
  		defer instances[index].discoveryImpl().lock.RUnlock()
  		assert.Empty(t, instances[index].discoveryImpl().aliveLastTS, fmt.Sprint(step, " Data from alive msg still exists in aliveLastTS of discovery inst ", index))
-@@ -1450,7 +1451,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1486,7 +1487,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  			func(k int) {
  				instances[i].discoveryImpl().handleMsgFromComm(&dummyReceivedMessage{
  					msg: memReqMsgs[k],
@@ -2193,7 +2201,7 @@ index ad0d3a1d2..f5343747c 100644
  						ID: common.PKIidType(fmt.Sprintf("d%d", i)),
  					},
  				})
-@@ -1467,7 +1468,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1503,7 +1504,7 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  		for k := 0; k < peersNum; k++ {
  			instances[i].discoveryImpl().handleMsgFromComm(&dummyReceivedMessage{
  				msg: aliveMsgs[k],
@@ -2202,7 +2210,7 @@ index ad0d3a1d2..f5343747c 100644
  					ID: common.PKIidType(fmt.Sprintf("d%d", i)),
  				},
  			})
-@@ -1484,16 +1485,16 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
+@@ -1520,16 +1521,16 @@ func TestMsgStoreExpirationWithMembershipMessages(t *testing.T) {
  	for i := 0; i < peersNum; i++ {
  		respForPeer := memRespMsgs[i]
  		for _, msg := range respForPeer {
@@ -2222,7 +2230,7 @@ index ad0d3a1d2..f5343747c 100644
  					ID: common.PKIidType(fmt.Sprintf("d%d", i)),
  				},
  			})
-@@ -1517,8 +1518,8 @@ func TestAliveMsgStore(t *testing.T) {
+@@ -1553,8 +1554,8 @@ func TestAliveMsgStore(t *testing.T) {
  	bootPeers := []string{}
  	peersNum := 2
  	instances := []*gossipInstance{}
@@ -2233,7 +2241,7 @@ index ad0d3a1d2..f5343747c 100644
  
  	for i := 0; i < peersNum; i++ {
  		id := fmt.Sprintf("d%d", i)
-@@ -1529,7 +1530,7 @@ func TestAliveMsgStore(t *testing.T) {
+@@ -1565,7 +1566,7 @@ func TestAliveMsgStore(t *testing.T) {
  	// Creating MembershipRequest messages
  	for i := 0; i < peersNum; i++ {
  		memReqMsg, _ := instances[i].discoveryImpl().createMembershipRequest(true)
@@ -2242,18 +2250,51 @@ index ad0d3a1d2..f5343747c 100644
  		memReqMsgs = append(memReqMsgs, sMsg)
  	}
  	// Creating Alive messages
-@@ -1563,9 +1564,9 @@ func TestAliveMsgStore(t *testing.T) {
- func TestMemRespDisclosurePol(t *testing.T) {
+@@ -1600,14 +1601,14 @@ func TestMemRespDisclosurePol(t *testing.T) {
  	t.Parallel()
  	pol := func(remotePeer *NetworkMember) (Sieve, EnvelopeFilter) {
+ 		assert.Equal(t, remotePeer.InternalEndpoint, remotePeer.Endpoint)
 -		return func(_ *proto.SignedGossipMessage) bool {
 +		return func(_ *protoext.SignedGossipMessage) bool {
- 				return remotePeer.Endpoint == "localhost:7880"
+ 				return remotePeer.Endpoint != "localhost:7879"
 -			}, func(m *proto.SignedGossipMessage) *proto.Envelope {
 +			}, func(m *protoext.SignedGossipMessage) *proto.Envelope {
  				return m.Envelope
  			}
  	}
+ 
+-	wasMembershipResponseReceived := func(msg *proto.SignedGossipMessage) {
++	wasMembershipResponseReceived := func(msg *protoext.SignedGossipMessage) {
+ 		assert.Nil(t, msg.GetMemRes())
+ 	}
+ 
+@@ -1789,7 +1790,7 @@ func TestMembershipAfterExpiration(t *testing.T) {
+ 	for i := 0; i < peersNum; i++ {
+ 		id := fmt.Sprintf("d%d", i)
+ 		logger := loggerThatTracksCustomMessage()
+-		inst = createDiscoveryInstanceWithAnchorPeerTracker(ports[i], id, bootPeers, true, noopPolicy, func(_ *proto.SignedGossipMessage) {}, config, mockTracker, logger)
++		inst = createDiscoveryInstanceWithAnchorPeerTracker(ports[i], id, bootPeers, true, noopPolicy, func(_ *protoext.SignedGossipMessage) {}, config, mockTracker, logger)
+ 		instances = append(instances, inst)
+ 	}
+ 	for i := 1; i < peersNum; i++ {
+@@ -1817,7 +1818,7 @@ func TestMembershipAfterExpiration(t *testing.T) {
+ 	// Especially, we want to test that peer2 won't be isolated
+ 	for i := 0; i < peersNum-1; i++ {
+ 		id := fmt.Sprintf("d%d", i)
+-		inst = createDiscoveryInstanceWithAnchorPeerTracker(ports[i], id, bootPeers, true, noopPolicy, func(_ *proto.SignedGossipMessage) {}, config, mockTracker, nil)
++		inst = createDiscoveryInstanceWithAnchorPeerTracker(ports[i], id, bootPeers, true, noopPolicy, func(_ *protoext.SignedGossipMessage) {}, config, mockTracker, nil)
+ 		instances[i] = inst
+ 	}
+ 	connect(instances[1], anchorPeer)
+@@ -1829,7 +1830,7 @@ func connect(inst *gossipInstance, endpoint string) {
+ 	inst.comm.mock = &mock.Mock{}
+ 	inst.comm.mock.On("SendToPeer", mock.Anything, mock.Anything).Run(func(arguments mock.Arguments) {
+ 		inst := inst
+-		msg := arguments.Get(1).(*proto.SignedGossipMessage)
++		msg := arguments.Get(1).(*protoext.SignedGossipMessage)
+ 		if req := msg.GetMemReq(); req != nil {
+ 			inst.comm.lock.Lock()
+ 			inst.comm.mock = nil
 diff --git a/gossip/election/adapter.go b/gossip/election/adapter.go
 index 106f7d721..3de1c3b6d 100644
 --- a/gossip/election/adapter.go
@@ -2748,7 +2789,7 @@ index af3a2aaad..162d076ba 100644
  		defer l.Unlock()
  
 diff --git a/gossip/gossip/channel/channel.go b/gossip/gossip/channel/channel.go
-index 7f93260c1..21dd4d0e2 100644
+index 04ae13dea..822e030ea 100644
 --- a/gossip/gossip/channel/channel.go
 +++ b/gossip/gossip/channel/channel.go
 @@ -26,6 +26,7 @@ import (
@@ -2815,16 +2856,16 @@ index 7f93260c1..21dd4d0e2 100644
  
  	// GetOrgOfPeer returns the organization ID of a given peer PKI-ID
  	GetOrgOfPeer(pkiID common.PKIidType) api.OrgIdentityType
-@@ -144,7 +145,7 @@ type gossipChannel struct {
- 	pkiID                     common.PKIidType
+@@ -145,7 +146,7 @@ type gossipChannel struct {
  	selfOrg                   api.OrgIdentityType
  	stopChan                  chan struct{}
--	stateInfoMsg              *proto.SignedGossipMessage
-+	stateInfoMsg              *protoext.SignedGossipMessage
+ 	selfStateInfoMsg          *proto.GossipMessage
+-	selfStateInfoSignedMsg    *proto.SignedGossipMessage
++	selfStateInfoSignedMsg    *protoext.SignedGossipMessage
  	orgs                      []api.OrgIdentityType
  	joinMsg                   api.JoinChannelMessage
  	blockMsgStore             msgstore.MessageStore
-@@ -203,12 +204,12 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
+@@ -204,12 +205,12 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
  
  	gc.memFilter = &membershipFilter{adapter: gc.Adapter, gossipChannel: gc}
  
@@ -2839,7 +2880,7 @@ index 7f93260c1..21dd4d0e2 100644
  	}
  	gc.blockMsgStore = msgstore.NewMessageStoreExpirable(comparator, func(m interface{}) {
  		gc.logger.Debugf("Removing %s from the message store", seqNumFromMsg(m))
-@@ -219,10 +220,10 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
+@@ -220,10 +221,10 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
  	})
  
  	hashPeerExpiredInMembership := func(o interface{}) bool {
@@ -2852,8 +2893,8 @@ index 7f93260c1..21dd4d0e2 100644
  		si := msg.GetStateInfo()
  		// No point in verifying ourselves
  		if bytes.Equal(gc.pkiID, si.PkiId) {
-@@ -267,7 +268,7 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
- 	gc.stateInfoMsgStore = newStateInfoCache(gc.GetConf().StateInfoCacheSweepInterval, hashPeerExpiredInMembership, verifyStateInfoMsg)
+@@ -273,7 +274,7 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
+ 	gc.setupSignedStateInfoMessage()
  
  	ttl := adapter.GetConf().MsgExpirationTimeout
 -	pol := proto.NewGossipMessageComparator(0)
@@ -2861,7 +2902,7 @@ index 7f93260c1..21dd4d0e2 100644
  
  	gc.leaderMsgStore = msgstore.NewMessageStoreExpirable(pol, msgstore.Noop, ttl, nil, nil, nil)
  
-@@ -321,7 +322,7 @@ func (gc *gossipChannel) periodicalInvocation(fn func(), c <-chan time.Time) {
+@@ -327,7 +328,7 @@ func (gc *gossipChannel) periodicalInvocation(fn func(), c <-chan time.Time) {
  }
  
  // Self returns a StateInfoMessage about the peer
@@ -2869,8 +2910,17 @@ index 7f93260c1..21dd4d0e2 100644
 +func (gc *gossipChannel) Self() *protoext.SignedGossipMessage {
  	gc.RLock()
  	defer gc.RUnlock()
- 	return gc.stateInfoMsg
-@@ -417,7 +418,7 @@ func (gc *gossipChannel) createBlockPuller() pull.Mediator {
+ 	return gc.selfStateInfoSignedMsg
+@@ -421,7 +422,7 @@ func (gc *gossipChannel) publishSignedStateInfoMessage() {
+ 	gc.Gossip(stateInfoMsg)
+ }
+ 
+-func (gc *gossipChannel) setupSignedStateInfoMessage() (*proto.SignedGossipMessage, error) {
++func (gc *gossipChannel) setupSignedStateInfoMessage() (*protoext.SignedGossipMessage, error) {
+ 	gc.RLock()
+ 	msg := gc.selfStateInfoMsg
+ 	gc.RUnlock()
+@@ -453,7 +454,7 @@ func (gc *gossipChannel) createBlockPuller() pull.Mediator {
  			ResponseWaitTime: gc.GetConf().ResponseWaitTime,
  		},
  	}
@@ -2879,7 +2929,7 @@ index 7f93260c1..21dd4d0e2 100644
  		dataMsg := msg.GetDataMsg()
  		if dataMsg == nil || dataMsg.Payload == nil {
  			gc.logger.Warning("Non-data block or with no payload")
-@@ -429,7 +430,7 @@ func (gc *gossipChannel) createBlockPuller() pull.Mediator {
+@@ -465,7 +466,7 @@ func (gc *gossipChannel) createBlockPuller() pull.Mediator {
  		Sndr:        gc,
  		MemSvc:      gc.memFilter,
  		IdExtractor: seqNumFromMsg,
@@ -2888,7 +2938,7 @@ index 7f93260c1..21dd4d0e2 100644
  			gc.DeMultiplex(msg)
  		},
  	}
-@@ -516,8 +517,8 @@ func (gc *gossipChannel) EligibleForChannel(member discovery.NetworkMember) bool
+@@ -552,8 +553,8 @@ func (gc *gossipChannel) EligibleForChannel(member discovery.NetworkMember) bool
  }
  
  // AddToMsgStore adds a given GossipMessage to the message store
@@ -2899,7 +2949,7 @@ index 7f93260c1..21dd4d0e2 100644
  		gc.Lock()
  		defer gc.Unlock()
  		added := gc.blockMsgStore.Add(msg)
-@@ -527,7 +528,7 @@ func (gc *gossipChannel) AddToMsgStore(msg *proto.SignedGossipMessage) {
+@@ -563,7 +564,7 @@ func (gc *gossipChannel) AddToMsgStore(msg *proto.SignedGossipMessage) {
  		}
  	}
  
@@ -2908,7 +2958,7 @@ index 7f93260c1..21dd4d0e2 100644
  		gc.stateInfoMsgStore.Add(msg)
  	}
  }
-@@ -558,13 +559,13 @@ func (gc *gossipChannel) ConfigureChannel(joinMsg api.JoinChannelMessage) {
+@@ -594,13 +595,13 @@ func (gc *gossipChannel) ConfigureChannel(joinMsg api.JoinChannelMessage) {
  }
  
  // HandleMessage processes a message sent by a remote peer
@@ -2924,7 +2974,7 @@ index 7f93260c1..21dd4d0e2 100644
  		gc.logger.Warning("Got message", msg.GetGossipMessage(), "but it's not a per-channel message, discarding it")
  		return
  	}
-@@ -579,20 +580,20 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
+@@ -615,20 +616,20 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
  		return
  	}
  
@@ -2949,7 +2999,7 @@ index 7f93260c1..21dd4d0e2 100644
  			if m.GetDataMsg().Payload == nil {
  				gc.logger.Warning("Payload is empty, got it from", msg.GetConnectionInfo().ID)
  				return
-@@ -626,7 +627,7 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
+@@ -662,7 +663,7 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
  		return
  	}
  
@@ -2958,7 +3008,7 @@ index 7f93260c1..21dd4d0e2 100644
  		if gc.hasLeftChannel() {
  			gc.logger.Info("Received Pull message from", msg.GetConnectionInfo().Endpoint, "but left the channel", string(gc.chainID))
  			return
-@@ -641,15 +642,15 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
+@@ -677,15 +678,15 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
  			gc.logger.Warning(msg.GetConnectionInfo(), "isn't eligible for pulling blocks of", string(gc.chainID))
  			return
  		}
@@ -2977,7 +3027,7 @@ index 7f93260c1..21dd4d0e2 100644
  				if err != nil {
  					gc.logger.Warningf("Data update contains an invalid message: %+v", errors.WithStack(err))
  					return
-@@ -689,7 +690,7 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
+@@ -725,7 +726,7 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
  		gc.blocksPuller.HandleMessage(msg)
  	}
  
@@ -2986,7 +3036,7 @@ index 7f93260c1..21dd4d0e2 100644
  		connInfo := msg.GetConnectionInfo()
  		senderOrg := gc.GetOrgOfPeer(connInfo.ID)
  		if !bytes.Equal(gc.selfOrg, senderOrg) {
-@@ -713,12 +714,12 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
+@@ -749,12 +750,12 @@ func (gc *gossipChannel) HandleMessage(msg proto.ReceivedMessage) {
  func (gc *gossipChannel) handleStateInfSnapshot(m *proto.GossipMessage, sender common.PKIidType) {
  	chanName := string(gc.chainID)
  	for _, envelope := range m.GetStateSnapshot().Elements {
@@ -3001,7 +3051,7 @@ index 7f93260c1..21dd4d0e2 100644
  			gc.logger.Warning("Channel", chanName, ": Element of StateInfoSnapshot isn't a StateInfoMessage:",
  				stateInf, "message sent from", sender)
  			return
-@@ -760,7 +761,7 @@ func (gc *gossipChannel) handleStateInfSnapshot(m *proto.GossipMessage, sender c
+@@ -796,7 +797,7 @@ func (gc *gossipChannel) handleStateInfSnapshot(m *proto.GossipMessage, sender c
  }
  
  func (gc *gossipChannel) verifyBlock(msg *proto.GossipMessage, sender common.PKIidType) bool {
@@ -3010,7 +3060,7 @@ index 7f93260c1..21dd4d0e2 100644
  		gc.logger.Warning("Received from ", sender, "a DataUpdate message that contains a non-block GossipMessage:", msg)
  		return false
  	}
-@@ -784,7 +785,7 @@ func (gc *gossipChannel) createStateInfoSnapshot(requestersOrg api.OrgIdentityTy
+@@ -820,7 +821,7 @@ func (gc *gossipChannel) createStateInfoSnapshot(requestersOrg api.OrgIdentityTy
  	rawElements := gc.stateInfoMsgStore.Get()
  	elements := []*proto.Envelope{}
  	for _, rawEl := range rawElements {
@@ -3019,7 +3069,7 @@ index 7f93260c1..21dd4d0e2 100644
  		orgOfCurrentMsg := gc.GetOrgOfPeer(msg.GetStateInfo().PkiId)
  		// If we're in the same org as the requester, or the message belongs to a foreign org
  		// don't do any filtering
-@@ -812,7 +813,7 @@ func (gc *gossipChannel) createStateInfoSnapshot(requestersOrg api.OrgIdentityTy
+@@ -848,7 +849,7 @@ func (gc *gossipChannel) createStateInfoSnapshot(requestersOrg api.OrgIdentityTy
  	}
  }
  
@@ -3028,7 +3078,7 @@ index 7f93260c1..21dd4d0e2 100644
  	if msg == nil {
  		gc.logger.Warning("Messsage is nil")
  		return false
-@@ -828,7 +829,7 @@ func (gc *gossipChannel) verifyMsg(msg proto.ReceivedMessage) bool {
+@@ -864,7 +865,7 @@ func (gc *gossipChannel) verifyMsg(msg proto.ReceivedMessage) bool {
  		return false
  	}
  
@@ -3037,7 +3087,7 @@ index 7f93260c1..21dd4d0e2 100644
  		si := m.GetStateInfo()
  		expectedMAC := GenerateMAC(si.PkiId, gc.chainID)
  		if !bytes.Equal(expectedMAC, si.Channel_MAC) {
-@@ -838,7 +839,7 @@ func (gc *gossipChannel) verifyMsg(msg proto.ReceivedMessage) bool {
+@@ -874,7 +875,7 @@ func (gc *gossipChannel) verifyMsg(msg proto.ReceivedMessage) bool {
  		return true
  	}
  
@@ -3046,7 +3096,7 @@ index 7f93260c1..21dd4d0e2 100644
  		sipr := m.GetStateInfoPullReq()
  		expectedMAC := GenerateMAC(msg.GetConnectionInfo().ID, gc.chainID)
  		if !bytes.Equal(expectedMAC, sipr.Channel_MAC) {
-@@ -855,8 +856,8 @@ func (gc *gossipChannel) verifyMsg(msg proto.ReceivedMessage) bool {
+@@ -891,8 +892,8 @@ func (gc *gossipChannel) verifyMsg(msg proto.ReceivedMessage) bool {
  	return true
  }
  
@@ -3057,7 +3107,7 @@ index 7f93260c1..21dd4d0e2 100644
  		Tag:   proto.GossipMessage_CHAN_OR_ORG,
  		Nonce: 0,
  		Content: &proto.GossipMessage_StateInfoPullReq{
-@@ -864,7 +865,7 @@ func (gc *gossipChannel) createStateInfoRequest() (*proto.SignedGossipMessage, e
+@@ -900,7 +901,7 @@ func (gc *gossipChannel) createStateInfoRequest() (*proto.SignedGossipMessage, e
  				Channel_MAC: GenerateMAC(gc.pkiID, gc.chainID),
  			},
  		},
@@ -3066,16 +3116,7 @@ index 7f93260c1..21dd4d0e2 100644
  }
  
  // UpdateLedgerHeight updates the ledger height the peer
-@@ -899,7 +900,7 @@ func (gc *gossipChannel) UpdateChaincodes(chaincodes []*proto.Chaincode) {
- 
- // UpdateStateInfo updates this channel's StateInfo message
- // that is periodically published
--func (gc *gossipChannel) updateStateInfo(msg *proto.SignedGossipMessage) {
-+func (gc *gossipChannel) updateStateInfo(msg *protoext.SignedGossipMessage) {
- 	gc.stateInfoMsgStore.Add(msg)
- 	gc.ledgerHeight = msg.GetStateInfo().Properties.LedgerHeight
- 	gc.stateInfoMsg = msg
-@@ -938,7 +939,7 @@ func (gc *gossipChannel) updateProperties(ledgerHeight uint64, chaincodes []*pro
+@@ -977,7 +978,7 @@ func (gc *gossipChannel) updateProperties(ledgerHeight uint64, chaincodes []*pro
  
  func newStateInfoCache(sweepInterval time.Duration, hasExpired func(interface{}) bool, verifyFunc membershipPredicate) *stateInfoCache {
  	membershipStore := util.NewMembershipStore()
@@ -3084,7 +3125,7 @@ index 7f93260c1..21dd4d0e2 100644
  
  	s := &stateInfoCache{
  		verify:          verifyFunc,
-@@ -946,7 +947,7 @@ func newStateInfoCache(sweepInterval time.Duration, hasExpired func(interface{})
+@@ -985,7 +986,7 @@ func newStateInfoCache(sweepInterval time.Duration, hasExpired func(interface{})
  		stopChan:        make(chan struct{}),
  	}
  	invalidationTrigger := func(m interface{}) {
@@ -3093,7 +3134,7 @@ index 7f93260c1..21dd4d0e2 100644
  		membershipStore.Remove(pkiID)
  	}
  	s.MessageStore = msgstore.NewMessageStore(pol, invalidationTrigger)
-@@ -967,7 +968,7 @@ func newStateInfoCache(sweepInterval time.Duration, hasExpired func(interface{})
+@@ -1006,7 +1007,7 @@ func newStateInfoCache(sweepInterval time.Duration, hasExpired func(interface{})
  // membershipPredicate receives a StateInfoMessage and optionally a slice of organization identifiers
  // and returns whether the peer that signed the given StateInfoMessage is eligible
  // to the channel or not
@@ -3102,7 +3143,7 @@ index 7f93260c1..21dd4d0e2 100644
  
  // stateInfoCache is actually a messageStore
  // that also indexes messages that are added
-@@ -981,7 +982,7 @@ type stateInfoCache struct {
+@@ -1020,7 +1021,7 @@ type stateInfoCache struct {
  
  func (cache *stateInfoCache) validate(orgs []api.OrgIdentityType) {
  	for _, m := range cache.Get() {
@@ -3111,7 +3152,7 @@ index 7f93260c1..21dd4d0e2 100644
  		if !cache.verify(msg, orgs...) {
  			cache.delete(msg)
  		}
-@@ -991,7 +992,7 @@ func (cache *stateInfoCache) validate(orgs []api.OrgIdentityType) {
+@@ -1030,7 +1031,7 @@ func (cache *stateInfoCache) validate(orgs []api.OrgIdentityType) {
  // Add attempts to add the given message to the stateInfoCache,
  // and if the message was added, also indexes it.
  // Message must be a StateInfo message.
@@ -3120,7 +3161,7 @@ index 7f93260c1..21dd4d0e2 100644
  	if !cache.MessageStore.CheckValid(msg) {
  		return false
  	}
-@@ -1006,9 +1007,9 @@ func (cache *stateInfoCache) Add(msg *proto.SignedGossipMessage) bool {
+@@ -1045,9 +1046,9 @@ func (cache *stateInfoCache) Add(msg *proto.SignedGossipMessage) bool {
  	return added
  }
  
@@ -3133,7 +3174,7 @@ index 7f93260c1..21dd4d0e2 100644
  	})
  	cache.Remove(msg.GetStateInfo().PkiId)
 diff --git a/gossip/gossip/channel/channel_test.go b/gossip/gossip/channel/channel_test.go
-index daec0aaf0..f6d120244 100644
+index 5526101ab..968a863d0 100644
 --- a/gossip/gossip/channel/channel_test.go
 +++ b/gossip/gossip/channel/channel_test.go
 @@ -26,6 +26,7 @@ import (
@@ -3173,18 +3214,19 @@ index daec0aaf0..f6d120244 100644
  		ID: m.PKIID,
  	}
  }
-@@ -188,8 +189,8 @@ type gossipAdapterMock struct {
+@@ -189,9 +190,9 @@ type gossipAdapterMock struct {
  	mock.Mock
  }
  
 -func (ga *gossipAdapterMock) Sign(msg *proto.GossipMessage) (*proto.SignedGossipMessage, error) {
--	return msg.NoopSign()
 +func (ga *gossipAdapterMock) Sign(msg *proto.GossipMessage) (*protoext.SignedGossipMessage, error) {
+ 	atomic.AddUint32(&ga.signCallCount, 1)
+-	return msg.NoopSign()
 +	return protoext.NoopSign(msg)
  }
  
  func (ga *gossipAdapterMock) GetConf() Config {
-@@ -197,11 +198,11 @@ func (ga *gossipAdapterMock) GetConf() Config {
+@@ -199,11 +200,11 @@ func (ga *gossipAdapterMock) GetConf() Config {
  	return args.Get(0).(Config)
  }
  
@@ -3198,7 +3240,7 @@ index daec0aaf0..f6d120244 100644
  	ga.Called(msg)
  }
  
-@@ -229,7 +230,7 @@ func (ga *gossipAdapterMock) Lookup(PKIID common.PKIidType) *discovery.NetworkMe
+@@ -236,7 +237,7 @@ func (ga *gossipAdapterMock) Lookup(PKIID common.PKIidType) *discovery.NetworkMe
  	return args.Get(0).(*discovery.NetworkMember)
  }
  
@@ -3207,7 +3249,7 @@ index daec0aaf0..f6d120244 100644
  	// Ensure we have configured Send prior
  	if !ga.wasMocked("Send") {
  		return
-@@ -237,7 +238,7 @@ func (ga *gossipAdapterMock) Send(msg *proto.SignedGossipMessage, peers ...*comm
+@@ -244,7 +245,7 @@ func (ga *gossipAdapterMock) Send(msg *proto.SignedGossipMessage, peers ...*comm
  	ga.Called(msg, peers)
  }
  
@@ -3216,7 +3258,7 @@ index daec0aaf0..f6d120244 100644
  	args := ga.Called(msg)
  	if args.Get(0) == nil {
  		return nil
-@@ -312,7 +313,7 @@ func TestSelf(t *testing.T) {
+@@ -319,7 +320,7 @@ func TestSelf(t *testing.T) {
  	gc.UpdateLedgerHeight(1)
  	gMsg := gc.Self().GossipMessage
  	env := gc.Self().Envelope
@@ -3225,9 +3267,9 @@ index daec0aaf0..f6d120244 100644
  	assert.True(t, gproto.Equal(gMsg, sMsg.GossipMessage))
  	assert.Equal(t, gMsg.GetStateInfo().Properties.LedgerHeight, uint64(1))
  	assert.Equal(t, gMsg.GetStateInfo().PkiId, []byte("1"))
-@@ -355,17 +356,17 @@ func TestMsgStoreNotExpire(t *testing.T) {
- 	gc.HandleMessage(&receivedMsg{PKIID: pkiID2, msg: createStateInfoMsg(1, pkiID2, channelA)})
+@@ -363,17 +364,17 @@ func TestMsgStoreNotExpire(t *testing.T) {
  	gc.HandleMessage(&receivedMsg{PKIID: pkiID3, msg: createStateInfoMsg(1, pkiID3, channelA)})
+ 	time.Sleep(adapter.GetConf().PublishStateInfoInterval * 2)
  
 -	simulateStateInfoRequest := func(pkiID []byte, outChan chan *proto.SignedGossipMessage) {
 +	simulateStateInfoRequest := func(pkiID []byte, outChan chan *protoext.SignedGossipMessage) {
@@ -3246,7 +3288,7 @@ index daec0aaf0..f6d120244 100644
  		snapshotReq := &receivedMsg{
  			PKIID: pkiID,
  			msg:   s,
-@@ -380,18 +381,18 @@ func TestMsgStoreNotExpire(t *testing.T) {
+@@ -388,18 +389,18 @@ func TestMsgStoreNotExpire(t *testing.T) {
  			t.Fatal("Haven't received a state info snapshot on time")
  		case msg := <-sentMessages:
  			for _, el := range msg.GetStateSnapshot().Elements {
@@ -3268,7 +3310,7 @@ index daec0aaf0..f6d120244 100644
  	simulateStateInfoRequest(pkiID3, c)
  	assert.Len(t, c, 3)
  
-@@ -403,11 +404,11 @@ func TestMsgStoreNotExpire(t *testing.T) {
+@@ -411,11 +412,11 @@ func TestMsgStoreNotExpire(t *testing.T) {
  	// the test
  	time.Sleep(conf.StateInfoCacheSweepInterval * 2)
  
@@ -3282,7 +3324,7 @@ index daec0aaf0..f6d120244 100644
  	simulateStateInfoRequest(pkiID3, c)
  	assert.Len(t, c, 2)
  }
-@@ -444,8 +445,8 @@ func TestLeaveChannel(t *testing.T) {
+@@ -452,8 +453,8 @@ func TestLeaveChannel(t *testing.T) {
  	configureAdapter(adapter, members...)
  	gc := NewGossipChannel(common.PKIidType("p0"), orgInChannelA, cs, channelA, adapter, jcm, disabledMetrics)
  	adapter.On("Send", mock.Anything, mock.Anything).Run(func(arguments mock.Arguments) {
@@ -3293,7 +3335,7 @@ index daec0aaf0..f6d120244 100644
  			helloPullWG.Done()
  			assert.False(t, gc.(*gossipChannel).hasLeftChannel())
  		}
-@@ -492,7 +493,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
+@@ -500,7 +501,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
  	t.Parallel()
  	ledgerHeight := 5
  	receivedMsg := int32(0)
@@ -3302,7 +3344,7 @@ index daec0aaf0..f6d120244 100644
  
  	cs := &cryptoService{}
  	cs.On("VerifyBlock", mock.Anything).Return(nil)
-@@ -506,7 +507,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
+@@ -520,7 +521,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
  		}
  
  		atomic.StoreInt32(&receivedMsg, int32(1))
@@ -3311,7 +3353,7 @@ index daec0aaf0..f6d120244 100644
  		stateInfoReceptionChan <- msg
  	})
  
-@@ -514,7 +515,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
+@@ -528,7 +529,7 @@ func TestChannelPeriodicalPublishStateInfo(t *testing.T) {
  	gc.UpdateLedgerHeight(uint64(ledgerHeight))
  	defer gc.Stop()
  
@@ -3320,7 +3362,7 @@ index daec0aaf0..f6d120244 100644
  	select {
  	case <-time.After(time.Second * 5):
  		t.Fatal("Haven't sent stateInfo on time")
-@@ -557,19 +558,19 @@ func TestChannelMsgStoreEviction(t *testing.T) {
+@@ -571,19 +572,19 @@ func TestChannelMsgStoreEviction(t *testing.T) {
  	wg.Add(int(totalPhases))
  
  	adapter.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -3344,7 +3386,7 @@ index daec0aaf0..f6d120244 100644
  			// Advance phase
  			atomic.AddUint64(&phaseNum, uint64(1))
  		}
-@@ -580,7 +581,7 @@ func TestChannelMsgStoreEviction(t *testing.T) {
+@@ -594,7 +595,7 @@ func TestChannelMsgStoreEviction(t *testing.T) {
  		pullPhase(args)
  
  		// If we finished the last phase, save the sequence to be used later for inspection
@@ -3353,7 +3395,7 @@ index daec0aaf0..f6d120244 100644
  			for _, seq := range currSeq {
  				lastPullPhase <- seq
  			}
-@@ -595,7 +596,7 @@ func TestChannelMsgStoreEviction(t *testing.T) {
+@@ -609,7 +610,7 @@ func TestChannelMsgStoreEviction(t *testing.T) {
  	helloMsg := createHelloMsg(pkiIDInOrg1)
  	helloMsg.On("Respond", mock.Anything).Run(func(arg mock.Arguments) {
  		msg := arg.Get(0).(*proto.GossipMessage)
@@ -3362,7 +3404,7 @@ index daec0aaf0..f6d120244 100644
  			return
  		}
  		msgSentFromPullMediator <- msg
-@@ -613,7 +614,7 @@ func TestChannelMsgStoreEviction(t *testing.T) {
+@@ -627,7 +628,7 @@ func TestChannelMsgStoreEviction(t *testing.T) {
  	assert.Len(t, msgSentFromPullMediator, 1)
  	msg := <-msgSentFromPullMediator
  	// It's a digest and not anything else, like an update
@@ -3371,7 +3413,7 @@ index daec0aaf0..f6d120244 100644
  	assert.Len(t, msg.GetDataDig().Digests, adapter.GetConf().MaxBlockCountToStore+1)
  	// Check that the last sequences are kept.
  	// Since we checked the length, it proves that the old blocks were discarded, since we had much more
-@@ -627,18 +628,18 @@ func TestChannelPull(t *testing.T) {
+@@ -641,18 +642,18 @@ func TestChannelPull(t *testing.T) {
  	t.Parallel()
  	cs := &cryptoService{}
  	cs.On("VerifyBlock", mock.Anything).Return(nil)
@@ -3394,7 +3436,7 @@ index daec0aaf0..f6d120244 100644
  		receivedBlocksChan <- msg
  	})
  	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{}, disabledMetrics)
-@@ -697,8 +698,8 @@ func TestChannelPullAccessControl(t *testing.T) {
+@@ -711,8 +712,8 @@ func TestChannelPullAccessControl(t *testing.T) {
  
  	sentHello := int32(0)
  	adapter.On("Send", mock.Anything, mock.Anything).Run(func(arg mock.Arguments) {
@@ -3405,7 +3447,7 @@ index daec0aaf0..f6d120244 100644
  			return
  		}
  		atomic.StoreInt32(&sentHello, int32(1))
-@@ -906,7 +907,7 @@ func TestChannelAddToMessageStore(t *testing.T) {
+@@ -920,7 +921,7 @@ func TestChannelAddToMessageStore(t *testing.T) {
  
  	cs := &cryptoService{}
  	cs.On("VerifyBlock", mock.Anything).Return(nil)
@@ -3414,7 +3456,7 @@ index daec0aaf0..f6d120244 100644
  	adapter := new(gossipAdapterMock)
  	configureAdapter(adapter)
  	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{}, disabledMetrics)
-@@ -914,7 +915,7 @@ func TestChannelAddToMessageStore(t *testing.T) {
+@@ -928,7 +929,7 @@ func TestChannelAddToMessageStore(t *testing.T) {
  	adapter.On("Forward", mock.Anything)
  	adapter.On("Send", mock.Anything, mock.Anything)
  	adapter.On("DeMultiplex", mock.Anything).Run(func(arg mock.Arguments) {
@@ -3423,7 +3465,7 @@ index daec0aaf0..f6d120244 100644
  	})
  
  	// Check that adding a message of a bad type doesn't crash the program
-@@ -959,7 +960,7 @@ func TestChannelBlockExpiration(t *testing.T) {
+@@ -973,7 +974,7 @@ func TestChannelBlockExpiration(t *testing.T) {
  
  	cs := &cryptoService{}
  	cs.On("VerifyBlock", mock.Anything).Return(nil)
@@ -3432,7 +3474,7 @@ index daec0aaf0..f6d120244 100644
  	adapter := new(gossipAdapterMock)
  	configureAdapter(adapter)
  	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{}, disabledMetrics)
-@@ -967,7 +968,7 @@ func TestChannelBlockExpiration(t *testing.T) {
+@@ -981,7 +982,7 @@ func TestChannelBlockExpiration(t *testing.T) {
  	adapter.On("Forward", mock.Anything)
  	adapter.On("Send", mock.Anything, mock.Anything)
  	adapter.On("DeMultiplex", mock.Anything).Run(func(arg mock.Arguments) {
@@ -3441,7 +3483,7 @@ index daec0aaf0..f6d120244 100644
  	})
  	respondedChan := make(chan *proto.GossipMessage, 1)
  	messageRelayer := func(arg mock.Arguments) {
-@@ -993,7 +994,7 @@ func TestChannelBlockExpiration(t *testing.T) {
+@@ -1007,7 +1008,7 @@ func TestChannelBlockExpiration(t *testing.T) {
  	case <-time.After(time.Second):
  		t.Fatal("Haven't responded to hello message within a time period")
  	case msg := <-respondedChan:
@@ -3450,7 +3492,7 @@ index daec0aaf0..f6d120244 100644
  			assert.Equal(t, 1, len(msg.GetDataDig().Digests), "Number of digests returned by channel blockPuller incorrect")
  		} else {
  			t.Fatal("Not correct pull msg type in response - expect digest")
-@@ -1037,7 +1038,7 @@ func TestChannelBlockExpiration(t *testing.T) {
+@@ -1051,7 +1052,7 @@ func TestChannelBlockExpiration(t *testing.T) {
  	case <-time.After(time.Second):
  		t.Fatal("Haven't responded to hello message within a time period")
  	case msg := <-respondedChan:
@@ -3459,7 +3501,7 @@ index daec0aaf0..f6d120244 100644
  			assert.Equal(t, 1, len(msg.GetDataDig().Digests), "Number of digests returned by channel blockPuller incorrect")
  		} else {
  			t.Fatal("Not correct pull msg type in response - expect digest")
-@@ -1049,7 +1050,7 @@ func TestChannelBlockExpiration(t *testing.T) {
+@@ -1063,7 +1064,7 @@ func TestChannelBlockExpiration(t *testing.T) {
  
  func TestChannelBadBlocks(t *testing.T) {
  	t.Parallel()
@@ -3468,7 +3510,7 @@ index daec0aaf0..f6d120244 100644
  	cs := &cryptoService{}
  	cs.On("VerifyBlock", mock.Anything).Return(nil)
  	adapter := new(gossipAdapterMock)
-@@ -1059,7 +1060,7 @@ func TestChannelBadBlocks(t *testing.T) {
+@@ -1073,7 +1074,7 @@ func TestChannelBadBlocks(t *testing.T) {
  	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{}, disabledMetrics)
  
  	adapter.On("DeMultiplex", mock.Anything).Run(func(args mock.Arguments) {
@@ -3477,7 +3519,7 @@ index daec0aaf0..f6d120244 100644
  	})
  
  	// Send a valid block
-@@ -1102,9 +1103,9 @@ func TestChannelPulledBadBlocks(t *testing.T) {
+@@ -1173,9 +1174,9 @@ func TestChannelPulledBadBlocks(t *testing.T) {
  	wg.Add(1)
  
  	changeChan := func(env *proto.Envelope) {
@@ -3489,7 +3531,7 @@ index daec0aaf0..f6d120244 100644
  		env.Payload = sMsg.Payload
  	}
  
-@@ -1150,9 +1151,9 @@ func TestChannelPulledBadBlocks(t *testing.T) {
+@@ -1221,9 +1222,9 @@ func TestChannelPulledBadBlocks(t *testing.T) {
  	var wg3 sync.WaitGroup
  	wg3.Add(1)
  	emptyBlock := func(env *proto.Envelope) {
@@ -3501,7 +3543,7 @@ index daec0aaf0..f6d120244 100644
  		env.Payload = sMsg.Payload
  	}
  	pullPhase3 := simulatePullPhase(gc, t, &wg3, emptyBlock, 10, 11)
-@@ -1175,9 +1176,9 @@ func TestChannelPulledBadBlocks(t *testing.T) {
+@@ -1246,9 +1247,9 @@ func TestChannelPulledBadBlocks(t *testing.T) {
  	var wg4 sync.WaitGroup
  	wg4.Add(1)
  	nonBlockMsg := func(env *proto.Envelope) {
@@ -3513,7 +3555,7 @@ index daec0aaf0..f6d120244 100644
  		env.Payload = sMsg.Payload
  	}
  	pullPhase4 := simulatePullPhase(gc, t, &wg4, nonBlockMsg, 10, 11)
-@@ -1219,7 +1220,7 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
+@@ -1290,7 +1291,7 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
  	// Ensure we ignore stateInfo snapshots with StateInfo messages with wrong MACs
  	sim := createStateInfoMsg(4, pkiIDInOrg1, channelA)
  	sim.GetStateInfo().Channel_MAC = append(sim.GetStateInfo().Channel_MAC, 1)
@@ -3522,7 +3564,7 @@ index daec0aaf0..f6d120244 100644
  	gc.HandleMessage(&receivedMsg{PKIID: pkiIDInOrg1, msg: stateInfoSnapshotForChannel(channelA, sim)})
  	assert.Empty(t, gc.GetPeers())
  
-@@ -1233,14 +1234,14 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
+@@ -1304,14 +1305,14 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
  	assert.Equal(t, 4, int(gc.GetPeers()[0].Properties.LedgerHeight))
  
  	// Check we don't respond to stateInfoSnapshot requests with wrong MAC
@@ -3539,7 +3581,7 @@ index daec0aaf0..f6d120244 100644
  	snapshotReq := &receivedMsg{
  		PKIID: pkiIDInOrg1,
  		msg:   sMsg,
-@@ -1257,14 +1258,14 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
+@@ -1328,14 +1329,14 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
  	}
  
  	// Ensure we respond to stateInfoSnapshot requests with valid MAC
@@ -3556,7 +3598,7 @@ index daec0aaf0..f6d120244 100644
  	snapshotReq = &receivedMsg{
  		PKIID: pkiIDInOrg1,
  		msg:   sMsg,
-@@ -1280,7 +1281,7 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
+@@ -1351,7 +1352,7 @@ func TestChannelStateInfoSnapshot(t *testing.T) {
  	case msg := <-sentMessages:
  		elements := msg.GetStateSnapshot().Elements
  		assert.Len(t, elements, 1)
@@ -3565,7 +3607,7 @@ index daec0aaf0..f6d120244 100644
  		assert.NoError(t, err)
  		assert.Equal(t, 4, int(sMsg.GetStateInfo().Properties.LedgerHeight))
  	}
-@@ -1327,14 +1328,14 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
+@@ -1398,14 +1399,14 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
  
  	// Check that we only return StateInfo messages of peers with external endpoints
  	// to peers of other orgs
@@ -3582,7 +3624,7 @@ index daec0aaf0..f6d120244 100644
  	snapshotReq := &receivedMsg{
  		PKIID: pkiID3,
  		msg:   sMsg,
-@@ -1350,8 +1351,8 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
+@@ -1421,8 +1422,8 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
  	case msg := <-sentMessages:
  		elements := msg.GetStateSnapshot().Elements
  		assert.Len(t, elements, 2)
@@ -3593,7 +3635,7 @@ index daec0aaf0..f6d120244 100644
  		pkiIDs := [][]byte{m1.GetStateInfo().PkiId, m2.GetStateInfo().PkiId}
  		assert.Contains(t, pkiIDs, []byte(pkiID1))
  		assert.Contains(t, pkiIDs, []byte(pkiID3))
-@@ -1359,14 +1360,14 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
+@@ -1430,14 +1431,14 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
  
  	// Check that we return all StateInfo messages to peers in our organization, regardless
  	// if the peers from foreign organizations have external endpoints or not
@@ -3610,7 +3652,7 @@ index daec0aaf0..f6d120244 100644
  	snapshotReq = &receivedMsg{
  		PKIID: pkiID2,
  		msg:   sMsg,
-@@ -1382,9 +1383,9 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
+@@ -1453,9 +1454,9 @@ func TestInterOrgExternalEndpointDisclosure(t *testing.T) {
  	case msg := <-sentMessages:
  		elements := msg.GetStateSnapshot().Elements
  		assert.Len(t, elements, 3)
@@ -3623,7 +3665,7 @@ index daec0aaf0..f6d120244 100644
  		pkiIDs := [][]byte{m1.GetStateInfo().PkiId, m2.GetStateInfo().PkiId, m3.GetStateInfo().PkiId}
  		assert.Contains(t, pkiIDs, []byte(pkiID1))
  		assert.Contains(t, pkiIDs, []byte(pkiID2))
-@@ -1701,7 +1702,7 @@ func TestChannelGetPeers(t *testing.T) {
+@@ -1772,7 +1773,7 @@ func TestChannelGetPeers(t *testing.T) {
  	assert.Equal(t, pkiIDInOrg1, gc.GetPeers()[0].PKIid)
  
  	// Ensure envelope from GetPeers is valid
@@ -3632,7 +3674,7 @@ index daec0aaf0..f6d120244 100644
  	assert.Equal(t, []byte(pkiIDInOrg1), gMsg.GetStateInfo().PkiId)
  
  	gc.HandleMessage(&receivedMsg{msg: createStateInfoMsg(10, pkiIDInOrg1ButNotEligible, channelA), PKIID: pkiIDInOrg1ButNotEligible})
-@@ -1788,18 +1789,18 @@ func TestChannelPullWithDigestsFilter(t *testing.T) {
+@@ -1857,18 +1858,18 @@ func TestChannelPullWithDigestsFilter(t *testing.T) {
  	t.Parallel()
  	cs := &cryptoService{}
  	cs.On("VerifyBlock", mock.Anything).Return(nil)
@@ -3655,7 +3697,19 @@ index daec0aaf0..f6d120244 100644
  		receivedBlocksChan <- msg
  	})
  	gc := NewGossipChannel(pkiIDInOrg1, orgInChannelA, cs, channelA, adapter, &joinChanMsg{}, disabledMetrics)
-@@ -1895,7 +1896,7 @@ func TestFilterForeignOrgLeadershipMessages(t *testing.T) {
+@@ -1936,9 +1937,9 @@ func TestFilterForeignOrgLeadershipMessages(t *testing.T) {
+ 	gc := NewGossipChannel(pkiIDInOrg1, org1, cs, channelA, adapter, joinMsg, disabledMetrics)
+ 	gc.(*gossipChannel).logger = logger
+ 
+-	leadershipMsg := func(sender common.PKIidType, creator common.PKIidType) proto.ReceivedMessage {
++	leadershipMsg := func(sender common.PKIidType, creator common.PKIidType) protoext.ReceivedMessage {
+ 		return &receivedMsg{PKIID: sender,
+-			msg: &proto.SignedGossipMessage{
++			msg: &protoext.SignedGossipMessage{
+ 				GossipMessage: &proto.GossipMessage{
+ 					Channel: common.ChainID("A"),
+ 					Tag:     proto.GossipMessage_CHAN_AND_ORG,
+@@ -1964,7 +1965,7 @@ func TestFilterForeignOrgLeadershipMessages(t *testing.T) {
  	assertLogged("Received leadership message created by a foreign organization org2")
  }
  
@@ -3664,7 +3718,7 @@ index daec0aaf0..f6d120244 100644
  	msg := &proto.GossipMessage{
  		Nonce:   0,
  		Channel: []byte(channelA),
-@@ -1911,7 +1912,7 @@ func createDataUpdateMsg(nonce uint64, seqs ...uint64) *proto.SignedGossipMessag
+@@ -1980,7 +1981,7 @@ func createDataUpdateMsg(nonce uint64, seqs ...uint64) *proto.SignedGossipMessag
  	for _, seq := range seqs {
  		msg.GetDataUpdate().Data = append(msg.GetDataUpdate().Data, createDataMsg(seq, channelA).Envelope)
  	}
@@ -3673,7 +3727,7 @@ index daec0aaf0..f6d120244 100644
  	return sMsg
  }
  
-@@ -1927,12 +1928,12 @@ func createHelloMsg(PKIID common.PKIidType) *receivedMsg {
+@@ -1996,12 +1997,12 @@ func createHelloMsg(PKIID common.PKIidType) *receivedMsg {
  			},
  		},
  	}
@@ -3689,7 +3743,7 @@ index daec0aaf0..f6d120244 100644
  		Channel: []byte(channel),
  		Nonce:   0,
  		Tag:     proto.GossipMessage_CHAN_AND_ORG,
-@@ -1944,12 +1945,12 @@ func dataMsgOfChannel(seqnum uint64, channel common.ChainID) *proto.SignedGossip
+@@ -2013,12 +2014,12 @@ func dataMsgOfChannel(seqnum uint64, channel common.ChainID) *proto.SignedGossip
  				},
  			},
  		},
@@ -3705,7 +3759,7 @@ index daec0aaf0..f6d120244 100644
  		Tag: proto.GossipMessage_CHAN_OR_ORG,
  		Content: &proto.GossipMessage_StateInfo{
  			StateInfo: &proto.StateInfo{
-@@ -1961,16 +1962,16 @@ func createStateInfoMsg(ledgerHeight int, pkiID common.PKIidType, channel common
+@@ -2030,16 +2031,16 @@ func createStateInfoMsg(ledgerHeight int, pkiID common.PKIidType, channel common
  				},
  			},
  		},
@@ -3725,7 +3779,7 @@ index daec0aaf0..f6d120244 100644
  		Channel: chainID,
  		Tag:     proto.GossipMessage_CHAN_OR_ORG,
  		Nonce:   0,
-@@ -1979,12 +1980,12 @@ func stateInfoSnapshotForChannel(chainID common.ChainID, stateInfoMsgs ...*proto
+@@ -2048,12 +2049,12 @@ func stateInfoSnapshotForChannel(chainID common.ChainID, stateInfoMsgs ...*proto
  				Elements: envelopes,
  			},
  		},
@@ -3741,7 +3795,7 @@ index daec0aaf0..f6d120244 100644
  		Nonce:   0,
  		Tag:     proto.GossipMessage_CHAN_AND_ORG,
  		Channel: []byte(channel),
-@@ -1996,7 +1997,7 @@ func createDataMsg(seqnum uint64, channel common.ChainID) *proto.SignedGossipMes
+@@ -2065,7 +2066,7 @@ func createDataMsg(seqnum uint64, channel common.ChainID) *proto.SignedGossipMes
  				},
  			},
  		},
@@ -3750,7 +3804,7 @@ index daec0aaf0..f6d120244 100644
  	return sMsg
  }
  
-@@ -2009,13 +2010,13 @@ func simulatePullPhaseWithVariableDigest(gc GossipChannel, t *testing.T, wg *syn
+@@ -2078,13 +2079,13 @@ func simulatePullPhaseWithVariableDigest(gc GossipChannel, t *testing.T, wg *syn
  	var sentHello bool
  	var sentReq bool
  	return func(args mock.Arguments) {
@@ -3767,7 +3821,7 @@ index daec0aaf0..f6d120244 100644
  				Tag:     proto.GossipMessage_CHAN_AND_ORG,
  				Channel: []byte(channelA),
  				Content: &proto.GossipMessage_DataDig{
-@@ -2025,14 +2026,14 @@ func simulatePullPhaseWithVariableDigest(gc GossipChannel, t *testing.T, wg *syn
+@@ -2094,14 +2095,14 @@ func simulatePullPhaseWithVariableDigest(gc GossipChannel, t *testing.T, wg *syn
  						Nonce:   msg.GetHello().Nonce,
  					},
  				},
@@ -3871,7 +3925,7 @@ index befe8ebe3..ea6b45dc3 100644
  }
  
 diff --git a/gossip/gossip/gossip.go b/gossip/gossip/gossip.go
-index 4ccc0c4b4..a3e6a04e9 100644
+index 40fb8ce94..99faa378b 100644
 --- a/gossip/gossip/gossip.go
 +++ b/gossip/gossip/gossip.go
 @@ -15,6 +15,7 @@ import (
@@ -3917,7 +3971,7 @@ index 4ccc0c4b4..a3e6a04e9 100644
  }
  
 diff --git a/gossip/gossip/gossip_impl.go b/gossip/gossip/gossip_impl.go
-index a60cee14b..ff0dd1285 100644
+index 05855fb43..b9af7821e 100644
 --- a/gossip/gossip/gossip_impl.go
 +++ b/gossip/gossip/gossip_impl.go
 @@ -27,6 +27,7 @@ import (
@@ -3928,7 +3982,7 @@ index a60cee14b..ff0dd1285 100644
  	"github.com/hyperledger/fabric/gossip/util"
  	proto "github.com/hyperledger/fabric/protos/gossip"
  	"github.com/pkg/errors"
-@@ -147,7 +148,7 @@ func NewGossipService(conf *Config, s *grpc.Server, sa api.SecurityAdvisor,
+@@ -152,7 +153,7 @@ func NewGossipService(conf *Config, s *grpc.Server, sa api.SecurityAdvisor,
  }
  
  func (g *gossipServiceImpl) newStateInfoMsgStore() msgstore.MessageStore {
@@ -3937,7 +3991,7 @@ index a60cee14b..ff0dd1285 100644
  	return msgstore.NewMessageStoreExpirable(pol,
  		msgstore.Noop,
  		g.conf.PublishStateInfoInterval*100,
-@@ -301,14 +302,14 @@ func (g *gossipServiceImpl) start() {
+@@ -306,14 +307,14 @@ func (g *gossipServiceImpl) start() {
  	go g.handlePresumedDead()
  
  	msgSelector := func(msg interface{}) bool {
@@ -3954,7 +4008,7 @@ index a60cee14b..ff0dd1285 100644
  
  		return !(isConn || isEmpty || isPrivateData)
  	}
-@@ -320,7 +321,7 @@ func (g *gossipServiceImpl) start() {
+@@ -325,7 +326,7 @@ func (g *gossipServiceImpl) start() {
  	g.logger.Info("Gossip instance", g.conf.ID, "started")
  }
  
@@ -3963,7 +4017,7 @@ index a60cee14b..ff0dd1285 100644
  	defer g.logger.Debug("Exiting")
  	defer g.stopSignal.Done()
  	for {
-@@ -334,7 +335,7 @@ func (g *gossipServiceImpl) acceptMessages(incMsgs <-chan proto.ReceivedMessage)
+@@ -339,7 +340,7 @@ func (g *gossipServiceImpl) acceptMessages(incMsgs <-chan proto.ReceivedMessage)
  	}
  }
  
@@ -3972,7 +4026,7 @@ index a60cee14b..ff0dd1285 100644
  	if g.toDie() {
  		return
  	}
-@@ -353,11 +354,11 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
+@@ -358,11 +359,11 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
  		return
  	}
  
@@ -3986,7 +4040,7 @@ index a60cee14b..ff0dd1285 100644
  				if g.stateInfoMsgStore.Add(msg) {
  					g.emitter.Add(&emittedGossipMessage{
  						SignedGossipMessage: msg,
-@@ -369,7 +370,7 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
+@@ -374,7 +375,7 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
  				g.logger.Debug("No such channel", msg.Channel, "discarding message", msg)
  			}
  		} else {
@@ -3995,7 +4049,7 @@ index a60cee14b..ff0dd1285 100644
  				if err := g.validateLeadershipMessage(m.GetGossipMessage()); err != nil {
  					g.logger.Warningf("Failed validating LeaderElection message: %+v", errors.WithStack(err))
  					return
-@@ -384,12 +385,12 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
+@@ -389,12 +390,12 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
  		// It's a membership request, check its self information
  		// matches the sender
  		if m.GetGossipMessage().GetMemReq() != nil {
@@ -4010,7 +4064,7 @@ index a60cee14b..ff0dd1285 100644
  				g.logger.Warning("Got membership request with selfInfo that isn't an AliveMessage")
  				return
  			}
-@@ -401,12 +402,12 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
+@@ -406,12 +407,12 @@ func (g *gossipServiceImpl) handleMessage(m proto.ReceivedMessage) {
  		g.forwardDiscoveryMsg(m)
  	}
  
@@ -4025,7 +4079,7 @@ index a60cee14b..ff0dd1285 100644
  	defer func() { // can be closed while shutting down
  		recover()
  	}()
-@@ -416,13 +417,13 @@ func (g *gossipServiceImpl) forwardDiscoveryMsg(msg proto.ReceivedMessage) {
+@@ -421,13 +422,13 @@ func (g *gossipServiceImpl) forwardDiscoveryMsg(msg proto.ReceivedMessage) {
  
  // validateMsg checks the signature of the message if exists,
  // and also checks that the tag matches the message type
@@ -4042,7 +4096,7 @@ index a60cee14b..ff0dd1285 100644
  		if err := g.validateStateInfoMsg(msg.GetGossipMessage()); err != nil {
  			g.logger.Warningf("StateInfo message %v is found invalid: %v", msg, err)
  			return false
-@@ -463,24 +464,24 @@ func (g *gossipServiceImpl) gossipBatch(msgs []*emittedGossipMessage) {
+@@ -468,24 +469,24 @@ func (g *gossipServiceImpl) gossipBatch(msgs []*emittedGossipMessage) {
  	var leadershipMsgs []*emittedGossipMessage
  
  	isABlock := func(o interface{}) bool {
@@ -4072,7 +4126,7 @@ index a60cee14b..ff0dd1285 100644
  	}
  
  	// Gossip blocks
-@@ -521,7 +522,7 @@ func (g *gossipServiceImpl) gossipBatch(msgs []*emittedGossipMessage) {
+@@ -526,7 +527,7 @@ func (g *gossipServiceImpl) gossipBatch(msgs []*emittedGossipMessage) {
  
  	// Finally, gossip the remaining messages
  	for _, msg := range msgs {
@@ -4081,7 +4135,7 @@ index a60cee14b..ff0dd1285 100644
  			g.logger.Error("Unknown message type", msg)
  			continue
  		}
-@@ -534,11 +535,11 @@ func (g *gossipServiceImpl) gossipBatch(msgs []*emittedGossipMessage) {
+@@ -539,11 +540,11 @@ func (g *gossipServiceImpl) gossipBatch(msgs []*emittedGossipMessage) {
  	}
  }
  
@@ -4095,7 +4149,7 @@ index a60cee14b..ff0dd1285 100644
  		if aliveMsgFromDiffOrg && !g.hasExternalEndpoint(peer.PKIID) {
  			continue
  		}
-@@ -580,7 +581,7 @@ func (g *gossipServiceImpl) gossipInChan(messages []*emittedGossipMessage, chanR
+@@ -585,7 +586,7 @@ func (g *gossipServiceImpl) gossipInChan(messages []*emittedGossipMessage, chanR
  		// For leadership messages we will select all peers that pass routing factory - e.g. all peers in channel and org
  		membership := g.disc.GetMembership()
  		var peers2Send []*comm.RemotePeer
@@ -4104,7 +4158,7 @@ index a60cee14b..ff0dd1285 100644
  			peers2Send = filter.SelectPeers(len(membership), membership, chanRoutingFactory(gc))
  		} else {
  			peers2Send = filter.SelectPeers(g.conf.PropagatePeerNum, membership, chanRoutingFactory(gc))
-@@ -611,7 +612,7 @@ func (g *gossipServiceImpl) IdentityInfo() api.PeerIdentitySet {
+@@ -616,7 +617,7 @@ func (g *gossipServiceImpl) IdentityInfo() api.PeerIdentitySet {
  }
  
  // SendByCriteria sends a given message to all peers that match the given SendCriteria
@@ -4113,7 +4167,7 @@ index a60cee14b..ff0dd1285 100644
  	if criteria.MaxPeers == 0 {
  		return nil
  	}
-@@ -657,17 +658,17 @@ func (g *gossipServiceImpl) SendByCriteria(msg *proto.SignedGossipMessage, crite
+@@ -662,17 +663,17 @@ func (g *gossipServiceImpl) SendByCriteria(msg *proto.SignedGossipMessage, crite
  func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
  	// Educate developers to Gossip messages with the right tags.
  	// See IsTagLegal() for wanted behavior.
@@ -4135,7 +4189,7 @@ index a60cee14b..ff0dd1285 100644
  	} else {
  		_, err = sMsg.Sign(func(msg []byte) ([]byte, error) {
  			return g.mcs.Sign(msg)
-@@ -679,13 +680,13 @@ func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
+@@ -684,13 +685,13 @@ func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
  		return
  	}
  
@@ -4151,7 +4205,7 @@ index a60cee14b..ff0dd1285 100644
  			gc.AddToMsgStore(sMsg)
  		}
  	}
-@@ -703,7 +704,7 @@ func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
+@@ -708,7 +709,7 @@ func (g *gossipServiceImpl) Gossip(msg *proto.GossipMessage) {
  
  // Send sends a message to remote peers
  func (g *gossipServiceImpl) Send(msg *proto.GossipMessage, peers ...*comm.RemotePeer) {
@@ -4160,7 +4214,7 @@ index a60cee14b..ff0dd1285 100644
  	if err != nil {
  		g.logger.Warningf("Failed creating SignedGossipMessage: %+v", errors.WithStack(err))
  		return
-@@ -734,7 +735,7 @@ func (g *gossipServiceImpl) SelfMembershipInfo() discovery.NetworkMember {
+@@ -739,7 +740,7 @@ func (g *gossipServiceImpl) SelfMembershipInfo() discovery.NetworkMember {
  }
  
  // SelfChannelInfo returns the peer's latest StateInfo message of a given channel
@@ -4169,7 +4223,7 @@ index a60cee14b..ff0dd1285 100644
  	ch := g.chanState.getGossipChannelByChainID(chain)
  	if ch == nil {
  		return nil
-@@ -801,7 +802,7 @@ func (g *gossipServiceImpl) UpdateChaincodes(chaincodes []*proto.Chaincode, chai
+@@ -806,7 +807,7 @@ func (g *gossipServiceImpl) UpdateChaincodes(chaincodes []*proto.Chaincode, chai
  // If passThrough is false, the messages are processed by the gossip layer beforehand.
  // If passThrough is true, the gossip layer doesn't intervene and the messages
  // can be used to send a reply back to the sender
@@ -4178,7 +4232,7 @@ index a60cee14b..ff0dd1285 100644
  	if passThrough {
  		return nil, g.comm.Accept(acceptor)
  	}
-@@ -809,7 +810,7 @@ func (g *gossipServiceImpl) Accept(acceptor common.MessageAcceptor, passThrough
+@@ -814,7 +815,7 @@ func (g *gossipServiceImpl) Accept(acceptor common.MessageAcceptor, passThrough
  		if o, isGossipMsg := o.(*proto.GossipMessage); isGossipMsg {
  			return acceptor(o)
  		}
@@ -4187,7 +4241,7 @@ index a60cee14b..ff0dd1285 100644
  			sMsg := o
  			return acceptor(sMsg.GossipMessage)
  		}
-@@ -828,7 +829,7 @@ func (g *gossipServiceImpl) Accept(acceptor common.MessageAcceptor, passThrough
+@@ -833,7 +834,7 @@ func (g *gossipServiceImpl) Accept(acceptor common.MessageAcceptor, passThrough
  				if m == nil {
  					return
  				}
@@ -4196,7 +4250,7 @@ index a60cee14b..ff0dd1285 100644
  			}
  		}
  	}()
-@@ -836,7 +837,7 @@ func (g *gossipServiceImpl) Accept(acceptor common.MessageAcceptor, passThrough
+@@ -841,7 +842,7 @@ func (g *gossipServiceImpl) Accept(acceptor common.MessageAcceptor, passThrough
  }
  
  func selectOnlyDiscoveryMessages(m interface{}) bool {
@@ -4205,7 +4259,7 @@ index a60cee14b..ff0dd1285 100644
  	if !isGossipMsg {
  		return false
  	}
-@@ -853,7 +854,7 @@ func (g *gossipServiceImpl) newDiscoveryAdapter() *discoveryAdapter {
+@@ -858,7 +859,7 @@ func (g *gossipServiceImpl) newDiscoveryAdapter() *discoveryAdapter {
  	return &discoveryAdapter{
  		c:        g.comm,
  		stopping: int32(0),
@@ -4214,7 +4268,7 @@ index a60cee14b..ff0dd1285 100644
  			if g.conf.PropagateIterations == 0 {
  				return
  			}
-@@ -864,7 +865,7 @@ func (g *gossipServiceImpl) newDiscoveryAdapter() *discoveryAdapter {
+@@ -869,7 +870,7 @@ func (g *gossipServiceImpl) newDiscoveryAdapter() *discoveryAdapter {
  				},
  			})
  		},
@@ -4223,7 +4277,7 @@ index a60cee14b..ff0dd1285 100644
  			if g.conf.PropagateIterations == 0 {
  				return
  			}
-@@ -873,7 +874,7 @@ func (g *gossipServiceImpl) newDiscoveryAdapter() *discoveryAdapter {
+@@ -878,7 +879,7 @@ func (g *gossipServiceImpl) newDiscoveryAdapter() *discoveryAdapter {
  				filter:              message.GetConnectionInfo().ID.IsNotSameFilter,
  			})
  		},
@@ -4232,7 +4286,7 @@ index a60cee14b..ff0dd1285 100644
  		presumedDead:     g.presumedDead,
  		disclosurePolicy: g.disclosurePolicy,
  	}
-@@ -885,9 +886,9 @@ type discoveryAdapter struct {
+@@ -890,9 +891,9 @@ type discoveryAdapter struct {
  	stopping         int32
  	c                comm.Comm
  	presumedDead     chan common.PKIidType
@@ -4245,7 +4299,7 @@ index a60cee14b..ff0dd1285 100644
  	disclosurePolicy discovery.DisclosurePolicy
  }
  
-@@ -900,7 +901,7 @@ func (da *discoveryAdapter) toDie() bool {
+@@ -905,7 +906,7 @@ func (da *discoveryAdapter) toDie() bool {
  	return atomic.LoadInt32(&da.stopping) == int32(1)
  }
  
@@ -4254,7 +4308,7 @@ index a60cee14b..ff0dd1285 100644
  	if da.toDie() {
  		return
  	}
-@@ -908,7 +909,7 @@ func (da *discoveryAdapter) Gossip(msg *proto.SignedGossipMessage) {
+@@ -913,7 +914,7 @@ func (da *discoveryAdapter) Gossip(msg *proto.SignedGossipMessage) {
  	da.gossipFunc(msg)
  }
  
@@ -4263,7 +4317,7 @@ index a60cee14b..ff0dd1285 100644
  	if da.toDie() {
  		return
  	}
-@@ -916,14 +917,14 @@ func (da *discoveryAdapter) Forward(msg proto.ReceivedMessage) {
+@@ -921,14 +922,14 @@ func (da *discoveryAdapter) Forward(msg proto.ReceivedMessage) {
  	da.forwardFunc(msg)
  }
  
@@ -4280,7 +4334,7 @@ index a60cee14b..ff0dd1285 100644
  		if err != nil {
  			// Shouldn't happen
  			panic(errors.Wrapf(err, "Tried to send a membership request with a malformed AliveMessage"))
-@@ -946,9 +947,7 @@ func (da *discoveryAdapter) SendToPeer(peer *discovery.NetworkMember, msg *proto
+@@ -951,9 +952,7 @@ func (da *discoveryAdapter) SendToPeer(peer *discovery.NetworkMember, msg *proto
  			MemReq: memReq,
  		}
  		// Update the envelope of the outer message, no need to sign (point2point)
@@ -4291,7 +4345,7 @@ index a60cee14b..ff0dd1285 100644
  
  		if err != nil {
  			return
-@@ -964,7 +963,7 @@ func (da *discoveryAdapter) Ping(peer *discovery.NetworkMember) bool {
+@@ -969,7 +968,7 @@ func (da *discoveryAdapter) Ping(peer *discovery.NetworkMember) bool {
  	return err == nil
  }
  
@@ -4300,7 +4354,7 @@ index a60cee14b..ff0dd1285 100644
  	return da.incChan
  }
  
-@@ -1003,7 +1002,7 @@ func (g *gossipServiceImpl) newDiscoverySecurityAdapter() *discoverySecurityAdap
+@@ -1008,7 +1007,7 @@ func (g *gossipServiceImpl) newDiscoverySecurityAdapter() *discoverySecurityAdap
  }
  
  // validateAliveMsg validates that an Alive message is authentic
@@ -4309,7 +4363,7 @@ index a60cee14b..ff0dd1285 100644
  	am := m.GetAliveMsg()
  	if am == nil || am.Membership == nil || am.Membership.PkiId == nil || !m.IsSigned() {
  		sa.logger.Warning("Invalid alive message:", m)
-@@ -1041,10 +1040,10 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
+@@ -1046,10 +1045,10 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
  	signer := func(msg []byte) ([]byte, error) {
  		return sa.mcs.Sign(msg)
  	}
@@ -4322,7 +4376,7 @@ index a60cee14b..ff0dd1285 100644
  		GossipMessage: m,
  	}
  	e, err := sMsg.Sign(signer)
-@@ -1056,7 +1055,7 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
+@@ -1061,7 +1060,7 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
  	if internalEndpoint == "" {
  		return e
  	}
@@ -4331,7 +4385,7 @@ index a60cee14b..ff0dd1285 100644
  		Content: &proto.Secret_InternalEndpoint{
  			InternalEndpoint: internalEndpoint,
  		},
-@@ -1064,7 +1063,7 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
+@@ -1069,7 +1068,7 @@ func (sa *discoverySecurityAdapter) SignMessage(m *proto.GossipMessage, internal
  	return e
  }
  
@@ -4340,7 +4394,7 @@ index a60cee14b..ff0dd1285 100644
  	am := m.GetAliveMsg()
  	// At this point we got the certificate of the peer, proceed to verifying the AliveMessage
  	verifier := func(peerIdentity []byte, signature, message []byte) error {
-@@ -1095,14 +1094,14 @@ func (g *gossipServiceImpl) createCertStorePuller() pull.Mediator {
+@@ -1100,14 +1099,14 @@ func (g *gossipServiceImpl) createCertStorePuller() pull.Mediator {
  			ResponseWaitTime: g.conf.ResponseWaitTime,
  		},
  	}
@@ -4357,7 +4411,7 @@ index a60cee14b..ff0dd1285 100644
  		idMsg := msg.GetPeerIdentity()
  		if idMsg == nil || idMsg.Cert == nil || idMsg.PkiId == nil {
  			g.logger.Warning("Invalid PeerIdentity:", idMsg)
-@@ -1124,7 +1123,7 @@ func (g *gossipServiceImpl) createCertStorePuller() pull.Mediator {
+@@ -1129,7 +1128,7 @@ func (g *gossipServiceImpl) createCertStorePuller() pull.Mediator {
  	return pull.NewPullMediator(conf, adapter)
  }
  
@@ -4366,7 +4420,7 @@ index a60cee14b..ff0dd1285 100644
  	peersOrg := g.secAdvisor.OrgByPeerIdentity(msg.GetConnectionInfo().Identity)
  	if len(peersOrg) == 0 {
  		g.logger.Warning("Failed determining organization of", msg.GetConnectionInfo())
-@@ -1210,7 +1209,7 @@ func (g *gossipServiceImpl) getOrgOfPeer(PKIID common.PKIidType) api.OrgIdentity
+@@ -1215,7 +1214,7 @@ func (g *gossipServiceImpl) getOrgOfPeer(PKIID common.PKIidType) api.OrgIdentity
  	return g.secAdvisor.OrgByPeerIdentity(cert)
  }
  
@@ -4375,7 +4429,7 @@ index a60cee14b..ff0dd1285 100644
  	pkiID := msg.GetLeadershipMsg().PkiId
  	if len(pkiID) == 0 {
  		return errors.New("Empty PKI-ID")
-@@ -1224,7 +1223,7 @@ func (g *gossipServiceImpl) validateLeadershipMessage(msg *proto.SignedGossipMes
+@@ -1229,7 +1228,7 @@ func (g *gossipServiceImpl) validateLeadershipMessage(msg *proto.SignedGossipMes
  	})
  }
  
@@ -4384,7 +4438,7 @@ index a60cee14b..ff0dd1285 100644
  	verifier := func(identity []byte, signature, message []byte) error {
  		pkiID := g.idMapper.GetPKIidOfCert(api.PeerIdentityType(identity))
  		if pkiID == nil {
-@@ -1244,15 +1243,15 @@ func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember
+@@ -1249,15 +1248,15 @@ func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember
  
  	if len(remotePeerOrg) == 0 {
  		g.logger.Warning("Cannot determine organization of", remotePeer)
@@ -4404,7 +4458,7 @@ index a60cee14b..ff0dd1285 100644
  				g.logger.Panic("Programming error, this should be used only on alive messages")
  			}
  			org := g.getOrgOfPeer(msg.GetAliveMsg().Membership.PkiId)
-@@ -1274,7 +1273,7 @@ func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember
+@@ -1279,7 +1278,7 @@ func (g *gossipServiceImpl) disclosurePolicy(remotePeer *discovery.NetworkMember
  			// Pass the alive message only if the alive message is in the same org as the remote peer
  			// or the message has an external endpoint, and the remote peer also has one
  			return bytes.Equal(org, remotePeerOrg) || msg.GetAliveMsg().Membership.Endpoint != "" && remotePeer.Endpoint != ""
@@ -4414,7 +4468,7 @@ index a60cee14b..ff0dd1285 100644
  			if !bytes.Equal(g.selfOrg, remotePeerOrg) {
  				envelope.SecretEnvelope = nil
 diff --git a/gossip/gossip/gossip_test.go b/gossip/gossip/gossip_test.go
-index f2a622939..cdc4c3ae9 100644
+index 04e189ea8..398f0b978 100644
 --- a/gossip/gossip/gossip_test.go
 +++ b/gossip/gossip/gossip_test.go
 @@ -31,6 +31,7 @@ import (
@@ -4425,7 +4479,7 @@ index f2a622939..cdc4c3ae9 100644
  	"github.com/hyperledger/fabric/gossip/util"
  	proto "github.com/hyperledger/fabric/protos/gossip"
  	"github.com/stretchr/testify/assert"
-@@ -90,7 +91,7 @@ func acceptData(m interface{}) bool {
+@@ -91,7 +92,7 @@ func acceptData(m interface{}) bool {
  
  func acceptLeadershp(message interface{}) bool {
  	validMsg := message.(*proto.GossipMessage).Tag == proto.GossipMessage_CHAN_AND_ORG &&
@@ -4434,7 +4488,7 @@ index f2a622939..cdc4c3ae9 100644
  
  	return validMsg
  }
-@@ -676,7 +677,7 @@ func TestNoMessagesSelfLoop(t *testing.T) {
+@@ -681,7 +682,7 @@ func TestNoMessagesSelfLoop(t *testing.T) {
  	// Wait until both peers get connected
  	waitUntilOrFail(t, checkPeersMembership(t, []Gossip{peer}, 1))
  	_, commCh := boot.Accept(func(msg interface{}) bool {
@@ -4443,7 +4497,7 @@ index f2a622939..cdc4c3ae9 100644
  	}, true)
  
  	wg := sync.WaitGroup{}
-@@ -684,13 +685,13 @@ func TestNoMessagesSelfLoop(t *testing.T) {
+@@ -689,13 +690,13 @@ func TestNoMessagesSelfLoop(t *testing.T) {
  
  	// Make sure sending peer is not getting his own
  	// message back
@@ -4459,7 +4513,7 @@ index f2a622939..cdc4c3ae9 100644
  						t.Fatal("Should not receive data message back, got", msg)
  					}
  				}
-@@ -986,27 +987,27 @@ func TestMembershipRequestSpoofing(t *testing.T) {
+@@ -991,27 +992,27 @@ func TestMembershipRequestSpoofing(t *testing.T) {
  	waitUntilOrFail(t, checkPeersMembership(t, []Gossip{g2, g3}, 1))
  	// Obtain an alive message from p3
  	_, aliveMsgChan := g2.Accept(func(o interface{}) bool {
@@ -4493,7 +4547,7 @@ index f2a622939..cdc4c3ae9 100644
  			Tag:   proto.GossipMessage_EMPTY,
  			Nonce: uint64(0),
  			Content: &proto.GossipMessage_MemReq{
-@@ -1015,7 +1016,7 @@ func TestMembershipRequestSpoofing(t *testing.T) {
+@@ -1020,7 +1021,7 @@ func TestMembershipRequestSpoofing(t *testing.T) {
  					Known:           [][]byte{},
  				},
  			},
@@ -4502,7 +4556,7 @@ index f2a622939..cdc4c3ae9 100644
  		return sMsg
  	}
  	spoofedMemReq := memRequestSpoofFactory(aliveMsg.GetSourceEnvelope())
-@@ -1278,7 +1279,7 @@ func TestSendByCriteria(t *testing.T) {
+@@ -1283,7 +1284,7 @@ func TestSendByCriteria(t *testing.T) {
  		p.UpdateLedgerHeight(1, common.ChainID("A"))
  	}
  	defer stopPeers(peers)
@@ -4511,7 +4565,7 @@ index f2a622939..cdc4c3ae9 100644
  
  	// We send without specifying maximum peers,
  	// which sets it to the zero value, and
-@@ -1335,12 +1336,12 @@ func TestSendByCriteria(t *testing.T) {
+@@ -1340,12 +1341,12 @@ func TestSendByCriteria(t *testing.T) {
  	// We retry the test above, but this time the peers acknowledge
  	// Peers now ack
  	acceptDataMsgs := func(m interface{}) bool {
@@ -4526,7 +4580,7 @@ index f2a622939..cdc4c3ae9 100644
  		msg := <-c
  		msg.Ack(nil)
  	}
-@@ -1352,7 +1353,7 @@ func TestSendByCriteria(t *testing.T) {
+@@ -1357,7 +1358,7 @@ func TestSendByCriteria(t *testing.T) {
  	assert.NoError(t, err)
  
  	// We send to 3 peers, but 2 out of 3 peers acknowledge with an error
@@ -4535,7 +4589,7 @@ index f2a622939..cdc4c3ae9 100644
  		msg := <-c
  		msg.Ack(fmt.Errorf("uh oh"))
  	}
-@@ -1366,7 +1367,7 @@ func TestSendByCriteria(t *testing.T) {
+@@ -1371,7 +1372,7 @@ func TestSendByCriteria(t *testing.T) {
  	// We try to send to either g2 or g3, but neither would ack us, so we would fail.
  	// However - what we actually check in this test is that we send to peers according to the
  	// filter passed in the criteria
@@ -4544,7 +4598,7 @@ index f2a622939..cdc4c3ae9 100644
  		msg := <-c
  		if msg == nil {
  			return
-@@ -1392,7 +1393,7 @@ func TestSendByCriteria(t *testing.T) {
+@@ -1397,7 +1398,7 @@ func TestSendByCriteria(t *testing.T) {
  	// this property is respected - and only 1 peer receives a message, and not both
  	criteria.MaxPeers = 1
  	// invoke f() in case message has been received
@@ -4554,7 +4608,7 @@ index f2a622939..cdc4c3ae9 100644
  		case msg := <-c:
  			if msg == nil {
 diff --git a/gossip/gossip/orgs_test.go b/gossip/gossip/orgs_test.go
-index c48a85c5d..a0d636be0 100644
+index 0252e15a2..0990cbb22 100644
 --- a/gossip/gossip/orgs_test.go
 +++ b/gossip/gossip/orgs_test.go
 @@ -23,6 +23,7 @@ import (
@@ -4565,7 +4619,7 @@ index c48a85c5d..a0d636be0 100644
  	"github.com/hyperledger/fabric/gossip/util"
  	proto "github.com/hyperledger/fabric/protos/gossip"
  	"github.com/stretchr/testify/assert"
-@@ -397,9 +398,9 @@ func TestConfidentiality(t *testing.T) {
+@@ -399,9 +400,9 @@ func TestConfidentiality(t *testing.T) {
  	var wg sync.WaitGroup
  
  	msgSelector := func(o interface{}) bool {
@@ -4578,7 +4632,7 @@ index c48a85c5d..a0d636be0 100644
  	}
  	// Listen to all peers membership messages and forward them to the inspection channel
  	// where they will be inspected, and the test would fail if a confidentiality violation is found
-@@ -408,7 +409,7 @@ func TestConfidentiality(t *testing.T) {
+@@ -410,7 +411,7 @@ func TestConfidentiality(t *testing.T) {
  		_, msgs := p.Accept(msgSelector, true)
  		peerNetMember := p.(*gossipGRPC).gossipServiceImpl.selfNetworkMember()
  		targetORg := string(cs.OrgByPeerIdentity(api.PeerIdentityType(peerNetMember.InternalEndpoint)))
@@ -4587,7 +4641,7 @@ index c48a85c5d..a0d636be0 100644
  			defer wg.Done()
  			for receivedMsg := range msgs {
  				m := &msg{
-@@ -517,16 +518,16 @@ func expectedMembershipSize(peersInOrg, externalEndpointsInOrg int, org string,
+@@ -519,16 +520,16 @@ func expectedMembershipSize(peersInOrg, externalEndpointsInOrg int, org string,
  }
  
  func extractOrgsFromMsg(msg *proto.GossipMessage, sec api.SecurityAdvisor) []string {
@@ -4608,7 +4662,7 @@ index c48a85c5d..a0d636be0 100644
  				digests = util.BytesToStrings(msg.GetDataDig().Digests)
  			} else {
  				digests = util.BytesToStrings(msg.GetDataReq().Digests)
-@@ -538,9 +539,9 @@ func extractOrgsFromMsg(msg *proto.GossipMessage, sec api.SecurityAdvisor) []str
+@@ -540,9 +541,9 @@ func extractOrgsFromMsg(msg *proto.GossipMessage, sec api.SecurityAdvisor) []str
  			}
  		}
  
@@ -4620,7 +4674,7 @@ index c48a85c5d..a0d636be0 100644
  				id := string(gMsg.GetPeerIdentity().Cert)
  				org := sec.OrgByPeerIdentity(api.PeerIdentityType(id))
  				orgs[string(org)] = struct{}{}
-@@ -552,7 +553,7 @@ func extractOrgsFromMsg(msg *proto.GossipMessage, sec api.SecurityAdvisor) []str
+@@ -554,7 +555,7 @@ func extractOrgsFromMsg(msg *proto.GossipMessage, sec api.SecurityAdvisor) []str
  		alive := msg.GetMemRes().Alive
  		dead := msg.GetMemRes().Dead
  		for _, envp := range append(alive, dead...) {
@@ -4629,7 +4683,7 @@ index c48a85c5d..a0d636be0 100644
  			orgs[string(sec.OrgByPeerIdentity(api.PeerIdentityType(msg.GetAliveMsg().Membership.PkiId)))] = struct{}{}
  		}
  	}
-@@ -571,7 +572,7 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
+@@ -573,7 +574,7 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
  		if msg.src == msg.dst {
  			continue
  		}
@@ -4638,7 +4692,7 @@ index c48a85c5d..a0d636be0 100644
  			inspectStateInfoMsg(t, msg, peersWithExternalEndpoints)
  			continue
  		}
-@@ -594,12 +595,12 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
+@@ -596,12 +597,12 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
  
  		// If this is an identity snapshot, make sure that only identities of peers
  		// with external endpoints pass between the organizations.
@@ -4654,7 +4708,7 @@ index c48a85c5d..a0d636be0 100644
  			pkiID := identityMsg.GetPeerIdentity().PkiId
  			_, hasExternalEndpoint := peersWithExternalEndpoints[string(pkiID)]
  			assert.True(t, hasExternalEndpoint,
-@@ -609,7 +610,7 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
+@@ -611,7 +612,7 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
  }
  
  func inspectStateInfoMsg(t *testing.T, m *msg, peersWithExternalEndpoints map[string]struct{}) {
@@ -4663,7 +4717,7 @@ index c48a85c5d..a0d636be0 100644
  		pkiID := m.GetStateInfo().PkiId
  		_, hasExternalEndpoint := peersWithExternalEndpoints[string(pkiID)]
  		assert.True(t, hasExternalEndpoint, "peer %s has no external endpoint but crossed an org", string(pkiID))
-@@ -617,7 +618,7 @@ func inspectStateInfoMsg(t *testing.T, m *msg, peersWithExternalEndpoints map[st
+@@ -619,7 +620,7 @@ func inspectStateInfoMsg(t *testing.T, m *msg, peersWithExternalEndpoints map[st
  	}
  
  	for _, envp := range m.GetStateSnapshot().Elements {
@@ -7173,7 +7227,7 @@ index 000000000..cf51a51d4
 +	assert.Equal(t, output, protoext.RemovePvtDataResponseToString(res))
 +}
 diff --git a/gossip/service/join_test.go b/gossip/service/join_test.go
-index 3fdcaec0d..b688d16a0 100644
+index 88772d7fb..cd5100bf7 100644
 --- a/gossip/service/join_test.go
 +++ b/gossip/service/join_test.go
 @@ -18,6 +18,7 @@ import (
@@ -7394,7 +7448,7 @@ index e0d476ad6..97d2094c0 100644
  	// Send signal that response for given nonce has been received
  	response := msg.GetGossipMessage().GetStateResponse()
 diff --git a/gossip/state/state_test.go b/gossip/state/state_test.go
-index f7268df64..364f41ca3 100644
+index f17d2e082..39b1415ec 100644
 --- a/gossip/state/state_test.go
 +++ b/gossip/state/state_test.go
 @@ -40,6 +40,7 @@ import (
@@ -7405,7 +7459,7 @@ index f7268df64..364f41ca3 100644
  	"github.com/hyperledger/fabric/gossip/state/mocks"
  	gossiputil "github.com/hyperledger/fabric/gossip/util"
  	gutil "github.com/hyperledger/fabric/gossip/util"
-@@ -486,12 +487,12 @@ func TestNilDirectMsg(t *testing.T) {
+@@ -487,12 +488,12 @@ func TestNilDirectMsg(t *testing.T) {
  	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
  	g := &mocks.GossipMock{}
  	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7420,7 +7474,7 @@ index f7268df64..364f41ca3 100644
  	req := &comm.ReceivedMessageImpl{
  		SignedGossipMessage: sMsg,
  	}
-@@ -504,7 +505,7 @@ func TestNilAddPayload(t *testing.T) {
+@@ -505,7 +506,7 @@ func TestNilAddPayload(t *testing.T) {
  	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
  	g := &mocks.GossipMock{}
  	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7429,7 +7483,7 @@ index f7268df64..364f41ca3 100644
  	p := newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
  	defer p.shutdown()
  	err := p.s.AddPayload(nil)
-@@ -518,7 +519,7 @@ func TestAddPayloadLedgerUnavailable(t *testing.T) {
+@@ -519,7 +520,7 @@ func TestAddPayloadLedgerUnavailable(t *testing.T) {
  	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
  	g := &mocks.GossipMock{}
  	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7438,7 +7492,7 @@ index f7268df64..364f41ca3 100644
  	p := newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
  	defer p.shutdown()
  	// Simulate a problem in the ledger
-@@ -550,7 +551,7 @@ func TestLargeBlockGap(t *testing.T) {
+@@ -551,7 +552,7 @@ func TestLargeBlockGap(t *testing.T) {
  	mc.On("CommitWithPvtData", mock.Anything).Run(func(arg mock.Arguments) {
  		blocksPassedToLedger <- arg.Get(0).(*pcomm.Block).Header.Number
  	})
@@ -7447,7 +7501,7 @@ index f7268df64..364f41ca3 100644
  	mc.On("LedgerHeight", mock.Anything).Return(uint64(1), nil)
  	mc.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
  	g := &mocks.GossipMock{}
-@@ -588,7 +589,7 @@ func TestLargeBlockGap(t *testing.T) {
+@@ -589,7 +590,7 @@ func TestLargeBlockGap(t *testing.T) {
  			res.GetStateResponse().Payloads = append(res.GetStateResponse().Payloads, payload)
  		}
  		// Finally, send the response down the channel the peer expects to receive it from
@@ -7456,7 +7510,7 @@ index f7268df64..364f41ca3 100644
  		msgsFromPeer <- &comm.ReceivedMessageImpl{
  			SignedGossipMessage: sMsg,
  		}
-@@ -626,7 +627,7 @@ func TestOverPopulation(t *testing.T) {
+@@ -627,7 +628,7 @@ func TestOverPopulation(t *testing.T) {
  	mc.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
  	g := &mocks.GossipMock{}
  	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7465,7 +7519,7 @@ index f7268df64..364f41ca3 100644
  	p := newPeerNode(0, mc, noopPeerIdentityAcceptor)
  	defer p.shutdown()
  
-@@ -690,7 +691,7 @@ func TestBlockingEnqueue(t *testing.T) {
+@@ -691,7 +692,7 @@ func TestBlockingEnqueue(t *testing.T) {
  	mc.On("DoesPvtDataInfoExistInLedger", mock.Anything).Return(false, nil)
  	g := &mocks.GossipMock{}
  	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7474,7 +7528,7 @@ index f7268df64..364f41ca3 100644
  	p := newPeerNode(0, mc, noopPeerIdentityAcceptor)
  	defer p.shutdown()
  
-@@ -791,7 +792,7 @@ func TestHaltChainProcessing(t *testing.T) {
+@@ -792,7 +793,7 @@ func TestHaltChainProcessing(t *testing.T) {
  	gossipMsgs := make(chan *proto.GossipMessage)
  
  	g.On("Accept", mock.Anything, false).Return(gossipChannel(gossipMsgs), nil)
@@ -7483,7 +7537,7 @@ index f7268df64..364f41ca3 100644
  	g.On("PeersOfChannel", mock.Anything).Return([]discovery.NetworkMember{})
  
  	v := &validator.MockValidator{}
-@@ -812,7 +813,7 @@ func TestFailures(t *testing.T) {
+@@ -813,7 +814,7 @@ func TestFailures(t *testing.T) {
  	mc.On("LedgerHeight", mock.Anything).Return(uint64(0), nil)
  	g := &mocks.GossipMock{}
  	g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7492,7 +7546,7 @@ index f7268df64..364f41ca3 100644
  	g.On("PeersOfChannel", mock.Anything).Return([]discovery.NetworkMember{})
  	assert.Panics(t, func() {
  		newPeerNodeWithGossip(0, mc, noopPeerIdentityAcceptor, g)
-@@ -876,7 +877,7 @@ func TestGossipReception(t *testing.T) {
+@@ -877,7 +878,7 @@ func TestGossipReception(t *testing.T) {
  	g.On("Accept", mock.Anything, false).Return(rmc, nil).Run(func(_ mock.Arguments) {
  		signalChan <- struct{}{}
  	})
@@ -7501,7 +7555,7 @@ index f7268df64..364f41ca3 100644
  	g.On("PeersOfChannel", mock.Anything).Return([]discovery.NetworkMember{})
  	mc := &mockCommitter{Mock: &mock.Mock{}}
  	receivedChan := make(chan struct{})
-@@ -919,7 +920,7 @@ func TestLedgerHeightFromProperties(t *testing.T) {
+@@ -920,7 +921,7 @@ func TestLedgerHeightFromProperties(t *testing.T) {
  			finChan <- struct{}{}
  		})
  		g.On("Accept", mock.Anything, false).Return(make(<-chan *proto.GossipMessage), nil)
@@ -7510,7 +7564,7 @@ index f7268df64..364f41ca3 100644
  		defaultPeer := discovery.NetworkMember{
  			InternalEndpoint: "b",
  			PKIid:            common.PKIidType("b"),
-@@ -1170,7 +1171,7 @@ func TestGossipStateProvider_TestStateMessages(t *testing.T) {
+@@ -1171,7 +1172,7 @@ func TestGossipStateProvider_TestStateMessages(t *testing.T) {
  	defer peer.shutdown()
  
  	naiveStateMsgPredicate := func(message interface{}) bool {
@@ -7519,7 +7573,7 @@ index f7268df64..364f41ca3 100644
  	}
  
  	_, bootCh := bootPeer.g.Accept(naiveStateMsgPredicate, true)
-@@ -1255,7 +1256,7 @@ func TestNewGossipStateProvider_BatchingOfStateRequest(t *testing.T) {
+@@ -1256,7 +1257,7 @@ func TestNewGossipStateProvider_BatchingOfStateRequest(t *testing.T) {
  	defer peer.shutdown()
  
  	naiveStateMsgPredicate := func(message interface{}) bool {
@@ -7528,7 +7582,7 @@ index f7268df64..364f41ca3 100644
  	}
  	_, peerCh := peer.g.Accept(naiveStateMsgPredicate, true)
  
-@@ -1369,9 +1370,9 @@ func (mock *receivedMessageMock) Respond(msg *proto.GossipMessage) {
+@@ -1370,9 +1371,9 @@ func (mock *receivedMessageMock) Respond(msg *proto.GossipMessage) {
  	mock.Called(msg)
  }
  
@@ -7540,7 +7594,7 @@ index f7268df64..364f41ca3 100644
  }
  
  func (mock *receivedMessageMock) GetSourceEnvelope() *proto.Envelope {
-@@ -1379,9 +1380,9 @@ func (mock *receivedMessageMock) GetSourceEnvelope() *proto.Envelope {
+@@ -1380,9 +1381,9 @@ func (mock *receivedMessageMock) GetSourceEnvelope() *proto.Envelope {
  	return args.Get(0).(*proto.Envelope)
  }
  
@@ -7552,7 +7606,7 @@ index f7268df64..364f41ca3 100644
  }
  
  type testData struct {
-@@ -1398,7 +1399,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
+@@ -1399,7 +1400,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
  	coord1 := new(coordinatorMock)
  
  	gossipChannel := make(chan *proto.GossipMessage)
@@ -7561,7 +7615,7 @@ index f7268df64..364f41ca3 100644
  
  	gossipChannelFactory := func(ch chan *proto.GossipMessage) <-chan *proto.GossipMessage {
  		return ch
-@@ -1505,15 +1506,15 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
+@@ -1506,15 +1507,15 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
  		}},
  	}
  
@@ -7581,7 +7635,7 @@ index f7268df64..364f41ca3 100644
  	defer close(responseChannel)
  
  	requestMsg.On("Respond", mock.Anything).Run(func(args mock.Arguments) {
-@@ -1522,7 +1523,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
+@@ -1523,7 +1524,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
  		// Wrap it up into received response
  		receivedMsg := new(receivedMessageMock)
  		// Create sign response
@@ -7590,7 +7644,7 @@ index f7268df64..364f41ca3 100644
  		// Mock to respond
  		receivedMsg.On("GetGossipMessage").Return(msg)
  		// Send response
-@@ -1578,7 +1579,7 @@ type testPeer struct {
+@@ -1579,7 +1580,7 @@ type testPeer struct {
  	*mocks.GossipMock
  	id            string
  	gossipChannel chan *proto.GossipMessage
@@ -7599,7 +7653,7 @@ index f7268df64..364f41ca3 100644
  	coord         *coordinatorMock
  }
  
-@@ -1586,7 +1587,7 @@ func (t testPeer) Gossip() <-chan *proto.GossipMessage {
+@@ -1587,7 +1588,7 @@ func (t testPeer) Gossip() <-chan *proto.GossipMessage {
  	return t.gossipChannel
  }
  
@@ -7608,7 +7662,7 @@ index f7268df64..364f41ca3 100644
  	return t.commChannel
  }
  
-@@ -1594,14 +1595,14 @@ var peers = map[string]testPeer{
+@@ -1595,14 +1596,14 @@ var peers = map[string]testPeer{
  	"peer1": {
  		id:            "peer1",
  		gossipChannel: make(chan *proto.GossipMessage),
@@ -7625,7 +7679,7 @@ index f7268df64..364f41ca3 100644
  		GossipMock:    &mocks.GossipMock{},
  		coord:         new(coordinatorMock),
  	},
-@@ -1627,7 +1628,7 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
+@@ -1628,7 +1629,7 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
  			Return(nil, peer.Comm()).
  			Once().
  			On("Accept", mock.Anything, true).
@@ -7634,7 +7688,7 @@ index f7268df64..364f41ca3 100644
  
  		peer.On("UpdateChannelMetadata", mock.Anything, mock.Anything)
  		peer.coord.On("Close")
-@@ -1695,16 +1696,16 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
+@@ -1696,16 +1697,16 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
  	peers["peer2"].On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
  		request := args.Get(0).(*proto.GossipMessage)
  		requestMsg := new(receivedMessageMock)
@@ -8796,5 +8850,5 @@ index 9c4047385..2ab1b2cab 100644
  			Content: ct,
  		}
 -- 
-2.21.0 (Apple Git-122.2)
+2.21.1 (Apple Git-122.3)
 

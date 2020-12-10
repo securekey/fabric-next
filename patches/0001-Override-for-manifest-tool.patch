@@ -1,0 +1,32 @@
+From e5980308849d0b80f0c2f1d7e62c5dba41b1eb90 Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Fri, 11 Dec 2020 10:40:38 -0500
+Subject: [PATCH] Added override for gotools.manifest-tool
+
+go get doesn't work anymore since the master branch removed main.go. Checking out v1.0.3 instead.
+---
+ gotools.mk | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/gotools.mk b/gotools.mk
+index d0108aff7..948fac34a 100644
+--- a/gotools.mk
++++ b/gotools.mk
+@@ -45,6 +45,14 @@ gotool.golint:
+ 	@echo "Building golang.org/x/lint/golint -> golint"
+ 	GOBIN=$(abspath $(GOTOOLS_BINDIR)) go install ./vendor/golang.org/x/lint/golint
+ 
++# Special override for manifest-tool since master doesn't have go files
++gotool.manifest-tool: MANIFEST_TOOL_VERSION ?= "v1.0.3"
++gotool.manifest-tool:
++	@echo "Building github.com/estesp/manifest-tool $(MANIFEST_TOOL_VERSION) -> manifest-tool"
++	@git clone https://github.com/estesp/manifest-tool.git $(abspath $(GOTOOLS_GOPATH))/src/github.com/estesp/manifest-tool
++	@git -C $(abspath $(GOTOOLS_GOPATH))/src/github.com/estesp/manifest-tool checkout -q $(MANIFEST_TOOL_VERSION)
++	@GOPATH=$(abspath $(GOTOOLS_GOPATH)) GOBIN=$(abspath $(GOTOOLS_BINDIR)) go install github.com/estesp/manifest-tool
++
+ # Lock to a versioned dep
+ gotool.dep: DEP_VERSION ?= "v0.5.1"
+ gotool.dep:
+-- 
+2.21.1 (Apple Git-122.3)
+

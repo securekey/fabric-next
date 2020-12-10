@@ -1,0 +1,114 @@
+From 6572f085b84bfd1159317582863f3c0f3968bc6f Mon Sep 17 00:00:00 2001
+From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Date: Fri, 7 Aug 2020 09:02:04 -0400
+Subject: [PATCH] Add standby role to peer
+
+Added a role 'standby' which, if set, prevents the peer from publishing it's channel membership. This allows the peer to be invisible to clients so that it doesn't get selected for endorsements, but at the same time allow it to commit blocks.
+
+Signed-off-by: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
+Change-Id: I9f52c61300d6dba203853b78efdc72de1eaefcb2
+---
+ discovery/support/gossip/support.go     | 9 +++++++++
+ extensions/roles/ledger_roles_config.go | 7 +++++++
+ gossip/gossip/channel/channel.go        | 6 ++++++
+ gotools.mk                              | 2 +-
+ 4 files changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/discovery/support/gossip/support.go b/discovery/support/gossip/support.go
+index 2b436ed27..8f12236f4 100644
+--- a/discovery/support/gossip/support.go
++++ b/discovery/support/gossip/support.go
+@@ -7,12 +7,16 @@ SPDX-License-Identifier: Apache-2.0
+ package gossip
+
+ import (
++	"github.com/hyperledger/fabric/common/flogging"
++	"github.com/hyperledger/fabric/extensions/roles"
+ 	"github.com/hyperledger/fabric/gossip/common"
+ 	"github.com/hyperledger/fabric/gossip/discovery"
+ 	gossip2 "github.com/hyperledger/fabric/gossip/gossip"
+ 	"github.com/hyperledger/fabric/protos/gossip"
+ )
+
++var	logger = flogging.MustGetLogger("discovery")
++
+ // DiscoverySupport implements support that is used for service discovery
+ // that is obtained from gossip
+ type DiscoverySupport struct {
+@@ -32,6 +36,11 @@ func (s *DiscoverySupport) ChannelExists(channel string) bool {
+ // PeersOfChannel returns the NetworkMembers considered alive
+ // and also subscribed to the channel given
+ func (s *DiscoverySupport) PeersOfChannel(chain common.ChainID) discovery.Members {
++	if roles.IsStandby() {
++		logger.Debugf("[%s] Not including myself in PeersOfChannel since I'm a standby peer", chain)
++		return s.Gossip.PeersOfChannel(chain)
++	}
++
+ 	msg := s.SelfChannelInfo(chain)
+ 	if msg == nil {
+ 		return nil
+diff --git a/extensions/roles/ledger_roles_config.go b/extensions/roles/ledger_roles_config.go
+index 1acf7c6e6..57f4348f1 100644
+--- a/extensions/roles/ledger_roles_config.go
++++ b/extensions/roles/ledger_roles_config.go
+@@ -8,6 +8,8 @@ package roles
+
+ import "github.com/trustbloc/fabric-peer-ext/pkg/roles"
+
++const Standby roles.Role = "standby"
++
+ // IsCommitter returns true if the peer is a committer, otherwise the peer does not commit to the DB
+ func IsCommitter() bool {
+ 	return roles.IsCommitter()
+@@ -23,6 +25,11 @@ func IsValidator() bool {
+ 	return roles.IsValidator()
+ }
+
++// IsStandby returns true if the peer has the 'standby' role
++func IsStandby() bool {
++	return roles.HasRole(Standby)
++}
++
+ // RolesAsString returns the roles for the peer
+ // nolint - this is an exported function (Renaming function name will break in other projects)
+ func RolesAsString() []string {
+diff --git a/gossip/gossip/channel/channel.go b/gossip/gossip/channel/channel.go
+index 822e030ea..758600512 100644
+--- a/gossip/gossip/channel/channel.go
++++ b/gossip/gossip/channel/channel.go
+@@ -16,6 +16,7 @@ import (
+ 	"time"
+
+ 	common_utils "github.com/hyperledger/fabric/common/util"
++	"github.com/hyperledger/fabric/extensions/roles"
+ 	"github.com/hyperledger/fabric/gossip/api"
+ 	"github.com/hyperledger/fabric/gossip/comm"
+ 	"github.com/hyperledger/fabric/gossip/common"
+@@ -413,6 +414,11 @@ func (gc *gossipChannel) publishStateInfo() {
+ }
+
+ func (gc *gossipChannel) publishSignedStateInfoMessage() {
++	if roles.IsStandby() {
++		gc.logger.Debugf("[%s] Not publishing my state since I'm a standby peer", gc.chainID)
++		return
++	}
++
+ 	stateInfoMsg, err := gc.setupSignedStateInfoMessage()
+ 	if err != nil {
+ 		gc.logger.Errorf("Failed creating signed state info message: %v", err)
+diff --git a/gotools.mk b/gotools.mk
+index c5f8d42bd..d0108aff7 100644
+--- a/gotools.mk
++++ b/gotools.mk
+@@ -3,7 +3,7 @@
+ #
+ # SPDX-License-Identifier: Apache-2.0
+
+-GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell mockery manifest-tool
++GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell manifest-tool
+ BUILD_DIR ?= .build
+ GOTOOLS_GOPATH ?= $(BUILD_DIR)/gotools
+ GOTOOLS_BINDIR ?= $(GOPATH)/bin
+-- 
+2.21.1 (Apple Git-122.3)
+
