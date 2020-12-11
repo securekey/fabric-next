@@ -44,6 +44,14 @@ gotool.golint:
 	@echo "Building golang.org/x/lint/golint -> golint"
 	GOBIN=$(abspath $(GOTOOLS_BINDIR)) go install ./vendor/golang.org/x/lint/golint
 
+# Special override for manifest-tool since master doesn't have go files
+gotool.manifest-tool: MANIFEST_TOOL_VERSION ?= "v1.0.3"
+gotool.manifest-tool:
+	@echo "Building github.com/estesp/manifest-tool $(MANIFEST_TOOL_VERSION) -> manifest-tool"
+	@git clone https://github.com/estesp/manifest-tool.git $(abspath $(GOTOOLS_GOPATH))/src/github.com/estesp/manifest-tool
+	@git -C $(abspath $(GOTOOLS_GOPATH))/src/github.com/estesp/manifest-tool checkout -q $(MANIFEST_TOOL_VERSION)
+	@GOPATH=$(abspath $(GOTOOLS_GOPATH)) GOBIN=$(abspath $(GOTOOLS_BINDIR)) go install github.com/estesp/manifest-tool
+
 # Lock to a versioned dep
 gotool.dep: DEP_VERSION ?= "v0.5.1"
 gotool.dep:
