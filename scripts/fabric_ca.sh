@@ -28,11 +28,14 @@ cd $GOPATH/src/github.com/hyperledger/fabric-ca
 git config user.name "jenkins"
 git config user.email jenkins@jenkins.com
 
-#apply patch for GREP11
+# apply patch for GREP11
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch -3
 
-#apply patch for Thales PKCS11
+# apply patch for Thales PKCS11
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/PKCS11-Thales.patch
+# apply patch for VMEENG-2572, requested by Security Team for Banks to be able
+# to list all identities
+git am $MY_PATH/../patches/0001-VMEENG-2572-patch-how-identity-list-works-for-banks.patch
 
 # fetching and update vendored packages for grep11 patch
 rm -rf vendor/google.golang.org/grpc
