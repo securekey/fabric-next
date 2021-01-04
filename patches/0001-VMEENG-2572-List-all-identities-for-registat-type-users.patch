@@ -1,0 +1,44 @@
+diff --git a/lib/dbaccessor.go b/lib/dbaccessor.go
+index 8d7913af..10fb0676 100644
+--- a/lib/dbaccessor.go
++++ b/lib/dbaccessor.go
+@@ -591,7 +591,7 @@ func (d *Accessor) GetFilteredUsers(affiliation, types string) (*sqlx.Rows, erro
+        subAffiliation := affiliation + ".%"
+        if util.ListContains(types, "*") { // If type is '*', allowed to get back of all types for requested affiliation
+                query := "SELECT * FROM users WHERE ((affiliation = ?) OR (affiliation LIKE ?))"
+-               rows, err := d.db.Queryx("GetFilteredUsers", d.db.Rebind(query))
++               rows, err := d.db.Queryx("GetFilteredUsers", d.db.Rebind(query), affiliation, subAffiliation)
+                if err != nil {
+                        return nil, errors.Wrapf(err, "Failed to execute query '%s' for affiliation '%s' and types '%s'", query, affiliation, types)
+                }
+diff --git a/lib/serveridentities.go b/lib/serveridentities.go
+index 4b0ff090..49c31852 100644
+--- a/lib/serveridentities.go
++++ b/lib/serveridentities.go
+@@ -9,6 +9,7 @@ package lib
+ import (
+        "encoding/json"
+        "fmt"
++       "github.com/jmoiron/sqlx"
+        "net/http"
+        "os"
+        "strconv"
+@@ -166,7 +167,17 @@ func getIDs(ctx *serverRequestContextImpl, caller user.User, caname string) erro
+        // Getting all identities of appropriate affiliation and type
+        callerAff := user.GetAffiliation(caller)
+        registry := ctx.ca.registry
+-       rows, err := registry.GetFilteredUsers(callerAff, callerTypes)
++
++       // VMEENG-2572: If the caller's type is 'registrar' then print out all
++       // of the identities, not just the ones matching the registrar roles.
++       var rows *sqlx.Rows
++       if caller.GetType() == "registrar" {
++               log.Debug("Caller's type was 'registrar', not filtering by type ...")
++               rows, err = registry.GetFilteredUsers(callerAff, "*")
++       } else {
++               rows, err = registry.GetFilteredUsers(callerAff, callerTypes)
++       }
++
+        if err != nil {
+                return caerrors.NewHTTPErr(500, caerrors.ErrGettingUser, "Failed to get users by affiliation and type: %s", err)
+        }
