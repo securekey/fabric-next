@@ -1,4 +1,4 @@
-From e8c8b229c7770f8d942a4a5ac571297e92308fe6 Mon Sep 17 00:00:00 2001
+From 30c61b0f73835cf63e0fd093a06acac71d078c1a Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Tue, 17 Dec 2019 10:51:10 -0500
 Subject: [PATCH] gossip protos extensions refactoring
@@ -10,8 +10,8 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  discovery/client/client_test.go               |   7 +-
  discovery/client/selection.go                 |   4 +-
  discovery/client/selection_test.go            |  13 +-
- discovery/cmd/endorsers.go                    |  11 +-
- discovery/cmd/peers_test.go                   |  11 +-
+ discovery/cmd/endorsers.go                    |   9 +-
+ discovery/cmd/peers_test.go                   |   9 +-
  discovery/service_test.go                     |   5 +-
  discovery/support/gossip/support_test.go      |   3 +-
  discovery/support/mocks/gossip.go             |   2 +-
@@ -26,7 +26,8 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  gossip/comm/mock/mock_comm_test.go            |  13 +-
  gossip/comm/msg.go                            |  11 +-
  gossip/discovery/discovery.go                 |  15 +-
- gossip/discovery/discovery_impl.go            |  93 +-
+ gossip/discovery/discovery_impl.go            |  91 +-
+ gossip/discovery/discovery_impl.go.rej        |  10 +
  gossip/discovery/discovery_test.go            | 157 ++--
  gossip/election/adapter.go                    |   5 +-
  gossip/election/adapter_test.go               |   7 +-
@@ -62,7 +63,8 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  protos/gossip/message.pb.go                   |  50 +-
  protos/gossip/message_ext.go                  |  25 +
  protos/gossip/message_test.go                 |   4 +-
- 57 files changed, 2143 insertions(+), 1740 deletions(-)
+ 58 files changed, 2150 insertions(+), 1737 deletions(-)
+ create mode 100644 gossip/discovery/discovery_impl.go.rej
  rename {protos/gossip => gossip/protoext}/compatibility_test.go (73%)
  rename {protos/gossip => gossip/protoext}/extensions.go (67%)
  create mode 100644 gossip/protoext/extensions_test.go
@@ -272,15 +274,13 @@ index b07edaba4..4aa951ac0 100644
  }
  
 diff --git a/discovery/cmd/endorsers.go b/discovery/cmd/endorsers.go
-index cbb073710..2734f2369 100644
+index 100d042b3..2734f2369 100644
 --- a/discovery/cmd/endorsers.go
 +++ b/discovery/cmd/endorsers.go
-@@ -15,7 +15,8 @@ import (
- 
+@@ -16,6 +16,7 @@ import (
  	"github.com/golang/protobuf/proto"
  	"github.com/hyperledger/fabric/cmd/common"
--	"github.com/hyperledger/fabric/discovery/client"
-+	discovery "github.com/hyperledger/fabric/discovery/client"
+ 	discovery "github.com/hyperledger/fabric/discovery/client"
 +	"github.com/hyperledger/fabric/gossip/protoext"
  	. "github.com/hyperledger/fabric/protos/discovery"
  	"github.com/hyperledger/fabric/protos/gossip"
@@ -314,15 +314,12 @@ index cbb073710..2734f2369 100644
  	}
  	if stateInfoMsg.GetStateInfo().Properties == nil {
 diff --git a/discovery/cmd/peers_test.go b/discovery/cmd/peers_test.go
-index 6da3a12d5..917676724 100644
+index 4d9cc0328..917676724 100644
 --- a/discovery/cmd/peers_test.go
 +++ b/discovery/cmd/peers_test.go
-@@ -14,8 +14,9 @@ import (
- 
- 	"github.com/hyperledger/fabric/cmd/common"
+@@ -16,6 +16,7 @@ import (
  	. "github.com/hyperledger/fabric/discovery/client"
--	"github.com/hyperledger/fabric/discovery/cmd"
-+	discovery "github.com/hyperledger/fabric/discovery/cmd"
+ 	discovery "github.com/hyperledger/fabric/discovery/cmd"
  	"github.com/hyperledger/fabric/discovery/cmd/mocks"
 +	"github.com/hyperledger/fabric/gossip/protoext"
  	"github.com/hyperledger/fabric/protos/gossip"
@@ -1328,7 +1325,7 @@ index 9e977e6c8..c1eaf4793 100644
  	// IdentitySwitch returns a read-only channel about identity change events
  	IdentitySwitch() <-chan common.PKIidType
 diff --git a/gossip/discovery/discovery_impl.go b/gossip/discovery/discovery_impl.go
-index 163d4cec5..a15c6110f 100644
+index 8a520b97b..729b8259c 100644
 --- a/gossip/discovery/discovery_impl.go
 +++ b/gossip/discovery/discovery_impl.go
 @@ -18,6 +18,7 @@ import (
@@ -1618,16 +1615,7 @@ index 163d4cec5..a15c6110f 100644
  		}
  
  		// update member's data
-@@ -870,7 +871,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
- 
- 			if am := d.aliveMembership.MsgByID(m.GetAliveMsg().Membership.PkiId); am == nil {
- 				d.logger.Debug("Adding", am, "to aliveMembership")
--				msg := &proto.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
-+				msg := &protoext.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
- 				d.aliveMembership.Put(m.GetAliveMsg().Membership.PkiId, msg)
- 			} else {
- 				d.logger.Debug("Replacing", am, "in aliveMembership")
-@@ -881,7 +882,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
+@@ -877,7 +878,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
  	}
  }
  
@@ -1636,7 +1624,7 @@ index 163d4cec5..a15c6110f 100644
  	d.logger.Debugf("Entering: learnedMembers={%v}, deadMembers={%v}", aliveMembers, deadMembers)
  	defer d.logger.Debugf("Exiting")
  
-@@ -898,7 +899,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
+@@ -894,7 +895,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
  			seqNum:   am.GetAliveMsg().Timestamp.SeqNum,
  		}
  
@@ -1645,7 +1633,7 @@ index 163d4cec5..a15c6110f 100644
  		d.logger.Debugf("Learned about a new alive member: %v", am)
  	}
  
-@@ -912,12 +913,12 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
+@@ -908,12 +909,12 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
  			seqNum:   dm.GetAliveMsg().Timestamp.SeqNum,
  		}
  
@@ -1660,7 +1648,7 @@ index 163d4cec5..a15c6110f 100644
  		for _, m := range a {
  			member := m.GetAliveMsg()
  			if member == nil {
-@@ -927,7 +928,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
+@@ -923,7 +924,7 @@ func (d *gossipDiscoveryImpl) learnNewMembers(aliveMembers []*proto.SignedGossip
  
  			var internalEndpoint string
  			if m.Envelope.SecretEnvelope != nil {
@@ -1669,7 +1657,7 @@ index 163d4cec5..a15c6110f 100644
  			}
  
  			if prevNetMem := d.id2Member[string(member.Membership.PkiId)]; prevNetMem != nil {
-@@ -986,7 +987,7 @@ func (d *gossipDiscoveryImpl) UpdateEndpoint(endpoint string) {
+@@ -982,7 +983,7 @@ func (d *gossipDiscoveryImpl) UpdateEndpoint(endpoint string) {
  func (d *gossipDiscoveryImpl) Self() NetworkMember {
  	var env *proto.Envelope
  	msg, _ := d.aliveMsgAndInternalEndpoint()
@@ -1678,7 +1666,7 @@ index 163d4cec5..a15c6110f 100644
  	if err != nil {
  		d.logger.Warning("Failed creating SignedGossipMessage:", err)
  	} else {
-@@ -1042,20 +1043,20 @@ type aliveMsgStore struct {
+@@ -1038,20 +1039,20 @@ type aliveMsgStore struct {
  }
  
  func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
@@ -1703,7 +1691,7 @@ index 163d4cec5..a15c6110f 100644
  		if util.Contains(endpoint, d.bootstrapPeers) || util.Contains(internalEndpoint, d.bootstrapPeers) ||
  			d.anchorPeerTracker.IsAnchorPeer(endpoint) || d.anchorPeerTracker.IsAnchorPeer(internalEndpoint) {
  			// Never remove a bootstrap peer or an anchor peer
-@@ -1077,14 +1078,14 @@ func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
+@@ -1073,14 +1074,14 @@ func newAliveMsgStore(d *gossipDiscoveryImpl) *aliveMsgStore {
  }
  
  func (s *aliveMsgStore) Add(msg interface{}) bool {
@@ -1720,6 +1708,22 @@ index 163d4cec5..a15c6110f 100644
  		panic(fmt.Sprint("Msg ", msg, " is not AliveMsg"))
  	}
  	return s.MessageStore.CheckValid(msg)
+diff --git a/gossip/discovery/discovery_impl.go.rej b/gossip/discovery/discovery_impl.go.rej
+new file mode 100644
+index 000000000..2165ec41c
+--- /dev/null
++++ b/gossip/discovery/discovery_impl.go.rej
+@@ -0,0 +1,10 @@
++diff a/gossip/discovery/discovery_impl.go b/gossip/discovery/discovery_impl.go	(rejected hunks)
++@@ -870,7 +871,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
++ 
++ 			if am := d.aliveMembership.MsgByID(m.GetAliveMsg().Membership.PkiId); am == nil {
++ 				d.logger.Debug("Adding", am, "to aliveMembership")
++-				msg := &proto.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
+++				msg := &protoext.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
++ 				d.aliveMembership.Put(m.GetAliveMsg().Membership.PkiId, msg)
++ 			} else {
++ 				d.logger.Debug("Replacing", am, "in aliveMembership")
 diff --git a/gossip/discovery/discovery_test.go b/gossip/discovery/discovery_test.go
 index 0f5da9470..a0f3f3715 100644
 --- a/gossip/discovery/discovery_test.go
