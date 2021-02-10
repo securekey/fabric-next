@@ -1,4 +1,4 @@
-From 6770ebf6ab83d3b2fd9653767e8da41d0f33b5e7 Mon Sep 17 00:00:00 2001
+From 5af1159aec883148244847fb31c809708b9591eb Mon Sep 17 00:00:00 2001
 From: Firas Qutishat <firas.qutishat@securekey.com>
 Date: Tue, 25 Feb 2020 18:00:40 -0500
 Subject: [PATCH] Backport Transient Data
@@ -81,6 +81,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  extensions/testutil/ext_test_env.go           |  25 +
  extensions/transientstore/store.go            |  17 +
  extensions/transientstore/store_test.go       |  17 +
+ gossip/discovery/discovery_impl.go.rej        |  10 -
  gossip/privdata/coordinator.go                |  16 +-
  gossip/privdata/coordinator_test.go           |  16 +
  gossip/privdata/dissemination.go              |  33 +
@@ -95,7 +96,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  peer/chaincode/common.go                      |  58 +-
  peer/chaincode/transientcollconfig_test.go    |  64 ++
  peer/node/start.go                            |  15 +-
- protos/common/collection.pb.go                | 147 ++-
+ protos/common/collection.pb.go                | 145 ++-
  protos/common/collection.proto                |  19 +-
  protos/gossip/message.pb.go                   | 738 ++++++++++----
  protos/gossip/message.proto                   |  45 +
@@ -286,7 +287,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  vendor/google.golang.org/grpc/stream.go       | 518 +++++++++-
  vendor/google.golang.org/grpc/tap/tap.go      |   2 +-
  vendor/google.golang.org/grpc/version.go      |   2 +-
- 281 files changed, 27549 insertions(+), 1889 deletions(-)
+ 282 files changed, 27548 insertions(+), 1898 deletions(-)
  create mode 100644 core/ledger/kvledger/idstore/idstore.go
  create mode 100644 core/ledger/kvledger/idstore/readme.md
  create mode 100644 core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/collection_val_ext.go
@@ -334,6 +335,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  create mode 100644 extensions/testutil/ext_test_env.go
  create mode 100644 extensions/transientstore/store.go
  create mode 100644 extensions/transientstore/store_test.go
+ delete mode 100644 gossip/discovery/discovery_impl.go.rej
  create mode 100644 gossip/privdata/dissemination.go
  create mode 100644 peer/chaincode/transientcollconfig_test.go
  create mode 100644 protoutil/blockutils.go
@@ -478,7 +480,7 @@ Signed-off-by: Firas Qutishat <firas.qutishat@securekey.com>
  delete mode 100644 vendor/google.golang.org/grpc/status/go17.go
 
 diff --git a/Gopkg.lock b/Gopkg.lock
-index d86fb59e9..c06d248f8 100644
+index 81419a3ab..6f5313e75 100644
 --- a/Gopkg.lock
 +++ b/Gopkg.lock
 @@ -93,6 +93,21 @@
@@ -592,7 +594,7 @@ index d86fb59e9..c06d248f8 100644
  [[projects]]
    digest = "1:3f3f2b36f76d1187ccf6640dd5bdbce43fd3c1a2cc0d747abc1e0de374d13e63"
    name = "github.com/willf/bitset"
-@@ -892,24 +961,29 @@
+@@ -896,24 +965,29 @@
    revision = "c7e5094acea1ca1b899e2259d80a6b0f882f81f8"
  
  [[projects]]
@@ -623,7 +625,7 @@ index d86fb59e9..c06d248f8 100644
      "internal/transport",
      "keepalive",
      "metadata",
-@@ -923,8 +997,8 @@
+@@ -927,8 +1001,8 @@
      "tap",
    ]
    pruneopts = "NUT"
@@ -634,7 +636,7 @@ index d86fb59e9..c06d248f8 100644
  
  [[projects]]
    digest = "1:22b2dee6f30bc8601f087449a2a819df8388e54e9547349c658f14d8f8c590f2"
-@@ -979,6 +1053,7 @@
+@@ -983,6 +1057,7 @@
      "github.com/hyperledger/fabric-amcl/amcl/FP256BN",
      "github.com/hyperledger/fabric-lib-go/healthz",
      "github.com/kr/pretty",
@@ -642,7 +644,7 @@ index d86fb59e9..c06d248f8 100644
      "github.com/miekg/pkcs11",
      "github.com/mitchellh/mapstructure",
      "github.com/onsi/ginkgo",
-@@ -1008,6 +1083,29 @@
+@@ -1012,6 +1087,29 @@
      "github.com/tedsuo/ifrit",
      "github.com/tedsuo/ifrit/ginkgomon",
      "github.com/tedsuo/ifrit/grouper",
@@ -673,7 +675,7 @@ index d86fb59e9..c06d248f8 100644
      "go.etcd.io/etcd/etcdserver/api/snap",
      "go.etcd.io/etcd/pkg/fileutil",
 diff --git a/Gopkg.toml b/Gopkg.toml
-index 15318acba..4e83368b4 100644
+index 44af45dba..081bddaf6 100644
 --- a/Gopkg.toml
 +++ b/Gopkg.toml
 @@ -15,6 +15,14 @@ noverify = [
@@ -710,7 +712,7 @@ index 15318acba..4e83368b4 100644
  [[constraint]]
    name = "gopkg.in/alecthomas/kingpin.v2"
 diff --git a/core/chaincode/exectransaction_test.go b/core/chaincode/exectransaction_test.go
-index 81b3fd1c9..5ae11dc6e 100644
+index 9dff616d1..96cc883e3 100644
 --- a/core/chaincode/exectransaction_test.go
 +++ b/core/chaincode/exectransaction_test.go
 @@ -198,7 +198,7 @@ func finitPeer(lis net.Listener, chainIDs ...string) {
@@ -954,10 +956,10 @@ index d0b1b4e30..6da679fc2 100644
  		}
  		for _, ns := range pvtDataProto.NsPvtRwset {
 diff --git a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util.go b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util.go
-index 0851b1ab4..c48fb86bd 100644
+index b84738c79..35c96f5d7 100644
 --- a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util.go
 +++ b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util.go
-@@ -128,7 +128,7 @@ func (txRwSet *TxRwSet) FromProtoBytes(protoBytes []byte) error {
+@@ -130,7 +130,7 @@ func (txRwSet *TxRwSet) FromProtoBytes(protoBytes []byte) error {
  func (txPvtRwSet *TxPvtRwSet) ToProtoBytes() ([]byte, error) {
  	var protoMsg *rwset.TxPvtReadWriteSet
  	var err error
@@ -966,7 +968,7 @@ index 0851b1ab4..c48fb86bd 100644
  		return nil, err
  	}
  	return proto.Marshal(protoMsg)
-@@ -249,7 +249,8 @@ func (txRwSet *TxRwSet) NumCollections() int {
+@@ -251,7 +251,8 @@ func (txRwSet *TxRwSet) NumCollections() int {
  // functions for private read-write set
  ///////////////////////////////////////////////////////////////////////////////
  
@@ -977,10 +979,10 @@ index 0851b1ab4..c48fb86bd 100644
  	var nsProtoMsg *rwset.NsPvtReadWriteSet
  	var err error
 diff --git a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util_test.go b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util_test.go
-index c7baf57da..2a5922ac1 100644
+index 8a934785b..af2ea4490 100644
 --- a/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util_test.go
 +++ b/core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util_test.go
-@@ -193,7 +193,7 @@ func sampleCollHashedRwSet(collectionName string) *CollHashedRwSet {
+@@ -195,7 +195,7 @@ func sampleCollHashedRwSet(collectionName string) *CollHashedRwSet {
  
  func TestTxPvtRwSetConversion(t *testing.T) {
  	txPvtRwSet := sampleTxPvtRwSet()
@@ -1217,10 +1219,10 @@ index b684c23e8..29b333558 100644
  
  // GetPrivateDataRangeScanIterator implements method in interface `ledger.QueryExecutor`
 diff --git a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-index c4cb4aa5e..844a59011 100644
+index dce688734..405e76487 100644
 --- a/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
 +++ b/core/ledger/kvledger/txmgmt/txmgr/lockbasedtxmgr/lockbased_txmgr.go
-@@ -22,6 +22,7 @@ import (
+@@ -23,6 +23,7 @@ import (
  	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/version"
  	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
  	"github.com/hyperledger/fabric/core/ledger/util"
@@ -1228,7 +1230,7 @@ index c4cb4aa5e..844a59011 100644
  	"github.com/hyperledger/fabric/protos/common"
  	"github.com/hyperledger/fabric/protos/ledger/rwset"
  	"github.com/hyperledger/fabric/protos/ledger/rwset/kvrwset"
-@@ -41,6 +42,8 @@ type LockBasedTxMgr struct {
+@@ -42,6 +43,8 @@ type LockBasedTxMgr struct {
  	commitRWLock    sync.RWMutex
  	oldBlockCommit  sync.Mutex
  	current         *current
@@ -1237,7 +1239,7 @@ index c4cb4aa5e..844a59011 100644
  }
  
  type current struct {
-@@ -59,7 +62,8 @@ func (c *current) maxTxNumber() uint64 {
+@@ -60,7 +63,8 @@ func (c *current) maxTxNumber() uint64 {
  
  // NewLockBasedTxMgr constructs a new instance of NewLockBasedTxMgr
  func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListeners []ledger.StateListener,
@@ -1247,7 +1249,7 @@ index c4cb4aa5e..844a59011 100644
  	db.Open()
  	txmgr := &LockBasedTxMgr{
  		ledgerid:       ledgerid,
-@@ -67,6 +71,8 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
+@@ -68,6 +72,8 @@ func NewLockBasedTxMgr(ledgerid string, db privacyenabledstate.DB, stateListener
  		stateListeners: stateListeners,
  		ccInfoProvider: ccInfoProvider,
  	}
@@ -1256,7 +1258,7 @@ index c4cb4aa5e..844a59011 100644
  	pvtstatePurgeMgr, err := pvtstatepurgemgmt.InstantiatePurgeMgr(ledgerid, db, btlPolicy, bookkeepingProvider)
  	if err != nil {
  		return nil, err
-@@ -113,7 +119,7 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
+@@ -114,7 +120,7 @@ func (txmgr *LockBasedTxMgr) ValidateAndPrepare(blockAndPvtdata *ledger.BlockAnd
  	// interleave and nullify the optimization provided by the bulk read API.
  	// Once the ledger cache (FAB-103) is introduced and existing
  	// LoadCommittedVersions() is refactored to return a map, we can allow
@@ -1265,7 +1267,7 @@ index c4cb4aa5e..844a59011 100644
  	logger.Debugf("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
  	txmgr.pvtdataPurgeMgr.WaitForPrepareToFinish()
  	txmgr.oldBlockCommit.Lock()
-@@ -159,7 +165,7 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
+@@ -160,7 +166,7 @@ func (txmgr *LockBasedTxMgr) RemoveStaleAndCommitPvtDataOfOldBlocks(blocksPvtDat
  	// interleave and nullify the optimization provided by the bulk read API.
  	// Once the ledger cache (FAB-103) is introduced and existing
  	// LoadCommittedVersions() is refactored to return a map, we can allow
@@ -1274,7 +1276,7 @@ index c4cb4aa5e..844a59011 100644
  	// the lock on oldBlockCommit as it is also used to avoid interleaving
  	// between Commit() and execution of this function for the correctness.
  	logger.Debug("Waiting for purge mgr to finish the background job of computing expirying keys for the block")
-@@ -486,7 +492,7 @@ func (txmgr *LockBasedTxMgr) Commit() error {
+@@ -487,7 +493,7 @@ func (txmgr *LockBasedTxMgr) Commit() error {
  	if err := txmgr.pvtdataPurgeMgr.BlockCommitDone(); err != nil {
  		return err
  	}
@@ -1453,7 +1455,7 @@ index afd476352..b9a36089d 100644
  type ErrOutOfRange struct {
  	msg string
 diff --git a/core/ledger/util/couchdb/couchdb.go b/core/ledger/util/couchdb/couchdb.go
-index e12239e21..7a896258f 100644
+index bced98e67..f5046d9bd 100644
 --- a/core/ledger/util/couchdb/couchdb.go
 +++ b/core/ledger/util/couchdb/couchdb.go
 @@ -116,6 +116,40 @@ type QueryResult struct {
@@ -1858,7 +1860,7 @@ index dfd5695ce..5c44e9f32 100644
  	)
  	chains.list = make(map[string]*chain)
 diff --git a/core/peer/peer.go b/core/peer/peer.go
-index 4d8659147..147843313 100644
+index 296b2d9f8..aa8802176 100644
 --- a/core/peer/peer.go
 +++ b/core/peer/peer.go
 @@ -33,6 +33,9 @@ import (
@@ -4225,6 +4227,22 @@ index 000000000..be4683fcc
 +func TestNewStoreProvider(t *testing.T) {
 +	require.Empty(t, NewStoreProvider())
 +}
+diff --git a/gossip/discovery/discovery_impl.go.rej b/gossip/discovery/discovery_impl.go.rej
+deleted file mode 100644
+index 2165ec41c..000000000
+--- a/gossip/discovery/discovery_impl.go.rej
++++ /dev/null
+@@ -1,10 +0,0 @@
+-diff a/gossip/discovery/discovery_impl.go b/gossip/discovery/discovery_impl.go	(rejected hunks)
+-@@ -870,7 +871,7 @@ func (d *gossipDiscoveryImpl) learnExistingMembers(aliveArr []*proto.SignedGossi
+- 
+- 			if am := d.aliveMembership.MsgByID(m.GetAliveMsg().Membership.PkiId); am == nil {
+- 				d.logger.Debug("Adding", am, "to aliveMembership")
+--				msg := &proto.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
+-+				msg := &protoext.SignedGossipMessage{GossipMessage: m.GossipMessage, Envelope: am.Envelope}
+- 				d.aliveMembership.Put(m.GetAliveMsg().Membership.PkiId, msg)
+- 			} else {
+- 				d.logger.Debug("Replacing", am, "in aliveMembership")
 diff --git a/gossip/privdata/coordinator.go b/gossip/privdata/coordinator.go
 index fe840a2a8..0eeacefa2 100644
 --- a/gossip/privdata/coordinator.go
@@ -4473,7 +4491,7 @@ index d1dd3e225..c56ff4b92 100644
  }
  
 diff --git a/gossip/service/gossip_service.go b/gossip/service/gossip_service.go
-index eba46bd38..845f86f2e 100644
+index 63381a5d3..29cb0622c 100644
 --- a/gossip/service/gossip_service.go
 +++ b/gossip/service/gossip_service.go
 @@ -31,6 +31,10 @@ import (
@@ -4487,7 +4505,7 @@ index eba46bd38..845f86f2e 100644
  	"google.golang.org/grpc"
  )
  
-@@ -260,6 +264,10 @@ type Support struct {
+@@ -291,6 +295,10 @@ type Support struct {
  	Cs                   privdata.CollectionStore
  	IdDeserializeFactory privdata2.IdentityDeserializerFactory
  	CapabilityProvider   privdata2.CapabilityProvider
@@ -4498,7 +4516,7 @@ index eba46bd38..845f86f2e 100644
  }
  
  // DataStoreSupport aggregates interfaces capable
-@@ -303,6 +311,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
+@@ -334,6 +342,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  		CollectionStore:    support.Cs,
  		Validator:          support.Validator,
  		TransientStore:     support.Store,
@@ -4506,7 +4524,7 @@ index eba46bd38..845f86f2e 100644
  		Committer:          support.Committer,
  		Fetcher:            fetcher,
  		CapabilityProvider: support.CapabilityProvider,
-@@ -328,7 +337,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
+@@ -359,7 +368,7 @@ func (g *gossipServiceImpl) InitializeChannel(chainID string, oac OrdererAddress
  	g.privateHandlers[chainID].reconciler.Start()
  
  	g.chains[chainID] = state.NewGossipStateProvider(chainID, servicesAdapter, coordinator,
@@ -4516,7 +4534,7 @@ index eba46bd38..845f86f2e 100644
  		var err error
  		g.deliveryService[chainID], err = g.deliveryFactory.Service(g, oac, g.mcs)
 diff --git a/gossip/service/gossip_service_test.go b/gossip/service/gossip_service_test.go
-index 52f0c4a09..773532ae4 100644
+index 7a525b450..b51cd0bcd 100644
 --- a/gossip/service/gossip_service_test.go
 +++ b/gossip/service/gossip_service_test.go
 @@ -22,6 +22,7 @@ import (
@@ -4664,10 +4682,10 @@ index 97d2094c0..2edcce2ab 100644
  
  }
 diff --git a/gossip/state/state_test.go b/gossip/state/state_test.go
-index 364f41ca3..9ac19d693 100644
+index 39b1415ec..d12f1047e 100644
 --- a/gossip/state/state_test.go
 +++ b/gossip/state/state_test.go
-@@ -435,8 +435,7 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
+@@ -436,8 +436,7 @@ func newPeerNodeWithGossipWithValidatorWithMetrics(id int, committer committer.C
  		Committer:          committer,
  		CapabilityProvider: capabilityProvider,
  	}, pcomm.SignedData{}, gossipMetrics.PrivdataMetrics, coordConfig)
@@ -4677,7 +4695,7 @@ index 364f41ca3..9ac19d693 100644
  	if sp == nil {
  		gRPCServer.Stop()
  		return nil, port
-@@ -1488,7 +1487,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
+@@ -1489,7 +1488,7 @@ func TestTransferOfPrivateRWSet(t *testing.T) {
  
  	servicesAdapater := &ServicesMediator{GossipAdapter: g, MCSAdapter: &cryptoServiceMock{acceptor: noopPeerIdentityAcceptor}}
  	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
@@ -4686,7 +4704,7 @@ index 364f41ca3..9ac19d693 100644
  	defer st.Stop()
  
  	// Mocked state request message
-@@ -1725,11 +1724,11 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
+@@ -1726,11 +1725,11 @@ func TestTransferOfPvtDataBetweenPeers(t *testing.T) {
  	stateMetrics := metrics.NewGossipMetrics(&disabled.Provider{}).StateMetrics
  
  	mediator := &ServicesMediator{GossipAdapter: peers["peer1"], MCSAdapter: cryptoService}
@@ -4855,7 +4873,7 @@ index 000000000..c16087d13
 +	})
 +}
 diff --git a/peer/node/start.go b/peer/node/start.go
-index 49a486a53..58e9ad49e 100644
+index b02298e70..388214d72 100644
 --- a/peer/node/start.go
 +++ b/peer/node/start.go
 @@ -75,6 +75,8 @@ import (
@@ -4892,7 +4910,7 @@ index 49a486a53..58e9ad49e 100644
  		},
  	)
  
-@@ -373,7 +386,7 @@ func serve(args []string) error {
+@@ -374,7 +387,7 @@ func serve(args []string) error {
  		}
  		cceventmgmt.GetMgr().Register(cid, sub)
  	}, ccp, sccp, txvalidator.MapBasedPluginMapper(validationPluginsByName),
@@ -4902,7 +4920,7 @@ index 49a486a53..58e9ad49e 100644
  	if viper.GetBool("peer.discovery.enabled") {
  		registerDiscoveryService(peerServer, policyMgr, lifecycle)
 diff --git a/protos/common/collection.pb.go b/protos/common/collection.pb.go
-index e4d936342..237f41418 100644
+index ea8b054db..7be00cc76 100644
 --- a/protos/common/collection.pb.go
 +++ b/protos/common/collection.pb.go
 @@ -18,6 +18,39 @@ var _ = math.Inf
@@ -5028,13 +5046,16 @@ index e4d936342..237f41418 100644
  }
  func (m *CollectionCriteria) XXX_Unmarshal(b []byte) error {
  	return xxx_messageInfo_CollectionCriteria.Unmarshal(m, b)
-@@ -457,40 +512,48 @@ func init() {
+@@ -457,42 +512,50 @@ func init() {
  	proto.RegisterType((*StaticCollectionConfig)(nil), "common.StaticCollectionConfig")
  	proto.RegisterType((*CollectionPolicyConfig)(nil), "common.CollectionPolicyConfig")
  	proto.RegisterType((*CollectionCriteria)(nil), "common.CollectionCriteria")
++	proto.RegisterEnum("common.CollectionType", CollectionType_name, CollectionType_value)
+ }
+ 
+ func init() {
+-	proto.RegisterFile("common/collection.proto", fileDescriptor_collection_12a2cf6632dc7d83)
 -}
--
--func init() { proto.RegisterFile("common/collection.proto", fileDescriptor_collection_12a2cf6632dc7d83) }
 -
 -var fileDescriptor_collection_12a2cf6632dc7d83 = []byte{
 -	// 480 bytes of a gzipped FileDescriptorProto
@@ -5068,10 +5089,8 @@ index e4d936342..237f41418 100644
 -	0x1c, 0x4d, 0xf2, 0xc8, 0xe6, 0x46, 0x70, 0xff, 0x1f, 0x54, 0xcd, 0x86, 0x0f, 0x5f, 0x72, 0x61,
 -	0x17, 0xcb, 0xf9, 0x26, 0x1c, 0xef, 0xc1, 0x63, 0x0f, 0x8f, 0x3d, 0x3c, 0xf6, 0xf0, 0xbc, 0xeb,
 -	0xc2, 0xef, 0xff, 0x03, 0x00, 0x00, 0xff, 0xff, 0xf0, 0x3b, 0x7c, 0x15, 0x7d, 0x03, 0x00, 0x00,
-+	proto.RegisterEnum("common.CollectionType", CollectionType_name, CollectionType_value)
++	proto.RegisterFile("common/collection.proto", fileDescriptor_collection_59b2e02e8b8b23b5)
 +}
-+
-+func init() { proto.RegisterFile("common/collection.proto", fileDescriptor_collection_59b2e02e8b8b23b5) }
 +
 +var fileDescriptor_collection_59b2e02e8b8b23b5 = []byte{
 +	// 591 bytes of a gzipped FileDescriptorProto
@@ -35522,5 +35541,5 @@ index 8ee619bf6..c30e84c00 100644
 -const Version = "1.15.0"
 +const Version = "1.19.0"
 -- 
-2.21.0 (Apple Git-122.2)
+2.21.1 (Apple Git-122.3)
 
