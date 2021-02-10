@@ -57,3 +57,5 @@ git am $MY_PATH/../patches/0001-DEV-16266-Remove-throttle.patch
 git am $MY_PATH/../patches/0001-DEV-18114-Add-standby-role-to-peer.patch
 # step 10 apply patch for gotools make target to fix manifest-tool build
 git am $MY_PATH/../patches/0001-Override-for-manifest-tool.patch
+# step 11 apply patch for PKCS11 resilience
+git am $MY_PATH/../patches/0001-PKCS11-resilience.patch
