@@ -1,4 +1,4 @@
-From 6572f085b84bfd1159317582863f3c0f3968bc6f Mon Sep 17 00:00:00 2001
+From 4dcabdf35582859d5993ef73d30412078a134770 Mon Sep 17 00:00:00 2001
 From: Bob Stasyszyn <Bob.Stasyszyn@securekey.com>
 Date: Fri, 7 Aug 2020 09:02:04 -0400
 Subject: [PATCH] Add standby role to peer
@@ -97,15 +97,15 @@ index 822e030ea..758600512 100644
  	if err != nil {
  		gc.logger.Errorf("Failed creating signed state info message: %v", err)
 diff --git a/gotools.mk b/gotools.mk
-index c5f8d42bd..d0108aff7 100644
+index a17c89aef..ee24562f8 100644
 --- a/gotools.mk
 +++ b/gotools.mk
 @@ -3,7 +3,7 @@
  #
  # SPDX-License-Identifier: Apache-2.0
 
--GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell mockery manifest-tool
-+GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell manifest-tool
+-GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell mockery
++GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell
  BUILD_DIR ?= .build
  GOTOOLS_GOPATH ?= $(BUILD_DIR)/gotools
  GOTOOLS_BINDIR ?= $(GOPATH)/bin
