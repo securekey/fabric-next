@@ -13,15 +13,13 @@ import (
 	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
-	"math/big"
-	"regexp"
-	"sync"
-	"time"
-
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/miekg/pkcs11"
 	"github.com/pkg/errors"
 	"go.uber.org/zap/zapcore"
+	"math/big"
+	"regexp"
+	"sync"
 )
 
 var regex = regexp.MustCompile(".*0xB.:\\sCKR.+")
@@ -31,82 +29,33 @@ func (csp *impl) initialize(opts PKCS11Opts) (*impl, error) {
 		return nil, fmt.Errorf("pkcs11: library path not provided")
 	}
 
-	ctx := pkcs11.New(opts.Library)
-	if ctx == nil {
-		return nil, fmt.Errorf("pkcs11: instantiation failed for %s", opts.Library)
-	}
-	if err := ctx.Initialize(); err != nil {
-		logger.Debugf("initialize failed: %v", err)
-	}
-
-	slots, err := ctx.GetSlotList(true)
+	ctx, loginSession,  err := loadContextAndLogin(opts.Library, opts.Pin, opts.Label)
 	if err != nil {
-		return nil, errors.Wrap(err, "pkcs11: get slot list")
+		return nil, errors.Errorf("pkcs11: could not find token with label %s", opts.Label)
 	}
 
-	for _, s := range slots {
-		info, err := ctx.GetTokenInfo(s)
-		if err != nil || opts.Label != info.Label {
-			continue
-		}
-
-		csp.slot = s
-		csp.ctx = ctx
-		csp.pin = opts.Pin
-
-		session, err := csp.createSession()
-		if err != nil {
-			return nil, err
-		}
-
-		csp.returnSession(session)
-		return csp, nil
+	if sessionCacheSize > 0 {
+		csp.sessionEntry(loginSession)
 	}
 
-	return nil, errors.Errorf("pkcs11: could not find token with label %s", opts.Label)
+	csp.ctx = ctx
+	return csp, nil
 }
 
-func (csp *impl) getSession() (session pkcs11.SessionHandle, err error) {
-	for {
-		select {
-		case session = <-csp.sessPool:
-			return
-		default:
-			// cache is empty (or completely in use), create a new session
-			return csp.createSession()
-		}
-	}
-}
-
-func (csp *impl) createSession() (pkcs11.SessionHandle, error) {
-	var sess pkcs11.SessionHandle
-	var err error
-
-	// attempt 10 times to open a session with a 100ms delay after each attempt
-	for i := 0; i < 10; i++ {
-		sess, err = csp.ctx.OpenSession(csp.slot, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
-		if err == nil {
-			logger.Debugf("Created new pkcs11 session %+v on slot %d\n", sess, csp.slot)
-			break
-		}
-
-		logger.Warningf("OpenSession failed, retrying [%s]\n", err)
-		time.Sleep(100 * time.Millisecond)
-	}
-	if err != nil {
-		return 0, errors.Wrap(err, "OpenSession failed")
-	}
-
-	err = csp.ctx.Login(sess, pkcs11.CKU_USER, csp.pin)
-	if err != nil && err != pkcs11.Error(pkcs11.CKR_USER_ALREADY_LOGGED_IN) {
-		csp.ctx.CloseSession(sess)
-		return 0, errors.Wrap(err, "Login failed")
-	}
+func (csp *impl) sessionEntry(session pkcs11.SessionHandle) {
 	csp.sessLock.Lock()
-	csp.sessions[sess] = struct{}{}
+	csp.sessions[session] = struct{}{}
 	csp.sessLock.Unlock()
+}
 
-	return sess, nil
+
+func (csp *impl) getSession() (pkcs11.SessionHandle, error) {
+	session, isNew := csp.ctx.GetSession()
+	if isNew {
+		csp.sessionEntry(session)
+	}
+
+	return session, nil
 }
 
 func (csp *impl) closeSession(session pkcs11.SessionHandle) {
@@ -125,12 +74,15 @@ func (csp *impl) closeSession(session pkcs11.SessionHandle) {
 }
 
 func (csp *impl) returnSession(session pkcs11.SessionHandle) {
-	select {
-	case csp.sessPool <- session:
-		// returned session back to session cache
-	default:
-		// have plenty of sessions in cache, dropping
-		csp.closeSession(session)
+	if csp.ctx.ReturnSession(session) {
+		csp.sessLock.Lock()
+		defer csp.sessLock.Unlock()
+
+		// purge the handle cache if the last session closes
+		delete(csp.sessions, session)
+		if len(csp.sessions) == 0 {
+			csp.clearCaches()
+		}
 	}
 }
 
@@ -384,6 +336,8 @@ func (csp *impl) signP11ECDSA(ski []byte, msg []byte) (R, S *big.Int, err error)
 		return nil, nil, fmt.Errorf("P11: sign failed [%s]", err)
 	}
 
+	logger.Debugf("Signing Successful: %+v", session)
+
 	R = new(big.Int)
 	S = new(big.Int)
 	R.SetBytes(sig[0 : len(sig)/2])
@@ -599,7 +553,7 @@ func (csp *impl) handleSessionReturn(err error, session pkcs11.SessionHandle) {
 	csp.returnSession(session)
 }
 
-func listAttrs(p11lib *pkcs11.Ctx, session pkcs11.SessionHandle, obj pkcs11.ObjectHandle) {
+func listAttrs(p11lib *ContextHandle, session pkcs11.SessionHandle, obj pkcs11.ObjectHandle) {
 	var cktype, ckclass uint
 	var ckaid, cklabel []byte
 

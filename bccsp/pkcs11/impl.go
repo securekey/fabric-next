@@ -72,7 +72,7 @@ type impl struct {
 	conf *config
 	ks   bccsp.KeyStore
 
-	ctx  *pkcs11.Ctx
+	ctx  *ContextHandle
 	slot uint
 	pin  string
 
