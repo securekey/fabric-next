@@ -96,19 +96,6 @@ index 822e030ea..758600512 100644
  	stateInfoMsg, err := gc.setupSignedStateInfoMessage()
  	if err != nil {
  		gc.logger.Errorf("Failed creating signed state info message: %v", err)
-diff --git a/gotools.mk b/gotools.mk
-index a17c89aef..ee24562f8 100644
---- a/gotools.mk
-+++ b/gotools.mk
-@@ -3,7 +3,7 @@
- #
- # SPDX-License-Identifier: Apache-2.0
-
--GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell mockery
-+GOTOOLS = counterfeiter dep golint goimports protoc-gen-go ginkgo gocov gocov-xml misspell
- BUILD_DIR ?= .build
- GOTOOLS_GOPATH ?= $(BUILD_DIR)/gotools
- GOTOOLS_BINDIR ?= $(GOPATH)/bin
--- 
+--
 2.21.1 (Apple Git-122.3)
 
