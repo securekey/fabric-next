@@ -1,0 +1,25 @@
+diff --git a/images/ccenv/Dockerfile.in b/images/ccenv/Dockerfile.in
+index 274bee8b0..6d032872d 100644
+--- a/images/ccenv/Dockerfile.in
++++ b/images/ccenv/Dockerfile.in
+@@ -3,7 +3,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ #
+ FROM _BASE_NS_/fabric-baseimage:_BASE_TAG_
+-RUN npm install -g npm@latest-6
+ COPY payload/chaintool payload/protoc-gen-go /usr/local/bin/
+ ADD payload/goshim.tar.bz2 $GOPATH/src/
+ RUN mkdir -p /chaincode/input /chaincode/output
+diff --git a/images/tools/Dockerfile.in b/images/tools/Dockerfile.in
+index 52b155ed2..2ffbed139 100644
+--- a/images/tools/Dockerfile.in
++++ b/images/tools/Dockerfile.in
+@@ -8,7 +8,7 @@ RUN mkdir src && mkdir pkg && mkdir bin
+ ADD . src/github.com/hyperledger/fabric
+ WORKDIR /opt/gopath/src/github.com/hyperledger/fabric
+ ENV EXECUTABLES go git curl
+-RUN make configtxgen configtxlator cryptogen peer discover idemixgen
++RUN GO_TAGS="pkcs11 pluginsenabled" make configtxgen configtxlator cryptogen peer discover idemixgen
+
+ FROM _BASE_NS_/fabric-baseimage:_BASE_TAG_
+ ENV FABRIC_CFG_PATH /etc/hyperledger/fabric

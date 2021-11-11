@@ -33,9 +33,13 @@ git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/000
 
 # apply patch for Thales PKCS11
 git am --directory vendor/github.com/hyperledger/fabric/ $MY_PATH/../patches/PKCS11-Thales.patch
+
 # apply patch for VMEENG-2572, requested by Security Team for Banks to be able
 # to list all identities
 git am $MY_PATH/../patches/0001-VMEENG-2572-patch-how-identity-list-works-for-banks.patch
+
+# updating the horrible make setup
+git apply $MY_PATH/../patches/fabric-ca_build.patch
 
 # fetching and update vendored packages for grep11 patch
 rm -rf vendor/google.golang.org/grpc

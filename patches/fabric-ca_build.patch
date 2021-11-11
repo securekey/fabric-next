@@ -1,0 +1,26 @@
+diff --git a/Makefile b/Makefile
+index ccd0ec87..71361c57 100644
+--- a/Makefile
++++ b/Makefile
+@@ -52,7 +52,7 @@ else
+ PGVER=10
+ endif
+
+-BASEIMAGE_RELEASE = 0.4.21
++BASEIMAGE_RELEASE ?= 0.4.21
+ PKGNAME = github.com/hyperledger/$(PROJECT_NAME)
+
+ METADATA_VAR = Version=$(PROJECT_VERSION)
+diff --git a/docker-env.mk b/docker-env.mk
+index 47aaee59..21f8850c 100644
+--- a/docker-env.mk
++++ b/docker-env.mk
+@@ -48,7 +48,7 @@ DRUN = docker run -i --rm $(DOCKER_RUN_FLAGS) \
+ DBUILD = docker build $(DOCKER_BUILD_FLAGS)
+
+ BASE_DOCKER_NS ?= hyperledger
+-BASE_DOCKER_TAG=$(ARCH)-$(BASEIMAGE_RELEASE)
++BASE_DOCKER_TAG ?= $(ARCH)-$(BASEIMAGE_RELEASE)
+
+ DOCKER_NS ?= hyperledger
+ NEXUS_URL ?= nexus3.hyperledger.org:10001/hyperledger

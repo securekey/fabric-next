@@ -27,15 +27,17 @@ git config user.email jenkins@jenkins.com
 
 git checkout v1.4.12
 
-#apply patch for GREP11
+# apply patch for GREP11
 git am $MY_PATH/../patches/0001-GREP11-Remote-EP11-BCCSP.patch
 
-#apply patch for PKCS11 Thales
+# apply patch for PKCS11 Thales
 git am $MY_PATH/../patches/PKCS11-Thales.patch
 
 # [FAB-14646] Update dependency github.com/opencontainers/runc
 git am $MY_PATH/../patches/runc.patch
 
+# Change Dockerfiles
+git apply $MY_PATH/../patches/fabric_build.patch
 
 # step 1 apply gossip protos extensions to match trustbloc/fabric-peer-ext package names dependencies
 git am $MY_PATH/../patches/0001-gossip-protos-extensions-refactoring.patch
