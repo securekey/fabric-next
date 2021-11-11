@@ -61,10 +61,13 @@ rm -Rf $TMP
 cd $MY_PATH
 
 # Build softhsm peer
-docker build -f ./images/fabric-peer-softhsm/Dockerfile \
- --build-arg ARCH=${ARCH} \
- -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
- ./images/fabric-peer-softhsm
+echo "Building images/fabric-peer-softhsm ..."
+docker build \
+  --build-arg FABRIC_PEER_BASE_IMAGE=${BASE_NAMESPACE}/fabric-peer \
+  --build-arg ARCH=${ARCH} \
+  -f ./images/fabric-peer-softhsm/Dockerfile \
+  -t ${BASE_NAMESPACE}/fabric-peer-softhsm:${FABRIC_NEXT_IMAGE_TAG} \
+  ./images/fabric-peer-softhsm
 
 # Fabric ccenv image
 # declare -x FABRIC_CCENV_IMAGE=${DOCKER_NS}/fabric-ccenv
